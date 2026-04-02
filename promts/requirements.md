@@ -24,6 +24,7 @@ There are three user roles: **User**, **Agent**, and **Admin**.
 | Change ticket status (pending / closed) | — | ✓ | ✓ |
 | Delete tickets | — | — | ✓ |
 | Access the Agent Dashboard | — | ✓ | ✓ |
+| Access the Admin Setup page | — | — | ✓ |
 
 All permission checks must be enforced **at the database level** using Postgres Row-Level Security — the frontend should not be the only line of defense.
 
@@ -96,11 +97,19 @@ There are three post types:
 33. **Notes are always internal** — Notes are implicitly restricted to agents and admins and are never visible to regular users.
 34. **Draft posts** — Any post (post, comment, or note) created by an agent can be saved as a **draft**. A draft post is visible only to agents and admins — regular users cannot see it regardless of ticket or post visibility settings. The draft state indicates that the agent is working on a response but it is not ready to be shared yet. When the agent is satisfied with the content, they publish the draft, which turns it into a regular post visible according to normal visibility rules.
 
+#### Admin Setup Page
+
+35. **Admin setup access** — Only admins can access the Admin Setup page. Admins see a "Setup" link in the navigation bar. Non-admin users do not see it and are redirected away if they try to access the URL directly.
+36. **Ticket types management** — A section to manage ticket types: add new types, rename existing ones, delete unused types, and set which type is the default. (See #14, #15.)
+37. **Categories management** — A section to manage ticket categories: add new categories, rename existing ones, and delete unused categories. (See #16, #17.)
+38. **Duplicate ticket template** — A section to edit the Markdown template used for the system-generated post when a ticket is marked as duplicate. The template supports a `{{ticketId}}` placeholder. A "Reset to default" button restores the built-in template. (See #28.)
+39. **Agent management** — A section that shows the list of current agents. The admin can search for a user by email and promote them to the agent role. The admin can also revoke agent rights, turning an agent back into a regular user.
+
 ---
 
 ### Navigation Bar
 
-- **Left side**: App name "HelpDesk" (links to home), "My Tickets" link, and (for agents/admins) "Agent Dashboard" link.
+- **Left side**: App name "HelpDesk" (links to home), "My Tickets" link, (for agents/admins) "Agent Dashboard" link, and (for admins only) "Setup" link.
 - **Right side**: Current user's email, role badges, and a "Sign out" button.
 - The nav bar is always visible. For unauthenticated visitors it shows the app name and a "Log in" link. The full nav bar (My Tickets, Agent Dashboard, user email, Sign out) is only shown to logged-in users.
 

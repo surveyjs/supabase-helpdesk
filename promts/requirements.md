@@ -104,30 +104,36 @@ There are three post types:
 33. **Notes are always internal** — Notes are implicitly restricted to agents and admins and are never visible to regular users.
 34. **Draft posts** — Any post (post, comment, or note) created by an agent can be saved as a **draft**. A draft post is visible only to agents and admins — regular users cannot see it regardless of ticket or post visibility settings. The draft state indicates that the agent is working on a response but it is not ready to be shared yet. When the agent is satisfied with the content, they publish the draft, which turns it into a regular post visible according to normal visibility rules.
 
+#### Activity / Audit Log
+
+35. **Ticket activity log** — Every ticket maintains a chronological activity log that records all significant events. Activity entries are displayed inline in the ticket timeline alongside posts and comments, styled as compact system messages (e.g., gray text, no background card). Each entry records the actor (who performed the action), the timestamp, and a description of the change.
+36. **Tracked events** — The following events are logged: status changes (open → pending, pending → closed, closed → open, etc.), agent assignment and unassignment, ticket type changes, category changes, severity changes, marking as duplicate (with link to original), removing duplicate link, draft published, and privacy changes on posts/comments.
+37. **Activity log visibility** — Activity log entries follow the same visibility rules as the ticket itself. All users who can view the ticket can see its activity log. Internal details (e.g., note-related activity) are visible only to agents and admins.
+
 #### Email Notifications
 
-35. **Email notifications for users** — Users receive email notifications when: a new post or comment is added to their ticket (by an agent or teammate), the ticket status changes, or an agent is assigned to their ticket. Private notes and draft posts do not trigger notifications to users.
-36. **Email notifications for agents** — Agents receive email notifications when: a new ticket is created, a user replies to a ticket assigned to them, a ticket is assigned to them, or a user re-opens a closed ticket. An agent does not receive notifications for their own actions.
-37. **Notification templates** — The admin configures separate email templates for each notification event (e.g., "New reply on your ticket", "Ticket assigned to you", "New ticket created"). Templates support Markdown and placeholders such as `{{ticketTitle}}`, `{{ticketId}}`, `{{authorName}}`, `{{postBody}}`, and `{{ticketUrl}}`. Each template has a subject line and a body. A "Reset to default" button restores the built-in template.
-38. **Email configuration** — The admin configures outbound email settings (SMTP host, port, username, password, sender address, and sender display name). A "Send test email" button lets the admin verify the configuration. Email sending is disabled until the configuration is saved and verified.
+38. **Email notifications for users** — Users receive email notifications when: a new post or comment is added to their ticket (by an agent or teammate), the ticket status changes, or an agent is assigned to their ticket. Private notes and draft posts do not trigger notifications to users.
+39. **Email notifications for agents** — Agents receive email notifications when: a new ticket is created, a user replies to a ticket assigned to them, a ticket is assigned to them, or a user re-opens a closed ticket. An agent does not receive notifications for their own actions.
+40. **Notification templates** — The admin configures separate email templates for each notification event (e.g., "New reply on your ticket", "Ticket assigned to you", "New ticket created"). Templates support Markdown and placeholders such as `{{ticketTitle}}`, `{{ticketId}}`, `{{authorName}}`, `{{postBody}}`, and `{{ticketUrl}}`. Each template has a subject line and a body. A "Reset to default" button restores the built-in template.
+41. **Email configuration** — The admin configures outbound email settings (SMTP host, port, username, password, sender address, and sender display name). A "Send test email" button lets the admin verify the configuration. Email sending is disabled until the configuration is saved and verified.
 
 #### Inbound Email (Email-to-Ticket)
 
-39. **Inbound email configuration** — The admin configures a reply-to address (e.g., `support@example.com`) used as the sender/reply address in outbound notifications. When a user replies to a notification email, the system processes the incoming email.
-40. **Create ticket by email** — An incoming email from a known user that does not match an existing ticket thread creates a new ticket. The email subject becomes the ticket title and the email body becomes the original post.
-41. **Reply by email** — An incoming email that matches an existing ticket thread (identified by a ticket reference in the email subject, e.g., `[Ticket #123]`) creates a new post on that ticket. If the ticket was closed, the reply re-opens it (same as #9). Only emails from users who have permission to view the ticket are processed; others are ignored.
-42. **Unknown sender auto-reply** — If an incoming email is from an address that does not match any registered user, the system sends an automatic reply informing them that they are not registered and providing a link to the registration page. The email is not processed further (no ticket or post is created). The auto-reply email template is configurable by the admin with a "Reset to default" option.
+42. **Inbound email configuration** — The admin configures a reply-to address (e.g., `support@example.com`) used as the sender/reply address in outbound notifications. When a user replies to a notification email, the system processes the incoming email.
+43. **Create ticket by email** — An incoming email from a known user that does not match an existing ticket thread creates a new ticket. The email subject becomes the ticket title and the email body becomes the original post.
+44. **Reply by email** — An incoming email that matches an existing ticket thread (identified by a ticket reference in the email subject, e.g., `[Ticket #123]`) creates a new post on that ticket. If the ticket was closed, the reply re-opens it (same as #9). Only emails from users who have permission to view the ticket are processed; others are ignored.
+45. **Unknown sender auto-reply** — If an incoming email is from an address that does not match any registered user, the system sends an automatic reply informing them that they are not registered and providing a link to the registration page. The email is not processed further (no ticket or post is created). The auto-reply email template is configurable by the admin with a "Reset to default" option.
 
 #### Admin Setup Page
 
-43. **Admin setup access** — Only admins can access the Admin Setup page. Admins see a "Setup" link in the navigation bar. Non-admin users do not see it and are redirected away if they try to access the URL directly.
-44. **Ticket types management** — A section to manage ticket types: add new types, rename existing ones, delete unused types, and set which type is the default. (See #14, #15.)
-45. **Categories management** — A section to manage ticket categories: add new categories, rename existing ones, and delete unused categories. (See #16, #17.)
-46. **Duplicate ticket template** — A section to edit the Markdown template used for the system-generated post when a ticket is marked as duplicate. The template supports a `{{ticketId}}` placeholder. A "Reset to default" button restores the built-in template. (See #28.)
-47. **Agent management** — A section that shows the list of current agents. The admin can search for a user by email and promote them to the agent role. The admin can also revoke agent rights, turning an agent back into a regular user.
-48. **Email configuration** — A section to configure outbound SMTP settings and verify them with a test email. (See #38.)
-49. **Notification templates** — A section to view and edit all email notification templates for users and agents, including the unknown-sender auto-reply template, with per-template subject and body fields and a reset-to-default option. (See #37, #42.)
-50. **Inbound email configuration** — A section to configure the reply-to address and enable/disable inbound email processing. (See #39.)
+46. **Admin setup access** — Only admins can access the Admin Setup page. Admins see a "Setup" link in the navigation bar. Non-admin users do not see it and are redirected away if they try to access the URL directly.
+47. **Ticket types management** — A section to manage ticket types: add new types, rename existing ones, delete unused types, and set which type is the default. (See #14, #15.)
+48. **Categories management** — A section to manage ticket categories: add new categories, rename existing ones, and delete unused categories. (See #16, #17.)
+49. **Duplicate ticket template** — A section to edit the Markdown template used for the system-generated post when a ticket is marked as duplicate. The template supports a `{{ticketId}}` placeholder. A "Reset to default" button restores the built-in template. (See #28.)
+50. **Agent management** — A section that shows the list of current agents. The admin can search for a user by email and promote them to the agent role. The admin can also revoke agent rights, turning an agent back into a regular user.
+51. **Email configuration** — A section to configure outbound SMTP settings and verify them with a test email. (See #41.)
+52. **Notification templates** — A section to view and edit all email notification templates for users and agents, including the unknown-sender auto-reply template, with per-template subject and body fields and a reset-to-default option. (See #40, #45.)
+53. **Inbound email configuration** — A section to configure the reply-to address and enable/disable inbound email processing. (See #42.)
 
 ---
 

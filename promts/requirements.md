@@ -40,11 +40,11 @@ All permission checks must be enforced **at the database level** using Postgres 
 
 #### Tickets (End-User Perspective)
 
-5. **Create a ticket** — A logged-in user can create a support ticket with a title (required), description (optional), and a "Private" checkbox (checked by default). Private tickets are only visible to the owner, their teammates, and agents.
+5. **Create a ticket** — A logged-in user can create a support ticket with a title (required), an original post body (required, Markdown text), and a "Private" checkbox (checked by default). Private tickets are only visible to the owner, their teammates, and agents. The original post is created automatically together with the ticket.
 6. **View my tickets** — The home page shows a list of the current user's tickets sorted by last-updated. Each entry shows the title, last-updated date, and a color-coded status badge (green = open, yellow = pending, gray = closed). Clicking a ticket opens the detail page.
 7. **Empty state** — If a user has no tickets, show a friendly message with a link to create one.
-8. **Ticket detail** — Shows the ticket title, status, submitter email, creation date, full description, and a chronological list of replies. The user's own replies have a blue-tinted background; others have a white background.
-9. **Reply to a ticket** — Below the reply list there is a text area and a "Reply" button. Users can reply as long as the ticket is not closed.
+8. **Ticket detail** — Shows the ticket title, status, submitter email, creation date, and a chronological list of posts. The original post appears first as the ticket's description. Each post can have its own chronological list of comments displayed beneath it. The current user's own posts/comments have a blue-tinted background; others have a white background.
+9. **Reply to a ticket** — Below the post list there is a text area and a "Reply" button to add a new post. Users can reply even if the ticket is closed — doing so automatically re-opens the ticket.
 10. **Public vs private** — Public tickets (is_private = false) are visible to any user. Private tickets are visible only to the owner, teammates, and agents/admins.
 
 #### Teams
@@ -56,7 +56,7 @@ All permission checks must be enforced **at the database level** using Postgres 
 #### Agent Dashboard
 
 14. **Agent dashboard access** — Agents and admins see an "Agent Dashboard" link in the navigation bar. Regular users do not see it, and are redirected away if they try to access it directly.
-15. **View all tickets** — The dashboard shows ALL tickets in the system (both private and public), with the submitter's email, last-updated date, reply count, and status badge.
+15. **View all tickets** — The dashboard shows ALL tickets in the system (both private and public), with the submitter's email, last-updated date, post count, and status badge.
 16. **Filter by status** — Toggle buttons let the agent filter by "All", "Active" (open + pending), or "Closed".
 17. **Sort** — Toggle buttons let the agent sort by "Last Modified" (default) or "Created" date.
 18. **Filter by user** — A text field lets the agent search tickets by submitter email (partial match). A "Clear" link removes the filter.
@@ -66,7 +66,7 @@ All permission checks must be enforced **at the database level** using Postgres 
 #### Agent Actions on Tickets
 
 21. **Change status** — On a ticket detail page, an agent sees "Mark Pending" and "Close Ticket" buttons (only if the ticket isn't already closed). Regular users do not see these buttons.
-22. **Reply as agent** — Agents can reply to any ticket.
+22. **Reply as agent** — Agents can reply to any post in a ticket (adding a post or a comment on an existing post).
 
 #### Posts, Comments & Notes
 
@@ -90,7 +90,7 @@ There are three post types:
 
 - **Left side**: App name "HelpDesk" (links to home), "My Tickets" link, and (for agents/admins) "Agent Dashboard" link.
 - **Right side**: Current user's email, role badges, and a "Sign out" button.
-- The nav bar is only visible to logged-in users.
+- The nav bar is always visible. For unauthenticated visitors it shows the app name and a "Log in" link. The full nav bar (My Tickets, Agent Dashboard, user email, Sign out) is only shown to logged-in users.
 
 ---
 
@@ -119,7 +119,7 @@ For local development, create seed data with these accounts (all passwords: `pas
 | bob@example.com | user | Alice's Team |
 | carol@example.com | user | Alice's Team |
 
-Seed **7 tickets** across Alice, Bob, and Carol with realistic helpdesk subjects (password reset issues, feature requests, billing questions, bug reports, etc.) in mixed statuses. Seed **12 replies** that simulate realistic agent–customer conversations.
+Seed **7 tickets** across Alice, Bob, and Carol with realistic helpdesk subjects (password reset issues, feature requests, billing questions, bug reports, etc.) in mixed statuses. Each ticket must have an original post. Seed additional **posts**, **comments**, and **notes** that simulate realistic agent–customer conversations.
 
 ---
 
@@ -129,7 +129,7 @@ Seed **7 tickets** across Alice, Bob, and Carol with realistic helpdesk subjects
 2. **Server-rendered everything** — No `"use client"` components. All pages are async Server Components that fetch data on the server.
 3. **Database-enforced security** — Every table must have Row-Level Security enabled. Helper functions like `is_agent()`, `is_admin()`, and `is_teammate()` should live in Postgres and be used in RLS policies.
 4. **Cookie-based auth** — Use `@supabase/ssr` for server-side Supabase clients. A Next.js middleware refreshes the session on every request.
-5. **Agent dashboard performance** — Create a Postgres VIEW (`agent_tickets`) that joins tickets with profile emails and pre-aggregates reply counts. The agent page queries this view instead of doing complex joins on the client.
+5. **Agent dashboard performance** — Create a Postgres VIEW (`agent_tickets`) that joins tickets with profile emails and pre-aggregates post counts. The agent page queries this view instead of doing complex joins on the client.
 6. **URL-driven state** — Filtering and view switching (my tickets vs team tickets, agent dashboard filters) should use URL search params, not React state.
 
 ---

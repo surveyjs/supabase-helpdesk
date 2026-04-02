@@ -40,7 +40,7 @@ All permission checks must be enforced **at the database level** using Postgres 
 
 #### Tickets (End-User Perspective)
 
-5. **Create a ticket** — A logged-in user can create a support ticket with a title (required), an original post body (required, Markdown text), and a "Private" checkbox (checked by default). Private tickets are only visible to the owner, their teammates, and agents. The original post is created automatically together with the ticket.
+5. **Create a ticket** — A logged-in user can create a support ticket with a title (required), a type (selected from available ticket types, defaults to the system default type), an original post body (required, Markdown text), and a "Private" checkbox (checked by default). Private tickets are only visible to the owner, their teammates, and agents. The original post is created automatically together with the ticket.
 6. **View my tickets** — The home page shows a list of the current user's tickets sorted by last-updated. Each entry shows the title, last-updated date, and a color-coded status badge (green = open, yellow = pending, gray = closed). Clicking a ticket opens the detail page.
 7. **Empty state** — If a user has no tickets, show a friendly message with a link to create one.
 8. **Ticket detail** — Shows the ticket title, status, submitter email, creation date, and a chronological list of posts. The original post appears first as the ticket's description. Each post can have its own chronological list of comments displayed beneath it. The current user's own posts/comments have a blue-tinted background; others have a white background.
@@ -53,20 +53,32 @@ All permission checks must be enforced **at the database level** using Postgres 
 12. **Teammate visibility** — Team members can see and comment on each other's private tickets.
 13. **No team management UI needed** — Teams are set up via the database / seed data. No UI for creating or managing teams is required in this version.
 
+#### Ticket Types
+
+14. **Ticket types** — Every ticket has a type. The system comes with three pre-defined types: **"Question"** (default), **"Issue"**, and **"Suggestion"**. One type is marked as the default and is pre-selected when creating a new ticket. Once a ticket is created, only an agent or admin can change its type.
+15. **Manage ticket types** — Admins can create, rename, and delete ticket types. Admins can also change which type is the default. Deleting a type that is in use by existing tickets is not allowed.
+
+#### Ticket Categories
+
+16. **Ticket categories** — A ticket has an optional category field. The list of available categories is managed by the admin. There are no default categories. If the categories list is empty, the category field is not shown in the ticket creation form or ticket detail page. The category can be set or changed by the ticket owner or an agent/admin.
+17. **Manage categories** — Admins can create, rename, and delete categories. Deleting a category that is in use by existing tickets is not allowed.
+
 #### Agent Dashboard
 
-14. **Agent dashboard access** — Agents and admins see an "Agent Dashboard" link in the navigation bar. Regular users do not see it, and are redirected away if they try to access it directly.
-15. **View all tickets** — The dashboard shows ALL tickets in the system (both private and public), with the submitter's email, last-updated date, post count, and status badge.
-16. **Filter by status** — Toggle buttons let the agent filter by "All", "Active" (open + pending), or "Closed".
-17. **Sort** — Toggle buttons let the agent sort by "Last Modified" (default) or "Created" date.
-18. **Filter by user** — A text field lets the agent search tickets by submitter email (partial match). A "Clear" link removes the filter.
-19. **Result count** — The dashboard shows "N ticket(s) found" above the list.
-20. **All filters are URL-based** — Filters use URL search params so the page is bookmarkable and shareable.
+18. **Agent dashboard access** — Agents and admins see an "Agent Dashboard" link in the navigation bar. Regular users do not see it, and are redirected away if they try to access it directly.
+19. **View all tickets** — The dashboard shows ALL tickets in the system (both private and public), with the submitter's email, last-updated date, post count, and status badge.
+20. **Filter by status** — Toggle buttons let the agent filter by "All", "Active" (open + pending), or "Closed".
+21. **Sort** — Toggle buttons let the agent sort by "Last Modified" (default) or "Created" date.
+22. **Filter by user** — A text field lets the agent search tickets by submitter email (partial match). A "Clear" link removes the filter.
+23. **Result count** — The dashboard shows "N ticket(s) found" above the list.
+24. **All filters are URL-based** — Filters use URL search params so the page is bookmarkable and shareable.
 
 #### Agent Actions on Tickets
 
-21. **Change status** — On a ticket detail page, an agent sees "Mark Pending" and "Close Ticket" buttons (only if the ticket isn't already closed). Regular users do not see these buttons.
-22. **Reply as agent** — Agents can reply to any post in a ticket (adding a post or a comment on an existing post).
+25. **Change status** — On a ticket detail page, an agent sees "Mark Pending" and "Close Ticket" buttons (only if the ticket isn't already closed). Regular users do not see these buttons. Closing a ticket automatically removes the assigned agent.
+26. **Reply as agent** — Agents can reply to any post in a ticket (adding a post or a comment on an existing post).
+27. **Assign agent** — A ticket can be assigned to an agent, indicating that this agent is responsible for working on it. Only agents and admins can assign or reassign an agent. A ticket can have at most one assigned agent at a time.
+28. **Mark as duplicate** — Only an agent or admin can mark a ticket as a duplicate of another ticket by linking it to the original. When a ticket is marked as duplicate, it is automatically closed and a system-generated post is added to the ticket with a Markdown message containing a link to the original ticket. The Markdown template for the duplicate message is configurable by the admin; there is a default template (e.g., *"This ticket has been closed as a duplicate of [#{{ticketId}}](link)."*). An agent or admin can also remove the duplicate link, which automatically re-opens the ticket.
 
 #### Posts, Comments & Notes
 
@@ -74,15 +86,15 @@ A **post** is the primary unit of content within a ticket. Every post belongs to
 
 There are three post types:
 
-23. **Post (root post)** — A top-level entry in a ticket's timeline. Every ticket has at least one post — the **original post**, which is created together with the ticket and contains its initial description. After that, any user or agent can add more posts. A post cannot reference another post; it always sits at the root level.
-24. **Comment** — A reply attached to a specific post (foreign key to that post). Comments provide threaded discussion under a post. A comment **cannot** be made on another comment — only on a post.
-25. **Note** — An internal post visible **only to agents and admins**. Notes are used for internal discussion and are never shown to regular users, regardless of ticket visibility.
+29. **Post (root post)** — A top-level entry in a ticket's timeline. Every ticket has at least one post — the **original post**, which is created together with the ticket and contains its initial description. After that, any user or agent can add more posts. A post cannot reference another post; it always sits at the root level.
+30. **Comment** — A reply attached to a specific post (foreign key to that post). Comments provide threaded discussion under a post. A comment **cannot** be made on another comment — only on a post.
+31. **Note** — An internal post visible **only to agents and admins**. Notes are used for internal discussion and are never shown to regular users, regardless of ticket visibility.
 
 #### Post Visibility & Privacy
 
-26. **Private posts / comments** — Any post or comment can be marked as **private**, except the original post that is created together with the ticket. When a post or comment is private, it is visible only to the ticket owner, their team members, and agents/admins — even if the ticket itself is public.
-27. **Notes are always internal** — Notes are implicitly restricted to agents and admins and are never visible to regular users.
-28. **Draft posts** — Any post (post, comment, or note) created by an agent can be saved as a **draft**. A draft post is visible only to agents and admins — regular users cannot see it regardless of ticket or post visibility settings. The draft state indicates that the agent is working on a response but it is not ready to be shared yet. When the agent is satisfied with the content, they publish the draft, which turns it into a regular post visible according to normal visibility rules.
+32. **Private posts / comments** — Any post or comment can be marked as **private**, except the original post that is created together with the ticket. When a post or comment is private, it is visible only to the ticket owner, their team members, and agents/admins — even if the ticket itself is public.
+33. **Notes are always internal** — Notes are implicitly restricted to agents and admins and are never visible to regular users.
+34. **Draft posts** — Any post (post, comment, or note) created by an agent can be saved as a **draft**. A draft post is visible only to agents and admins — regular users cannot see it regardless of ticket or post visibility settings. The draft state indicates that the agent is working on a response but it is not ready to be shared yet. When the agent is satisfied with the content, they publish the draft, which turns it into a regular post visible according to normal visibility rules.
 
 ---
 

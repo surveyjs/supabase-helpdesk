@@ -56,6 +56,7 @@ All permission checks must be enforced **at the database level** using Postgres 
 2.6. **Public vs private** — Public tickets (is_private = false) are visible to any user. Private tickets are visible only to the owner, teammates, and agents/admins.
 2.7. **Search tickets** — A search field on the tickets list page lets the user search their own tickets (and team tickets, if applicable) by title or original post content (partial match). Public tickets are also searchable. Search uses URL search params so results are bookmarkable. A "Clear" link removes the search filter.
 2.8. **Filter by status** — Toggle buttons on the tickets list page let the user filter by "All", "Active" (open + pending), or "Closed".
+2.9. **SEO-friendly ticket URLs** — Each ticket has a permanent, human-readable URL in the format `/tickets/{id}/{slug}`, where `{id}` is the immutable numeric ticket ID and `{slug}` is a URL-safe, lowercase, hyphenated version of the ticket title (e.g., `/tickets/42/password-reset-not-working`). The `{id}` is the authoritative identifier — if the slug in the URL doesn't match the current title, the server redirects to the correct URL. This ensures stable, shareable links even if the title changes.
 
 #### 3. Teams
 

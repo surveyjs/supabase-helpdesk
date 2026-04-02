@@ -20,10 +20,17 @@ There are three user roles: **User**, **Agent**, and **Admin**.
 | View own tickets | ✓ | ✓ | ✓ |
 | View public tickets | ✓ | ✓ | ✓ |
 | View all tickets (including private) | — | ✓ | ✓ |
-| Reply to visible tickets | ✓ | ✓ | ✓ |
+| Add posts/comments to visible tickets | ✓ | ✓ | ✓ |
+| Change ticket type | — | ✓ | ✓ |
+| Set/change ticket category | ✓ (owner) | ✓ | ✓ |
 | Change ticket status (pending / closed) | — | ✓ | ✓ |
+| Assign agent to a ticket | — | ✓ | ✓ |
+| Mark ticket as duplicate | — | ✓ | ✓ |
 | Delete tickets | — | — | ✓ |
 | Access the Agent Dashboard | — | ✓ | ✓ |
+| Manage ticket types | — | — | ✓ |
+| Manage ticket categories | — | — | ✓ |
+| Manage agents (promote/revoke) | — | — | ✓ |
 | Access the Admin Setup page | — | — | ✓ |
 
 All permission checks must be enforced **at the database level** using Postgres Row-Level Security — the frontend should not be the only line of defense.
@@ -41,11 +48,11 @@ All permission checks must be enforced **at the database level** using Postgres 
 
 #### Tickets (End-User Perspective)
 
-5. **Create a ticket** — A logged-in user can create a support ticket with a title (required), a type (selected from available ticket types, defaults to the system default type), an original post body (required, Markdown text), and a "Private" checkbox (checked by default). Private tickets are only visible to the owner, their teammates, and agents. The original post is created automatically together with the ticket.
+5. **Create a ticket** — A logged-in user can create a support ticket with a title (required), a type (selected from available ticket types, defaults to the system default type), an optional severity (**"Minor"**, **"Moderate"**, or **"Severe"**), an original post body (required, Markdown text), and a "Private" checkbox (checked by default). Private tickets are only visible to the owner, their teammates, and agents. The original post is created automatically together with the ticket.
 6. **View my tickets** — The home page shows a list of the current user's tickets sorted by last-updated. Each entry shows the title, last-updated date, and a color-coded status badge (green = open, yellow = pending, gray = closed). Clicking a ticket opens the detail page.
 7. **Empty state** — If a user has no tickets, show a friendly message with a link to create one.
-8. **Ticket detail** — Shows the ticket title, status, submitter email, creation date, and a chronological list of posts. The original post appears first as the ticket's description. Each post can have its own chronological list of comments displayed beneath it. The current user's own posts/comments have a blue-tinted background; others have a white background.
-9. **Reply to a ticket** — Below the post list there is a text area and a "Reply" button to add a new post. Users can reply even if the ticket is closed — doing so automatically re-opens the ticket.
+8. **Ticket detail** — Shows the ticket title, type, status, severity (if set), category (if categories exist and one is set), assigned agent (if any), submitter email, creation date, and a chronological list of posts. If the ticket is marked as a duplicate, a banner shows the link to the original ticket. The original post appears first as the ticket's description. Each post can have its own chronological list of comments displayed beneath it. The current user's own posts/comments have a blue-tinted background; others have a white background.
+9. **Reply to a ticket** — Below the post list there is a text area and a "Reply" button to add a new post. Users can reply even if the ticket is closed — doing so automatically re-opens the ticket. Users cannot reply to a ticket that is marked as a duplicate.
 10. **Public vs private** — Public tickets (is_private = false) are visible to any user. Private tickets are visible only to the owner, teammates, and agents/admins.
 
 #### Teams

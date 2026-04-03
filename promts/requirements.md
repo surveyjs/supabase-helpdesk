@@ -47,63 +47,93 @@ All permission checks must be enforced **at the database level** using Postgres 
 #### 1. Authentication
 
 1.1. **Sign up** — A visitor can create an account with email and password. After signing up they are told to check their email for confirmation.
+
 1.2. **Log in** — A user can log in with email and password. Invalid credentials show an error message on the same page.
+
 1.3. **Sign out** — A logged-in user can sign out from the navigation bar.
+
 1.4. **Unauthenticated visitors** — Unauthenticated visitors can view public tickets. They can't create or make any modification to any ticket.
 
 #### 2. Tickets (End-User Perspective)
 
 2.1. **Create a ticket** — A logged-in user can create a support ticket with a title (required), a type (selected from available ticket types, defaults to the system default type), an original post body (required, Markdown text), and a "Private" checkbox. The default state of the checkbox (checked or unchecked) is configured by the admin (see 15.10). If the admin has disabled user control over privacy, the checkbox is hidden and all tickets are created with the admin-configured default. Private tickets are only visible to the owner, their teammates, and agents/admins. The original post is created automatically together with the ticket.
+
 2.2. **View my tickets** — The home page shows a list of the current user's tickets sorted by last-updated. Each entry shows the title, last-updated date, and a color-coded status badge (green = open, yellow = pending, gray = closed). Clicking a ticket opens the detail page.
+
 2.3. **Empty state** — If a user has no tickets, show a friendly message with a link to create one.
+
 2.4. **Ticket detail** — Shows the ticket title, type, status, category (if categories exist and one is set), tags (if tags are enabled), assigned agent (if any), submitter email, creation date, and a chronological list of posts. Severity is shown only to agents and admins (if set). If the ticket is marked as a duplicate, a banner shows the link to the original ticket. The original post appears first as the ticket's description. Each post can have its own chronological list of comments displayed beneath it. The current user's own posts/comments have a blue-tinted background; others have a white background.
+
 2.5. **Reply to a ticket** — Below the post list there is a text area and a "Reply" button to add a new post. Users can reply even if the ticket is closed — doing so automatically re-opens the ticket. Users cannot reply to a ticket that is marked as a duplicate.
+
 2.6. **Public vs private** — Public tickets are visible to any user. Private tickets are visible only to the owner, teammates, and agents/admins.
+
 2.7. **Search tickets** — A search field on the tickets list page lets the user search their own tickets (and team tickets, if applicable) by title or original post content (partial match). Public tickets are also searchable. Search uses URL search params so results are bookmarkable. A "Clear" link removes the search filter.
+
 2.8. **Filter by status** — Toggle buttons on the tickets list page let the user filter by "All", "Active" (open + pending), or "Closed".
+
 2.9. **SEO-friendly ticket URLs** — Each ticket has a permanent, human-readable URL in the format `/tickets/{id}/{slug}`, where `{id}` is the immutable numeric ticket ID and `{slug}` is a URL-safe, lowercase, hyphenated version of the ticket title (e.g., `/tickets/42/password-reset-not-working`). The `{id}` is the authoritative identifier — if the slug in the URL doesn't match the current title, the server redirects to the correct URL. This ensures stable, shareable links even if the title changes.
+
 2.10. **Customer satisfaction (CSAT)** — The ticket owner can mark an agent's post as **"Solved"**, indicating that it resolved their issue. Only one post per ticket can be marked as solved at a time; marking a different post moves the solved mark. Once a post is marked as solved, a 1–5 star rating prompt appears on the ticket detail page. The user may optionally add a text comment along with the rating. Submitting a rating creates a special CSAT post on the ticket. The agent who authored the solved post receives a notification about the rating and comment. The rating and the solved post are highlighted on the ticket detail page. A user can change the rating (and comment) at any time while the solved mark remains. If the user removes the solved mark, the rating is also removed.
+
 2.11. **Follow a ticket** — A logged-in user can follow any ticket they have access to but did not create. A "Follow" / "Unfollow" toggle is shown on the ticket detail page. Followers receive the same email notifications as the ticket owner (new posts, status changes, agent assignment) but cannot rate the ticket. The ticket owner automatically follows their own ticket and cannot unfollow it.
 
 #### 3. Teams
 
 3.1. **Teams** — Users can belong to a team. If a user is on a team, the home page shows a toggle between "My Tickets" and "Team Tickets". The team view lists all tickets created by any member of the same team.
+
 3.2. **Teammate visibility** — Team members can see and comment on each other's private tickets.
+
 3.3. **No team management UI needed** — Teams are set up via the database / seed data. No UI for creating or managing teams is required in this version.
 
 #### 4. Ticket Types
 
 4.1. **Ticket types** — Every ticket has a type. The system comes with three pre-defined types: **"Question"** (default), **"Issue"**, and **"Suggestion"**. One type is marked as the default and is pre-selected when creating a new ticket. Once a ticket is created, only an agent or admin can change its type.
+
 4.2. **Manage ticket types** — Admins can create, rename, and delete ticket types. Admins can also change which type is the default. Deleting a type that is in use by existing tickets is not allowed.
 
 #### 5. Ticket Categories
 
 5.1. **Ticket categories** — A ticket has an optional category field. The list of available categories is managed by the admin. There are no default categories. If the categories list is empty, the category field is not shown in the ticket creation form or ticket detail page. The category can be set or changed by the ticket owner or an agent/admin.
+
 5.2. **Manage categories** — Admins can create, rename, and delete categories. Deleting a category that is in use by existing tickets is not allowed.
 
 #### 6. Tags / Labels
 
 6.1. **Tags feature toggle** — Tags are an optional feature, disabled by default. The admin can enable or disable tags from the Admin Setup page. When disabled, tag-related UI is hidden throughout the application.
+
 6.2. **Tags on tickets** — When enabled, a ticket can have zero or more tags. Tags are displayed as colored pills on the ticket detail page and in ticket lists. Users and agents can add or remove tags on tickets they have access to.
+
 6.3. **Manage tags** — Admins create and manage the list of available tags. Each tag has a name and a color (selected from a predefined palette or custom hex value). Admins can rename, change the color of, or delete tags. Deleting a tag removes it from all tickets that use it.
 
 #### 7. Agent Dashboard
 
 7.1. **Agent dashboard access** — Agents and admins see an "Agent Dashboard" link in the navigation bar. Regular users do not see it, and are redirected away if they try to access it directly.
+
 7.2. **View all tickets** — The dashboard shows ALL tickets in the system (both private and public), with the submitter's email, last-updated date, post count, and status badge.
+
 7.3. **Filter by status** — Toggle buttons let the agent filter by "All", "Active" (open + pending), or "Closed".
+
 7.4. **Sort** — Toggle buttons let the agent sort by "Last Modified" (default) or "Created" date.
+
 7.5. **Filter by user** — A text field lets the agent search tickets by submitter email (partial match). A "Clear" link removes the filter.
+
 7.6. **Result count** — The dashboard shows "N ticket(s) found" above the list.
+
 7.7. **All filters are URL-based** — Filters use URL search params so the page is bookmarkable and shareable.
 
 #### 8. Agent Actions on Tickets
 
 8.1. **Change status** — On a ticket detail page, an agent sees "Mark Pending", "Close Ticket", and (if the ticket is closed) "Re-open Ticket" buttons. Regular users do not see these buttons. Closing a ticket automatically removes the assigned agent.
+
 8.2. **Reply as agent** — Agents can add a post, comment, or note to any ticket at any time, regardless of the ticket's status (open, pending, or closed). Adding a post or comment to a closed ticket does **not** automatically re-open it — the agent must explicitly re-open if desired.
+
 8.3. **Assign agent** — A ticket can be assigned to an agent, indicating that this agent is responsible for working on it. Only agents and admins can assign or reassign an agent. A ticket can have at most one assigned agent at a time.
+
 8.4. **Mark as duplicate** — Only an agent or admin can mark a ticket as a duplicate of another ticket by linking it to the original. When a ticket is marked as duplicate, it is automatically closed and a system-generated post is added to the ticket with a Markdown message containing a link to the original ticket. The Markdown template for the duplicate message is configurable by the admin; there is a default template (e.g., *"This ticket has been closed as a duplicate of [#{{ticketId}}](link)."*). An agent or admin can also remove the duplicate link, which automatically re-opens the ticket.
+
 8.5. **Escalate ticket** — An agent or admin can escalate a ticket to a different agent or admin. Escalation is distinct from simple reassignment: it records an escalation event in the activity log, changes the ticket status to **open** (if not already), and sends a dedicated escalation notification to the target agent/admin. The escalating agent must provide a reason (free-text) which is stored as an internal note visible only to agents and admins. A ticket can be escalated multiple times. The escalation history (who escalated, to whom, when, and why) is visible in the activity log for agents and admins.
+
 8.6. **Delete ticket** — Only an admin can delete a ticket. A "Delete" button with a confirmation prompt is shown on the ticket detail page for admins only. A ticket that has other tickets linked to it as duplicates (i.e., it is the original in a duplicate relationship) cannot be deleted until all duplicate links pointing to it are removed.
 
 #### 9. Canned Responses (Reply Templates)

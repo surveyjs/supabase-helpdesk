@@ -139,7 +139,9 @@ All permission checks must be enforced **at the database level** using Postgres 
 #### 9. Canned Responses (Reply Templates)
 
 9.1. **Canned responses** — Agents and admins can create pre-written reply templates (canned responses) to speed up common replies. A canned response has a title, a body (Markdown text), and a visibility setting: **public** (visible to all agents and admins) or **private** (visible only to the agent who created it).
+
 9.2. **Using canned responses** — When composing a post or comment, an agent can pick a canned response from a dropdown or searchable list. Selecting a canned response inserts its body into the text area. The agent can edit the inserted text before submitting.
+
 9.3. **Managing canned responses** — An agent can create, edit, and delete their own private canned responses. Public canned responses can be created by any agent but can only be edited or deleted by the agent who created them or by an admin.
 
 #### 10. Posts, Comments & Notes
@@ -149,47 +151,69 @@ A **post** is the primary unit of content within a ticket. Every post belongs to
 There are three post types:
 
 10.1. **Post (root post)** — A top-level entry in a ticket's timeline. Every ticket has at least one post — the **original post**, which is created together with the ticket and contains its initial description. After that, any user or agent can add more posts. A post cannot reference another post; it always sits at the root level.
+
 10.2. **Comment** — A reply attached to a specific post (foreign key to that post). Comments provide threaded discussion under a post. A comment **cannot** be made on another comment — only on a post.
+
 10.3. **Note** — An internal post visible **only to agents and admins**. Notes are used for internal discussion and are never shown to regular users, regardless of ticket visibility.
+
 10.4. **File attachments** — Any post, comment, or note can include one or more file attachments. Files are uploaded to Supabase Storage. Allowed file types: images (PNG, JPG, GIF, WebP), documents (PDF, DOC, DOCX, XLS, XLSX, TXT, CSV), and archives (ZIP). Maximum file size: 10 MB per file. Attachments are displayed below the post body — images show an inline thumbnail preview; other file types show the file name, size, and a download link. Attachments inherit the visibility of the post they belong to (private post attachments are not accessible to unauthorized users). File access is enforced via Supabase Storage RLS policies.
 
 #### 11. Post Visibility & Privacy
 
 11.1. **Private posts / comments** — Any post or comment can be marked as **private**, except the original post that is created together with the ticket. When a post or comment is private, it is visible only to the ticket owner, their team members, and agents/admins — even if the ticket itself is public.
+
 11.2. **Notes are always internal** — Notes are implicitly restricted to agents and admins and are never visible to regular users.
+
 11.3. **Draft posts** — Any post (post, comment, or note) created by an agent can be saved as a **draft**. A draft post is visible only to agents and admins — regular users cannot see it regardless of ticket or post visibility settings. The draft state indicates that the agent is working on a response but it is not ready to be shared yet. When the agent is satisfied with the content, they publish the draft, which turns it into a regular post visible according to normal visibility rules.
 
 #### 12. Activity / Audit Log
 
 12.1. **Ticket activity log** — Every ticket maintains a chronological activity log that records all significant events. Activity entries are displayed inline in the ticket timeline alongside posts and comments, styled as compact system messages (e.g., gray text, no background card). Each entry records the actor (who performed the action), the timestamp, and a description of the change.
+
 12.2. **Tracked events** — The following events are logged: status changes (open → pending, pending → closed, closed → open, etc.), agent assignment and unassignment, ticket type changes, category changes, severity changes, tag additions and removals, marking as duplicate (with link to original), removing duplicate link, draft published, privacy changes on posts/comments, escalation events (who escalated, to whom, and reason), marking a post as solved, removing the solved mark, and CSAT rating submissions.
+
 12.3. **Activity log visibility** — Activity log entries follow the same visibility rules as the ticket itself. All users who can view the ticket can see its activity log. Internal details (e.g., note-related activity) are visible only to agents and admins.
 
 #### 13. Email Notifications
 
 13.1. **Email notifications for users** — Users receive email notifications when: a new post or comment is added to their ticket (by an agent or teammate), the ticket status changes, an agent is assigned to their ticket, or an agent's post on their ticket is marked as solved / receives a CSAT rating change. Followers of a ticket receive the same notifications as the ticket owner (see 2.11). Private notes and draft posts do not trigger notifications to users or followers.
+
 13.2. **Email notifications for agents** — Agents receive email notifications when: a new ticket is created, a user replies to a ticket assigned to them, a ticket is assigned to them, a user re-opens a closed ticket, a ticket is escalated to them, or a user marks their post as solved / submits or changes a CSAT rating on their solved post. An agent does not receive notifications for their own actions.
+
 13.3. **Notification templates** — The admin configures separate email templates for each notification event (e.g., "New reply on your ticket", "Ticket assigned to you", "New ticket created"). Templates support Markdown and placeholders such as `{{ticketTitle}}`, `{{ticketId}}`, `{{authorName}}`, `{{postBody}}`, and `{{ticketUrl}}`. Each template has a subject line and a body. A "Reset to default" button restores the built-in template.
+
 13.4. **Email configuration** — The admin configures outbound email settings (SMTP host, port, username, password, sender address, and sender display name). A "Send test email" button lets the admin verify the configuration. Email sending is disabled until the configuration is saved and verified.
 
 #### 14. Inbound Email (Email-to-Ticket)
 
 14.1. **Inbound email configuration** — The admin configures a reply-to address (e.g., `support@example.com`) used as the sender/reply address in outbound notifications. When a user replies to a notification email, the system processes the incoming email.
+
 14.2. **Create ticket by email** — An incoming email from a known user that does not match an existing ticket thread creates a new ticket. The email subject becomes the ticket title and the email body becomes the original post. The ticket is created with all default settings: private (regardless of the admin-configured default), the system default ticket type (e.g., "Question"), no category, no severity, and no tags.
+
 14.3. **Reply by email** — An incoming email that matches an existing ticket thread (identified by a ticket reference in the email subject, e.g., `[Ticket #123]`) creates a new post on that ticket. If the ticket was closed, the reply re-opens it (same as 2.5). If the ticket is marked as a duplicate, the reply does **not** add a post to the duplicate ticket; instead, a new ticket is created with the email subject as the title and the email body as the original post, with an auto-generated note in the body linking to the duplicate ticket (e.g., *"Related to [#{{ticketId}}](link)"*). Only emails from users who have permission to view the ticket are processed; others are ignored.
+
 14.4. **Unknown sender auto-reply** — If an incoming email is from an address that does not match any registered user, the system sends an automatic reply informing them that they are not registered and providing a link to the registration page. The email is not processed further (no ticket or post is created). The auto-reply email template is configurable by the admin with a "Reset to default" option.
 
 #### 15. Admin Setup Page
 
 15.1. **Admin setup access** — Only admins can access the Admin Setup page. Admins see a "Setup" link in the navigation bar. Non-admin users do not see it and are redirected away if they try to access the URL directly.
+
 15.2. **Ticket types management** — A section to manage ticket types: add new types, rename existing ones, delete unused types, and set which type is the default. (See 4.1, 4.2.)
+
 15.3. **Categories management** — A section to manage ticket categories: add new categories, rename existing ones, and delete unused categories. (See 5.1, 5.2.)
+
 15.4. **Tags management** — A section to enable or disable the tags feature (disabled by default). When enabled, the admin can create, rename, change the color of, and delete tags. (See 6.1, 6.2, 6.3.)
+
 15.5. **Duplicate ticket template** — A section to edit the Markdown template used for the system-generated post when a ticket is marked as duplicate. The template supports a `{{ticketId}}` placeholder. A "Reset to default" button restores the built-in template. (See 8.4.)
+
 15.6. **Agent management** — A section that shows the list of current agents. The admin can search for a user by email and promote them to the agent role. The admin can also revoke agent rights, turning an agent back into a regular user.
+
 15.7. **Email configuration** — A section to configure outbound SMTP settings and verify them with a test email. (See 13.4.)
+
 15.8. **Notification templates** — A section to view and edit all email notification templates for users and agents, including the unknown-sender auto-reply template, with per-template subject and body fields and a reset-to-default option. (See 13.3, 14.4.)
+
 15.9. **Inbound email configuration** — A section to configure the reply-to address and enable/disable inbound email processing. (See 14.1.)
+
 15.10. **Ticket privacy settings** — A section with two settings: (1) **Default ticket privacy** — whether new tickets are private or public by default (private by default). (2) **Allow users to change privacy** — a toggle that controls whether users see the "Private" checkbox on the ticket creation form. When disabled, all tickets are created with the admin-configured default and users cannot change privacy. Agents and admins can always change ticket privacy regardless of this setting.
 
 ---

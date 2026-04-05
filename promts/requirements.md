@@ -35,11 +35,17 @@ There are three user roles: **User**, **Agent**, and **Admin**.
 | Mark ticket as duplicate | — | ✓ | ✓ |
 | Escalate ticket | — | ✓ | ✓ |
 | Delete tickets | — | — | ✓ |
+| Merge tickets | — | ✓ | ✓ |
+| Block / unblock users | — | — | ✓ |
 | Access the Agent Dashboard | — | ✓ | ✓ |
 | Manage ticket types | — | — | ✓ |
 | Manage ticket categories | — | — | ✓ |
 | Add/remove tags on tickets | ✓ (accessible tickets) | ✓ | ✓ |
 | Manage tags (create/edit/delete) | — | — | ✓ |
+| Manage custom fields | — | — | ✓ |
+| Manage knowledge base | — | — | ✓ |
+| Manage SLA policies | — | — | ✓ |
+| Access reporting dashboard | — | — | ✓ |
 | Manage agents (promote/revoke) | — | — | ✓ |\n| Manage email configuration | — | — | ✓ |\n| Manage notification templates | — | — | ✓ |\n| Manage inbound email settings | — | — | ✓ |
 | Access the Admin Setup page | — | — | ✓ |
 
@@ -57,7 +63,9 @@ All permission checks must be enforced **at the database level** using Postgres 
 
 1.3. **Sign out** — A logged-in user can sign out from the navigation bar.
 
-1.4. **Unauthenticated visitors** — If the admin has enabled public access for unauthenticated visitors (see 16.10), unauthenticated visitors can view public tickets. They can’t create or make any modification to any ticket. If public access is disabled, unauthenticated visitors see only the login page and cannot view any tickets.
+1.4. **Forgot password** — The login page has a "Forgot password?" link. Clicking it shows a form where the user enters their email. If the email matches a registered account, a password reset email is sent with a one-time link. The link opens a page where the user sets a new password. If the admin has configured an external authentication URL (see 16.14), the "Forgot password?" link redirects to that external URL instead of showing the built-in form.
+
+1.5. **Unauthenticated visitors** — If the admin has enabled public access for unauthenticated visitors (see 16.10), unauthenticated visitors can view public tickets. They can't create or make any modification to any ticket. If public access is disabled, unauthenticated visitors see only the login page and cannot view any tickets.
 
 #### 2. Ticket Statuses
 
@@ -116,6 +124,12 @@ A new ticket defaults to **Medium**. The ticket owner, agents, and admins can ch
 
 3.11. **Follow a ticket** — A logged-in user can follow any ticket they have access to but did not create. A "Follow" / "Unfollow" toggle is shown on the ticket detail page. Followers receive the same email notifications as the ticket owner (new posts, status changes, agent assignment) but cannot rate the ticket. The ticket owner automatically follows their own ticket and cannot unfollow it.
 
+3.12. **Markdown preview** — All text areas for composing posts, comments, and notes include a "Preview" tab that renders the Markdown as formatted HTML before submission. The user can toggle between "Write" and "Preview" tabs. The preview renders the same Markdown subset used in the final display.
+
+3.13. **Custom fields** — Tickets can have additional custom fields defined by the admin (see 16.15). Custom fields are stored as a JSON object on the ticket. On the ticket creation form, custom fields are displayed after the standard fields. On the ticket detail page, custom fields are displayed in the metadata area. The ticket owner, agents, and admins can set and edit custom field values.
+
+3.14. **Ticket creation rate limit** — To prevent spam, the system limits how many tickets a user can create within a 24-hour sliding window. The limit is configured by the admin (see 16.13); the default is **10**. When the limit is reached, the user sees an error message and cannot create new tickets until the window expires. Agents and admins are not subject to this limit.
+
 #### 4. Teams
 
 4.1. **Teams** — Users can belong to a team. A user can belong to at most one team.
@@ -172,6 +186,8 @@ A new ticket defaults to **Medium**. The ticket owner, agents, and admins can ch
 
 8.11. **All filters are URL-based** — Filters use URL search params so the page is bookmarkable and shareable.
 
+8.12. **Saved views** — Agents and admins can save the current combination of filters and sort order as a named view (e.g., "My open Critical tickets", "Unassigned this week"). Saved views appear as quick-access links above the filter controls. Each agent manages their own saved views — saved views are private to the agent who created them. An agent can rename or delete their saved views. Clicking a saved view applies all its filters and sort to the dashboard URL.
+
 #### 9. Agent Actions on Tickets
 
 9.1. **Change status** — On a ticket detail page, an agent sees status action buttons depending on the current state: "Mark Pending" (sets to pending), "Close Ticket" (sets to closed), and "Re-open Ticket" / "Mark Open" (sets to open). The available buttons adapt to the ticket's current status so the agent can transition between any of the three states. Regular users do not see these buttons. Status transition rules are defined in section 2.
@@ -185,6 +201,8 @@ A new ticket defaults to **Medium**. The ticket owner, agents, and admins can ch
 9.5. **Escalate ticket** — An agent or admin can escalate a ticket to a different agent or admin. Escalation is distinct from simple reassignment: it records an escalation event in the activity log, changes the ticket status to **open** (if not already), and sends a dedicated escalation notification to the target agent/admin. The escalating agent must provide a reason (free-text) which is stored as an internal note visible only to agents and admins. A ticket can be escalated multiple times. The escalation history (who escalated, to whom, when, and why) is visible in the activity log for agents and admins.
 
 9.6. **Delete ticket** — Only an admin can delete a ticket. A "Delete" button with a confirmation prompt is shown on the ticket detail page for admins only. A ticket that has other tickets linked to it as duplicates (i.e., it is the original in a duplicate relationship) cannot be deleted until all duplicate links pointing to it are removed.
+
+9.7. **Merge tickets** — An agent or admin can merge two tickets into one. Merging moves all posts, comments, notes, attachments, activity log entries, and followers from the source ticket into the target ticket. The source ticket is then closed and marked with a system-generated post linking to the target ticket (using the same configurable template as duplicates, but with a "merged into" message). Unlike duplicate, merging physically consolidates the timelines — the source ticket becomes a redirect stub. The merged posts retain their original timestamps and authors so the combined timeline stays chronological. Tags from both tickets are combined (union). Custom field values from the source are **not** copied to the target (the target's values are preserved). Merge is irreversible.
 
 #### 10. Canned Responses (Reply Templates)
 
@@ -238,6 +256,8 @@ There are three post types:
 
 14.4. **Email configuration** — The admin configures outbound email settings (SMTP host, port, username, password, sender address, and sender display name). A "Send test email" button lets the admin verify the configuration. Email sending is disabled until the configuration is saved and verified.
 
+14.5. **Notification preferences** — Each user (including agents and admins) can manage their own notification preferences from a "Notification Settings" page accessible via a link in the navigation bar user menu. The page lists all notification event types the user can receive and provides a toggle for each to enable or disable email notifications for that event. All notifications are enabled by default. Preferences are per-user and do not affect other users. Disabling a notification type suppresses the email but does not affect in-app behavior (e.g., activity log entries are still recorded).
+
 #### 15. Inbound Email (Email-to-Ticket)
 
 15.1. **Inbound email configuration** — The admin configures a reply-to address (e.g., `support@example.com`) used as the sender/reply address in outbound notifications. When a user replies to a notification email, the system processes the incoming email.
@@ -247,6 +267,8 @@ There are three post types:
 15.3. **Reply by email** — An incoming email that matches an existing ticket thread (identified by a ticket reference in the email subject, e.g., `[Ticket #123]`) creates a new post on that ticket. If the ticket was closed or pending, the reply transitions it to open (same as 3.5 / section 2); email-based re-opens are subject to the same rate limit as UI re-opens (see 16.12) — if the limit is exceeded, the reply is still added as a post but the status remains unchanged. If the ticket is marked as a duplicate, the email reply is **rejected** and the system sends an auto-reply informing the sender that the ticket is closed as a duplicate and directing them to the original ticket. Only emails from users who have permission to view the ticket are processed; others are ignored.
 
 15.4. **Unknown sender** — If an incoming email is from an address that does not match any registered user, the system does **not** create a ticket. Instead, it sends an automatic reply informing the sender that they are not registered and providing a link to the registration page. The auto-reply email template is configurable by the admin with a "Reset to default" option (see 16.8).
+
+15.5. **Email signature stripping** — When processing inbound emails, the system strips common email signatures, quoted reply text, and forwarded-message headers before creating a post. The system detects standard signature delimiters (e.g., `-- `, `___`, "Sent from my iPhone") and quoted blocks (lines starting with `>`). Only the new content above the signature/quote is used as the post body. If stripping results in an empty body, the full email body is used as a fallback.
 
 #### 16. Admin Setup Page
 
@@ -274,13 +296,95 @@ There are three post types:
 
 16.12. **Re-open rate limit** — A numeric setting that controls how many times a user can re-open closed tickets within a 24-hour sliding window. The default is **3**. Setting it to **0** disables the limit (unlimited re-opens). When a user exceeds the limit, their reply to a closed ticket is still posted but the ticket status remains **closed**, and the user sees an informational message. Agents and admins are not subject to this limit.
 
+16.13. **Ticket creation rate limit** — A numeric setting that controls how many tickets a user can create within a 24-hour sliding window. The default is **10**. Setting it to **0** disables the limit (unlimited creation). When the limit is reached, the user sees an error message and cannot create new tickets until the window expires. Agents and admins are not subject to this limit. (See 3.14.)
+
+16.14. **External authentication URL** — An optional URL field. When set, the "Forgot password?" link on the login page and the "Change password" / "Edit profile" links on the user profile page redirect to this external URL instead of showing the built-in forms. This is useful when authentication is handled by an external identity provider. When empty (default), the built-in authentication pages are used.
+
+16.15. **Custom fields management** — A section to define custom fields for tickets. Each custom field has: a name (unique, displayed as the label), a type (text, number, dropdown, checkbox, or date), and an optional "required" flag. For dropdown fields, the admin defines the list of allowed values. Custom fields are stored as a JSON object on each ticket. The admin can reorder, rename, and delete custom fields. Deleting a custom field removes its values from all tickets. (See 3.13.)
+
+16.16. **SLA configuration** — A section to define SLA policies. See section 17 for details.
+
+16.17. **User blocking** — A section to view and manage blocked users. See section 22 for details.
+
+16.18. **Merge ticket template** — A section to edit the Markdown template used for the system-generated post when a ticket is merged into another. The template supports a `{{ticketId}}` placeholder. A "Reset to default" button restores the built-in template. The default template is: *"This ticket has been merged into [#{{ticketId}}](link)."* (See 9.7.)
+
+#### 17. SLA (Service Level Agreements)
+
+17.1. **SLA policies** — The admin can define SLA policies that set time-based targets for ticket response and resolution. Each SLA policy has a name and defines two targets: **first response time** (how quickly an agent must first reply) and **resolution time** (how quickly the ticket must be closed). Both targets are specified in business hours.
+
+17.2. **SLA assignment** — SLA policies are assigned based on ticket severity. The admin maps each severity level to an SLA policy (e.g., Critical → 1h response / 4h resolution, Low → 24h response / 72h resolution). A ticket's SLA is determined when it is created and updates if the severity changes. If no SLA policy is mapped to a severity level, no SLA targets apply to tickets with that severity.
+
+17.3. **SLA timers** — The system tracks elapsed time against SLA targets. The timer starts when the ticket is created (for first response) or when it enters **open** status (for resolution). The timer **pauses** when the ticket is in **pending** status (waiting on customer) and resumes when it returns to **open**. The timer stops when the target is met (first agent reply for response, ticket closed for resolution).
+
+17.4. **SLA indicators** — On the ticket detail page and agent dashboard, SLA status is shown as a visual indicator: **on track** (green), **approaching** (yellow, within 75% of the target), or **breached** (red, target exceeded). The agent dashboard can be sorted by SLA urgency so the most at-risk tickets appear first.
+
+17.5. **SLA breach notifications** — When an SLA target is breached, a notification is sent to the assigned agent (if any) and to all admins. When an SLA target is approaching (configurable threshold, default 75%), a warning notification is sent to the assigned agent. These notifications use configurable templates (see 16.8).
+
+#### 18. Reporting & Analytics
+
+18.1. **Reporting dashboard access** — Admins see a "Reports" link in the navigation bar. Agents do not have access to the reporting dashboard. Regular users do not see the link and are redirected away if they try to access the URL directly.
+
+18.2. **Ticket volume** — A chart showing the number of tickets created over time (daily, weekly, or monthly, selectable). Filterable by status, severity, type, and category.
+
+18.3. **Resolution metrics** — Average time to first response, average time to resolution, and median resolution time. Displayed for a selected time period with comparison to the previous period. Broken down by severity level.
+
+18.4. **Agent performance** — A table showing per-agent metrics: number of tickets assigned, number of tickets resolved (closed), average response time, average resolution time, and average CSAT rating. Sortable by any column. Filterable by time period.
+
+18.5. **CSAT summary** — Average CSAT rating and distribution (bar chart of 1–5 star ratings) for a selected time period. Trend chart showing CSAT over time.
+
+18.6. **SLA compliance** — Percentage of tickets that met SLA targets (first response and resolution) for a selected time period, broken down by severity. A list of breached tickets with links.
+
+18.7. **Backlog overview** — Current count of open and pending tickets, broken down by severity and assigned/unassigned. Trend chart showing backlog size over time.
+
+18.8. **Export** — All report data can be exported as CSV for external analysis.
+
+#### 19. Knowledge Base / FAQ
+
+19.1. **Knowledge base access** — The knowledge base is a public-facing section accessible from the navigation bar via a "Help Center" link. It is available to all users (authenticated and unauthenticated, if public access is enabled). The knowledge base is separate from the ticket system.
+
+19.2. **Articles** — The knowledge base consists of articles organized into categories. Each article has a title, a body (Markdown text), a category, and a published/draft status. Only published articles are visible to non-admin users. Articles have SEO-friendly URLs in the format `/help/{category-slug}/{article-slug}`.
+
+19.3. **Article categories** — Knowledge base categories are separate from ticket categories. Each category has a name and a display order. The help center landing page lists all categories with their published article count.
+
+19.4. **Search** — A search field on the help center page lets users search articles by title and body content (partial match). Search results are paginated.
+
+19.5. **Article management** — Only admins can create, edit, publish, unpublish, and delete knowledge base articles and categories. Article management is done from a section in the Admin Setup page.
+
+19.6. **Suggested articles** — When a user starts typing a ticket title in the creation form, the system searches the knowledge base and displays up to 5 matching article links below the title field. This encourages self-service before ticket submission.
+
+#### 20. User Profile
+
+20.1. **Profile page** — Each logged-in user can access their profile page via a link in the navigation bar user menu. The profile page shows the user's email, role, team (if any), and account creation date.
+
+20.2. **Change password** — The profile page includes a "Change password" form with fields for current password and new password (with confirmation). If the admin has configured an external authentication URL (see 16.14), the "Change password" section is replaced with a link to the external URL.
+
+20.3. **Display name** — Users can set an optional display name on their profile. When set, the display name is shown instead of the email address in posts, comments, ticket lists, and activity log entries. The email is still shown in the agent dashboard and admin views for identification purposes.
+
+#### 21. Real-Time Updates
+
+21.1. **Live ticket updates** — The ticket detail page subscribes to Supabase Realtime channels for the current ticket. When another user adds a post, comment, or note, changes the ticket status, or modifies ticket metadata, the page updates automatically without requiring a manual refresh. New posts appear at the bottom of the timeline with a subtle animation.
+
+21.2. **Live dashboard updates** — The agent dashboard subscribes to Supabase Realtime for ticket changes. New tickets, status changes, and assignment changes are reflected in the list in real time. The result count updates accordingly.
+
+21.3. **Optimistic updates are not required** — Given the server-rendered architecture, real-time updates are delivered via Supabase Realtime subscriptions in a minimal client-side listener that triggers a page data refresh. This is the only permitted use of client-side JavaScript beyond standard form submissions.
+
+#### 22. User Blocking
+
+22.1. **Block a user** — An admin can block a user from the Admin Setup page (see 16.17) or from the ticket detail page (via a "Block user" action in the submitter info area). Blocking a user prevents them from creating new tickets, posting replies, and commenting. Existing tickets and posts by the blocked user remain visible. The blocked user can still log in and view their existing tickets but sees a banner explaining their account is restricted.
+
+22.2. **Unblock a user** — An admin can unblock a previously blocked user, restoring their full capabilities.
+
+22.3. **Block indicator** — In the agent dashboard and ticket detail pages, blocked users are marked with a visual indicator (e.g., a red "Blocked" badge next to their email). This helps agents identify restricted accounts.
+
+22.4. **Block log** — Blocking and unblocking events are recorded in a system-wide admin activity log (separate from ticket activity logs). The log shows who was blocked/unblocked, by which admin, and when.
+
 ---
 
 ### Navigation Bar
 
-- **Left side**: App name "HelpDesk" (links to home), "My Tickets" link, (for agents/admins) "Agent Dashboard" link, and (for admins only) "Setup" link.
-- **Right side**: Current user's email, role badges, and a "Sign out" button.
-- The nav bar is always visible. For unauthenticated visitors it shows the app name and a "Log in" link. The full nav bar (My Tickets, Agent Dashboard, user email, Sign out) is only shown to logged-in users.
+- **Left side**: App name "HelpDesk" (links to home), "My Tickets" link, "Help Center" link, (for agents/admins) "Agent Dashboard" link, (for admins only) "Reports" link, and (for admins only) "Setup" link.
+- **Right side**: Current user's email (or display name, if set), role badges, and a "Sign out" button. A dropdown menu on the user name provides links to "Profile" and "Notification Settings".
+- The nav bar is always visible. For unauthenticated visitors it shows the app name, "Help Center" link, and a "Log in" link. The full nav bar (My Tickets, Agent Dashboard, user menu, Sign out) is only shown to logged-in users.
 
 ---
 
@@ -293,6 +397,7 @@ There are three post types:
 - Use Geist font family (sans + mono).
 - Forms in white card containers with padding and rounded corners.
 - No dark mode needed (just light theme).
+- **Mobile responsive** — All pages must be fully responsive. On small screens: the nav bar collapses into a hamburger menu, ticket lists use a compact single-column layout, the ticket detail page stacks metadata above the timeline, and filter controls collapse into an expandable panel. Touch targets must be at least 44×44px.
 
 ---
 
@@ -321,5 +426,6 @@ Seed **7 tickets** across Alice, Bob, and Carol with realistic helpdesk subjects
 4. **Cookie-based auth** — Use `@supabase/ssr` for server-side Supabase clients. A Next.js middleware refreshes the session on every request.
 5. **Agent dashboard performance** — Create a Postgres VIEW (`agent_tickets`) that joins tickets with profile emails and pre-aggregates post counts. The agent page queries this view instead of doing complex joins on the client.
 6. **URL-driven state** — Filtering and view switching (my tickets vs team tickets, agent dashboard filters) should use URL search params, not React state.
+7. **Real-time subscriptions** — Use Supabase Realtime to push live updates to ticket detail and agent dashboard pages. This is the only permitted use of client-side JavaScript (`"use client"`) beyond standard form submissions. The real-time listener is a thin wrapper that triggers a server data refresh when changes are detected.
 
 ---

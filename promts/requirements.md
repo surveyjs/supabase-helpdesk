@@ -188,6 +188,8 @@ A new ticket defaults to **Medium**. The ticket owner, agents, and admins can ch
 
 8.12. **Saved views** — Agents and admins can save the current combination of filters and sort order as a named view (e.g., "My open Critical tickets", "Unassigned this week"). Saved views appear as quick-access links above the filter controls. Each agent manages their own saved views — saved views are private to the agent who created them. An agent can rename or delete their saved views. Clicking a saved view applies all its filters and sort to the dashboard URL.
 
+8.13. **Search by title/content** — A text field lets the agent search tickets by title or post content (partial match). This is separate from the submitter email filter (8.5). A "Clear" link removes the search. The search filter is URL-based and combines with all other filters.
+
 #### 9. Agent Actions on Tickets
 
 9.1. **Change status** — On a ticket detail page, an agent sees status action buttons depending on the current state: "Mark Pending" (sets to pending), "Close Ticket" (sets to closed), and "Re-open Ticket" / "Mark Open" (sets to open). The available buttons adapt to the ticket's current status so the agent can transition between any of the three states. Regular users do not see these buttons. Status transition rules are defined in section 2.
@@ -242,13 +244,13 @@ There are three post types:
 
 13.1. **Ticket activity log** — Every ticket maintains a chronological activity log that records all significant events. Activity entries are displayed inline in the ticket timeline alongside posts and comments, styled as compact system messages (e.g., gray text, no background card). Each entry records the actor (who performed the action), the timestamp, and a description of the change.
 
-13.2. **Tracked events** — The following events are logged: status changes (open → pending, pending → closed, closed → open, etc.), agent assignment, unassignment, and reassignment, ticket title changes, ticket type changes, category changes, severity changes, tag additions and removals, marking as duplicate (with link to original), removing duplicate link, draft published, privacy changes on posts/comments, escalation events (who escalated, to whom, and reason), marking a post as solved, removing the solved mark, and CSAT rating submissions.
+13.2. **Tracked events** — The following events are logged: status changes (open → pending, pending → closed, closed → open, etc.), agent assignment, unassignment, and reassignment, ticket title changes, ticket type changes, category changes, severity changes, tag additions and removals, marking as duplicate (with link to original), removing duplicate link, ticket merge (on both the source and target tickets — the source records "merged into #X" and the target records "merged from #Y"), draft published, privacy changes on posts/comments, escalation events (who escalated, to whom, and reason), marking a post as solved, removing the solved mark, and CSAT rating submissions.
 
 13.3. **Activity log visibility** — Activity log entries follow the same visibility rules as the ticket itself. All users who can view the ticket can see its activity log. Internal details (e.g., note-related activity) are visible only to agents and admins.
 
 #### 14. Email Notifications
 
-14.1. **Email notifications for users** — Users receive email notifications when: a new post or comment is added to their ticket (by an agent or teammate), the ticket status changes, or an agent is assigned to their ticket. Followers of a ticket receive the same notifications as the ticket owner (see 3.11). Private notes and draft posts do not trigger notifications to users or followers.
+14.1. **Email notifications for users** — Users receive email notifications when: a new post or comment is added to their ticket (by an agent or teammate), the ticket status changes, an agent is assigned to their ticket, or their ticket is merged into another ticket (the notification includes a link to the target ticket). Followers of a ticket receive the same notifications as the ticket owner (see 3.11). Private notes and draft posts do not trigger notifications to users or followers.
 
 14.2. **Email notifications for agents** — Agents receive email notifications when: a user replies to a ticket assigned to them, a ticket is assigned to them, a user replies to a closed ticket (auto-transitions to open), a ticket is escalated to them, a user marks their post as solved / submits or changes a CSAT rating on their solved post, an SLA target on a ticket assigned to them is approaching the threshold, an SLA target on a ticket assigned to them is breached, or another agent or admin adds a note to a ticket assigned to them. Admins additionally receive SLA breach notifications for all tickets, not just those assigned to them (see 17.5). An agent does not receive notifications for their own actions. Note: new ticket creation does **not** trigger a notification to all agents — agents see new unassigned tickets via the Agent Dashboard.
 
@@ -262,9 +264,9 @@ There are three post types:
 
 15.1. **Inbound email configuration** — The admin configures a reply-to address (e.g., `support@example.com`) used as the sender/reply address in outbound notifications. When a user replies to a notification email, the system processes the incoming email.
 
-15.2. **Create ticket by email** — An incoming email from a known user that does not match an existing ticket thread creates a new ticket. The email subject becomes the ticket title and the email body becomes the original post. The ticket is created with the same defaults as a ticket created from the UI: the admin-configured default privacy setting, the system default ticket type, severity set to **Medium**, no category, and no tags.
+15.2. **Create ticket by email** — An incoming email from a known user that does not match an existing ticket thread creates a new ticket. The email subject becomes the ticket title and the email body becomes the original post. The ticket is created with the same defaults as a ticket created from the UI: the admin-configured default privacy setting, the system default ticket type, severity set to **Medium**, no category, and no tags. Custom fields are not populated for email-created tickets; required custom fields are not enforced — they are left empty and can be filled in later by the ticket owner or an agent. If the sender is a blocked user (see section 22), the email is rejected and the system sends an auto-reply informing them that their account is restricted. Email-created tickets are subject to the same creation rate limit as UI-created tickets (see 3.14 / 16.13); if the user has exceeded the limit, the email is rejected and the system sends an auto-reply informing them of the limit.
 
-15.3. **Reply by email** — An incoming email that matches an existing ticket thread (identified by a ticket reference in the email subject, e.g., `[Ticket #123]`) creates a new post on that ticket. If the ticket was closed or pending, the reply transitions it to open (same as 3.5 / section 2); email-based re-opens are subject to the same rate limit as UI re-opens (see 16.12) — if the limit is exceeded, the reply is still added as a post but the status remains unchanged. If the ticket is marked as a duplicate, the email reply is **rejected** and the system sends an auto-reply informing the sender that the ticket is closed as a duplicate and directing them to the original ticket. Only emails from users who have permission to view the ticket are processed; others are ignored.
+15.3. **Reply by email** — An incoming email that matches an existing ticket thread (identified by a ticket reference in the email subject, e.g., `[Ticket #123]`) creates a new post on that ticket. If the ticket was closed or pending, the reply transitions it to open (same as 3.5 / section 2); email-based re-opens are subject to the same rate limit as UI re-opens (see 16.12) — if the limit is exceeded, the reply is still added as a post but the status remains unchanged. If the ticket is marked as a duplicate, the email reply is **rejected** and the system sends an auto-reply informing the sender that the ticket is closed as a duplicate and directing them to the original ticket. If the sender is a blocked user (see section 22), the email is rejected and the system sends an auto-reply informing them that their account is restricted. Only emails from users who have permission to view the ticket are processed; others are ignored.
 
 15.4. **Unknown sender** — If an incoming email is from an address that does not match any registered user, the system does **not** create a ticket. Instead, it sends an automatic reply informing the sender that they are not registered and providing a link to the registration page. The auto-reply email template is configurable by the admin with a "Reset to default" option (see 16.8).
 
@@ -308,9 +310,11 @@ There are three post types:
 
 16.18. **Merge ticket template** — A section to edit the Markdown template used for the system-generated post when a ticket is merged into another. The template supports a `{{ticketId}}` placeholder. A "Reset to default" button restores the built-in template. The default template is: *"This ticket has been merged into [#{{ticketId}}](link)."* (See 9.7.)
 
+16.19. **Knowledge base management** — A section to manage knowledge base categories and articles: create, edit, publish, unpublish, reorder, and delete categories and articles. (See 19.3, 19.5.)
+
 #### 17. SLA (Service Level Agreements)
 
-17.1. **SLA policies** — The admin can define SLA policies that set time-based targets for ticket response and resolution. Each SLA policy has a name and defines two targets: **first response time** (how quickly an agent must first reply) and **resolution time** (how quickly the ticket must be closed). Both targets are specified in business hours.
+17.1. **SLA policies** — The admin can define SLA policies that set time-based targets for ticket response and resolution. Each SLA policy has a name and defines two targets: **first response time** (how quickly an agent must first reply) and **resolution time** (how quickly the ticket must be closed). Both targets are specified in business hours. Business hours are configured by the admin as part of SLA configuration (see 16.16): a weekly schedule specifying working days and working hours (e.g., Monday–Friday, 9:00–17:00), and a timezone. Hours outside this schedule do not count toward SLA targets. There is no holiday calendar in this version.
 
 17.2. **SLA assignment** — SLA policies are assigned based on ticket severity. The admin maps each severity level to an SLA policy (e.g., Critical → 1h response / 4h resolution, Low → 24h response / 72h resolution). A ticket's SLA is determined when it is created and updates if the severity changes. If no SLA policy is mapped to a severity level, no SLA targets apply to tickets with that severity.
 
@@ -416,12 +420,21 @@ For local development, create seed data with these accounts (all passwords: `pas
 
 Seed **7 tickets** across Alice, Bob, and Carol with realistic helpdesk subjects (password reset issues, feature requests, billing questions, bug reports, etc.) in mixed statuses. Each ticket must have an original post. Seed additional **posts**, **comments**, and **notes** that simulate realistic agent–customer conversations.
 
+Additionally, seed the following reference data:
+
+- **3 categories**: "Billing", "Technical", "Account".
+- **5 tags** with distinct colors: "urgent" (red), "bug" (orange), "feature-request" (blue), "documentation" (teal), "UI" (purple).
+- **1 SLA policy** ("Standard SLA") mapped to Critical (1h response / 4h resolution) and High (4h response / 24h resolution). Low and Medium have no SLA policy.
+- **2 canned responses**: one public ("Greeting" — a standard welcome reply), one private to agent.smith ("Escalation note" — an internal escalation template).
+- **3 knowledge base articles** across 2 categories ("Getting Started" and "Troubleshooting"): two published articles and one draft article.
+- **1 custom field**: a dropdown named "Browser" with values Chrome, Firefox, Safari, and Edge (not required). Populate it on 3 of the 7 seeded tickets.
+
 ---
 
 ### Architecture Constraints
 
 1. **No custom API layer** — Use Supabase client libraries to read/write data directly. Mutations happen through Next.js Server Actions called from `<form>` elements.
-2. **Server-rendered everything** — No `"use client"` components. All pages are async Server Components that fetch data on the server.
+2. **Server-rendered everything** — No `"use client"` components except for: (a) Supabase Realtime subscriptions (see constraint 7), (b) Markdown preview toggling (see 3.12), (c) reporting charts (see section 18), and (d) knowledge base article suggestions with debounced search (see 19.6). These client-side components must be minimal wrappers with no application state management.
 3. **Database-enforced security** — Every table must have Row-Level Security enabled. Helper functions like `is_agent()`, `is_admin()`, and `is_teammate()` should live in Postgres and be used in RLS policies.
 4. **Cookie-based auth** — Use `@supabase/ssr` for server-side Supabase clients. A Next.js middleware refreshes the session on every request.
 5. **Agent dashboard performance** — Create a Postgres VIEW (`agent_tickets`) that joins tickets with profile emails and pre-aggregates post counts. The agent page queries this view instead of doing complex joins on the client.

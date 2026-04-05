@@ -21,7 +21,8 @@ There are three user roles: **User**, **Agent**, and **Admin**.
 | View public tickets | ✓ | ✓ | ✓ |
 | View all tickets (including private) | — | ✓ | ✓ |
 | Add posts/comments to visible tickets | ✓ | ✓ | ✓ |
-| Edit own posts/comments/notes | ✓ | ✓ | ✓ |
+| Edit own posts/comments | ✓ | ✓ | ✓ |
+| Edit own notes | — | ✓ | ✓ |
 | Edit any post/comment/note | — | ✓ | ✓ |
 | Edit ticket title | ✓ (owner) | ✓ | ✓ |
 | Change ticket type | — | ✓ | ✓ |
@@ -229,7 +230,7 @@ There are three post types:
 
 #### 14. Email Notifications
 
-14.1. **Email notifications for users** — Users receive email notifications when: a new post or comment is added to their ticket (by an agent or teammate), the ticket status changes, an agent is assigned to their ticket, or an agent's post on their ticket is marked as solved / receives a CSAT rating change. Followers of a ticket receive the same notifications as the ticket owner (see 3.11). Private notes and draft posts do not trigger notifications to users or followers.
+14.1. **Email notifications for users** — Users receive email notifications when: a new post or comment is added to their ticket (by an agent or teammate), the ticket status changes, or an agent is assigned to their ticket. Followers of a ticket receive the same notifications as the ticket owner (see 3.11). Private notes and draft posts do not trigger notifications to users or followers.
 
 14.2. **Email notifications for agents** — Agents receive email notifications when: a user replies to a ticket assigned to them, a ticket is assigned to them, a user replies to a closed ticket (auto-transitions to open), a ticket is escalated to them, or a user marks their post as solved / submits or changes a CSAT rating on their solved post. An agent does not receive notifications for their own actions. Note: new ticket creation does **not** trigger a notification to all agents — agents see new unassigned tickets via the Agent Dashboard.
 
@@ -243,7 +244,7 @@ There are three post types:
 
 15.2. **Create ticket by email** — An incoming email from a known user that does not match an existing ticket thread creates a new ticket. The email subject becomes the ticket title and the email body becomes the original post. The ticket is created with the same defaults as a ticket created from the UI: the admin-configured default privacy setting, the system default ticket type, severity set to **Medium**, no category, and no tags.
 
-15.3. **Reply by email** — An incoming email that matches an existing ticket thread (identified by a ticket reference in the email subject, e.g., `[Ticket #123]`) creates a new post on that ticket. If the ticket was closed or pending, the reply transitions it to open (same as 3.5 / section 2). If the ticket is marked as a duplicate, the reply is redirected to the original ticket — the post is added to the original ticket instead of the duplicate, and the user receives an auto-reply informing them that their message was added to the original ticket. Only emails from users who have permission to view the ticket are processed; others are ignored.
+15.3. **Reply by email** — An incoming email that matches an existing ticket thread (identified by a ticket reference in the email subject, e.g., `[Ticket #123]`) creates a new post on that ticket. If the ticket was closed or pending, the reply transitions it to open (same as 3.5 / section 2); email-based re-opens are subject to the same rate limit as UI re-opens (see 16.12) — if the limit is exceeded, the reply is still added as a post but the status remains unchanged. If the ticket is marked as a duplicate, the email reply is **rejected** and the system sends an auto-reply informing the sender that the ticket is closed as a duplicate and directing them to the original ticket. Only emails from users who have permission to view the ticket are processed; others are ignored.
 
 15.4. **Unknown sender** — If an incoming email is from an address that does not match any registered user, the system does **not** create a ticket. Instead, it sends an automatic reply informing the sender that they are not registered and providing a link to the registration page. The auto-reply email template is configurable by the admin with a "Reset to default" option (see 16.8).
 

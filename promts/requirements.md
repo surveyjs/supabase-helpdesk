@@ -202,7 +202,7 @@ A new ticket defaults to **Medium**. The ticket owner, agents, and admins can ch
 
 9.6. **Delete ticket** — Only an admin can delete a ticket. A "Delete" button with a confirmation prompt is shown on the ticket detail page for admins only. A ticket that has other tickets linked to it as duplicates (i.e., it is the original in a duplicate relationship) cannot be deleted until all duplicate links pointing to it are removed.
 
-9.7. **Merge tickets** — An agent or admin can merge two tickets into one. Merging moves all posts, comments, notes, attachments, activity log entries, and followers from the source ticket into the target ticket. The source ticket is then closed and marked with a system-generated post linking to the target ticket (using the same configurable template as duplicates, but with a "merged into" message). Unlike duplicate, merging physically consolidates the timelines — the source ticket becomes a redirect stub. The merged posts retain their original timestamps and authors so the combined timeline stays chronological. Tags from both tickets are combined (union). Custom field values from the source are **not** copied to the target (the target's values are preserved). Merge is irreversible.
+9.7. **Merge tickets** — An agent or admin can merge two tickets into one. Merging moves all posts, comments, notes, attachments, activity log entries, and followers from the source ticket into the target ticket. The source ticket is then closed and marked with a system-generated post linking to the target ticket (using the configurable merge template, see 16.18). Unlike duplicate, merging physically consolidates the timelines — the source ticket becomes a redirect stub. The merged posts retain their original timestamps and authors so the combined timeline stays chronological. Tags from both tickets are combined (union). Custom field values from the source are **not** copied to the target (the target's values are preserved). Merge is irreversible.
 
 #### 10. Canned Responses (Reply Templates)
 
@@ -250,7 +250,7 @@ There are three post types:
 
 14.1. **Email notifications for users** — Users receive email notifications when: a new post or comment is added to their ticket (by an agent or teammate), the ticket status changes, or an agent is assigned to their ticket. Followers of a ticket receive the same notifications as the ticket owner (see 3.11). Private notes and draft posts do not trigger notifications to users or followers.
 
-14.2. **Email notifications for agents** — Agents receive email notifications when: a user replies to a ticket assigned to them, a ticket is assigned to them, a user replies to a closed ticket (auto-transitions to open), a ticket is escalated to them, or a user marks their post as solved / submits or changes a CSAT rating on their solved post. An agent does not receive notifications for their own actions. Note: new ticket creation does **not** trigger a notification to all agents — agents see new unassigned tickets via the Agent Dashboard.
+14.2. **Email notifications for agents** — Agents receive email notifications when: a user replies to a ticket assigned to them, a ticket is assigned to them, a user replies to a closed ticket (auto-transitions to open), a ticket is escalated to them, a user marks their post as solved / submits or changes a CSAT rating on their solved post, an SLA target on a ticket assigned to them is approaching the threshold, an SLA target on a ticket assigned to them is breached, or another agent or admin adds a note to a ticket assigned to them. Admins additionally receive SLA breach notifications for all tickets, not just those assigned to them (see 17.5). An agent does not receive notifications for their own actions. Note: new ticket creation does **not** trigger a notification to all agents — agents see new unassigned tickets via the Agent Dashboard.
 
 14.3. **Notification templates** — The admin configures separate email templates for each notification event (e.g., "New reply on your ticket", "Ticket assigned to you"). Templates support Markdown and placeholders such as `{{ticketTitle}}`, `{{ticketId}}`, `{{authorName}}`, `{{postBody}}`, and `{{ticketUrl}}`. Each template has a subject line and a body. A "Reset to default" button restores the built-in template.
 
@@ -298,7 +298,7 @@ There are three post types:
 
 16.13. **Ticket creation rate limit** — A numeric setting that controls how many tickets a user can create within a 24-hour sliding window. The default is **10**. Setting it to **0** disables the limit (unlimited creation). When the limit is reached, the user sees an error message and cannot create new tickets until the window expires. Agents and admins are not subject to this limit. (See 3.14.)
 
-16.14. **External authentication URL** — An optional URL field. When set, the "Forgot password?" link on the login page and the "Change password" / "Edit profile" links on the user profile page redirect to this external URL instead of showing the built-in forms. This is useful when authentication is handled by an external identity provider. When empty (default), the built-in authentication pages are used.
+16.14. **External authentication URL** — An optional URL field. When set, the "Forgot password?" link on the login page and the "Change password" link on the user profile page redirect to this external URL instead of showing the built-in form. Display name editing (20.3) remains available regardless of this setting, since it is a HelpDesk-specific field. This is useful when authentication is handled by an external identity provider. When empty (default), the built-in authentication pages are used.
 
 16.15. **Custom fields management** — A section to define custom fields for tickets. Each custom field has: a name (unique, displayed as the label), a type (text, number, dropdown, checkbox, or date), and an optional "required" flag. For dropdown fields, the admin defines the list of allowed values. Custom fields are stored as a JSON object on each ticket. The admin can reorder, rename, and delete custom fields. Deleting a custom field removes its values from all tickets. (See 3.13.)
 
@@ -340,7 +340,7 @@ There are three post types:
 
 #### 19. Knowledge Base / FAQ
 
-19.1. **Knowledge base access** — The knowledge base is a public-facing section accessible from the navigation bar via a "Help Center" link. It is available to all users (authenticated and unauthenticated, if public access is enabled). The knowledge base is separate from the ticket system.
+19.1. **Knowledge base access** — The knowledge base is a public-facing section accessible from the navigation bar via a "Help Center" link. It is always publicly accessible to all visitors, both authenticated and unauthenticated, regardless of the ticket public access setting (16.10). The knowledge base is separate from the ticket system.
 
 19.2. **Articles** — The knowledge base consists of articles organized into categories. Each article has a title, a body (Markdown text), a category, and a published/draft status. Only published articles are visible to non-admin users. Articles have SEO-friendly URLs in the format `/help/{category-slug}/{article-slug}`.
 
@@ -370,7 +370,7 @@ There are three post types:
 
 #### 22. User Blocking
 
-22.1. **Block a user** — An admin can block a user from the Admin Setup page (see 16.17) or from the ticket detail page (via a "Block user" action in the submitter info area). Blocking a user prevents them from creating new tickets, posting replies, and commenting. Existing tickets and posts by the blocked user remain visible. The blocked user can still log in and view their existing tickets but sees a banner explaining their account is restricted.
+22.1. **Block a user** — An admin can block a user from the Admin Setup page (see 16.17) or from the ticket detail page (via a "Block user" action in the submitter info area). Blocking a user prevents them from creating new tickets, posting replies, commenting, and editing existing posts or comments. Existing tickets and posts by the blocked user remain visible. The blocked user can still log in and view their existing tickets but sees a banner explaining their account is restricted.
 
 22.2. **Unblock a user** — An admin can unblock a previously blocked user, restoring their full capabilities.
 

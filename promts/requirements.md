@@ -21,12 +21,16 @@ There are three user roles: **User**, **Agent**, and **Admin**.
 | View public tickets | ✓ | ✓ | ✓ |
 | View all tickets (including private) | — | ✓ | ✓ |
 | Add posts/comments to visible tickets | ✓ | ✓ | ✓ |
+| Edit own posts/comments/notes | ✓ | ✓ | ✓ |
+| Edit any post/comment/note | — | ✓ | ✓ |
+| Edit ticket title | ✓ (owner) | ✓ | ✓ |
 | Change ticket type | — | ✓ | ✓ |
 | Set/change ticket severity | ✓ (owner) | ✓ | ✓ |
 | Set/change ticket category | ✓ (owner) | ✓ | ✓ |
 | Change ticket status (open / pending / closed) | — | ✓ | ✓ |
 | Change ticket privacy | — | ✓ | ✓ |
 | Assign agent to a ticket | — | ✓ | ✓ |
+| Unassign agent from a ticket | — | ✓ | ✓ |
 | Mark ticket as duplicate | — | ✓ | ✓ |
 | Escalate ticket | — | ✓ | ✓ |
 | Delete tickets | — | — | ✓ |
@@ -69,7 +73,7 @@ Status transition rules:
 - A new ticket starts as **open**.
 - An agent can manually set a ticket to **open**, **pending**, or **closed**.
 - When a user (non-agent) replies to a **pending** ticket, it automatically transitions to **open**.
-- When a user (non-agent) replies to a **closed** ticket, it automatically transitions to **open** (re-open), subject to the re-open rate limit (see 16.11).
+- When a user (non-agent) replies to a **closed** ticket, it automatically transitions to **open** (re-open), subject to the re-open rate limit (see 16.12).
 - Users cannot reply to a ticket that is marked as a duplicate.
 - Marking a ticket as duplicate automatically sets it to **closed**.
 - Removing a duplicate link does **not** change the ticket's status — it stays in its current state (typically closed).
@@ -89,13 +93,13 @@ A new ticket defaults to **Medium**. The ticket owner, agents, and admins can ch
 
 #### 3. Tickets (End-User Perspective)
 
-3.1. **Create a ticket** — A logged-in user can create a support ticket with a title (required), a type (selected from available ticket types, defaults to the system default type), a severity (selected from the four severity levels, defaults to **Medium**), an original post body (required, Markdown text), and a "Private" checkbox. The default state of the checkbox (checked or unchecked) is configured by the admin (see 16.10). If the admin has disabled user control over privacy, the checkbox is hidden and all tickets are created with the admin-configured default. Private tickets are only visible to the owner, their teammates, and agents/admins. The original post is created automatically together with the ticket.
+3.1. **Create a ticket** — A logged-in user can create a support ticket with a title (required), a type (selected from available ticket types, defaults to the system default type), a severity (selected from the four severity levels, defaults to **Medium**), a category (optional, selected from available categories; only shown if categories exist), an original post body (required, Markdown text), and a "Private" checkbox. The default state of the checkbox (checked or unchecked) is configured by the admin (see 16.10). If the admin has disabled user control over privacy, the checkbox is hidden and all tickets are created with the admin-configured default. Private tickets are only visible to the owner, their teammates, and agents/admins. The original post is created automatically together with the ticket.
 
 3.2. **View my tickets** — The home page shows a paginated list of the current user's tickets sorted by last-updated. Each entry shows the title, last-updated date, and a color-coded status badge (green = open, yellow = pending, gray = closed). Clicking a ticket opens the detail page. The page size is configured by the admin (see 16.11); the default is 20. Pagination controls (previous/next and page numbers) appear at the bottom of the list. The current page is stored in URL search params.
 
 3.3. **Empty state** — If a user has no tickets, show a friendly message with a link to create one.
 
-3.4. **Ticket detail** — Shows the ticket title, type, status, severity, category (if categories exist and one is set), tags (if at least 10 tags are defined), assigned agent (if any), submitter email, creation date, and a chronological list of posts. If the ticket is marked as a duplicate, a banner shows the link to the original ticket. The original post appears first as the ticket's description. Each post can have its own chronological list of comments displayed beneath it. The current user's own posts/comments have a blue-tinted background; others have a white background.
+3.4. **Ticket detail** — Shows the ticket title, type, status, severity, category (if categories exist and one is set), tags (if at least one tag is defined), assigned agent (if any), submitter email, creation date, and a chronological list of posts. If the ticket is marked as a duplicate, a banner shows the link to the original ticket. The original post appears first as the ticket's description. Each post can have its own chronological list of comments displayed beneath it. The current user's own posts/comments have a blue-tinted background; others have a white background.
 
 3.5. **Reply to a ticket** — Below the post list there is a text area and a "Reply" button to add a new post. Users can reply even if the ticket is closed or pending — doing so automatically transitions the ticket to **open** (see section 2). Users cannot reply to a ticket that is marked as a duplicate. Re-opening a closed ticket via reply is subject to a rate limit configured by the admin (see 16.12); if the user has exceeded the maximum number of re-opens within a 24-hour window, their reply is still posted but the ticket status does **not** change and the user sees a message explaining the limit.
 
@@ -107,7 +111,7 @@ A new ticket defaults to **Medium**. The ticket owner, agents, and admins can ch
 
 3.9. **SEO-friendly ticket URLs** — Each ticket has a permanent, human-readable URL in the format `/tickets/{id}/{slug}`, where `{id}` is the immutable numeric ticket ID and `{slug}` is a URL-safe, lowercase, hyphenated version of the ticket title (e.g., `/tickets/42/password-reset-not-working`). The `{id}` is the authoritative identifier — if the slug in the URL doesn't match the current title, the server redirects to the correct URL. This ensures stable, shareable links even if the title changes.
 
-3.10. **Customer satisfaction (CSAT)** — The ticket owner can mark an agent's post as **"Solved"**, indicating that it resolved their issue. Only one post per ticket can be marked as solved at a time; marking a different post moves the solved mark. Once a post is marked as solved, a 1–5 star rating prompt appears on the ticket detail page. The user may optionally add a text comment along with the rating. Submitting a rating creates a special CSAT post on the ticket. The agent who authored the solved post receives a notification about the rating and comment. The rating and the solved post are highlighted on the ticket detail page. A user can change the rating (and comment) at any time while the solved mark remains. If the user removes the solved mark, the rating is also removed.
+3.10. **Customer satisfaction (CSAT)** — The ticket owner can mark an agent's post as **"Solved"**, indicating that it resolved their issue. Only one post per ticket can be marked as solved at a time; marking a different post moves the solved mark. Once a post is marked as solved, a 1–5 star rating widget appears on the ticket detail page (in the ticket metadata area, not in the timeline). The user may optionally add a text comment along with the rating. The CSAT rating, comment, and the solved post reference are stored as ticket metadata — not as a post in the timeline. The agent who authored the solved post receives a notification about the rating and comment. The rating is displayed in the ticket header/sidebar alongside other metadata (status, severity, etc.), and the solved post is highlighted in the timeline. A user can change the rating (and comment) at any time while the solved mark remains. If the user removes the solved mark, the rating is also removed.
 
 3.11. **Follow a ticket** — A logged-in user can follow any ticket they have access to but did not create. A "Follow" / "Unfollow" toggle is shown on the ticket detail page. Followers receive the same email notifications as the ticket owner (new posts, status changes, agent assignment) but cannot rate the ticket. The ticket owner automatically follows their own ticket and cannot unfollow it.
 
@@ -137,9 +141,9 @@ A new ticket defaults to **Medium**. The ticket owner, agents, and admins can ch
 
 #### 7. Tags / Labels
 
-7.1. **Tags activation** — Tags become available throughout the application automatically once the admin has created at least **10** tags. When fewer than 10 tags are defined, tag-related UI is hidden throughout the application. There is no separate toggle to enable or disable tags.
+7.1. **Tags activation** — Tags become available throughout the application automatically once the admin has created at least **one** tag. When no tags are defined, tag-related UI is hidden throughout the application. There is no separate toggle to enable or disable tags.
 
-7.2. **Tags on tickets** — When at least 10 tags are defined, a ticket can have zero or more tags. Tags are displayed as colored pills on the ticket detail page and in ticket lists. Users and agents can add or remove tags on tickets they have access to.
+7.2. **Tags on tickets** — When at least one tag is defined, a ticket can have zero or more tags. Tags are displayed as colored pills on the ticket detail page and in ticket lists. Users and agents can add or remove tags on tickets they have access to.
 
 7.3. **Manage tags** — Admins create and manage the list of available tags. Each tag has a name and a color (selected from a predefined palette or custom hex value). Admins can rename, change the color of, or delete tags. Deleting a tag removes it from all tickets that use it.
 
@@ -173,7 +177,7 @@ A new ticket defaults to **Medium**. The ticket owner, agents, and admins can ch
 
 9.2. **Reply as agent** — Agents can add a post, comment, or note to any ticket at any time, regardless of the ticket's status (open, pending, or closed). Adding a post or comment to a closed or pending ticket does **not** automatically change its status — the agent must explicitly change the status if desired.
 
-9.3. **Assign agent** — A ticket can be assigned to an agent, indicating that this agent is responsible for working on it. Only agents and admins can assign or reassign an agent. A ticket can have at most one assigned agent at a time.
+9.3. **Assign / unassign agent** — A ticket can be assigned to an agent, indicating that this agent is responsible for working on it. Only agents and admins can assign, reassign, or unassign an agent. A ticket can have at most one assigned agent at a time. An "Unassign" action (e.g., a clear/remove button next to the assigned agent) removes the current agent without assigning a replacement, leaving the ticket unassigned.
 
 9.4. **Mark as duplicate** — Only an agent or admin can mark a ticket as a duplicate of another ticket by linking it to the original. When a ticket is marked as duplicate, it is automatically closed and a system-generated post is added to the ticket with a Markdown message containing a link to the original ticket. The Markdown template for the duplicate message is configurable by the admin; there is a default template (e.g., *"This ticket has been closed as a duplicate of [#{{ticketId}}](link)."*). An agent or admin can also remove the duplicate link; removing the link does not change the ticket's status.
 
@@ -203,19 +207,23 @@ There are three post types:
 
 11.4. **File attachments** — Any post, comment, or note can include one or more file attachments. Files are uploaded to Supabase Storage. Allowed file types: images (PNG, JPG, GIF, WebP), documents (PDF, DOC, DOCX, XLS, XLSX, TXT, CSV), and archives (ZIP). Maximum file size: 10 MB per file. Attachments are displayed below the post body — images show an inline thumbnail preview; other file types show the file name, size, and a download link. Attachments inherit the visibility of the post they belong to (private post attachments are not accessible to unauthorized users). File access is enforced via Supabase Storage RLS policies.
 
+11.5. **Editing posts, comments, and notes** — The author of a post, comment, or note can edit its body text at any time. Agents and admins can also edit any post, comment, or note regardless of authorship. An edited post shows a small "(edited)" indicator with a timestamp of the last edit. The original content is not preserved (no edit history). Editing a post does **not** trigger email notifications or create an activity log entry.
+
+11.6. **Editing ticket title** — The ticket owner, agents, and admins can edit the ticket title after creation. Editing the title updates the URL slug (the old URL with the stale slug redirects to the new one, per 3.9). Title changes are recorded in the activity log.
+
 #### 12. Post Visibility & Privacy
 
 12.1. **Private posts / comments** — Any post or comment can be marked as **private**, except the original post that is created together with the ticket. When a post or comment is private, it is visible only to the ticket owner, their team members, and agents/admins — even if the ticket itself is public.
 
 12.2. **Notes are always internal** — Notes are implicitly restricted to agents and admins and are never visible to regular users.
 
-12.3. **Draft posts** — Any post (post, comment, or note) created by an agent can be saved as a **draft**. A draft post is visible only to agents and admins — regular users cannot see it regardless of ticket or post visibility settings. The draft state indicates that the agent is working on a response but it is not ready to be shared yet. When the agent is satisfied with the content, they publish the draft, which turns it into a regular post visible according to normal visibility rules.
+12.3. **Draft posts** — Any post (post, comment, or note) created by an agent can be saved as a **draft**. A draft post is visible only to agents and admins — regular users cannot see it regardless of ticket or post visibility settings. The draft state indicates that the agent is working on a response but it is not ready to be shared yet. When the agent is satisfied with the content, they publish the draft, which turns it into a regular post visible according to normal visibility rules. Publishing a draft triggers the same events as creating a new post: email notifications are sent to the relevant users/followers, and an activity log entry is recorded.
 
 #### 13. Activity / Audit Log
 
 13.1. **Ticket activity log** — Every ticket maintains a chronological activity log that records all significant events. Activity entries are displayed inline in the ticket timeline alongside posts and comments, styled as compact system messages (e.g., gray text, no background card). Each entry records the actor (who performed the action), the timestamp, and a description of the change.
 
-13.2. **Tracked events** — The following events are logged: status changes (open → pending, pending → closed, closed → open, etc.), agent assignment and unassignment, ticket type changes, category changes, severity changes, tag additions and removals, marking as duplicate (with link to original), removing duplicate link, draft published, privacy changes on posts/comments, escalation events (who escalated, to whom, and reason), marking a post as solved, removing the solved mark, and CSAT rating submissions.
+13.2. **Tracked events** — The following events are logged: status changes (open → pending, pending → closed, closed → open, etc.), agent assignment, unassignment, and reassignment, ticket title changes, ticket type changes, category changes, severity changes, tag additions and removals, marking as duplicate (with link to original), removing duplicate link, draft published, privacy changes on posts/comments, escalation events (who escalated, to whom, and reason), marking a post as solved, removing the solved mark, and CSAT rating submissions.
 
 13.3. **Activity log visibility** — Activity log entries follow the same visibility rules as the ticket itself. All users who can view the ticket can see its activity log. Internal details (e.g., note-related activity) are visible only to agents and admins.
 
@@ -225,7 +233,7 @@ There are three post types:
 
 14.2. **Email notifications for agents** — Agents receive email notifications when: a user replies to a ticket assigned to them, a ticket is assigned to them, a user replies to a closed ticket (auto-transitions to open), a ticket is escalated to them, or a user marks their post as solved / submits or changes a CSAT rating on their solved post. An agent does not receive notifications for their own actions. Note: new ticket creation does **not** trigger a notification to all agents — agents see new unassigned tickets via the Agent Dashboard.
 
-14.3. **Notification templates** — The admin configures separate email templates for each notification event (e.g., "New reply on your ticket", "Ticket assigned to you", "New ticket created"). Templates support Markdown and placeholders such as `{{ticketTitle}}`, `{{ticketId}}`, `{{authorName}}`, `{{postBody}}`, and `{{ticketUrl}}`. Each template has a subject line and a body. A "Reset to default" button restores the built-in template.
+14.3. **Notification templates** — The admin configures separate email templates for each notification event (e.g., "New reply on your ticket", "Ticket assigned to you"). Templates support Markdown and placeholders such as `{{ticketTitle}}`, `{{ticketId}}`, `{{authorName}}`, `{{postBody}}`, and `{{ticketUrl}}`. Each template has a subject line and a body. A "Reset to default" button restores the built-in template.
 
 14.4. **Email configuration** — The admin configures outbound email settings (SMTP host, port, username, password, sender address, and sender display name). A "Send test email" button lets the admin verify the configuration. Email sending is disabled until the configuration is saved and verified.
 
@@ -247,7 +255,7 @@ There are three post types:
 
 16.3. **Categories management** — A section to manage ticket categories: add new categories, rename existing ones, and delete unused categories. (See 6.1, 6.2.)
 
-16.4. **Tags management** — A section to create, rename, change the color of, and delete tags. Tags become active throughout the application automatically once at least 10 tags are defined; no separate toggle is needed. (See 7.1, 7.2, 7.3.)
+16.4. **Tags management** — A section to create, rename, change the color of, and delete tags. Tags become active throughout the application automatically once at least one tag is defined; no separate toggle is needed. (See 7.1, 7.2, 7.3.)
 
 16.5. **Duplicate ticket template** — A section to edit the Markdown template used for the system-generated post when a ticket is marked as duplicate. The template supports a `{{ticketId}}` placeholder. A "Reset to default" button restores the built-in template. (See 9.4.)
 

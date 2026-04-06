@@ -213,11 +213,11 @@ A new ticket defaults to **Medium** urgency with no severity set. SLA policies a
 
 9.3. **Assign / reassign / unassign agent** — A ticket can be assigned to an agent, indicating that this agent is responsible for working on it. Only agents and admins can assign, reassign, or unassign an agent. A ticket can have at most one assigned agent at a time. When reassigning a ticket to a different agent, the reassigning agent can optionally provide a reason or note (free-text). If provided, the reason is stored as an internal note visible only to agents and admins, and the activity log records the reassignment along with the reason. The target agent receives a notification that includes the reason. An "Unassign" action (e.g., a clear/remove button next to the assigned agent) removes the current agent without assigning a replacement, leaving the ticket unassigned.
 
-9.4. **Mark as duplicate** — Only an agent or admin can mark a ticket as a duplicate of another ticket by linking it to the original. When a ticket is marked as duplicate, it is automatically closed and a system-generated post is added to the ticket with a Markdown message containing a link to the original ticket. The Markdown template for the duplicate message is configurable by the admin; there is a default template (e.g., *"This ticket has been closed as a duplicate of [#{{ticketId}}](link)."*). An agent or admin can also remove the duplicate link; removing the link does not change the ticket's status.
+9.4. **Mark as duplicate** — Only an agent or admin can mark a ticket as a duplicate of another ticket by linking it to the original. When a ticket is marked as duplicate, it is automatically closed and a system-generated post is added to the ticket with a Markdown message containing a link to the original ticket. The Markdown template for the duplicate message is configurable by the admin (see 16.5); there is a default template (e.g., *"This ticket has been closed as a duplicate of [#{{ticketId}}](link)."*). An agent or admin can also remove the duplicate link; removing the link does not change the ticket's status.
 
 9.5. **Delete ticket** — Only an admin can delete a ticket. A "Delete" button with a confirmation prompt is shown on the ticket detail page for admins only. A ticket that has other tickets linked to it as duplicates (i.e., it is the original in a duplicate relationship) cannot be deleted until all duplicate links pointing to it are removed.
 
-9.6. **Merge tickets** — An agent or admin can merge two tickets into one. Merging moves all posts, comments, notes, attachments, activity log entries, and followers from the source ticket into the target ticket. The source ticket is then closed and marked with a system-generated post linking to the target ticket (using the configurable merge template, see 16.17). Unlike duplicate, merging physically consolidates the timelines — the source ticket becomes a redirect stub. The merged posts retain their original timestamps and authors so the combined timeline stays chronological. Tags from both tickets are combined (union). Custom field values from the source are **not** copied to the target (the target's values are preserved). If the source ticket has a severity set and the target does not, the target inherits the source's severity. If both tickets have severity set and the source's is higher, the target's severity is upgraded to match. In both cases the target's SLA is recalculated accordingly. If only the target has severity set (or neither does), no severity change occurs. Merge is irreversible.
+9.6. **Merge tickets** — An agent or admin can merge two tickets into one. Merging moves all posts, comments, notes, attachments, activity log entries, and followers from the source ticket into the target ticket. The source ticket is then closed and marked with a system-generated post linking to the target ticket (using the configurable merge template, see 16.17). Unlike duplicate, merging physically consolidates the timelines — the source ticket becomes a redirect stub. The merged posts retain their original timestamps and authors so the combined timeline stays chronological. Tags from both tickets are combined (union). The target ticket's urgency is preserved (the source's urgency is discarded). Custom field values from the source are **not** copied to the target (the target's values are preserved). If the source ticket has a severity set and the target does not, the target inherits the source's severity. If both tickets have severity set and the source's is higher, the target's severity is upgraded to match. In both cases the target's SLA is recalculated accordingly. If only the target has severity set (or neither does), no severity change occurs. Merge is irreversible.
 
 #### 10. Canned Responses (Reply Templates)
 
@@ -321,7 +321,7 @@ There are three post types:
 
 16.17. **Merge ticket template** — A section to edit the Markdown template used for the system-generated post when a ticket is merged into another. The template supports a `{{ticketId}}` placeholder. A "Reset to default" button restores the built-in template. The default template is: *"This ticket has been merged into [#{{ticketId}}](link)."* (See 9.6.)
 
-16.18. **Knowledge base management** — A section to manage knowledge base categories and articles: create, edit, change status (draft / published / archived), reorder, and delete categories and articles. (See 19.2, 19.3, 19.5.)
+16.18. **Knowledge base categories** — A section to manage knowledge base categories: create, rename, reorder, and delete categories. Article management is **not** in the Admin Setup page — it is in the dedicated Knowledge Base Management page accessible to agents and admins (see 19.5). (See 19.3.)
 
 16.19. **CSAT settings** — A section to configure customer satisfaction surveys: (1) **Enable CSAT surveys** — a toggle to enable or disable automatic CSAT survey emails (disabled by default). (2) **Survey delay** — how long after ticket closure the survey email is sent (default: 1 hour; options: immediately, 1 hour, 4 hours, 24 hours). If a closed ticket is re-opened before the delay elapses, the survey email is cancelled. The rating scale is always 1–5 stars. (See 3.10.)
 
@@ -392,7 +392,7 @@ Articles have SEO-friendly URLs in the format `/help/{id}/{category-slug}/{artic
 
 19.4. **Search** — A search field on the help center page lets users search articles by title and body content (partial match). Search results are paginated.
 
-19.5. **Article management** — Agents and admins can create, edit, change status (draft / published / archived), and delete knowledge base articles. Only admins can manage knowledge base categories (create, rename, reorder, delete). Article management is done from a section in the Admin Setup page, accessible to both agents and admins.
+19.5. **Article management** — Agents and admins can create, edit, change status (draft / published / archived), and delete knowledge base articles. Only admins can manage knowledge base categories (create, rename, reorder, delete) from the Admin Setup page (see 16.18). Article management is done from a dedicated **Knowledge Base Management** page (e.g., `/kb/manage`), accessible to agents and admins via a "Manage Articles" link in the navigation bar (visible only to agents and admins). This page is separate from the Admin Setup page and does not require admin privileges.
 
 19.6. **Suggested articles and similar tickets** — When a user starts typing a ticket title in the creation form, the system searches published knowledge base articles and displays up to 5 matching article links below the title field. Draft and archived articles are excluded from suggestions. If AI-powered duplicate detection is enabled (see 23.2), up to 3 similar open/pending tickets are also displayed in a separate "Similar open tickets" section below the KB suggestions. This encourages self-service and reduces duplicate submissions.
 
@@ -410,7 +410,7 @@ Articles have SEO-friendly URLs in the format `/help/{id}/{category-slug}/{artic
 
 21.2. **Live dashboard updates** — The agent dashboard subscribes to Supabase Realtime for ticket changes. New tickets, status changes, and assignment changes are reflected in the list in real time. The result count updates accordingly.
 
-21.3. **Optimistic updates are not required** — Given the server-rendered architecture, real-time updates are delivered via Supabase Realtime subscriptions in a minimal client-side listener that triggers a page data refresh. This is the only permitted use of client-side JavaScript beyond standard form submissions.
+21.3. **Optimistic updates are not required** — Given the server-rendered architecture, real-time updates are delivered via Supabase Realtime subscriptions in a minimal client-side listener that triggers a page data refresh. See architecture constraint 2 for the full list of permitted `"use client"` components.
 
 #### 22. User Blocking
 
@@ -440,7 +440,7 @@ All AI features require a configured AI provider and API key (see 16.20). Each f
 
 ### Navigation Bar
 
-- **Left side**: App name "HelpDesk" (links to home), "My Tickets" link, "Help Center" link, (for agents/admins) "Agent Dashboard" link, (for admins only) "Reports" link, and (for admins only) "Setup" link.
+- **Left side**: App name "HelpDesk" (links to home), "My Tickets" link, "Help Center" link, (for agents/admins) "Agent Dashboard" link, (for agents/admins) "Manage Articles" link, (for admins only) "Reports" link, and (for admins only) "Setup" link.
 - **Right side**: Current user's email (or display name, if set), role badges, and a "Sign out" button. A dropdown menu on the user name provides links to "Profile" and "Notification Settings".
 - The nav bar is always visible. For unauthenticated visitors it shows the app name, "Help Center" link, and a "Log in" link. The full nav bar (My Tickets, Agent Dashboard, user menu, Sign out) is only shown to logged-in users.
 
@@ -496,7 +496,7 @@ Additionally, seed the following reference data:
 4. **Cookie-based auth** — Use `@supabase/ssr` for server-side Supabase clients. A Next.js middleware refreshes the session on every request.
 5. **Agent dashboard performance** — Create a Postgres VIEW (`agent_tickets`) that joins tickets with profile emails and pre-aggregates post counts. The agent page queries this view instead of doing complex joins on the client.
 6. **URL-driven state** — Filtering and view switching (my tickets vs team tickets, agent dashboard filters) should use URL search params, not React state.
-7. **Real-time subscriptions** — Use Supabase Realtime to push live updates to ticket detail and agent dashboard pages. This is the only permitted use of client-side JavaScript (`"use client"`) beyond standard form submissions. The real-time listener is a thin wrapper that triggers a server data refresh when changes are detected.
+7. **Real-time subscriptions** — Use Supabase Realtime to push live updates to ticket detail and agent dashboard pages. The real-time listener is a thin wrapper that triggers a server data refresh when changes are detected. See constraint 2 for the full list of permitted `"use client"` components.
 8. **Markdown sanitization** — All user-supplied Markdown is rendered to HTML on the server and sanitized before output to prevent XSS attacks. Only a safe subset of HTML is allowed (headings, lists, links, code blocks, emphasis, images). Script tags, event handlers, and dangerous attributes are stripped. Use a battle-tested sanitization library (e.g., `sanitize-html` or `rehype-sanitize`).
 
 ---

@@ -47,6 +47,9 @@ There are three user roles: **User**, **Agent**, and **Admin**.
 | Manage knowledge base | — | — | ✓ |
 | Manage SLA policies | — | — | ✓ |
 | Access reporting dashboard | — | — | ✓ |
+| Use AI suggested reply | — | ✓ | ✓ |
+| Generate KB article from ticket | — | ✓ | ✓ |
+| Configure AI settings | — | — | ✓ |
 | Manage agents (promote/revoke) | — | — | ✓ |\n| Manage email configuration | — | — | ✓ |\n| Manage notification templates | — | — | ✓ |\n| Manage inbound email settings | — | — | ✓ |
 | Access the Admin Setup page | — | — | ✓ |
 
@@ -315,6 +318,23 @@ There are three post types:
 
 16.20. **CSAT settings** — A section to configure customer satisfaction surveys: (1) **Enable CSAT surveys** — a toggle to enable or disable automatic CSAT survey emails (disabled by default). (2) **Survey delay** — how long after ticket closure the survey email is sent (default: 1 hour; options: immediately, 1 hour, 4 hours, 24 hours). If a closed ticket is re-opened before the delay elapses, the survey email is cancelled. (3) **Rating scale** — choose between "Simple" (Good / Bad) or "Detailed" (1–5 stars); default is Simple. (See 3.10.)
 
+16.21. **AI configuration** — A section to configure AI features. The section has two parts:
+
+**Connection settings:**
+- **AI Provider** — a dropdown to select the AI provider: OpenAI, Anthropic, or Custom (OpenAI-compatible endpoint). Default: none (unconfigured).
+- **API Key** — a password field for the provider's API key. Stored encrypted in the database. A "Test connection" button verifies the key and shows a success/error message.
+- **Custom endpoint URL** — a text field shown only when "Custom" is selected as the provider.
+- **Model** — a dropdown populated with available models from the selected provider (auto-fetched after the API key is verified). The admin selects one model used by all AI features.
+
+**Feature toggles** (each feature can be independently enabled/disabled; all default to off; toggles are disabled until a valid API key is saved):
+- **Auto-categorize tickets** — enables AI-suggested type, category, severity, and tags on ticket creation. (See 23.1.)
+- **Duplicate ticket detection** — enables similar-ticket suggestions on ticket creation. Includes a similarity threshold setting: Low, Medium (default), or High. (See 23.2.)
+- **Suggested reply for agents** — enables the "Suggest reply" button on ticket detail pages. (See 23.3.)
+- **Ticket summary** — enables AI-generated summaries on long tickets. Includes a "Minimum post count" numeric setting (default: 10, minimum: 5). (See 23.4.)
+- **Generate KB article from ticket** — enables the "Generate KB Article" button on closed tickets. (See 23.5.)
+
+**Usage counter** (read-only): shows total AI API calls and estimated token usage for the current calendar month, so the admin can monitor costs. No billing integration.
+
 #### 17. SLA (Service Level Agreements)
 
 17.1. **SLA policies** — The admin can define SLA policies that set time-based targets for ticket response and resolution. Each SLA policy has a name and defines two targets: **first response time** (how quickly an agent must first reply) and **resolution time** (how quickly the ticket must be closed). Both targets are specified in business hours. Business hours are configured by the admin as part of SLA configuration (see 16.16): a weekly schedule specifying working days and working hours (e.g., Monday–Friday, 9:00–17:00), and a timezone. Hours outside this schedule do not count toward SLA targets. There is no holiday calendar in this version.
@@ -367,7 +387,7 @@ Articles have SEO-friendly URLs in the format `/help/{id}/{category-slug}/{artic
 
 19.5. **Article management** — Only admins can create, edit, change status (draft / published / archived), and delete knowledge base articles and categories. Article management is done from a section in the Admin Setup page.
 
-19.6. **Suggested articles** — When a user starts typing a ticket title in the creation form, the system searches published knowledge base articles and displays up to 5 matching article links below the title field. Draft and archived articles are excluded from suggestions. This encourages self-service before ticket submission.
+19.6. **Suggested articles and similar tickets** — When a user starts typing a ticket title in the creation form, the system searches published knowledge base articles and displays up to 5 matching article links below the title field. Draft and archived articles are excluded from suggestions. If AI-powered duplicate detection is enabled (see 23.2), up to 3 similar open/pending tickets are also displayed in a separate "Similar open tickets" section below the KB suggestions. This encourages self-service and reduces duplicate submissions.
 
 #### 20. User Profile
 
@@ -394,6 +414,20 @@ Articles have SEO-friendly URLs in the format `/help/{id}/{category-slug}/{artic
 22.3. **Block indicator** — In the agent dashboard and ticket detail pages, blocked users are marked with a visual indicator (e.g., a red "Blocked" badge next to their email). This helps agents identify restricted accounts.
 
 22.4. **Block log** — Blocking and unblocking events are recorded in a system-wide admin activity log (separate from ticket activity logs). The log shows who was blocked/unblocked, by which admin, and when.
+
+#### 23. AI Features
+
+All AI features require a configured AI provider and API key (see 16.21). Each feature can be individually enabled or disabled by the admin. When AI is not configured or a feature is disabled, the corresponding UI elements are hidden. All AI calls are executed server-side via Server Actions — no client-side AI SDK is used.
+
+23.1. **Auto-categorization** — When a user submits a ticket, the system analyzes the title and body using the configured AI model and suggests values for type, category, severity, and tags. Suggestions are shown as pre-filled values on the ticket creation form after the user fills in the title and body. The user can accept, change, or ignore any suggestion before submitting. Auto-categorization runs only once when the user moves focus out of the body field (not on every keystroke). If the AI call fails or times out, the form uses the standard defaults silently.
+
+23.2. **Duplicate ticket detection** — When a user types a ticket title in the creation form, the system searches existing open and pending tickets for potential duplicates using AI-powered semantic similarity. Up to 3 similar tickets are displayed as "Similar open tickets" links below the title field, alongside the KB article suggestions (see 19.6). Each link shows the ticket title, status, and creation date. This reduces duplicate ticket volume before it reaches agents. The similarity threshold is configurable by the admin (see 16.21). If no similar tickets are found or AI is unavailable, nothing is shown.
+
+23.3. **Suggested reply** — On the ticket detail page, agents see a "Suggest reply" button next to the reply text area. Clicking it sends the ticket context (title, posts, comments, and any related KB articles) to the AI model, which generates a draft response. The suggested text is inserted into the reply text area — the agent can review, edit, and post it. The AI never sends a reply automatically. If the ticket has a long history, only the most recent posts (up to a configurable context window) are included in the prompt. The button shows a loading indicator while the AI processes. If the AI call fails, the agent sees an error message and can retry or write a manual reply.
+
+23.4. **Ticket summary** — For tickets with 10 or more posts (configurable, see 16.21), a collapsible AI-generated summary is shown at the top of the ticket detail page, below the ticket metadata and above the timeline. The summary provides a concise overview of the problem, key discussion points, and current status. It is generated on demand when the ticket detail page is loaded and the post threshold is met. The summary is cached and refreshed when new posts are added. It is visible to agents and admins only. A "Refresh summary" button lets the agent regenerate the summary.
+
+23.5. **Generate KB article from ticket** — On closed tickets, agents and admins see a "Generate KB Article" button in the ticket actions area. Clicking it sends the full ticket thread (all posts and comments) to the AI model, which generates: a suggested article title, a suggested KB category (from existing categories, or "Uncategorized" if none fits), and an article body in Markdown summarizing the problem and solution. Any personally identifiable information (names, emails, account numbers) is stripped from the generated body. A reference link to the source ticket is stored as article metadata (visible only to admins, not shown in the public article). The article is created in **draft** status with the current agent/admin as the author. After creation, the agent is redirected to the article editing page where they can review, edit, assign a category, and publish.
 
 ---
 
@@ -447,7 +481,7 @@ Additionally, seed the following reference data:
 ### Architecture Constraints
 
 1. **No custom API layer** — Use Supabase client libraries to read/write data directly. Mutations happen through Next.js Server Actions called from `<form>` elements.
-2. **Server-rendered everything** — No `"use client"` components except for: (a) Supabase Realtime subscriptions (see constraint 7), (b) Markdown preview toggling (see 3.12), (c) reporting charts (see section 18), and (d) knowledge base article suggestions with debounced search (see 19.6). These client-side components must be minimal wrappers with no application state management.
+2. **Server-rendered everything** — No `"use client"` components except for: (a) Supabase Realtime subscriptions (see constraint 7), (b) Markdown preview toggling (see 3.12), (c) reporting charts (see section 18), (d) knowledge base article suggestions and duplicate ticket detection with debounced search (see 19.6, 23.2), and (e) AI-powered form interactions such as auto-categorization suggestions and suggested reply loading (see 23.1, 23.3). These client-side components must be minimal wrappers with no application state management.
 3. **Database-enforced security** — Every table must have Row-Level Security enabled. Helper functions like `is_agent()`, `is_admin()`, and `is_teammate()` should live in Postgres and be used in RLS policies.
 4. **Cookie-based auth** — Use `@supabase/ssr` for server-side Supabase clients. A Next.js middleware refreshes the session on every request.
 5. **Agent dashboard performance** — Create a Postgres VIEW (`agent_tickets`) that joins tickets with profile emails and pre-aggregates post counts. The agent page queries this view instead of doing complex joins on the client.

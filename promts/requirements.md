@@ -346,15 +346,25 @@ There are three post types:
 
 19.1. **Knowledge base access** — The knowledge base is a public-facing section accessible from the navigation bar via a "Help Center" link. It is always publicly accessible to all visitors, both authenticated and unauthenticated, regardless of the ticket public access setting (16.10). The knowledge base is separate from the ticket system.
 
-19.2. **Articles** — The knowledge base consists of articles organized into categories. Each article has a title, a body (Markdown text), a category, and a published/draft status. Only published articles are visible to non-admin users. Articles have SEO-friendly URLs in the format `/help/{category-slug}/{article-slug}`.
+19.2. **Articles** — The knowledge base consists of articles organized into categories. Each article has a title, a body (Markdown text), a category, and one of three statuses:
+
+| Status | Visible in Help Center listings & search | Accessible via direct URL | Indexed by search engines | Appears in suggested articles (19.6) |
+|---|:---:|:---:|:---:|:---:|
+| **Draft** | No | No (admins only) | No | No |
+| **Published** | Yes | Yes | Yes | Yes |
+| **Archived** | No | Yes (with an "This article may be outdated" banner) | Yes | No |
+
+New articles start as **Draft**. Admins can transition between all three statuses in any direction. Archived articles are hidden from category listings, help center search, and suggested articles, but remain accessible via their direct URL so existing links, bookmarks, and search engine results continue to work.
+
+Articles have SEO-friendly URLs in the format `/help/{id}/{category-slug}/{article-slug}`, where `{id}` is the immutable numeric article ID and is the authoritative identifier. If the category slug or article slug in the URL doesn't match the current values (e.g., after a rename or re-categorization), the server redirects to the correct URL. This ensures stable, shareable links even if the article title or category changes.
 
 19.3. **Article categories** — Knowledge base categories are separate from ticket categories. Each category has a name and a display order. The help center landing page lists all categories with their published article count.
 
 19.4. **Search** — A search field on the help center page lets users search articles by title and body content (partial match). Search results are paginated.
 
-19.5. **Article management** — Only admins can create, edit, publish, unpublish, and delete knowledge base articles and categories. Article management is done from a section in the Admin Setup page.
+19.5. **Article management** — Only admins can create, edit, change status (draft / published / archived), and delete knowledge base articles and categories. Article management is done from a section in the Admin Setup page.
 
-19.6. **Suggested articles** — When a user starts typing a ticket title in the creation form, the system searches the knowledge base and displays up to 5 matching article links below the title field. This encourages self-service before ticket submission.
+19.6. **Suggested articles** — When a user starts typing a ticket title in the creation form, the system searches published knowledge base articles and displays up to 5 matching article links below the title field. Draft and archived articles are excluded from suggestions. This encourages self-service before ticket submission.
 
 #### 20. User Profile
 

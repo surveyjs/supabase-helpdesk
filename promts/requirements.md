@@ -460,6 +460,10 @@ Articles have SEO-friendly URLs in the format `/help/{id}/{category-slug}/{artic
 
 19.6. **Suggested articles and similar tickets** — When a user starts typing a ticket title in the creation form, the system searches published knowledge base articles and displays up to 5 matching article links below the title field. Draft and archived articles are excluded from suggestions. If AI-powered duplicate detection is enabled (see 23.2), up to 3 similar open/pending tickets are also displayed in a separate "Similar open tickets" section below the KB suggestions. This encourages self-service and reduces duplicate submissions.
 
+19.7. **Article feedback** — Each published article displays a **"Was this helpful?"** prompt at the bottom with thumbs-up and thumbs-down buttons. Authenticated users can vote once per article; clicking the opposite button changes the vote. Unauthenticated visitors cannot vote. The vote counts (helpful / not helpful) are stored per article and displayed to agents and admins on the article management page (19.5) as a sortable "Helpfulness" column, helping them identify articles that need improvement. Vote counts are not shown publicly to end users.
+
+19.8. **Create a ticket from an article** — Below the feedback prompt, a **"Still need help? Create a ticket"** link is displayed. Clicking it navigates to the ticket creation form with the title pre-filled as "Question about: {article title}" and the source article ID stored as ticket metadata (visible to agents and admins in the ticket detail sidebar as a clickable link to the article). The user can edit the pre-filled title and body before submitting. This ensures every question about an article is tracked through the standard ticket workflow.
+
 #### 20. User Profile
 
 20.1. **Profile page** — Each logged-in user can access their profile page via a link in the navigation bar user menu. The profile page shows the user's email, role, team (if any), and account creation date.

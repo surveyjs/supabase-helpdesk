@@ -434,7 +434,7 @@ There are three post types:
 
 19.1. **Knowledge base access** — The knowledge base is a public-facing section accessible from the navigation bar via a "Help Center" link. It is always publicly accessible to all visitors, both authenticated and unauthenticated, regardless of the ticket public access setting (16.10). The knowledge base is separate from the ticket system.
 
-19.2. **Articles** — The knowledge base consists of articles organized into categories. Each article has a title, a body (Markdown text), a category, an author (the agent or admin who created or last edited it), and one of three statuses:
+19.2. **Articles** — The knowledge base consists of articles organized into categories. Each article has a title, a body (Markdown text), a category, an original author (the agent or admin who created it), a last editor (the agent or admin who last modified it), a last-edited timestamp, and one of three statuses:
 
 | Status | Visible in Help Center listings & search | Accessible via direct URL | Indexed by search engines | Appears in suggested articles (19.6) |
 |---|:---:|:---:|:---:|:---:|
@@ -444,7 +444,7 @@ There are three post types:
 
 New articles start as **Draft**. Agents and admins can transition between all three statuses in any direction. Archived articles are hidden from category listings, help center search, and suggested articles, but remain accessible via their direct URL so existing links, bookmarks, and search engine results continue to work.
 
-Articles have SEO-friendly URLs in the format `/help/{id}/{category-slug}/{article-slug}`, where `{id}` is the immutable numeric article ID and is the authoritative identifier. If the category slug or article slug in the URL doesn't match the current values (e.g., after a rename or re-categorization), the server redirects to the correct URL. This ensures stable, shareable links even if the article title or category changes.
+Articles have SEO-friendly URLs in the format `/help/{id}/{category-slug}/{article-slug}`, where `{id}` is the immutable numeric article ID and is the authoritative identifier. If the category slug or article slug in the URL doesn't match the current values (e.g., after a rename or re-categorization), the server redirects to the correct URL. This ensures stable, shareable links even if the article title or category changes. The help center article page displays "Last updated on {date}" below the article body. The article management page (19.5) shows both the original author and last editor in the article list.
 
 19.3. **Article categories** — Knowledge base categories are separate from ticket categories. Each category has a name and a display order. The help center landing page lists all categories with their published article count.
 

@@ -38,6 +38,8 @@ There are three user roles: **User**, **Agent**, and **Admin**.
 | Delete tickets | — | — | ✓ |
 | Delete posts/comments | — | ✓ | ✓ |
 | Merge tickets | — | ✓ | ✓ |
+| Bulk close / assign / change status / tags / severity | — | ✓ | ✓ |
+| Bulk delete tickets | — | — | ✓ |
 | Block / unblock users | — | — | ✓ |
 | Access the Agent Dashboard | — | ✓ | ✓ |
 | Manage ticket types | — | — | ✓ |
@@ -223,6 +225,8 @@ A new ticket defaults to **Medium** urgency with no severity set. SLA policies a
 8.13. **Saved views** — Agents and admins can save the current combination of filters and sort order as a named view (e.g., "My open Critical tickets", "Unassigned this week"). Saved views appear as quick-access links above the filter controls. Each agent manages their own saved views — saved views are private to the agent who created them. An agent can rename or delete their saved views. Clicking a saved view applies all its filters and sort to the dashboard URL.
 
 8.14. **Search by title/content** — A text field lets the agent search tickets by title or post content (partial match). This is separate from the submitter email filter (8.5). A "Clear" link removes the search. The search filter is URL-based and combines with all other filters.
+
+8.15. **Bulk actions** — The agent dashboard supports bulk operations on multiple tickets. Agents can select tickets using checkboxes (individual selection + "Select all on this page"). A bulk action toolbar appears when at least one ticket is selected, offering the following actions: (1) **Bulk close** — close all selected tickets; tickets already closed are skipped. (2) **Bulk assign** — assign all selected tickets to a chosen agent via a single agent picker. (3) **Bulk unassign** — remove the assigned agent from all selected tickets. (4) **Bulk change status** — set all selected tickets to a chosen status (open, pending, or closed). (5) **Bulk add tags** — add one or more tags to all selected tickets (only shown if tags are defined). (6) **Bulk remove tags** — remove one or more tags from all selected tickets. (7) **Bulk set severity** — set severity on all selected tickets to a chosen level. (8) **Bulk delete** — (admin only) delete all selected tickets, with a confirmation prompt showing the count; tickets that are originals in duplicate relationships are skipped with a warning. Each bulk action shows a confirmation summary ("Apply to N tickets?") before executing. Bulk actions generate individual activity log entries for each affected ticket. Bulk actions are processed server-side in a single Server Action call. Status transition side effects apply normally (e.g., bulk-closing tickets triggers CSAT survey scheduling per 16.19). Email notifications are sent per normal rules but are batched to avoid flooding — at most one notification email per recipient per bulk operation, summarizing the affected tickets.
 
 #### 9. Agent Actions on Tickets
 

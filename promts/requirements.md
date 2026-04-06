@@ -30,6 +30,7 @@ There are three user roles: **User**, **Agent**, and **Admin**.
 | Set/change ticket category | ✓ (owner) | ✓ | ✓ |
 | Change ticket status (open / pending / closed) | — | ✓ | ✓ |
 | Change ticket privacy | — | ✓ | ✓ |
+| Change post privacy | — | ✓ | ✓ |
 | Assign agent to a ticket | — | ✓ | ✓ |
 | Unassign agent from a ticket | — | ✓ | ✓ |
 | Mark ticket as duplicate | — | ✓ | ✓ |
@@ -234,7 +235,7 @@ There are three post types:
 
 #### 12. Post Visibility & Privacy
 
-12.1. **Private posts / comments** — Any post or comment can be marked as **private**, except the original post that is created together with the ticket. When a post or comment is private, it is visible only to the ticket owner, their team members, and agents/admins — even if the ticket itself is public.
+12.1. **Private posts** — An agent or admin can mark any post as **private**, except the original post (the first post created together with the ticket, whose visibility is determined by the ticket's privacy setting). A private post is visible only to the ticket owner, their team members, and agents/admins — even if the ticket itself is public. Only agents and admins can change a post's privacy (mark it private or make it public again). Users cannot mark posts as private. All comments on a private post are automatically private — comment privacy is inherited from the parent post and cannot be set independently. This allows agents to initiate a private conversation thread within a public ticket (e.g., to request sensitive information from the user), and the user's replies (comments) are automatically protected.
 
 12.2. **Notes are always internal** — Notes are implicitly restricted to agents and admins and are never visible to regular users.
 
@@ -244,7 +245,7 @@ There are three post types:
 
 13.1. **Ticket activity log** — Every ticket maintains a chronological activity log that records all significant events. Activity entries are displayed inline in the ticket timeline alongside posts and comments, styled as compact system messages (e.g., gray text, no background card). Each entry records the actor (who performed the action), the timestamp, and a description of the change.
 
-13.2. **Tracked events** — The following events are logged: status changes (open → pending, pending → closed, closed → open, etc.), agent assignment, unassignment, and reassignment, ticket title changes, ticket type changes, category changes, severity changes, tag additions and removals, marking as duplicate (with link to original), removing duplicate link, ticket merge (on both the source and target tickets — the source records "merged into #X" and the target records "merged from #Y"), draft published, privacy changes on posts/comments, escalation events (who escalated, to whom, and reason), and CSAT rating submissions.
+13.2. **Tracked events** — The following events are logged: status changes (open → pending, pending → closed, closed → open, etc.), agent assignment, unassignment, and reassignment, ticket title changes, ticket type changes, category changes, severity changes, tag additions and removals, marking as duplicate (with link to original), removing duplicate link, ticket merge (on both the source and target tickets — the source records "merged into #X" and the target records "merged from #Y"), draft published, privacy changes on posts, escalation events (who escalated, to whom, and reason), and CSAT rating submissions.
 
 13.3. **Activity log visibility** — Activity log entries follow the same visibility rules as the ticket itself. All users who can view the ticket can see its activity log. Internal details (e.g., note-related activity) are visible only to agents and admins.
 

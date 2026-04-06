@@ -44,7 +44,8 @@ There are three user roles: **User**, **Agent**, and **Admin**.
 | Add/remove tags on tickets | ✓ (accessible tickets) | ✓ | ✓ |
 | Manage tags (create/edit/delete) | — | — | ✓ |
 | Manage custom fields | — | — | ✓ |
-| Manage knowledge base | — | — | ✓ |
+| Manage knowledge base articles | — | ✓ | ✓ |
+| Manage knowledge base categories | — | — | ✓ |
 | Manage SLA policies | — | — | ✓ |
 | Access reporting dashboard | — | — | ✓ |
 | Use AI suggested reply | — | ✓ | ✓ |
@@ -124,7 +125,7 @@ A new ticket defaults to **Medium**. The ticket owner, agents, and admins can ch
 
 3.9. **SEO-friendly ticket URLs** — Each ticket has a permanent, human-readable URL in the format `/tickets/{id}/{slug}`, where `{id}` is the immutable numeric ticket ID and `{slug}` is a URL-safe, lowercase, hyphenated version of the ticket title (e.g., `/tickets/42/password-reset-not-working`). The `{id}` is the authoritative identifier — if the slug in the URL doesn't match the current title, the server redirects to the correct URL. This ensures stable, shareable links even if the title changes.
 
-3.10. **Customer satisfaction (CSAT)** — When an agent closes a ticket, the system automatically sends a CSAT survey email to the ticket owner after a configurable delay (see 16.20). The email contains a unique, token-based link that does not require login. The link opens a lightweight page where the user selects a satisfaction rating and optionally adds a text comment. The rating scale is configurable by the admin (see 16.20): either **simple** (Good / Bad) or **detailed** (1–5 stars); the default is simple. One rating per ticket — submitting a new rating overwrites the previous one. The CSAT rating, comment, and submission timestamp are stored as ticket metadata. The assigned agent receives a notification when a rating is submitted. The rating is displayed in the ticket header/sidebar alongside other metadata (status, severity, etc.). If the ticket is re-opened after a rating is submitted, the rating is preserved. If CSAT surveys are disabled by the admin, no survey email is sent.
+3.10. **Customer satisfaction (CSAT)** — When an agent closes a ticket, the system automatically sends a CSAT survey email to the ticket owner after a configurable delay (see 16.20). The email contains a unique, token-based link that does not require login. The link opens a lightweight page where the user selects a satisfaction rating from **1 to 5 stars** and optionally adds a text comment. One rating per ticket — submitting a new rating overwrites the previous one. The CSAT rating, comment, and submission timestamp are stored as ticket metadata. The assigned agent receives a notification when a rating is submitted. The rating is displayed in the ticket header/sidebar alongside other metadata (status, severity, etc.). If the ticket is re-opened after a rating is submitted, the rating is preserved. If CSAT surveys are disabled by the admin, no survey email is sent.
 
 3.11. **Follow a ticket** — A logged-in user can follow any ticket they have access to but did not create. A "Follow" / "Unfollow" toggle is shown on the ticket detail page. Followers receive the same email notifications as the ticket owner (new posts, status changes, agent assignment) but cannot rate the ticket. The ticket owner automatically follows their own ticket and cannot unfollow it.
 
@@ -208,7 +209,7 @@ A new ticket defaults to **Medium**. The ticket owner, agents, and admins can ch
 
 9.6. **Delete ticket** — Only an admin can delete a ticket. A "Delete" button with a confirmation prompt is shown on the ticket detail page for admins only. A ticket that has other tickets linked to it as duplicates (i.e., it is the original in a duplicate relationship) cannot be deleted until all duplicate links pointing to it are removed.
 
-9.7. **Merge tickets** — An agent or admin can merge two tickets into one. Merging moves all posts, comments, notes, attachments, activity log entries, and followers from the source ticket into the target ticket. The source ticket is then closed and marked with a system-generated post linking to the target ticket (using the configurable merge template, see 16.18). Unlike duplicate, merging physically consolidates the timelines — the source ticket becomes a redirect stub. The merged posts retain their original timestamps and authors so the combined timeline stays chronological. Tags from both tickets are combined (union). Custom field values from the source are **not** copied to the target (the target's values are preserved). Merge is irreversible.
+9.7. **Merge tickets** — An agent or admin can merge two tickets into one. Merging moves all posts, comments, notes, attachments, activity log entries, and followers from the source ticket into the target ticket. The source ticket is then closed and marked with a system-generated post linking to the target ticket (using the configurable merge template, see 16.18). Unlike duplicate, merging physically consolidates the timelines — the source ticket becomes a redirect stub. The merged posts retain their original timestamps and authors so the combined timeline stays chronological. Tags from both tickets are combined (union). Custom field values from the source are **not** copied to the target (the target's values are preserved). If the source ticket has a higher severity than the target, the target's severity is upgraded to match (and its SLA is recalculated accordingly). Merge is irreversible.
 
 #### 10. Canned Responses (Reply Templates)
 
@@ -230,7 +231,7 @@ There are three post types:
 
 11.3. **Note** — An internal post visible **only to agents and admins**. Notes are used for internal discussion and are never shown to regular users, regardless of ticket visibility.
 
-11.4. **File attachments** — Any post, comment, or note can include one or more file attachments. Files are uploaded to Supabase Storage. Allowed file types: images (PNG, JPG, GIF, WebP), documents (PDF, DOC, DOCX, XLS, XLSX, TXT, CSV), and archives (ZIP). Maximum file size: 10 MB per file. Attachments are displayed below the post body — images show an inline thumbnail preview; other file types show the file name, size, and a download link. Attachments inherit the visibility of the post they belong to (private post attachments are not accessible to unauthorized users). File access is enforced via Supabase Storage RLS policies.
+11.4. **File attachments** — Any post, comment, or note can include one or more file attachments, up to a maximum of **5 files per post**. Files are uploaded to Supabase Storage. Allowed file types: images (PNG, JPG, GIF, WebP), documents (PDF, DOC, DOCX, XLS, XLSX, TXT, CSV), and archives (ZIP). Maximum file size: 10 MB per file. Attachments are displayed below the post body — images show an inline thumbnail preview; other file types show the file name, size, and a download link. The author of a post (or an agent/admin) can delete individual attachments from an existing post. Deleting an attachment removes the file from Supabase Storage permanently. Attachments inherit the visibility of the post they belong to (private post attachments are not accessible to unauthorized users). File access is enforced via Supabase Storage RLS policies.
 
 11.5. **Editing posts, comments, and notes** — The author of a post, comment, or note can edit its body text at any time. Agents and admins can also edit any post, comment, or note regardless of authorship. An edited post shows a small "(edited)" indicator with a timestamp of the last edit. The original content is not preserved (no edit history). Editing a post does **not** trigger email notifications or create an activity log entry.
 
@@ -278,7 +279,7 @@ There are three post types:
 
 #### 16. Admin Setup Page
 
-16.1. **Admin setup access** — Only admins can access the Admin Setup page. Admins see a "Setup" link in the navigation bar. Non-admin users do not see it and are redirected away if they try to access the URL directly.
+16.1. **Admin setup access** — Only admins can access the Admin Setup page. Admins see a "Setup" link in the navigation bar. Non-admin users do not see it and are redirected away if they try to access the URL directly. The Admin Setup page uses a **sidebar navigation** layout: a fixed left sidebar lists all configuration sections (Ticket Types, Categories, Tags, Agent Management, Email, etc.) and the right content area displays the selected section. Only one section is shown at a time. The URL reflects the active section (e.g., `/admin/tags`, `/admin/email`) so direct linking and browser back/forward work correctly.
 
 16.2. **Ticket types management** — A section to manage ticket types: add new types, rename existing ones, delete unused types, and set which type is the default. (See 5.1, 5.2.)
 
@@ -314,9 +315,9 @@ There are three post types:
 
 16.18. **Merge ticket template** — A section to edit the Markdown template used for the system-generated post when a ticket is merged into another. The template supports a `{{ticketId}}` placeholder. A "Reset to default" button restores the built-in template. The default template is: *"This ticket has been merged into [#{{ticketId}}](link)."* (See 9.7.)
 
-16.19. **Knowledge base management** — A section to manage knowledge base categories and articles: create, edit, publish, unpublish, reorder, and delete categories and articles. (See 19.3, 19.5.)
+16.19. **Knowledge base management** — A section to manage knowledge base categories and articles: create, edit, change status (draft / published / archived), reorder, and delete categories and articles. (See 19.2, 19.3, 19.5.)
 
-16.20. **CSAT settings** — A section to configure customer satisfaction surveys: (1) **Enable CSAT surveys** — a toggle to enable or disable automatic CSAT survey emails (disabled by default). (2) **Survey delay** — how long after ticket closure the survey email is sent (default: 1 hour; options: immediately, 1 hour, 4 hours, 24 hours). If a closed ticket is re-opened before the delay elapses, the survey email is cancelled. (3) **Rating scale** — choose between "Simple" (Good / Bad) or "Detailed" (1–5 stars); default is Simple. (See 3.10.)
+16.20. **CSAT settings** — A section to configure customer satisfaction surveys: (1) **Enable CSAT surveys** — a toggle to enable or disable automatic CSAT survey emails (disabled by default). (2) **Survey delay** — how long after ticket closure the survey email is sent (default: 1 hour; options: immediately, 1 hour, 4 hours, 24 hours). If a closed ticket is re-opened before the delay elapses, the survey email is cancelled. The rating scale is always 1–5 stars. (See 3.10.)
 
 16.21. **AI configuration** — A section to configure AI features. The section has two parts:
 
@@ -369,15 +370,15 @@ There are three post types:
 
 19.1. **Knowledge base access** — The knowledge base is a public-facing section accessible from the navigation bar via a "Help Center" link. It is always publicly accessible to all visitors, both authenticated and unauthenticated, regardless of the ticket public access setting (16.10). The knowledge base is separate from the ticket system.
 
-19.2. **Articles** — The knowledge base consists of articles organized into categories. Each article has a title, a body (Markdown text), a category, and one of three statuses:
+19.2. **Articles** — The knowledge base consists of articles organized into categories. Each article has a title, a body (Markdown text), a category, an author (the agent or admin who created or last edited it), and one of three statuses:
 
 | Status | Visible in Help Center listings & search | Accessible via direct URL | Indexed by search engines | Appears in suggested articles (19.6) |
 |---|:---:|:---:|:---:|:---:|
-| **Draft** | No | No (admins only) | No | No |
+| **Draft** | No | No (agents and admins only) | No | No |
 | **Published** | Yes | Yes | Yes | Yes |
 | **Archived** | No | Yes (with an "This article may be outdated" banner) | Yes | No |
 
-New articles start as **Draft**. Admins can transition between all three statuses in any direction. Archived articles are hidden from category listings, help center search, and suggested articles, but remain accessible via their direct URL so existing links, bookmarks, and search engine results continue to work.
+New articles start as **Draft**. Agents and admins can transition between all three statuses in any direction. Archived articles are hidden from category listings, help center search, and suggested articles, but remain accessible via their direct URL so existing links, bookmarks, and search engine results continue to work.
 
 Articles have SEO-friendly URLs in the format `/help/{id}/{category-slug}/{article-slug}`, where `{id}` is the immutable numeric article ID and is the authoritative identifier. If the category slug or article slug in the URL doesn't match the current values (e.g., after a rename or re-categorization), the server redirects to the correct URL. This ensures stable, shareable links even if the article title or category changes.
 
@@ -385,7 +386,7 @@ Articles have SEO-friendly URLs in the format `/help/{id}/{category-slug}/{artic
 
 19.4. **Search** — A search field on the help center page lets users search articles by title and body content (partial match). Search results are paginated.
 
-19.5. **Article management** — Only admins can create, edit, change status (draft / published / archived), and delete knowledge base articles and categories. Article management is done from a section in the Admin Setup page.
+19.5. **Article management** — Agents and admins can create, edit, change status (draft / published / archived), and delete knowledge base articles. Only admins can manage knowledge base categories (create, rename, reorder, delete). Article management is done from a section in the Admin Setup page, accessible to both agents and admins.
 
 19.6. **Suggested articles and similar tickets** — When a user starts typing a ticket title in the creation form, the system searches published knowledge base articles and displays up to 5 matching article links below the title field. Draft and archived articles are excluded from suggestions. If AI-powered duplicate detection is enabled (see 23.2), up to 3 similar open/pending tickets are also displayed in a separate "Similar open tickets" section below the KB suggestions. This encourages self-service and reduces duplicate submissions.
 
@@ -476,7 +477,7 @@ Additionally, seed the following reference data:
 - **1 SLA policy** ("Standard SLA") mapped to Critical (1h response / 4h resolution) and High (4h response / 24h resolution). Low and Medium have no SLA policy.
 - **2 canned responses**: one public ("Greeting" — a standard welcome reply), one private to agent.smith ("Escalation note" — an internal escalation template).
 - **3 knowledge base articles** across 2 categories ("Getting Started" and "Troubleshooting"): two published articles and one draft article.
-- **1 custom field**: a dropdown named "Browser" with values Chrome, Firefox, Safari, and Edge (not required). Populate it on 3 of the 7 seeded tickets.
+- **1 custom field**: a dropdown named "Browser" with values Chrome, Firefox, Safari, and Edge (not required). Populate it on 3 of the 9 seeded tickets.
 
 ---
 
@@ -489,5 +490,6 @@ Additionally, seed the following reference data:
 5. **Agent dashboard performance** — Create a Postgres VIEW (`agent_tickets`) that joins tickets with profile emails and pre-aggregates post counts. The agent page queries this view instead of doing complex joins on the client.
 6. **URL-driven state** — Filtering and view switching (my tickets vs team tickets, agent dashboard filters) should use URL search params, not React state.
 7. **Real-time subscriptions** — Use Supabase Realtime to push live updates to ticket detail and agent dashboard pages. This is the only permitted use of client-side JavaScript (`"use client"`) beyond standard form submissions. The real-time listener is a thin wrapper that triggers a server data refresh when changes are detected.
+8. **Markdown sanitization** — All user-supplied Markdown is rendered to HTML on the server and sanitized before output to prevent XSS attacks. Only a safe subset of HTML is allowed (headings, lists, links, code blocks, emphasis, images). Script tags, event handlers, and dangerous attributes are stripped. Use a battle-tested sanitization library (e.g., `sanitize-html` or `rehype-sanitize`).
 
 ---

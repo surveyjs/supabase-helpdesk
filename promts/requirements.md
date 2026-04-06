@@ -464,8 +464,10 @@ For local development, create seed data with these accounts (all passwords: `pas
 | alice@example.com | user | Alice's Team |
 | bob@example.com | user | Alice's Team |
 | carol@example.com | user | Alice's Team |
+| dave@example.com | user | — |
+| eve@example.com | user | — |
 
-Seed **7 tickets** across Alice, Bob, and Carol with realistic helpdesk subjects (password reset issues, feature requests, billing questions, bug reports, etc.) in mixed statuses. Each ticket must have an original post. Seed additional **posts**, **comments**, and **notes** that simulate realistic agent–customer conversations.
+Seed **9 tickets** across Alice, Bob, Carol, and Dave with realistic helpdesk subjects (password reset issues, feature requests, billing questions, bug reports, etc.) in mixed statuses. Dave has 2 tickets (testing the no-team experience). Eve has no tickets (testing the empty state, see 3.3). Each ticket must have an original post. Seed additional **posts**, **comments**, and **notes** that simulate realistic agent–customer conversations.
 
 Additionally, seed the following reference data:
 

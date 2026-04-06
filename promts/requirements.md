@@ -23,7 +23,7 @@ There are three user roles: **User**, **Agent**, and **Admin**.
 | Add posts/comments to visible tickets | ✓ | ✓ | ✓ |
 | Edit own posts/comments | ✓ | ✓ | ✓ |
 | Edit own notes | — | ✓ | ✓ |
-| Edit any post/comment/note | — | ✓ | ✓ |
+| Edit any post/comment | — | ✓ | ✓ |
 | Edit ticket title | ✓ (owner) | ✓ | ✓ |
 | Change ticket type | — | ✓ | ✓ |
 | Set/change ticket urgency | ✓ (owner) | ✓ | ✓ |
@@ -36,6 +36,7 @@ There are three user roles: **User**, **Agent**, and **Admin**.
 | Unassign agent from a ticket | — | ✓ | ✓ |
 | Mark ticket as duplicate | — | ✓ | ✓ |
 | Delete tickets | — | — | ✓ |
+| Delete posts/comments | — | ✓ | ✓ |
 | Merge tickets | — | ✓ | ✓ |
 | Block / unblock users | — | — | ✓ |
 | Access the Agent Dashboard | — | ✓ | ✓ |
@@ -52,7 +53,10 @@ There are three user roles: **User**, **Agent**, and **Admin**.
 | Generate KB article from ticket | — | ✓ | ✓ |
 | Configure AI settings | — | — | ✓ |
 | Manage agents (promote/revoke) | — | — | ✓ |
-| Manage teams | — | — | ✓ |\n| Manage email configuration | — | — | ✓ |\n| Manage notification templates | — | — | ✓ |\n| Manage inbound email settings | — | — | ✓ |
+| Manage teams | — | — | ✓ |
+| Manage email configuration | — | — | ✓ |
+| Manage notification templates | — | — | ✓ |
+| Manage inbound email settings | — | — | ✓ |
 | Access the Admin Setup page | — | — | ✓ |
 
 All permission checks must be enforced **at the database level** using Postgres Row-Level Security — the frontend should not be the only line of defense.
@@ -65,7 +69,7 @@ All permission checks must be enforced **at the database level** using Postgres 
 
 1.1. **Sign up** — A visitor can create an account with email and password. Passwords must be at least **8 characters** long and contain at least one uppercase letter, one lowercase letter, and one digit. If the password does not meet these requirements, the form shows a validation error. After signing up they are told to check their email for confirmation.
 
-1.2. **Log in** — A user can log in with email and password. Invalid credentials show an error message on the same page. To prevent brute-force attacks, the system enforces login rate limiting: after **5 consecutive failed login attempts** for the same email, the account is temporarily locked for **15 minutes**. During the lockout period, further login attempts are rejected with a message indicating the remaining lockout time. The lockout counter resets after a successful login.
+1.2. **Log in** — A user can log in with email and password. Invalid credentials show an error message on the same page. To prevent brute-force attacks, the system enforces login rate limiting: after **5 consecutive failed login attempts** for the same email, the account is temporarily locked for **15 minutes**. During the lockout period, further login attempts are rejected with a message indicating the remaining lockout time. The lockout counter resets after a successful login. Login rate limiting is enforced in the Next.js middleware: before forwarding the sign-in request to Supabase Auth, the middleware checks a `login_attempts` table (via a Supabase service-role client) for the failure count and lockout timestamp. On failed login, the counter is incremented; on successful login, it is reset. This approach requires no custom API server and keeps the logic server-side.
 
 1.3. **Sign out** — A logged-in user can sign out from the navigation bar.
 
@@ -124,7 +128,7 @@ A new ticket defaults to **Medium** urgency with no severity set. SLA policies a
 
 3.3. **Empty state** — If a user has no tickets, show a friendly message with a link to create one.
 
-3.4. **Ticket detail** — Shows the ticket title, type, status, urgency, severity (if set), category (if categories exist and one is set), tags (if at least one tag is defined), assigned agent (if any), submitter email, creation date, custom fields (if any, see 3.13), and a chronological list of posts. If the ticket is marked as a duplicate, a banner shows the link to the original ticket. The original post appears first as the ticket's description. Each post can have its own chronological list of comments displayed beneath it; comments can themselves have nested replies (up to 2 levels, see 11.2) shown indented beneath the parent comment. The current user's own posts/comments have a blue-tinted background; others have a white background.
+3.4. **Ticket detail** — Shows the ticket title, type, status, urgency, severity (if set), category (if categories exist and one is set), tags (if at least one tag is defined), assigned agent (if any, shown by display name), submitter display name, creation date, custom fields (if any, see 3.13), and a chronological list of posts. Email addresses are never shown on the ticket detail page or ticket lists for any user — only display names are visible. If the ticket is marked as a duplicate, a banner shows the link to the original ticket. The original post appears first as the ticket's description. Each post can have its own chronological list of comments displayed beneath it; comments can themselves have nested replies (up to 2 levels, see 11.2) shown indented beneath the parent comment. The current user's own posts/comments have a blue-tinted background; others have a white background.
 
 3.4.1. **Collapsible timeline** — To keep the ticket detail page fast and readable on long-lived tickets, the timeline uses progressive disclosure:
 
@@ -145,9 +149,9 @@ A new ticket defaults to **Medium** urgency with no severity set. SLA policies a
 
 3.9. **SEO-friendly ticket URLs** — Each ticket has a permanent, human-readable URL in the format `/tickets/{id}/{slug}`, where `{id}` is the immutable numeric ticket ID and `{slug}` is a URL-safe, lowercase, hyphenated version of the ticket title (e.g., `/tickets/42/password-reset-not-working`). The `{id}` is the authoritative identifier — if the slug in the URL doesn't match the current title, the server redirects to the correct URL. This ensures stable, shareable links even if the title changes.
 
-3.10. **Customer satisfaction (CSAT)** — When an agent closes a ticket, the system automatically sends a CSAT survey email to the ticket owner after a configurable delay (see 16.19). The email contains a unique, token-based link that does not require login. CSAT tokens are cryptographically random (at least 32 bytes of entropy), expire **30 days** after issuance, and are single-use — once a rating is submitted the token is invalidated and a new token is issued in case the user wants to change their rating. Expired or invalid tokens show a friendly error page. The link opens a lightweight page where the user selects a satisfaction rating from **1 to 5 stars** and optionally adds a text comment. One rating per ticket — submitting a new rating overwrites the previous one. The CSAT rating, comment, and submission timestamp are stored as ticket metadata. The assigned agent receives a notification when a rating is submitted. The rating is displayed in the ticket header/sidebar alongside other metadata (status, urgency, severity, etc.). If the ticket is re-opened after a rating is submitted, the rating is preserved. If CSAT surveys are disabled by the admin, no survey email is sent.
+3.10. **Customer satisfaction (CSAT)** — When an agent closes a ticket, the system automatically sends a CSAT survey email to the ticket owner after a configurable delay (see 16.19). The email contains a unique, token-based link that does not require login. CSAT tokens are cryptographically random (at least 32 bytes of entropy), expire **30 days** after issuance, and are single-use — once a rating is submitted the token is invalidated and a new token is issued. The confirmation page displayed after submission includes a persistent link with the new token, allowing the user to bookmark it and update their rating later without needing another email. Expired or invalid tokens show a friendly error page (see 16.23). The link opens a lightweight page where the user selects a satisfaction rating from **1 to 5 stars** and optionally adds a text comment. One rating per ticket — submitting a new rating overwrites the previous one. The CSAT rating, comment, and submission timestamp are stored as ticket metadata. The assigned agent receives a notification when a rating is submitted. The rating is displayed in the ticket header/sidebar alongside other metadata (status, urgency, severity, etc.). If the ticket is re-opened after a rating is submitted, the rating is preserved. If CSAT surveys are disabled by the admin, no survey email is sent.
 
-3.11. **Follow a ticket** — A logged-in user can follow any ticket they have access to but did not create. A "Follow" / "Unfollow" toggle is shown on the ticket detail page. Followers receive the same email notifications as the ticket owner (new posts, status changes, agent assignment) but cannot rate the ticket. The ticket owner automatically follows their own ticket and cannot unfollow it.
+3.11. **Follow a ticket** — A logged-in user can follow any ticket they have access to but did not create. A "Follow" / "Unfollow" toggle is shown on the ticket detail page. Followers receive the same email notifications as the ticket owner (new posts, status changes, agent assignment) but cannot rate the ticket. The ticket owner automatically follows their own ticket and cannot unfollow it. Agents and admins can view the list of followers on any ticket they have access to — a "Followers" section in the ticket metadata area shows the count and, when expanded, the list of follower display names.
 
 3.12. **Markdown preview** — All text areas for composing posts, comments, and notes include a "Preview" tab that renders the Markdown as formatted HTML before submission. The user can toggle between "Write" and "Preview" tabs. The preview renders the same Markdown subset used in the final display.
 
@@ -159,11 +163,11 @@ A new ticket defaults to **Medium** urgency with no severity set. SLA policies a
 
 4.1. **Teams** — Users can belong to a team. A user can belong to at most one team.
 
-4.2. **Team tickets view** — If a user is on a team, the home page shows toggle buttons: "My Tickets" and "Team Tickets". The toggle uses URL search params (e.g., `?view=team`) so the selected view is bookmarkable. "My Tickets" is the default. The "Team Tickets" view lists all tickets created by any member of the same team, sorted by last-updated. Each entry shows the same information as in "My Tickets" (title, last-updated date, status badge) plus the submitter's email so the user can see which teammate created the ticket. If the user is not on a team, the toggle is not shown. The team tickets view is paginated with the same page size as the user ticket list (see 16.11).
+4.2. **Team tickets view** — If a user is on a team, the home page shows toggle buttons: "My Tickets" and "Team Tickets". The toggle uses URL search params (e.g., `?view=team`) so the selected view is bookmarkable. "My Tickets" is the default. The "Team Tickets" view lists all tickets created by any member of the same team, sorted by last-updated. Each entry shows the same information as in "My Tickets" (title, last-updated date, status badge) plus the submitter's display name so the user can see which teammate created the ticket. If the user is not on a team, the toggle is not shown. The team tickets view is paginated with the same page size as the user ticket list (see 16.11).
 
 4.3. **Teammate visibility** — Team members can see and comment on each other's private tickets. On a teammate's private ticket, the team member can add posts and comments but cannot change the ticket's status, type, category, urgency, severity, or privacy (those remain restricted to the owner and agents/admins).
 
-4.4. **Team indicator** — On the ticket detail page, if the ticket belongs to a teammate, a label shows the team name (e.g., "Alice's Team") next to the submitter email. This helps agents and teammates identify the team context.
+4.4. **Team indicator** — On the ticket detail page, if the ticket belongs to a teammate, a label shows the team name (e.g., "Alice's Team") next to the submitter's display name. This helps agents and teammates identify the team context.
 
 4.5. **Team management (admin)** — Admins can manage teams from the Admin Setup page (see 16.21). The team management section allows admins to: create new teams (with a name), rename existing teams, delete teams (only if they have no members), add users to a team (by searching by email), and remove users from a team. A user can belong to at most one team; assigning a user to a new team removes them from their previous team. Team membership changes take effect immediately.
 
@@ -191,11 +195,11 @@ A new ticket defaults to **Medium** urgency with no severity set. SLA policies a
 
 8.1. **Agent dashboard access** — Agents and admins see an "Agent Dashboard" link in the navigation bar. Regular users do not see it, and are redirected away if they try to access it directly.
 
-8.2. **View all tickets** — The dashboard shows ALL tickets in the system (both private and public), with the submitter's email, last-updated date, post count, urgency badge, severity badge (if set), and status badge. The list is paginated; the page size is configured separately for the agent dashboard by the admin (see 16.11); the default is 20.
+8.2. **View all tickets** — The dashboard shows ALL tickets in the system (both private and public), with the submitter's display name, last-updated date, post count, urgency badge, severity badge (if set), and status badge. Email addresses are shown only in the agent dashboard and admin views for identification purposes (see 20.3). The list is paginated; the page size is configured separately for the agent dashboard by the admin (see 16.11); the default is 20.
 
 8.3. **Filter by status** — Toggle buttons let the agent filter by "All", "Active" (open + pending), or "Closed".
 
-8.4. **Sort** — Toggle buttons let the agent sort by "Last Modified" (default) or "Created" date.
+8.4. **Sort** — Toggle buttons let the agent sort by "Last Modified" (default), "Created" date, or "SLA Risk" (most at-risk tickets first, based on SLA indicators — see 17.4).
 
 8.5. **Filter by user** — A text field lets the agent search tickets by submitter email (partial match). A "Clear" link removes the filter.
 
@@ -207,13 +211,15 @@ A new ticket defaults to **Medium** urgency with no severity set. SLA policies a
 
 8.9. **Filter by assigned agent** — A dropdown lets the agent filter tickets by assigned agent. Options include "All", "Unassigned", and each agent's email. This lets agents quickly find their own assigned tickets or unassigned tickets that need attention.
 
-8.10. **Result count** — The dashboard shows "N ticket(s) found" above the list.
+8.10. **Filter by team** — A dropdown lets the agent filter tickets by team. Only shown if at least one team exists. Options include "All", "No team", and each team's name. This lets agents filter tickets submitted by members of a specific team.
 
-8.11. **All filters are URL-based** — Filters use URL search params so the page is bookmarkable and shareable.
+8.11. **Result count** — The dashboard shows "N ticket(s) found" above the list.
 
-8.12. **Saved views** — Agents and admins can save the current combination of filters and sort order as a named view (e.g., "My open Critical tickets", "Unassigned this week"). Saved views appear as quick-access links above the filter controls. Each agent manages their own saved views — saved views are private to the agent who created them. An agent can rename or delete their saved views. Clicking a saved view applies all its filters and sort to the dashboard URL.
+8.12. **All filters are URL-based** — Filters use URL search params so the page is bookmarkable and shareable.
 
-8.13. **Search by title/content** — A text field lets the agent search tickets by title or post content (partial match). This is separate from the submitter email filter (8.5). A "Clear" link removes the search. The search filter is URL-based and combines with all other filters.
+8.13. **Saved views** — Agents and admins can save the current combination of filters and sort order as a named view (e.g., "My open Critical tickets", "Unassigned this week"). Saved views appear as quick-access links above the filter controls. Each agent manages their own saved views — saved views are private to the agent who created them. An agent can rename or delete their saved views. Clicking a saved view applies all its filters and sort to the dashboard URL.
+
+8.14. **Search by title/content** — A text field lets the agent search tickets by title or post content (partial match). This is separate from the submitter email filter (8.5). A "Clear" link removes the search. The search filter is URL-based and combines with all other filters.
 
 #### 9. Agent Actions on Tickets
 
@@ -227,7 +233,7 @@ A new ticket defaults to **Medium** urgency with no severity set. SLA policies a
 
 9.5. **Delete ticket** — Only an admin can delete a ticket. A "Delete" button with a confirmation prompt is shown on the ticket detail page for admins only. A ticket that has other tickets linked to it as duplicates (i.e., it is the original in a duplicate relationship) cannot be deleted until all duplicate links pointing to it are removed.
 
-9.6. **Merge tickets** — An agent or admin can merge two tickets into one. Merging moves all posts, comments, notes, attachments, activity log entries, CSAT ratings, and followers from the source ticket into the target ticket. Followers are de-duplicated: if a user already follows the target ticket, the duplicate follow from the source is discarded (union semantics). If the source ticket has a CSAT rating and the target does not, the rating is transferred to the target; if both have ratings, the target's rating is preserved. The source ticket is then closed and marked with a system-generated post linking to the target ticket (using the configurable merge template, see 16.17). Any pending CSAT survey email scheduled for the source ticket is cancelled on merge. Unlike duplicate, merging physically consolidates the timelines — the source ticket becomes a read-only stub. The source ticket remains accessible at its original URL as a read-only page showing a merge banner (using the configurable merge banner template, see 16.22) and a link to the target ticket. It does **not** HTTP-redirect. The reply form is hidden on merged tickets. The merged posts retain their original timestamps and authors so the combined timeline stays chronological. Tags from both tickets are combined (union). The target ticket's urgency is preserved (the source's urgency is discarded). Custom field values from the source are **not** copied to the target (the target's values are preserved). If the source ticket has a severity set and the target does not, the target inherits the source's severity. If both tickets have severity set and the source's is higher, the target's severity is upgraded to match. In both cases the target's SLA is recalculated accordingly. If only the target has severity set (or neither does), no severity change occurs. Merge is irreversible.
+9.6. **Merge tickets** — An agent or admin can merge two tickets into one. A ticket that is marked as a duplicate cannot be merged (the duplicate link must be removed first). Merging moves all posts, comments, notes, attachments, activity log entries, and followers from the source ticket into the target ticket. Followers are de-duplicated: if a user already follows the target ticket, the duplicate follow from the source is discarded (union semantics). The owner of the source ticket becomes a regular follower of the target ticket (they can unfollow it, unlike their own tickets). CSAT ratings are **not** transferred: the source ticket's CSAT rating is discarded; the target ticket's existing rating (if any) is preserved. Any pending CSAT survey email scheduled for the source ticket is cancelled on merge. The source ticket is then closed and marked with a system-generated post linking to the target ticket (using the configurable merge template, see 16.17). Unlike duplicate, merging physically consolidates the timelines — the source ticket becomes a read-only stub. The source ticket remains accessible at its original URL as a read-only page showing a merge banner (using the configurable merge banner template, see 16.22) and a link to the target ticket. It does **not** HTTP-redirect. The reply form is hidden on merged tickets. The merged posts retain their original timestamps and authors so the combined timeline stays chronological. Tags from both tickets are combined (union). The target ticket's urgency is preserved (the source's urgency is discarded). Custom field values from the source are **not** copied to the target (the target's values are preserved). If the source ticket has a severity set and the target does not, the target inherits the source's severity. If both tickets have severity set and the source's is higher, the target's severity is upgraded to match. In both cases the target's SLA is recalculated accordingly. If only the target has severity set (or neither does), no severity change occurs. Merge is irreversible.
 
 #### 10. Canned Responses (Reply Templates)
 
@@ -251,11 +257,11 @@ There are three post types:
 
 11.4. **File attachments** — Any post, comment, or note can include one or more file attachments, up to a maximum of **5 files per post**. Files are uploaded to Supabase Storage. Allowed file types: images (PNG, JPG, GIF, WebP), documents (PDF, DOC, DOCX, XLS, XLSX, TXT, CSV), and archives (ZIP). Maximum file size: 10 MB per file. Attachments are displayed below the post body — images show an inline thumbnail preview; other file types show the file name, size, and a download link. The author of a post (or an agent/admin) can delete individual attachments from an existing post. Deleting an attachment removes the file from Supabase Storage permanently. Attachments inherit the visibility of the post they belong to (private post attachments are not accessible to unauthorized users). File access is enforced via Supabase Storage RLS policies.
 
-11.5. **Editing posts, comments, and notes** — The author of a post, comment, or note can edit its body text at any time. Agents and admins can also edit any post, comment, or note regardless of authorship. An edited post shows a small "(edited)" indicator with a timestamp of the last edit. The original content is not preserved (no edit history). Editing a post does **not** trigger email notifications or create an activity log entry.
+11.5. **Editing posts, comments, and notes** — The author of a post, comment, or note can edit its body text at any time. Agents and admins can also edit any post or comment regardless of authorship. However, agents and admins can only edit their **own** notes — they cannot edit notes created by other agents or admins. An edited post shows a small "(edited)" indicator with a timestamp of the last edit. The original content is not preserved (no edit history). Editing a post does **not** trigger email notifications or create an activity log entry.
 
 11.6. **Editing ticket title** — The ticket owner, agents, and admins can edit the ticket title after creation. Editing the title updates the URL slug (the old URL with the stale slug redirects to the new one, per 3.9). Title changes are recorded in the activity log.
 
-11.7. **No post deletion by users** — Users cannot delete their own posts, comments, or replies. This ensures the integrity of the ticket conversation history for audit and support purposes. Only admins can delete an entire ticket (see 9.5). Agents and admins can delete individual file attachments from posts (see 11.4) but cannot delete post content itself.
+11.7. **Post deletion** — Regular users cannot delete their own posts, comments, or replies. This ensures the integrity of the ticket conversation history for audit and support purposes. Agents and admins can delete any individual post, comment, or note (except the original post, which cannot be deleted). Deleting a post also deletes all its comments and file attachments. Admins can delete an entire ticket (see 9.5). Agents and admins can also delete individual file attachments from posts (see 11.4).
 
 #### 12. Post Visibility & Privacy
 
@@ -311,9 +317,9 @@ There are three post types:
 
 15.4. **Unknown sender** — If an incoming email is from an address that does not match any registered user, the system does **not** create a ticket. Instead, it sends an automatic reply informing the sender that they are not registered and providing a link to the registration page. The auto-reply email template is configurable by the admin with a "Reset to default" option (see 16.8).
 
-15.6. **Outbound auto-reply rate limiting** — To prevent the system from being abused as an email relay (e.g., via spoofed sender addresses), outbound auto-reply emails (unknown sender replies, blocked user replies, duplicate ticket replies, and rate-limit rejection replies) are rate-limited to **3 auto-replies per recipient address per hour**. Once the limit is reached, further auto-replies to that address are silently discarded. This limit applies globally across all auto-reply types.
+15.5. **Outbound auto-reply rate limiting** — To prevent the system from being abused as an email relay (e.g., via spoofed sender addresses), outbound auto-reply emails (unknown sender replies, blocked user replies, duplicate ticket replies, and rate-limit rejection replies) are rate-limited to **3 auto-replies per recipient address per hour**. Once the limit is reached, further auto-replies to that address are silently discarded. This limit applies globally across all auto-reply types.
 
-15.5. **Email signature stripping** — When processing inbound emails, the system strips common email signatures, quoted reply text, and forwarded-message headers before creating a post. The system detects standard signature delimiters (e.g., `-- `, `___`, "Sent from my iPhone") and quoted blocks (lines starting with `>`). Only the new content above the signature/quote is used as the post body. If stripping results in an empty body, the full email body is used as a fallback.
+15.6. **Email signature stripping** — When processing inbound emails, the system strips common email signatures, quoted reply text, and forwarded-message headers before creating a post. The system detects standard signature delimiters (e.g., `-- `, `___`, "Sent from my iPhone") and quoted blocks (lines starting with `>`). Only the new content above the signature/quote is used as the post body. If stripping results in an empty body, the full email body is used as a fallback.
 
 #### 16. Admin Setup Page
 
@@ -353,7 +359,7 @@ There are three post types:
 
 16.18. **Knowledge base categories** — A section to manage knowledge base categories: create, rename, reorder, and delete categories. Article management is **not** in the Admin Setup page — it is in the dedicated Knowledge Base Management page accessible to agents and admins (see 19.5). (See 19.3.)
 
-16.19. **CSAT settings** — A section to configure customer satisfaction surveys: (1) **Enable CSAT surveys** — a toggle to enable or disable automatic CSAT survey emails (disabled by default). (2) **Survey delay** — how long after ticket closure the survey email is sent (default: 1 hour; options: immediately, 1 hour, 4 hours, 24 hours). If a closed ticket is re-opened before the delay elapses, the survey email is cancelled. If a ticket is closed again after being re-opened, a new CSAT survey email is sent **only if no rating has been submitted yet** for this ticket; if the user has already rated the ticket, no additional survey email is sent (the existing rating is preserved and editable via the token reissue mechanism, see 3.10). The rating scale is always 1–5 stars. (See 3.10.)
+16.19. **CSAT settings** — A section to configure customer satisfaction surveys: (1) **Enable CSAT surveys** — a toggle to enable or disable automatic CSAT survey emails (disabled by default). The toggle is disabled with a warning message until outbound email is configured and verified (see 14.4 / 16.7). (2) **Survey delay** — how long after ticket closure the survey email is sent (default: 1 hour; options: immediately, 1 hour, 4 hours, 24 hours). If a closed ticket is re-opened before the delay elapses, the survey email is cancelled. If a ticket is closed again after being re-opened, a new CSAT survey email is sent **only if no rating has been submitted yet** for this ticket; if the user has already rated the ticket, no additional survey email is sent (the existing rating is preserved and editable via the token reissue mechanism, see 3.10). The rating scale is always 1–5 stars. (See 3.10.)
 
 16.20. **AI configuration** — A section to configure AI features. The section has two parts:
 **Connection settings:**
@@ -363,9 +369,9 @@ There are three post types:
 - **Model** — a dropdown populated with available models from the selected provider (auto-fetched after the API key is verified). The admin selects one model used by all AI features.
 
 **Feature toggles** (each feature can be independently enabled/disabled; all default to off; toggles are disabled until a valid API key is saved):
-- **Auto-categorize tickets** — enables AI-suggested type, category, urgency, and tags on ticket creation. (See 23.1.)
+- **Auto-categorize tickets** — enables AI-suggested type, category, urgency, and tags on ticket creation. Includes a **"Minimum body length"** numeric setting (default: **20**, minimum: 10) that controls the minimum number of characters required in the ticket body before auto-categorization triggers. (See 23.1.)
 - **Duplicate ticket detection** — enables similar-ticket suggestions on ticket creation. Includes a similarity threshold setting: Low, Medium (default), or High. (See 23.2.)
-- **Suggested reply for agents** — enables the "Suggest reply" button on ticket detail pages. (See 23.3.)
+- **Suggested reply for agents** — enables the "Suggest reply" button on ticket detail pages. Includes a **"Context window"** numeric setting (default: **20**, minimum: 5, maximum: 50) that controls the maximum number of recent posts included in the AI prompt. (See 23.3.)
 - **Ticket summary** — enables AI-generated summaries on long tickets. Includes a "Minimum post count" numeric setting (default: 10, minimum: 5). (See 23.4.)
 - **Generate KB article from ticket** — enables the "Generate KB Article" button on closed tickets. (See 23.5.)
 
@@ -377,6 +383,8 @@ There are three post types:
 16.22. **Merge stub banner template** — A section to edit the Markdown template used for the banner displayed on merged (stub) tickets. The template supports a `{{ticketId}}` placeholder for the target ticket ID. A "Reset to default" button restores the built-in template. The default template is: *"This ticket has been merged into [#{{ticketId}}](link). Please continue the conversation there."* This is separate from the merge post template (16.17) — the post template is used for the system-generated post in the timeline, while the banner template is used for the prominent banner at the top of the stub page. (See 9.6.)
 
 16.21. **Team management** — A section to manage teams. Admins can: create new teams (with a name), rename existing teams, delete teams (only if the team has no members), add users to a team by searching by email, and remove users from a team. A user can belong to at most one team; assigning a user to a different team removes them from their current team. The section shows a list of all teams with their member count, and clicking a team shows its members. (See 4.5.)
+
+16.23. **Error page templates** — A section to configure the content displayed on error pages (404 Not Found, 403 Forbidden, 500 Internal Server Error, and CSAT Token Error). Each error page template has a Markdown body that supports the following placeholders: `{{statusCode}}` (the HTTP status code), `{{errorMessage}}` (a human-readable error description), `{{requestedUrl}}` (the URL the user attempted to access), `{{userDisplayName}}` (the current user's display name, if authenticated), and `{{supportEmail}}` (the configured reply-to address from inbound email settings, see 16.9). The CSAT Token Error template additionally supports `{{ticketId}}` (the ticket ID associated with the expired/invalid token, if available). Each template has a "Reset to default" button. Default templates include: a friendly message and a link to the home page (all pages); a search bar for tickets and knowledge base articles (404 page); a clear reason and link to the home page (403 page); a retry suggestion and contact support link (500 page); and a message such as *"This survey link has expired or has already been used"* with a link to the ticket if the user is authenticated (CSAT Token Error page). Error pages are server-rendered and respect the current authentication state — unauthenticated visitors see a minimal layout while authenticated users see the full navigation bar.
 
 #### 17. SLA (Service Level Agreements)
 
@@ -438,11 +446,11 @@ Articles have SEO-friendly URLs in the format `/help/{id}/{category-slug}/{artic
 
 20.2. **Change password** — The profile page includes a "Change password" form with fields for current password and new password (with confirmation). If the admin has configured an external authentication URL (see 16.13), the "Change password" section is replaced with a link to the external URL.
 
-20.3. **Display name** — Users can set an optional display name on their profile. When set, the display name is shown instead of the email address in posts, comments, ticket lists, and activity log entries. The email is still shown in the agent dashboard and admin views for identification purposes.
+20.3. **Display name** — Users can set an optional display name on their profile. The display name is shown instead of the email address throughout the application: in posts, comments, ticket lists, activity log entries, navigation bar, and ticket detail pages. If no display name is set, a placeholder (e.g., "User #123" or a truncated email hash) is shown — raw email addresses are never displayed in ticket-facing UI. Email addresses are shown only in the agent dashboard, admin views, and profile pages for identification purposes.
 
 #### 21. Real-Time Updates
 
-21.1. **Live ticket updates** — The ticket detail page subscribes to Supabase Realtime channels for the current ticket. When another user adds a post, comment, or note, changes the ticket status, or modifies ticket metadata, the page updates automatically without requiring a manual refresh. New posts appear at the bottom of the timeline with a subtle animation.
+21.1. **Live ticket updates** — The ticket detail page subscribes to Supabase Realtime channels for the current ticket. When another user adds a post, comment, or note, changes the ticket status, or modifies ticket metadata, the page updates automatically without requiring a manual refresh. New posts appear at the bottom of the timeline with a subtle animation. Real-time updates are available only to authenticated users. Unauthenticated visitors (when public access is enabled, see 16.10) see a static server-rendered page without real-time updates.
 
 21.2. **Live dashboard updates** — The agent dashboard subscribes to Supabase Realtime for ticket changes. New tickets, status changes, and assignment changes are reflected in the list in real time. The result count updates accordingly.
 
@@ -454,7 +462,7 @@ Articles have SEO-friendly URLs in the format `/help/{id}/{category-slug}/{artic
 
 22.2. **Unblock a user** — An admin can unblock a previously blocked user, restoring their full capabilities.
 
-22.3. **Block indicator** — In the agent dashboard and ticket detail pages, blocked users are marked with a visual indicator (e.g., a red "Blocked" badge next to their email). This helps agents identify restricted accounts.
+22.3. **Block indicator** — In the agent dashboard and ticket detail pages, blocked users are marked with a visual indicator (e.g., a red "Blocked" badge next to their display name). This helps agents identify restricted accounts.
 
 22.4. **Block log** — Blocking and unblocking events are recorded in a system-wide admin activity log (separate from ticket activity logs). The log shows who was blocked/unblocked, by which admin, and when.
 
@@ -462,11 +470,11 @@ Articles have SEO-friendly URLs in the format `/help/{id}/{category-slug}/{artic
 
 All AI features require a configured AI provider and API key (see 16.20). Each feature can be individually enabled or disabled by the admin. When AI is not configured or a feature is disabled, the corresponding UI elements are hidden. All AI calls are executed server-side via Server Actions — no client-side AI SDK is used.
 
-23.1. **Auto-categorization** — When a user submits a ticket, the system analyzes the title and body using the configured AI model and suggests values for type, category, urgency, and tags. Suggestions are shown as pre-filled values on the ticket creation form after the user fills in the title and body. The user can accept, change, or ignore any suggestion before submitting. Auto-categorization runs automatically once when the user moves focus out of the body field (not on every keystroke). A **"Re-suggest"** button is displayed next to the AI-suggested fields, allowing the user to manually re-trigger auto-categorization after editing the title or body. Clicking "Re-suggest" replaces the current suggestions with fresh ones from the AI model. If the AI call fails or times out, the form uses the standard defaults silently.
+23.1. **Auto-categorization** — When a user submits a ticket, the system analyzes the title and body using the configured AI model and suggests values for type, category, urgency, and tags. Suggestions are shown as pre-filled values on the ticket creation form after the user fills in the title and body. The user can accept, change, or ignore any suggestion before submitting. Auto-categorization runs automatically once when the user moves focus out of the body field, provided the body contains at least the configured minimum number of characters (default: **20**, configurable in 16.20). If the body is shorter than the minimum, auto-categorization does not trigger. A **"Re-suggest"** button is displayed next to the AI-suggested fields, allowing the user to manually re-trigger auto-categorization after editing the title or body (the minimum character requirement also applies to re-suggest). Clicking "Re-suggest" replaces the current suggestions with fresh ones from the AI model. If the AI call fails or times out, the form uses the standard defaults silently.
 
 23.2. **Duplicate ticket detection** — When a user types a ticket title in the creation form, the system searches existing open and pending tickets for potential duplicates using AI-powered semantic similarity. Up to 3 similar tickets are displayed as "Similar open tickets" links below the title field, alongside the KB article suggestions (see 19.6). Each link shows the ticket title, status, and creation date. This reduces duplicate ticket volume before it reaches agents. The similarity threshold is configurable by the admin (see 16.20). If no similar tickets are found or AI is unavailable, nothing is shown.
 
-23.3. **Suggested reply** — On the ticket detail page, agents see a "Suggest reply" button next to the reply text area. Clicking it sends the ticket context (title, posts, comments, and any related KB articles) to the AI model, which generates a draft response. The suggested text is inserted into the reply text area — the agent can review, edit, and post it. The AI never sends a reply automatically. If the ticket has a long history, only the most recent posts (up to a configurable context window) are included in the prompt. The button shows a loading indicator while the AI processes. If the AI call fails, the agent sees an error message and can retry or write a manual reply. To control costs, AI suggested reply usage is rate-limited to **20 requests per agent per hour**. When the limit is reached, the "Suggest reply" button is disabled with a message indicating when it will be available again. The rate limit is configurable by the admin (see 16.20).
+23.3. **Suggested reply** — On the ticket detail page, agents see a "Suggest reply" button next to the reply text area. Clicking it sends the ticket context (title, posts, comments, and any related KB articles) to the AI model, which generates a draft response. The suggested text is inserted into the reply text area — the agent can review, edit, and post it. The AI never sends a reply automatically. If the ticket has a long history, only the most recent posts (up to the configured context window, see 16.20) are included in the prompt. The button shows a loading indicator while the AI processes. If the AI call fails, the agent sees an error message and can retry or write a manual reply. To control costs, AI suggested reply usage is rate-limited to **20 requests per agent per hour**. When the limit is reached, the "Suggest reply" button is disabled with a message indicating when it will be available again. The rate limit is configurable by the admin (see 16.20).
 
 23.4. **Ticket summary** — For tickets with 10 or more posts (configurable, see 16.20), a collapsible AI-generated summary is shown at the top of the ticket detail page, below the ticket metadata and above the timeline. The summary provides a concise overview of the problem, key discussion points, and current status. It is generated on demand when the ticket detail page is loaded and the post threshold is met. The summary is cached and refreshed when new posts are added. It is visible to agents and admins only. A "Refresh summary" button lets the agent regenerate the summary.
 
@@ -477,7 +485,7 @@ All AI features require a configured AI provider and API key (see 16.20). Each f
 ### Navigation Bar
 
 - **Left side**: App name "HelpDesk" (links to home), "My Tickets" link, "Help Center" link, (for agents/admins) "Agent Dashboard" link, (for agents/admins) "Manage Articles" link, (for admins only) "Reports" link, and (for admins only) "Setup" link.
-- **Right side**: Notification bell icon with unread count badge (see 14a.1), current user's email (or display name, if set), role badges, and a "Sign out" button. A dropdown menu on the user name provides links to "Profile" and "Notification Settings".
+- **Right side**: Notification bell icon with unread count badge (see 14a.1), current user's display name (or email if no display name is set), role badges, and a "Sign out" button. A dropdown menu on the user name provides links to "Profile" and "Notification Settings".
 - The nav bar is always visible. For unauthenticated visitors it shows the app name, "Help Center" link, and a "Log in" link. The full nav bar (My Tickets, Agent Dashboard, user menu, Sign out) is only shown to logged-in users.
 
 ---
@@ -492,23 +500,24 @@ All AI features require a configured AI provider and API key (see 16.20). Each f
 - Forms in white card containers with padding and rounded corners.
 - No dark mode needed (just light theme).
 - **Mobile responsive** — All pages must be fully responsive. On small screens: the nav bar collapses into a hamburger menu, ticket lists use a compact single-column layout, the ticket detail page stacks metadata above the timeline, and filter controls collapse into an expandable panel. Touch targets must be at least 44×44px.
+- **Accessibility** — The application must conform to **WCAG 2.1 Level AA**. All interactive elements must be keyboard-navigable, have visible focus indicators, and include appropriate ARIA attributes. Images and icons must have alt text or `aria-label`. Color must not be the sole means of conveying information (e.g., status badges include text labels alongside colors). Form inputs must have associated labels. Error messages must be programmatically associated with their fields.
 
 ---
 
 ### Seed / Test Data
 
-For local development, create seed data with these accounts (all passwords: `password123`):
+For local development, create seed data with these accounts (all passwords: `Password123`):
 
-| Email | Role | Team |
-|---|---|---|
-| admin@example.com | admin | — |
-| agent.smith@example.com | agent | — |
-| agent.jones@example.com | agent | — |
-| alice@example.com | user | Alice's Team |
-| bob@example.com | user | Alice's Team |
-| carol@example.com | user | Alice's Team |
-| dave@example.com | user | — |
-| eve@example.com | user | — |
+| Email | Display Name | Role | Team |
+|---|---|---|---|
+| admin@example.com | Admin | admin | — |
+| agent.smith@example.com | Agent Smith | agent | — |
+| agent.jones@example.com | Agent Jones | agent | — |
+| alice@example.com | Alice | user | Alice's Team |
+| bob@example.com | Bob | user | Alice's Team |
+| carol@example.com | Carol | user | Alice's Team |
+| dave@example.com | Dave | user | — |
+| eve@example.com | Eve | user | — |
 
 Seed **9 tickets** across Alice, Bob, Carol, and Dave with realistic helpdesk subjects (password reset issues, feature requests, billing questions, bug reports, etc.) in mixed statuses. Dave has 2 tickets (testing the no-team experience). Eve has no tickets (testing the empty state, see 3.3). Each ticket must have an original post. Seed additional **posts**, **comments**, and **notes** that simulate realistic agent–customer conversations.
 
@@ -526,7 +535,7 @@ Additionally, seed the following reference data:
 
 ### Architecture Constraints
 
-1. **No custom API layer** — Use Supabase client libraries to read/write data directly. Mutations happen through Next.js Server Actions called from `<form>` elements.
+1. **No custom API layer** — Use Supabase client libraries to read/write data directly. Mutations happen through Next.js Server Actions called from `<form>` elements or programmatic invocations (e.g., `useFormAction`, button `onClick` handlers) for interactions that don't map naturally to forms. Exceptions to the `<form>` pattern include: Follow/Unfollow toggle (3.11), Mark all as read (14a.2, 14a.3), collapsible timeline expand/collapse (3.4.1), draft publish (12.3), and notification mark-as-read actions.
 2. **Server-rendered everything** — No `"use client"` components except for: (a) Supabase Realtime subscriptions (see constraint 7), (b) Markdown preview toggling (see 3.12), (c) reporting charts (see section 18), (d) knowledge base article suggestions and duplicate ticket detection with debounced search (see 19.6, 23.2), (e) AI-powered form interactions such as auto-categorization suggestions and suggested reply loading (see 23.1, 23.3), (f) collapsible "Show older posts" / "Show older comments" expand/collapse toggles on the ticket detail timeline (see 3.4.1), and (g) notification bell icon with dropdown panel and real-time badge updates (see 14a.1, 14a.2, 14a.5). These client-side components must be minimal wrappers with no application state management.
 3. **Database-enforced security** — Every table must have Row-Level Security enabled. Helper functions like `is_agent()`, `is_admin()`, and `is_teammate()` should live in Postgres and be used in RLS policies.
 4. **Cookie-based auth** — Use `@supabase/ssr` for server-side Supabase clients. A Next.js middleware refreshes the session on every request.

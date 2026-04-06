@@ -124,7 +124,16 @@ A new ticket defaults to **Medium** urgency with no severity set. SLA policies a
 
 3.3. **Empty state** — If a user has no tickets, show a friendly message with a link to create one.
 
-3.4. **Ticket detail** — Shows the ticket title, type, status, urgency, severity (if set), category (if categories exist and one is set), tags (if at least one tag is defined), assigned agent (if any), submitter email, creation date, and a chronological list of posts. If the ticket is marked as a duplicate, a banner shows the link to the original ticket. The original post appears first as the ticket's description. Each post can have its own chronological list of comments displayed beneath it; comments can themselves have nested replies (up to 2 levels, see 11.2) shown indented beneath the parent comment. The current user's own posts/comments have a blue-tinted background; others have a white background.
+3.4. **Ticket detail** — Shows the ticket title, type, status, urgency, severity (if set), category (if categories exist and one is set), tags (if at least one tag is defined), assigned agent (if any), submitter email, creation date, custom fields (if any, see 3.13), and a chronological list of posts. If the ticket is marked as a duplicate, a banner shows the link to the original ticket. The original post appears first as the ticket's description. Each post can have its own chronological list of comments displayed beneath it; comments can themselves have nested replies (up to 2 levels, see 11.2) shown indented beneath the parent comment. The current user's own posts/comments have a blue-tinted background; others have a white background.
+
+3.4.1. **Collapsible timeline** — To keep the ticket detail page fast and readable on long-lived tickets, the timeline uses progressive disclosure:
+
+- The **original post** is always visible at the top.
+- The **10 most recent posts** (with their comments, notes, and inline activity entries) are shown in full.
+- If the ticket has more than 10 posts, the older posts are collapsed behind a clickable **"Show N older posts"** link between the original post and the visible recent posts. Clicking the link expands the hidden posts in place (no page reload). Once expanded, a **"Collapse older posts"** link allows re-collapsing them.
+- For **comment threads** on a post: the **3 most recent comments** are shown. If a post has more than 3 comments, the older comments are collapsed behind a **"Show N older comments"** link at the top of the thread. Clicking it expands the hidden comments in place.
+- Activity log entries (see 13.1) are grouped with the posts they relate to chronologically. Collapsed sections include an activity count in the link text (e.g., "Show 15 older posts and 8 activity entries").
+- The collapse thresholds (10 posts, 3 comments) are not admin-configurable in this version.
 
 3.5. **Reply to a ticket** — Below the post list there is a text area and a "Reply" button to add a new post. Users can reply even if the ticket is closed or pending — doing so automatically transitions the ticket to **open** (see section 2). Users cannot reply to a ticket that is marked as a duplicate.
 
@@ -502,7 +511,7 @@ Additionally, seed the following reference data:
 ### Architecture Constraints
 
 1. **No custom API layer** — Use Supabase client libraries to read/write data directly. Mutations happen through Next.js Server Actions called from `<form>` elements.
-2. **Server-rendered everything** — No `"use client"` components except for: (a) Supabase Realtime subscriptions (see constraint 7), (b) Markdown preview toggling (see 3.12), (c) reporting charts (see section 18), (d) knowledge base article suggestions and duplicate ticket detection with debounced search (see 19.6, 23.2), and (e) AI-powered form interactions such as auto-categorization suggestions and suggested reply loading (see 23.1, 23.3). These client-side components must be minimal wrappers with no application state management.
+2. **Server-rendered everything** — No `"use client"` components except for: (a) Supabase Realtime subscriptions (see constraint 7), (b) Markdown preview toggling (see 3.12), (c) reporting charts (see section 18), (d) knowledge base article suggestions and duplicate ticket detection with debounced search (see 19.6, 23.2), (e) AI-powered form interactions such as auto-categorization suggestions and suggested reply loading (see 23.1, 23.3), and (f) collapsible "Show older posts" / "Show older comments" expand/collapse toggles on the ticket detail timeline (see 3.4.1). These client-side components must be minimal wrappers with no application state management.
 3. **Database-enforced security** — Every table must have Row-Level Security enabled. Helper functions like `is_agent()`, `is_admin()`, and `is_teammate()` should live in Postgres and be used in RLS policies.
 4. **Cookie-based auth** — Use `@supabase/ssr` for server-side Supabase clients. A Next.js middleware refreshes the session on every request.
 5. **Agent dashboard performance** — Create a Postgres VIEW (`agent_tickets`) that joins tickets with profile emails and pre-aggregates post counts. The agent page queries this view instead of doing complex joins on the client.

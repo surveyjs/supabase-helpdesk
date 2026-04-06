@@ -89,7 +89,7 @@ Status transition rules:
 - An agent can manually set a ticket to **open**, **pending**, or **closed**.
 - When a user (non-agent) replies to a **pending** ticket, it automatically transitions to **open**.
 - When a user (non-agent) replies to a **closed** ticket, it automatically transitions to **open** (re-open).
-- Users cannot reply to a ticket that is marked as a duplicate.
+- Regular users cannot reply to a ticket that is marked as a duplicate. Agents and admins can still add posts, comments, and notes to duplicate tickets.
 - Marking a ticket as duplicate automatically sets it to **closed**.
 - Removing a duplicate link does **not** change the ticket's status — it stays in its current state (typically closed).
 - Closing a ticket does **not** remove the assigned agent. The agent remains assigned for tracking and reporting purposes.
@@ -135,7 +135,7 @@ A new ticket defaults to **Medium** urgency with no severity set. SLA policies a
 - Activity log entries (see 13.1) are grouped with the posts they relate to chronologically. Collapsed sections include an activity count in the link text (e.g., "Show 15 older posts and 8 activity entries").
 - The collapse thresholds (10 posts, 3 comments) are not admin-configurable in this version.
 
-3.5. **Reply to a ticket** — Below the post list there is a text area and a "Reply" button to add a new post. Users can reply even if the ticket is closed or pending — doing so automatically transitions the ticket to **open** (see section 2). Users cannot reply to a ticket that is marked as a duplicate.
+3.5. **Reply to a ticket** — Below the post list there is a text area and a "Reply" button to add a new post. Users can reply even if the ticket is closed or pending — doing so automatically transitions the ticket to **open** (see section 2). Regular users cannot reply to a ticket that is marked as a duplicate; agents and admins can still add posts, comments, and notes to duplicate tickets (see section 2).
 
 3.6. **Public vs private** — Public tickets are visible to any logged-in user. If public access for unauthenticated visitors is enabled by the admin (see 16.10), public tickets are also visible to unauthenticated visitors (useful for SEO indexing). Private tickets are visible only to the owner, teammates, and agents/admins.
 
@@ -219,7 +219,7 @@ A new ticket defaults to **Medium** urgency with no severity set. SLA policies a
 
 9.1. **Change status** — On a ticket detail page, an agent sees status action buttons depending on the current state: "Mark Pending" (sets to pending), "Close Ticket" (sets to closed), and "Re-open Ticket" / "Mark Open" (sets to open). The available buttons adapt to the ticket's current status so the agent can transition between any of the three states. Regular users do not see these buttons. Status transition rules are defined in section 2.
 
-9.2. **Reply as agent** — Agents can add a post, comment, or note to any ticket at any time, regardless of the ticket's status (open, pending, or closed). Adding a post or comment to a closed or pending ticket does **not** automatically change its status — the agent must explicitly change the status if desired.
+9.2. **Reply as agent** — Agents can add a post, comment, or note to any ticket at any time, regardless of the ticket's status (open, pending, closed, or marked as duplicate). Adding a post or comment to a closed, pending, or duplicate ticket does **not** automatically change its status — the agent must explicitly change the status if desired.
 
 9.3. **Assign / reassign / unassign agent** — A ticket can be assigned to an agent, indicating that this agent is responsible for working on it. Only agents and admins can assign, reassign, or unassign an agent. A ticket can have at most one assigned agent at a time. When reassigning a ticket to a different agent, the reassigning agent can optionally provide a reason or note (free-text). If provided, the reason is stored as an internal note visible only to agents and admins, and the activity log records the reassignment along with the reason. The target agent receives a notification that includes the reason. An "Unassign" action (e.g., a clear/remove button next to the assigned agent) removes the current agent without assigning a replacement, leaving the ticket unassigned.
 
@@ -227,7 +227,7 @@ A new ticket defaults to **Medium** urgency with no severity set. SLA policies a
 
 9.5. **Delete ticket** — Only an admin can delete a ticket. A "Delete" button with a confirmation prompt is shown on the ticket detail page for admins only. A ticket that has other tickets linked to it as duplicates (i.e., it is the original in a duplicate relationship) cannot be deleted until all duplicate links pointing to it are removed.
 
-9.6. **Merge tickets** — An agent or admin can merge two tickets into one. Merging moves all posts, comments, notes, attachments, activity log entries, CSAT ratings, and followers from the source ticket into the target ticket. Followers are de-duplicated: if a user already follows the target ticket, the duplicate follow from the source is discarded (union semantics). If the source ticket has a CSAT rating and the target does not, the rating is transferred to the target; if both have ratings, the target's rating is preserved. The source ticket is then closed and marked with a system-generated post linking to the target ticket (using the configurable merge template, see 16.17). Unlike duplicate, merging physically consolidates the timelines — the source ticket becomes a redirect stub. The merged posts retain their original timestamps and authors so the combined timeline stays chronological. Tags from both tickets are combined (union). The target ticket's urgency is preserved (the source's urgency is discarded). Custom field values from the source are **not** copied to the target (the target's values are preserved). If the source ticket has a severity set and the target does not, the target inherits the source's severity. If both tickets have severity set and the source's is higher, the target's severity is upgraded to match. In both cases the target's SLA is recalculated accordingly. If only the target has severity set (or neither does), no severity change occurs. Merge is irreversible.
+9.6. **Merge tickets** — An agent or admin can merge two tickets into one. Merging moves all posts, comments, notes, attachments, activity log entries, CSAT ratings, and followers from the source ticket into the target ticket. Followers are de-duplicated: if a user already follows the target ticket, the duplicate follow from the source is discarded (union semantics). If the source ticket has a CSAT rating and the target does not, the rating is transferred to the target; if both have ratings, the target's rating is preserved. The source ticket is then closed and marked with a system-generated post linking to the target ticket (using the configurable merge template, see 16.17). Any pending CSAT survey email scheduled for the source ticket is cancelled on merge. Unlike duplicate, merging physically consolidates the timelines — the source ticket becomes a read-only stub. The source ticket remains accessible at its original URL as a read-only page showing a merge banner (using the configurable merge banner template, see 16.22) and a link to the target ticket. It does **not** HTTP-redirect. The reply form is hidden on merged tickets. The merged posts retain their original timestamps and authors so the combined timeline stays chronological. Tags from both tickets are combined (union). The target ticket's urgency is preserved (the source's urgency is discarded). Custom field values from the source are **not** copied to the target (the target's values are preserved). If the source ticket has a severity set and the target does not, the target inherits the source's severity. If both tickets have severity set and the source's is higher, the target's severity is upgraded to match. In both cases the target's SLA is recalculated accordingly. If only the target has severity set (or neither does), no severity change occurs. Merge is irreversible.
 
 #### 10. Canned Responses (Reply Templates)
 
@@ -285,7 +285,21 @@ There are three post types:
 
 14.4. **Email configuration** — The admin configures outbound email settings (SMTP host, port, username, password, sender address, and sender display name). A "Send test email" button lets the admin verify the configuration. Email sending is disabled until the configuration is saved and verified.
 
-14.5. **Notification preferences** — Each user (including agents and admins) can manage their own notification preferences from a "Notification Settings" page accessible via a link in the navigation bar user menu. The page lists all notification event types the user can receive and provides a toggle for each to enable or disable email notifications for that event. All notifications are enabled by default. Preferences are per-user and do not affect other users. Disabling a notification type suppresses the email but does not affect in-app behavior (e.g., activity log entries are still recorded).
+14.5. **Notification preferences** — Each user (including agents and admins) can manage their own notification preferences from a "Notification Settings" page accessible via a link in the navigation bar user menu. The page lists all notification event types the user can receive and provides two toggles for each event type: one for **email** notifications and one for **in-app** notifications. Both are enabled by default. Preferences are per-user and do not affect other users. Disabling a notification type suppresses that delivery channel but does not affect other channels or in-app behavior (e.g., activity log entries are always recorded regardless of notification preferences).
+
+#### 14a. In-App Notifications
+
+14a.1. **Notification bell** — A bell icon is displayed in the navigation bar (right side, next to the user menu) for all logged-in users. The bell shows an **unread count badge** (e.g., a red circle with the number) when there are unread notifications. The badge is hidden when the count is zero.
+
+14a.2. **Notification dropdown** — Clicking the bell icon opens a dropdown panel showing the **10 most recent notifications**. Each notification entry shows: an icon indicating the event type, a short description (e.g., "Agent Smith replied to your ticket #42"), a relative timestamp (e.g., "5 minutes ago"), and a link to the relevant ticket. Unread notifications have a highlighted background; read notifications have a plain background. A **"Mark all as read"** action appears at the top of the dropdown. A **"View all"** link at the bottom opens the full notifications page.
+
+14a.3. **Notifications page** — A dedicated page (`/notifications`) showing all notifications for the current user, paginated (using the "Other lists" page size, see 16.11). Each entry shows the same information as the dropdown plus the full timestamp. Notifications can be individually marked as read/unread by clicking them. A bulk "Mark all as read" button is provided.
+
+14a.4. **Notification events** — In-app notifications are generated for the same events as email notifications (see 14.1, 14.2). Private notes and draft posts do not generate in-app notifications for regular users. Each notification is stored in a `notifications` table with: recipient user ID, event type, reference ticket ID, message text, read/unread status, and creation timestamp.
+
+14a.5. **Real-time delivery** — In-app notifications are delivered in real time via Supabase Realtime. When a new notification is created, the bell badge updates immediately without page refresh. This uses a dedicated Realtime subscription (see architecture constraint 2).
+
+14a.6. **Notification retention** — Notifications older than **90 days** are automatically deleted by a scheduled cleanup. Read notifications older than **30 days** are also eligible for cleanup.
 
 #### 15. Inbound Email (Email-to-Ticket)
 
@@ -339,12 +353,12 @@ There are three post types:
 
 16.18. **Knowledge base categories** — A section to manage knowledge base categories: create, rename, reorder, and delete categories. Article management is **not** in the Admin Setup page — it is in the dedicated Knowledge Base Management page accessible to agents and admins (see 19.5). (See 19.3.)
 
-16.19. **CSAT settings** — A section to configure customer satisfaction surveys: (1) **Enable CSAT surveys** — a toggle to enable or disable automatic CSAT survey emails (disabled by default). (2) **Survey delay** — how long after ticket closure the survey email is sent (default: 1 hour; options: immediately, 1 hour, 4 hours, 24 hours). If a closed ticket is re-opened before the delay elapses, the survey email is cancelled. The rating scale is always 1–5 stars. (See 3.10.)
+16.19. **CSAT settings** — A section to configure customer satisfaction surveys: (1) **Enable CSAT surveys** — a toggle to enable or disable automatic CSAT survey emails (disabled by default). (2) **Survey delay** — how long after ticket closure the survey email is sent (default: 1 hour; options: immediately, 1 hour, 4 hours, 24 hours). If a closed ticket is re-opened before the delay elapses, the survey email is cancelled. If a ticket is closed again after being re-opened, a new CSAT survey email is sent **only if no rating has been submitted yet** for this ticket; if the user has already rated the ticket, no additional survey email is sent (the existing rating is preserved and editable via the token reissue mechanism, see 3.10). The rating scale is always 1–5 stars. (See 3.10.)
 
 16.20. **AI configuration** — A section to configure AI features. The section has two parts:
 **Connection settings:**
 - **AI Provider** — a dropdown to select the AI provider: OpenAI, Anthropic, or Custom (OpenAI-compatible endpoint). Default: none (unconfigured).
-- **API Key** — a password field for the provider's API key. Stored encrypted in the database. A "Test connection" button verifies the key and shows a success/error message.
+- **API Key** — a password field for the provider's API key. Stored encrypted at rest using **Supabase Vault** (pgsodium Transparent Column Encryption). The decrypted value is accessible only to server-side code via Supabase's `vault.decrypted_secrets` view and is never exposed to the client. A "Test connection" button verifies the key and shows a success/error message.
 - **Custom endpoint URL** — a text field shown only when "Custom" is selected as the provider.
 - **Model** — a dropdown populated with available models from the selected provider (auto-fetched after the API key is verified). The admin selects one model used by all AI features.
 
@@ -360,6 +374,8 @@ There are three post types:
 
 **Usage counter** (read-only): shows total AI API calls and estimated token usage for the current calendar month, so the admin can monitor costs. No billing integration.
 
+16.22. **Merge stub banner template** — A section to edit the Markdown template used for the banner displayed on merged (stub) tickets. The template supports a `{{ticketId}}` placeholder for the target ticket ID. A "Reset to default" button restores the built-in template. The default template is: *"This ticket has been merged into [#{{ticketId}}](link). Please continue the conversation there."* This is separate from the merge post template (16.17) — the post template is used for the system-generated post in the timeline, while the banner template is used for the prominent banner at the top of the stub page. (See 9.6.)
+
 16.21. **Team management** — A section to manage teams. Admins can: create new teams (with a name), rename existing teams, delete teams (only if the team has no members), add users to a team by searching by email, and remove users from a team. A user can belong to at most one team; assigning a user to a different team removes them from their current team. The section shows a list of all teams with their member count, and clicking a team shows its members. (See 4.5.)
 
 #### 17. SLA (Service Level Agreements)
@@ -368,7 +384,7 @@ There are three post types:
 
 17.2. **SLA assignment** — SLA policies are assigned based on ticket severity. The admin maps each severity level to an SLA policy (e.g., Critical → 1h response / 4h resolution, Low → 24h response / 72h resolution). A ticket's SLA is determined when severity is first set by an agent and updates if the severity changes. Tickets without a severity have no SLA targets until an agent assigns one. If no SLA policy is mapped to a severity level, no SLA targets apply to tickets with that severity.
 
-17.3. **SLA timers** — The system tracks elapsed time against SLA targets. The first-response timer starts when the ticket is created — not when severity is first set. This means time elapsed before an agent assigns a severity counts retroactively against the SLA target, incentivizing fast triage. The resolution timer starts when the ticket enters **open** status. Both timers **pause** when the ticket is in **pending** status (waiting on customer) and resume when it returns to **open**. The first-response timer stops when the first agent reply is posted; the resolution timer stops when the ticket is closed.
+17.3. **SLA timers** — The system tracks elapsed time against SLA targets. The first-response timer starts when the ticket is created — not when severity is first set. This means time elapsed before an agent assigns a severity counts retroactively against the SLA target, incentivizing fast triage. The resolution timer starts when the ticket enters **open** status. Both timers **pause** when the ticket is in **pending** status (waiting on customer) and resume when it returns to **open**. The first-response timer stops when the first agent reply is posted; the resolution timer stops when the ticket is closed. When a closed ticket is re-opened, the resolution timer **resumes** from its previously accumulated elapsed time — it does not reset. This prevents gaming SLA metrics by closing and re-opening tickets.
 
 17.4. **SLA indicators** — On the ticket detail page and agent dashboard, SLA status is shown as a visual indicator: **on track** (green), **approaching** (yellow, within 75% of the target), or **breached** (red, target exceeded). The agent dashboard can be sorted by SLA risk so the most at-risk tickets appear first.
 
@@ -461,7 +477,7 @@ All AI features require a configured AI provider and API key (see 16.20). Each f
 ### Navigation Bar
 
 - **Left side**: App name "HelpDesk" (links to home), "My Tickets" link, "Help Center" link, (for agents/admins) "Agent Dashboard" link, (for agents/admins) "Manage Articles" link, (for admins only) "Reports" link, and (for admins only) "Setup" link.
-- **Right side**: Current user's email (or display name, if set), role badges, and a "Sign out" button. A dropdown menu on the user name provides links to "Profile" and "Notification Settings".
+- **Right side**: Notification bell icon with unread count badge (see 14a.1), current user's email (or display name, if set), role badges, and a "Sign out" button. A dropdown menu on the user name provides links to "Profile" and "Notification Settings".
 - The nav bar is always visible. For unauthenticated visitors it shows the app name, "Help Center" link, and a "Log in" link. The full nav bar (My Tickets, Agent Dashboard, user menu, Sign out) is only shown to logged-in users.
 
 ---
@@ -511,7 +527,7 @@ Additionally, seed the following reference data:
 ### Architecture Constraints
 
 1. **No custom API layer** — Use Supabase client libraries to read/write data directly. Mutations happen through Next.js Server Actions called from `<form>` elements.
-2. **Server-rendered everything** — No `"use client"` components except for: (a) Supabase Realtime subscriptions (see constraint 7), (b) Markdown preview toggling (see 3.12), (c) reporting charts (see section 18), (d) knowledge base article suggestions and duplicate ticket detection with debounced search (see 19.6, 23.2), (e) AI-powered form interactions such as auto-categorization suggestions and suggested reply loading (see 23.1, 23.3), and (f) collapsible "Show older posts" / "Show older comments" expand/collapse toggles on the ticket detail timeline (see 3.4.1). These client-side components must be minimal wrappers with no application state management.
+2. **Server-rendered everything** — No `"use client"` components except for: (a) Supabase Realtime subscriptions (see constraint 7), (b) Markdown preview toggling (see 3.12), (c) reporting charts (see section 18), (d) knowledge base article suggestions and duplicate ticket detection with debounced search (see 19.6, 23.2), (e) AI-powered form interactions such as auto-categorization suggestions and suggested reply loading (see 23.1, 23.3), (f) collapsible "Show older posts" / "Show older comments" expand/collapse toggles on the ticket detail timeline (see 3.4.1), and (g) notification bell icon with dropdown panel and real-time badge updates (see 14a.1, 14a.2, 14a.5). These client-side components must be minimal wrappers with no application state management.
 3. **Database-enforced security** — Every table must have Row-Level Security enabled. Helper functions like `is_agent()`, `is_admin()`, and `is_teammate()` should live in Postgres and be used in RLS policies.
 4. **Cookie-based auth** — Use `@supabase/ssr` for server-side Supabase clients. A Next.js middleware refreshes the session on every request.
 5. **Agent dashboard performance** — Create a Postgres VIEW (`agent_tickets`) that joins tickets with profile emails and pre-aggregates post counts. The agent page queries this view instead of doing complex joins on the client.

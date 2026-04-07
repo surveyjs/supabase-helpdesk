@@ -56,6 +56,7 @@ There are three user roles: **User**, **Agent**, and **Admin**.
 | Generate KB article from ticket | — | ✓ | ✓ |
 | Configure AI settings | — | — | ✓ |
 | Manage agents (promote/revoke) | — | — | ✓ |
+| Promote/demote admins | — | — | ✓ |
 | Manage teams | — | — | ✓ |
 | Manage email configuration | — | — | ✓ |
 | Manage notification templates | — | — | ✓ |
@@ -379,7 +380,7 @@ The coalescing delay applies only to **agent-triggered email notifications sent 
 
 16.5. **Duplicate ticket template** — A section to edit the Markdown template used for the system-generated post when a ticket is marked as duplicate. The template supports a `{{ticketId}}` placeholder. A "Reset to default" button restores the built-in template. (See 9.4.)
 
-16.6. **Agent management** — A section that shows the list of current agents. The admin can search for a user by email and promote them to the agent role. The admin can also revoke agent rights, turning an agent back into a regular user. The system prevents revoking admin rights from the **last remaining admin** — the action is rejected with an error message (*"Cannot remove the last admin. Promote another user to admin first."*) to avoid an irrecoverable lockout.
+16.6. **Agent and admin management** — A section that shows the list of current agents and admins. The admin can search for a user by email and promote them to the **agent** role or the **admin** role. The admin can also demote an admin back to agent, or revoke agent rights entirely, turning them back into a regular user. The system prevents revoking or demoting the **last remaining admin** — the action is rejected with an error message (*"Cannot remove the last admin. Promote another user to admin first."*) to avoid an irrecoverable lockout. Admin promotions, demotions, agent promotions, and agent revocations are recorded in the admin audit log (see 16.24).
 
 16.7. **Email configuration** — A section to configure outbound SMTP settings and verify them with a test email. (See 14.4.)
 
@@ -441,9 +442,9 @@ The coalescing delay applies only to **agent-triggered email notifications sent 
 
 16.27. **Logo and URL configuration** — A section to configure the application logo and its link URL displayed in the navigation bar. The section has two settings: (1) **Logo image** — an image upload field that accepts PNG, JPG, JPEG, SVG, or WebP files. Maximum file size: **2 MB**. Maximum dimensions: **200×60 pixels** (images exceeding this are rejected with a validation error). The uploaded logo is stored in Supabase Storage. A preview of the current logo is displayed. A "Reset to default" button restores the built-in Help Desk logo. By default, a custom Help Desk logo is used. (2) **Logo link URL** — a URL field that specifies where the logo links to when clicked. Default: `/` (root website). The URL must be a valid absolute URL (starting with `http://` or `https://`) or a root-relative path (starting with `/`). Invalid URLs are rejected with a validation error. SVG logo files are sanitized on upload using the same pipeline as file attachments (see 16.25) to strip embedded scripts and event handlers.
 
-16.29. **Notification coalescing delay** — A numeric setting that controls how long (in minutes) the system waits after an agent action on a ticket before sending email notifications to the ticket owner and followers. During the delay, additional agent actions on the same ticket reset the timer, and all changes are consolidated into a single email. Default: **2**. Minimum: **0** (disabled — notifications sent immediately, preserving legacy behavior). Maximum: **15**. Changes are recorded in the admin audit log. (See 14.6.)
-
 16.28. **Subscription tiers management** — A section to manage subscription tier definitions and the external assignment API. The section has two parts: (1) **Tier definitions** — a list of all defined tiers showing key, display name, color, icon, capability overrides, and limit overrides. Admins can create, edit, reorder, and delete tiers from this list. The key is set at creation and displayed as read-only on the edit form. (See 25.1, 25.6.) (2) **External API settings** — a **shared secret** password field for authenticating external tier assignment requests. The secret is stored encrypted using Supabase Vault (same approach as AI API keys, see 16.20). A "Regenerate" button creates a new secret (with confirmation, since this invalidates the previous one). The current secret is shown masked with a "Copy" button. When no secret is configured, external tier assignment is unavailable. Changes to the shared secret are recorded in the admin audit log as "changed" without recording the actual value. (See 25.7.)
+
+16.29. **Notification coalescing delay** — A numeric setting that controls how long (in minutes) the system waits after an agent action on a ticket before sending email notifications to the ticket owner and followers. During the delay, additional agent actions on the same ticket reset the timer, and all changes are consolidated into a single email. Default: **2**. Minimum: **0** (disabled — notifications sent immediately, preserving legacy behavior). Maximum: **15**. Changes are recorded in the admin audit log. (See 14.6.)
 
 #### 17. SLA (Service Level Agreements)
 

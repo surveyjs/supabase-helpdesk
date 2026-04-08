@@ -105,12 +105,12 @@
 - Status/urgency/severity filter toggles
 - Search by title/content, filter by submitter
 - Sort by last-modified / created
-- Agent actions: change status, assign/unassign/reassign (with reason note)
+- Agent actions: change status, assign/unassign/reassign (with reason note), change urgency/severity, change type/category, toggle privacy
 - Saved views (8.13): save/load/rename/delete named filter combos
 - Agent personal stats panel (8.16): "My Stats" collapsible panel (assigned, resolved, avg response/resolution time, CSAT, SLA compliance for last 30 days)
 - Write Playwright tests: dashboard access (agent vs user), filters, assign, saved views
 - Write DB tests: agent_tickets VIEW, agent RLS policies
-- **Note:** Later phases extend this dashboard: tag filter (Phase 5), SLA sort (Phase 13), bulk actions (Phase 17), tier filter (Phase 20)
+- **Note:** Later phases extend this dashboard: tag filter (Phase 5), SLA sort (Phase 12), bulk actions (Phase 17), tier filter (Phase 20)
 
 ### Phase 5 — Teams, Types, Categories, Tags
 **Prompt**: `promts/05-teams-types-categories-tags.md`

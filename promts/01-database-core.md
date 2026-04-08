@@ -221,6 +221,74 @@ RETURNS TEXT AS $$
 $$ LANGUAGE sql IMMUTABLE;
 ```
 
+### 5a. Ticket Creation Rate Limit Trigger (Defense-in-Depth)
+
+Per requirement 3.14, add a `BEFORE INSERT` trigger on `tickets` that enforces the creation rate limit at the database level (alongside the Server Action check):
+
+```sql
+CREATE OR REPLACE FUNCTION check_ticket_rate_limit()
+RETURNS TRIGGER AS $$
+DECLARE
+  ticket_count INTEGER;
+  rate_limit INTEGER;
+  user_role_val user_role;
+BEGIN
+  -- Agents are exempt
+  SELECT role INTO user_role_val FROM profiles WHERE id = NEW.creator_id;
+  IF user_role_val IN ('agent', 'admin') THEN
+    RETURN NEW;
+  END IF;
+
+  -- Get configured rate limit (default 10, 0 = unlimited)
+  SELECT COALESCE(
+    (SELECT value::integer FROM app_settings WHERE key = 'ticket_creation_rate_limit'),
+    10
+  ) INTO rate_limit;
+
+  IF rate_limit = 0 THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT count(*) INTO ticket_count
+  FROM tickets
+  WHERE creator_id = NEW.creator_id
+    AND created_at > now() - interval '24 hours';
+
+  IF ticket_count >= rate_limit THEN
+    RAISE EXCEPTION 'Ticket creation rate limit exceeded';
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER tickets_rate_limit
+  BEFORE INSERT ON tickets
+  FOR EACH ROW EXECUTE FUNCTION check_ticket_rate_limit();
+```
+
+Also create the `app_settings` key-value table for configurable settings:
+
+```sql
+CREATE TABLE app_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+### 5b. Blocked User Check Helper
+
+```sql
+CREATE OR REPLACE FUNCTION is_blocked()
+RETURNS boolean AS $$
+  SELECT COALESCE(
+    (SELECT is_blocked FROM profiles WHERE id = auth.uid()),
+    false
+  )
+$$ LANGUAGE sql SECURITY DEFINER STABLE;
+```
+
 ### 6. RLS Policies
 
 Enable RLS on ALL tables. Key policies:
@@ -232,13 +300,13 @@ Enable RLS on ALL tables. Key policies:
 
 **tickets:**
 - SELECT: user sees own tickets + public tickets + teammate tickets (if on a team) + agents see all
-- INSERT: authenticated users can create tickets (creator_id = auth.uid())
+- INSERT: authenticated users can create tickets (creator_id = auth.uid()) AND NOT is_blocked()
 - UPDATE: owner can update limited fields; agents can update all fields
 - DELETE: admin only
 
 **posts:**
 - SELECT: follows ticket visibility + notes visible only to agents + drafts visible only to agents
-- INSERT: user can post on visible tickets (not blocked, not duplicate for non-agents)
+- INSERT: user can post on visible tickets AND NOT is_blocked() (not duplicate for non-agents)
 - UPDATE: author can edit own posts; agents can edit any post/comment (but only own notes)
 - DELETE: agents can delete posts/comments (not original post); agents delete own notes; admins delete any note
 
@@ -266,6 +334,8 @@ LEFT JOIN profiles ap ON t.assigned_agent_id = ap.id
 LEFT JOIN ticket_types tt ON t.type_id = tt.id
 LEFT JOIN categories c ON t.category_id = c.id;
 ```
+
+**Note:** This VIEW will be extended in Phase 20 (Subscription Tiers) to join subscription tier data (tier display name, color, icon) per architecture constraint 5. For now, the VIEW covers the columns needed through Phase 4.
 
 ### 8. Database Tests
 

@@ -39,10 +39,13 @@ Phases 0–2 are complete: project initialized, database schema with RLS, and au
 **`src/lib/utils/validation.ts`**:
 - Reusable validation functions for title length, body length, required fields
 
+**Important display rule:** Email addresses are never shown in ticket-facing UI (ticket lists, ticket detail, posts, comments). Always use display names. If no display name is set, show a placeholder (e.g., "User #123"). See requirement 20.3 / 8.2.
+
 **`src/lib/utils/markdown.ts`**:
-- `renderMarkdown(text: string): string` — convert Markdown to sanitized HTML using `react-markdown` + `rehype-sanitize` + `remark-gfm`
+- `renderMarkdown(text: string): string` — convert Markdown to sanitized HTML **server-side** using `unified + remark-parse + remark-gfm + remark-rehype + rehype-sanitize + rehype-stringify`
 - Safe subset only: headings, lists, links, code blocks, emphasis, images
 - Strip script tags, event handlers, dangerous attributes
+- **Note:** Do NOT use `react-markdown` for server rendering — it's a React component designed for client-side. Use the `unified` pipeline for server-side HTML string output. `react-markdown` is used only in the client-side Markdown preview component.
 
 ### 3. UI Components
 
@@ -83,6 +86,7 @@ Phases 0–2 are complete: project initialized, database schema with RLS, and au
 - Search field (search by title or original post body)
 - Search and filter use URL search params
 - "Create Ticket" button
+- **"Browse Public Tickets" link** (navigates to `/tickets/public`, per requirement 3.7)
 - Empty state if no tickets (friendly message + link to create)
 - Page size: default 20 (will be configurable by admin in Phase 7)
 
@@ -114,6 +118,16 @@ Update the NavBar to include:
 - "My Tickets" link (for authenticated users)
 - Role badges next to user name
 
+### 5a. Seed Data Update
+
+Extend `supabase/seed.sql` (created in Phase 2) to add:
+- **9 tickets** across Alice, Bob, Carol, and Dave with realistic helpdesk subjects (password reset issues, feature requests, billing questions, bug reports, etc.) in mixed statuses (open, pending, closed)
+- Dave has 2 tickets (testing no-team experience)
+- Eve has no tickets (testing empty state per 3.3)
+- Each ticket has an **original post** (is_original = true)
+- Additional **posts**, **comments**, and **notes** simulating realistic agent–customer conversations
+- This seed data is essential for testing all subsequent phases
+
 ### 6. Tests
 
 **`tests/db/003-tickets.test.ts`**:
@@ -141,6 +155,8 @@ Update the NavBar to include:
 
 ## Implementation Notes
 
+- Install additional server-side markdown dependencies: `npm install unified remark-parse remark-gfm remark-rehype rehype-sanitize rehype-stringify`
+- `react-markdown` (installed in Phase 0) is used only for the client-side MarkdownPreview component
 - All data fetching is server-side (no client components except MarkdownPreview)
 - Search and filters are all URL search params
 - The `tickets/[id]/[slug]` route uses Next.js dynamic segments

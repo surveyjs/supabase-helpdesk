@@ -74,8 +74,15 @@ Create these files (empty implementations, just structure):
 Use environment variables:
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY` (for DB tests and admin operations)
 
 Create a `.env.local.example` file with these variables (no values).
+Create a `.env.test` file with local Supabase defaults:
+```
+NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<local anon key from supabase start output>
+SUPABASE_SERVICE_ROLE_KEY=<local service_role key from supabase start output>
+```
 
 ### 7. Create Test Infrastructure
 
@@ -117,6 +124,8 @@ Add to `package.json`:
 
 **`.github/workflows/ci.yml`**:
 
+Note: Local Supabase (`supabase start`) provides deterministic keys. Use `supabase status -o env` to extract them in CI instead of GitHub secrets.
+
 ```yaml
 name: CI
 on:
@@ -151,7 +160,10 @@ jobs:
           version: latest
       - run: supabase start
       - run: npm ci
-      - run: npm run test:db
+      - name: Run DB tests
+        run: |
+          eval "$(supabase status -o env)"
+          npm run test:db
 
   e2e-tests:
     runs-on: ubuntu-latest
@@ -167,14 +179,11 @@ jobs:
       - run: supabase start
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npm run build
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-      - run: npm run test:e2e
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      - name: Build and test
+        run: |
+          eval "$(supabase status -o env)"
+          npm run build
+          npm run test:e2e
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

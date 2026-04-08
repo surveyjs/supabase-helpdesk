@@ -86,9 +86,13 @@ Implement the client helpers created as stubs in Phase 0:
 
 **`src/components/layout/NavBar.tsx`**:
 - Server Component
-- Left: "HelpDesk" logo link
-- Right (authenticated): display name (or email fallback), role badge, "Sign out" button
+- Left: "HelpDesk" logo link (links to `/`)
+- Right (authenticated): Notification bell placeholder (Phase 10), user dropdown menu with:
+  - Display name (or email fallback) + role badge (trigger element)
+  - Dropdown items: "Profile" link, "Notification Settings" link (both placeholder routes for now)
+  - "Sign out" button
 - Right (unauthenticated): "Log in" link
+- The dropdown wrapper structure must exist now even though Profile/Settings pages come later — this avoids rework
 - Fetch user profile server-side to show display name and role
 
 ### 6. Main Layout
@@ -110,6 +114,15 @@ Create `supabase/seed.sql` with the user accounts from `docs/seed-data.md`:
 - All passwords: `Password123`
 - Set roles in `profiles` table after user creation
 - Create the team "Alice's Team" and assign Alice, Bob, Carol
+- Seed 3 default ticket types: "Question" (default), "Issue", "Suggestion"
+
+**Important:** The seed file will be extended in Phase 3 to add 9 tickets with posts/comments/notes. Structure the seed SQL so it can be appended to.
+
+### 7a. Profile Creation Validation
+
+The profile creation trigger (`handle_new_user`) should validate that:
+- Display names cannot start with the reserved prefix `"Deleted User #"` (per requirement 20.3)
+- Add a CHECK constraint on `profiles.display_name`: `display_name NOT LIKE 'Deleted User #%'`
 
 ### 8. Tests
 

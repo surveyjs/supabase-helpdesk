@@ -368,8 +368,9 @@ Enable RLS on ALL tables. Key policies:
 **posts:** (CRITICAL — complex privacy model from requirement 12.1)
 - SELECT: Multi-condition policy:
   ```
-  -- Public posts on visible tickets
+  -- Public posts on visible tickets (comments must also check root post privacy)
   (NOT is_private AND NOT is_draft AND post_type != 'note'
+   AND (parent_post_id IS NULL OR NOT COALESCE(get_root_post_is_private(id), false))
    AND ticket is visible per tickets SELECT rules)
   OR
   -- Private posts: visible to ticket owner, teammates of owner, and agents

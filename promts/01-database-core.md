@@ -120,7 +120,9 @@ Indexes: `ticket_id`, `author_id`, `parent_post_id`, `created_at`, `post_type`, 
 - `tag_id` UUID NOT NULL REFERENCES tags(id) ON DELETE CASCADE
 - PRIMARY KEY (ticket_id, tag_id)
 
-Index: `tag_id` (reverse lookup for finding tickets by tag). — Following tickets:
+Index: `tag_id` (reverse lookup for finding tickets by tag).
+
+**`ticket_followers`** — Following tickets:
 - `ticket_id` BIGINT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE
 - `user_id` UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE
 - `created_at` TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -154,6 +156,21 @@ UNIQUE index on `email`.
 - `updated_at` TIMESTAMPTZ NOT NULL DEFAULT now()
 
 UNIQUE constraint on `(agent_id, name)` — an agent cannot have two views with the same name.
+
+**`app_settings`** — Key-value store for configurable settings:
+- `key` TEXT PRIMARY KEY
+- `value` TEXT NOT NULL
+- `updated_at` TIMESTAMPTZ NOT NULL DEFAULT now()
+
+Seed default settings:
+```sql
+INSERT INTO app_settings (key, value) VALUES
+  ('ticket_creation_rate_limit', '10'),
+  ('allow_public_ticket_browsing', 'false'),
+  ('ticket_default_privacy', 'true'),
+  ('allow_user_privacy_control', 'true'),
+  ('agent_dashboard_page_size', '20');
+```
 
 ### 2. Helper Functions
 
@@ -314,19 +331,15 @@ CREATE TRIGGER tickets_rate_limit
 
 > **Known limitation:** This trigger has a TOCTOU race window — two concurrent inserts may both pass the count check. This is acceptable as defense-in-depth (the primary check is in the Server Action). If stronger guarantees are needed later, add `PERFORM pg_advisory_xact_lock(hashtext('ticket_rl_' || NEW.creator_id::text));` at the start of the function.
 
-Also create the `app_settings` key-value table for configurable settings:
+Also seed the `app_settings` defaults (table is defined in section 1 above):
 
 ```sql
-CREATE TABLE app_settings (
-  key TEXT PRIMARY KEY,
-  value TEXT NOT NULL,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- Seed default settings
 INSERT INTO app_settings (key, value) VALUES
   ('ticket_creation_rate_limit', '10'),
-  ('allow_public_ticket_browsing', 'false');
+  ('allow_public_ticket_browsing', 'false'),
+  ('ticket_default_privacy', 'true'),
+  ('allow_user_privacy_control', 'true'),
+  ('agent_dashboard_page_size', '20');
 ```
 
 ### 5b. Blocked User Check Helper

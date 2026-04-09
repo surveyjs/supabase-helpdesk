@@ -191,7 +191,6 @@
 - Nav bar user dropdown menu (design doc): username dropdown with "Profile" and "Notification Settings" links
 - Notification cleanup cron job (14a.6: read >30 days, all >90 days)
 - Write Playwright tests: bell badge, dropdown, mark-as-read, real-time post appearance
-- **Note:** Phase 11 number is now freed — phases after this are renumbered
 
 ### Phase 11 — CSAT (Customer Satisfaction)
 **Prompt**: `promts/11-csat.md`

@@ -1,9 +1,6 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { SupabaseClient } from '@supabase/supabase-js';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createServiceRoleClient } from '../helpers/supabase';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'http://127.0.0.1:54321';
-const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 let svc: SupabaseClient;
 

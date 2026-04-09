@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { getUser, getProfile } from '@/lib/supabase/auth';
 import { signOut } from '@/lib/actions/auth';
 
@@ -30,9 +31,9 @@ export default async function NavBar() {
       <div className="max-w-5xl mx-auto flex items-center justify-between">
         {/* Left side */}
         <div className="flex items-center gap-4">
-          <a href="/" className="text-lg font-semibold text-gray-900">
+          <Link href="/" className="text-lg font-semibold text-gray-900">
             HelpDesk
-          </a>
+          </Link>
           {user && (
             <a href="/tickets" className="text-sm text-gray-600 hover:text-gray-900">
               My Tickets

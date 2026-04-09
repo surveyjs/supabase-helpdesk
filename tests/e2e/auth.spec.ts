@@ -86,9 +86,6 @@ test.describe('Authentication', () => {
 
   test('login lockout: 5 failures → shows lockout message', async ({ page }) => {
     const lockoutEmail = `lockout-e2e-${Date.now()}@example.com`;
-    // Create a user for this test
-    const svcUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'http://127.0.0.1:54321';
-    const svcKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
     // Attempt 5 failed logins (this user doesn't exist but we're testing rate limit tracking)
     for (let i = 0; i < 5; i++) {

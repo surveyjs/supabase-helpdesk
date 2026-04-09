@@ -39,6 +39,8 @@ CREATE TYPE post_type AS ENUM ('post', 'comment', 'note');
 
 #### Tables
 
+> **IMPORTANT — Creation order:** Tables must be created in dependency order to satisfy foreign key references. Create in this order: `teams` → `profiles` → `ticket_types` → `categories` → `tickets` → `posts` → `ticket_tags` → `ticket_followers` → `activity_log` → `login_attempts` → `saved_views` → `app_settings`. The descriptions below are grouped logically, not necessarily in creation order.
+
 **`profiles`** — Extends `auth.users` with app-specific data:
 - `id` UUID PRIMARY KEY REFERENCES auth.users(id)
 - `email` TEXT NOT NULL
@@ -331,16 +333,7 @@ CREATE TRIGGER tickets_rate_limit
 
 > **Known limitation:** This trigger has a TOCTOU race window — two concurrent inserts may both pass the count check. This is acceptable as defense-in-depth (the primary check is in the Server Action). If stronger guarantees are needed later, add `PERFORM pg_advisory_xact_lock(hashtext('ticket_rl_' || NEW.creator_id::text));` at the start of the function.
 
-Also seed the `app_settings` defaults (table is defined in section 1 above):
-
-```sql
-INSERT INTO app_settings (key, value) VALUES
-  ('ticket_creation_rate_limit', '10'),
-  ('allow_public_ticket_browsing', 'false'),
-  ('ticket_default_privacy', 'true'),
-  ('allow_user_privacy_control', 'true'),
-  ('agent_dashboard_page_size', '20');
-```
+> **Note:** The `app_settings` defaults are already seeded in the table definition (Section 1). Do NOT duplicate the INSERT here.
 
 ### 5b. Blocked User Check Helper
 
@@ -397,7 +390,35 @@ Enable RLS on ALL tables. Key policies:
   -- Notes: visible only to agents
   (post_type = 'note' AND is_agent())
   ```
-  **Comment privacy inheritance (requirement 12.1):** All comments on a private post are automatically private — comment privacy is inherited from the root post the thread belongs to (regardless of nesting depth) and cannot be set independently. The SELECT policy must traverse `parent_post_id` / `parent_comment_id` to the root post and check its `is_private` flag. Consider creating a helper function `get_root_post_is_private(post_id UUID) RETURNS boolean` to simplify this.
+  **Comment privacy inheritance (requirement 12.1):** All comments on a private post are automatically private — comment privacy is inherited from the root post the thread belongs to (regardless of nesting depth) and cannot be set independently. Create this helper function and use it in the SELECT policy:
+
+  ```sql
+  CREATE OR REPLACE FUNCTION get_root_post_is_private(p_post_id UUID)
+  RETURNS boolean AS $$
+    WITH RECURSIVE chain AS (
+      SELECT id, parent_post_id, parent_comment_id, is_private
+      FROM posts WHERE id = p_post_id
+      UNION ALL
+      SELECT p.id, p.parent_post_id, p.parent_comment_id, p.is_private
+      FROM posts p
+      JOIN chain c ON p.id = COALESCE(c.parent_post_id, c.parent_comment_id)
+      WHERE c.parent_post_id IS NOT NULL OR c.parent_comment_id IS NOT NULL
+    )
+    SELECT is_private FROM chain
+    WHERE parent_post_id IS NULL AND parent_comment_id IS NULL
+    LIMIT 1;
+  $$ LANGUAGE sql SECURITY DEFINER STABLE;
+  ```
+
+  Then replace the `... root post privacy check ...` placeholder in the SELECT policy with:
+  ```
+  (parent_post_id IS NOT NULL AND get_root_post_is_private(id) AND (
+    auth.uid() = author_id
+    OR auth.uid() = (SELECT creator_id FROM tickets WHERE id = ticket_id)
+    OR is_teammate((SELECT creator_id FROM tickets WHERE id = ticket_id))
+    OR is_agent()
+  ))
+  ```
 
 - INSERT: user can post on visible tickets `AND NOT is_blocked()` (non-agents cannot post on duplicate tickets)
 - UPDATE: author can edit own posts; agents can edit any post/comment (but only own notes)

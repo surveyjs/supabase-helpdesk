@@ -14,6 +14,8 @@ This is Phase 0: set up the project skeleton with all tooling, CI, and a verifie
 npx create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --import-alias "@/*" --use-npm
 ```
 
+> **Note:** The directory already contains `docs/` and `promts/` folders. `create-next-app` may warn about a non-empty directory — accept the prompt to proceed, or pass `--yes` to skip confirmation. These existing folders will not be overwritten.
+
 - Use Next.js 15 (latest) with App Router
 - TypeScript strict mode enabled
 - Tailwind CSS configured

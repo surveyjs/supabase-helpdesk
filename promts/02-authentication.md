@@ -16,6 +16,7 @@ Implement the client helpers created as stubs in Phase 0:
 
 **`src/lib/supabase/server.ts`**:
 - `createServerClient()` — creates a Supabase client for Server Components and Server Actions using `@supabase/ssr` with `cookies()` from `next/headers`
+- **Critical:** The `setAll` callback MUST be wrapped in a try-catch. In Server Components, cookies are read-only and `cookieStore.set()` throws. The middleware handles session refresh, so silently catching the error is safe.
 - Uses `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `createServiceRoleClient()` — creates a Supabase client that bypasses RLS, for use in login rate-limiting and other admin operations
 - Uses `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (server-only, non-public env var)
@@ -27,6 +28,7 @@ Implement the client helpers created as stubs in Phase 0:
 
 **`src/lib/supabase/middleware.ts`**:
 - `updateSession(request)` — refreshes the auth session using `@supabase/ssr` and returns the updated response with refreshed cookies
+- **Also handles auth redirects:** After calling `getUser()`, redirect authenticated users away from auth pages (`/login`, `/signup`, `/forgot-password`) to `/`. This is more reliable than doing it in the `(auth)` layout because middleware has full cookie read-write access and won't crash on token refresh.
 
 **`src/middleware.ts`**:
 - Calls `updateSession` on every request
@@ -47,7 +49,7 @@ Implement the client helpers created as stubs in Phase 0:
 - Centered layout for auth pages
 - White card container with padding, rounded corners
 - No nav bar (minimal layout)
-- Redirect to `/` if already authenticated
+- Auth redirect for authenticated users is handled in middleware (see Task 1), NOT in this layout — `getUser()` in a Server Component can trigger a token refresh that fails because cookies are read-only outside Server Actions/Route Handlers
 
 **`src/app/(auth)/login/page.tsx`**:
 - Email + password form
@@ -67,7 +69,7 @@ Implement the client helpers created as stubs in Phase 0:
 - Email + password + confirm password form
 - Password validation (8+ chars, 1 upper, 1 lower, 1 digit)
 - Server Action: `supabase.auth.signUp()`
-- On success: show "Check your email for confirmation" message
+- **Auto-confirm behavior:** When `enable_confirmations = false` in `config.toml` (local dev default), `signUp()` returns a session immediately. In that case, redirect to `/` instead of showing a confirmation message. Only show "Check your email for confirmation" when no session is returned (i.e., email confirmation is enabled).
 - "Already have an account? Log in" link
 
 **`src/app/(auth)/forgot-password/page.tsx`**:
@@ -94,13 +96,14 @@ Implement the client helpers created as stubs in Phase 0:
 ### 4. Sign Out
 
 **`src/lib/actions/auth.ts`**:
-- `signOut()` Server Action — calls `supabase.auth.signOut()` and redirects to `/login`
+- `signOut()` Server Action — calls `supabase.auth.signOut({ scope: 'local' })` and redirects to `/login`
+- **Important:** Use `scope: 'local'` to only invalidate the current browser session. The default `'global'` scope revokes ALL sessions for the user, which breaks concurrent sessions and parallel E2E tests.
 
 ### 5. Navigation Bar
 
 **`src/components/layout/NavBar.tsx`**:
 - Server Component
-- Left: "HelpDesk" logo link (links to `/`, will become configurable in Phase 7). Add a "My Tickets" link pointing to `/tickets` (page built in Phase 3 — renders now, page returns 404 until then). Role-conditional links (Agent Dashboard, Setup) added in their respective phases.
+- Left: "HelpDesk" logo link using `<Link>` from `next/link` (links to `/`, will become configurable in Phase 7). Use `next/link` for internal navigation to satisfy the `@next/next/no-html-link-for-pages` lint rule. Add a "My Tickets" link pointing to `/tickets` (page built in Phase 3 — renders now, page returns 404 until then). Role-conditional links (Agent Dashboard, Setup) added in their respective phases.
 - Right (authenticated):
   - Notification bell placeholder icon (Phase 10 adds interactive client component)
   - Display name (or email fallback) + role badge pill: "Admin" (red/orange) for admins, "Agent" (blue) for agents, no badge for regular users
@@ -126,8 +129,10 @@ Implement the client helpers created as stubs in Phase 0:
 ### 7. Seed Data Script
 
 Create `supabase/seed.sql` with the user accounts from `docs/seed-data.md`:
-- Use raw SQL inserts into `auth.users` with `crypt('Password123', gen_salt('bf'))` for `encrypted_password`
+- Use a PL/pgSQL `DO` block to loop over a JSON array and insert into `auth.users` with `crypt('Password123', gen_salt('bf'))` for `encrypted_password`
 - Required `auth.users` columns: `id` (known UUID), `instance_id` (use `'00000000-0000-0000-0000-000000000000'`), `aud` (`'authenticated'`), `role` (`'authenticated'`), `email`, `encrypted_password`, `email_confirmed_at` (set to `now()` so accounts are active), `created_at`, `updated_at`
+- **GoTrue compatibility — additional required columns:** GoTrue's Go code cannot scan NULL into string fields. The following columns MUST be set to empty strings: `confirmation_token`, `recovery_token`, `email_change_token_new`, `email_change_token_current`, `email_change`, `reauthentication_token`. Set `email_change_confirm_status` to `0` (integer). Do NOT insert `confirmed_at` — it is a `GENERATED ALWAYS` column computed from `LEAST(email_confirmed_at, phone_confirmed_at)`. Do NOT set `phone` to an empty string — it has a UNIQUE constraint; leave it as NULL.
+- After inserting users, also insert identity records into `auth.identities` by selecting from `auth.users` — GoTrue requires these for login to work
 - The `handle_new_user` trigger (Phase 1) will auto-create `profiles` rows — do NOT insert directly into `profiles`
 - After user creation, UPDATE the `profiles` table to set roles and team assignments
 - Create the team "Alice's Team" and assign Alice, Bob, Carol
@@ -160,7 +165,7 @@ Create migration **`supabase/migrations/002_auth.sql`**:
 
 > **Email handling:** Supabase local dev includes Inbucket (email capture at `http://localhost:54324`). For signup and reset tests, either (a) query Inbucket API to retrieve confirmation/reset links and complete the flow, or (b) configure Supabase local to auto-confirm users in `config.toml`. Document the chosen approach.
 
-- Test signup flow: valid credentials → "check your email" message
+- Test signup flow: valid credentials → with auto-confirm enabled (local dev default), user is logged in and redirected to `/`; with confirmations enabled, shows "check your email" message
 - Test signup validation: password missing uppercase/digit/length → inline error
 - Test login flow: correct credentials → redirects to `/`
 - Test login: wrong password → error message
@@ -180,13 +185,13 @@ Create migration **`supabase/migrations/002_auth.sql`**:
 - **Visual design:** Follow `docs/design.md` — gray-50 page background, white cards with subtle borders, blue primary buttons, Geist font (sans + mono), max-width ~5xl centered content. All forms must have proper labels and be keyboard-navigable (WCAG 2.1 AA).
 - Enforce content-length limits from architecture constraint 9 on all form inputs (e.g., display_name max 100 chars, email max 320 chars). Validate both client-side (for UX, using `maxLength` attributes) and server-side (in Server Actions).
 - All auth mutations happen via Server Actions (architecture constraint 1)
-- No `"use client"` components in this phase — the NavBar dropdown uses `<details>`/`<summary>` (no JS)
+- The NavBar dropdown uses `<details>`/`<summary>` (no JS, no `"use client"`). However, the auth form pages (`login`, `signup`, `forgot-password`, `reset-password`) require `"use client"` because they use React's `useActionState` hook for Server Action form state management.
 - Login rate limiting is in the Server Action, not client-side
 - The login_attempts check uses a service-role client (bypasses RLS) since unauthenticated users can't have RLS context
 
 ## Verification Checklist
 
-- [ ] Sign up creates account and shows confirmation message
+- [ ] Sign up creates account (auto-confirms in local dev and redirects to home, or shows confirmation message if email confirmation is enabled)
 - [ ] Login works with correct credentials
 - [ ] Login fails with wrong credentials and shows error
 - [ ] Login locks after 5 failed attempts for 15 minutes

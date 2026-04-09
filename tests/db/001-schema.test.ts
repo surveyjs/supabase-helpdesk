@@ -886,9 +886,11 @@ describe('7. Triggers', () => {
     // Set rate limit to 2
     await admin.from('app_settings').update({ value: '2' }).eq('key', 'ticket_creation_rate_limit');
 
-    // Create 2 tickets (at the limit)
+    const dave = await clientForUser('dave@test.com');
+
+    // Create 2 tickets (at the limit) — use authenticated client so rate limit applies
     for (let i = 0; i < 2; i++) {
-      await admin.from('tickets').insert({
+      await dave.from('tickets').insert({
         title: `Rate limit test ${i}`,
         slug: `rate-limit-test-${i}`,
         creator_id: USER_DAVE_ID,
@@ -897,7 +899,7 @@ describe('7. Triggers', () => {
     }
 
     // Third should fail
-    const { error } = await admin.from('tickets').insert({
+    const { error } = await dave.from('tickets').insert({
       title: 'Rate limit over',
       slug: 'rate-limit-over',
       creator_id: USER_DAVE_ID,
@@ -956,7 +958,7 @@ describe('7. Triggers', () => {
       .single();
     const before = new Date(t!.updated_at).getTime();
 
-    await new Promise(r => setTimeout(r, 50));
+    await new Promise(r => setTimeout(r, 1100));
 
     await admin.from('posts').insert({
       ticket_id: t!.id,

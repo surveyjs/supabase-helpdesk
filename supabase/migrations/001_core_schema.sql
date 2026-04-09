@@ -304,6 +304,11 @@ DECLARE
   rate_limit INTEGER;
   user_role_val user_role;
 BEGIN
+  -- Service-role / internal calls bypass rate limiting
+  IF auth.uid() IS NULL THEN
+    RETURN NEW;
+  END IF;
+
   SELECT role INTO user_role_val FROM profiles WHERE id = NEW.creator_id;
   IF user_role_val IN ('agent', 'admin') THEN
     RETURN NEW;

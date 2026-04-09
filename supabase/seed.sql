@@ -96,3 +96,220 @@ UPDATE profiles SET team_id = '00000000-0000-0000-0000-000000000110' WHERE id IN
   '00000000-0000-0000-0000-000000000015',
   '00000000-0000-0000-0000-000000000016'
 );
+
+-- ============================================================
+-- Phase 3 — Seed Data: Tickets, Posts, Comments, Notes
+-- ============================================================
+
+-- Get the default ticket type ID (Question)
+DO $$
+DECLARE
+  _type_question UUID;
+  _type_issue UUID;
+  _type_suggestion UUID;
+  _tid1 BIGINT; _tid2 BIGINT; _tid3 BIGINT; _tid4 BIGINT;
+  _tid5 BIGINT; _tid6 BIGINT; _tid7 BIGINT; _tid8 BIGINT; _tid9 BIGINT;
+BEGIN
+  SELECT id INTO _type_question FROM ticket_types WHERE name = 'Question';
+  SELECT id INTO _type_issue FROM ticket_types WHERE name = 'Issue';
+  SELECT id INTO _type_suggestion FROM ticket_types WHERE name = 'Suggestion';
+
+  -- --------------------------------------------------------
+  -- Alice's tickets (3): open, pending, closed
+  -- --------------------------------------------------------
+
+  -- Ticket 1: Alice - open, public
+  INSERT INTO tickets (title, slug, status, urgency, severity, is_private, type_id, creator_id, assigned_agent_id)
+  VALUES ('Password reset not working', 'password-reset-not-working', 'open', 'high', 'medium', false, _type_issue,
+          '00000000-0000-0000-0000-000000000014', '00000000-0000-0000-0000-000000000012')
+  RETURNING id INTO _tid1;
+
+  INSERT INTO posts (ticket_id, author_id, body, is_original, post_type)
+  VALUES (_tid1, '00000000-0000-0000-0000-000000000014',
+    E'I tried to reset my password using the forgot password link but I never received the email. I have checked my spam folder.\n\n**Steps to reproduce:**\n1. Click "Forgot password"\n2. Enter email\n3. Wait for email — never arrives',
+    true, 'post');
+
+  INSERT INTO posts (ticket_id, author_id, body, post_type)
+  VALUES (_tid1, '00000000-0000-0000-0000-000000000012',
+    'Hi Alice, I can see the reset email was sent successfully from our end. Could you please check if you have any email filters that might be blocking it? Also, please verify the email address you used.',
+    'post');
+
+  INSERT INTO posts (ticket_id, author_id, body, post_type)
+  VALUES (_tid1, '00000000-0000-0000-0000-000000000014',
+    'I double-checked and it is the correct email. No filters found either. Still not receiving it.',
+    'post');
+
+  -- Agent note (will render in Phase 6)
+  INSERT INTO posts (ticket_id, author_id, body, post_type)
+  VALUES (_tid1, '00000000-0000-0000-0000-000000000012',
+    'Checked mail logs — delivery confirmed. Might be ISP-level blocking. Escalating to email team.',
+    'note');
+
+  INSERT INTO ticket_followers (ticket_id, user_id) VALUES (_tid1, '00000000-0000-0000-0000-000000000014');
+
+  -- Ticket 2: Alice - pending, private
+  INSERT INTO tickets (title, slug, status, urgency, severity, is_private, type_id, creator_id, assigned_agent_id)
+  VALUES ('Feature request: dark mode', 'feature-request-dark-mode', 'pending', 'low', 'low', true, _type_suggestion,
+          '00000000-0000-0000-0000-000000000014', '00000000-0000-0000-0000-000000000013')
+  RETURNING id INTO _tid2;
+
+  INSERT INTO posts (ticket_id, author_id, body, is_original, post_type)
+  VALUES (_tid2, '00000000-0000-0000-0000-000000000014',
+    'Would love to see a **dark mode** option in the application. Working late at night and the bright screen is hard on the eyes.',
+    true, 'post');
+
+  INSERT INTO posts (ticket_id, author_id, body, post_type)
+  VALUES (_tid2, '00000000-0000-0000-0000-000000000013',
+    'Thanks for the suggestion! We have this on our roadmap. Marking as pending while we evaluate the timeline.',
+    'post');
+
+  INSERT INTO ticket_followers (ticket_id, user_id) VALUES (_tid2, '00000000-0000-0000-0000-000000000014');
+
+  -- Ticket 3: Alice - closed
+  INSERT INTO tickets (title, slug, status, urgency, severity, is_private, type_id, creator_id)
+  VALUES ('How to export data?', 'how-to-export-data', 'closed', 'medium', 'low', false, _type_question,
+          '00000000-0000-0000-0000-000000000014')
+  RETURNING id INTO _tid3;
+
+  INSERT INTO posts (ticket_id, author_id, body, is_original, post_type)
+  VALUES (_tid3, '00000000-0000-0000-0000-000000000014',
+    'How can I export my data to CSV? I looked in the settings but could not find an export option.',
+    true, 'post');
+
+  INSERT INTO posts (ticket_id, author_id, body, post_type)
+  VALUES (_tid3, '00000000-0000-0000-0000-000000000012',
+    E'Go to **Settings > Data > Export** and select CSV format. You can also use the API endpoint `/api/export`.\n\nLet me know if that helps!',
+    'post');
+
+  INSERT INTO posts (ticket_id, author_id, body, post_type)
+  VALUES (_tid3, '00000000-0000-0000-0000-000000000014',
+    'Found it, thank you!',
+    'post');
+
+  INSERT INTO ticket_followers (ticket_id, user_id) VALUES (_tid3, '00000000-0000-0000-0000-000000000014');
+
+  -- --------------------------------------------------------
+  -- Bob's tickets (2): one open (public), one closed (duplicate)
+  -- --------------------------------------------------------
+
+  -- Ticket 4: Bob - open, public
+  INSERT INTO tickets (title, slug, status, urgency, severity, is_private, type_id, creator_id)
+  VALUES ('Billing shows wrong amount', 'billing-shows-wrong-amount', 'open', 'critical', 'high', false, _type_issue,
+          '00000000-0000-0000-0000-000000000015')
+  RETURNING id INTO _tid4;
+
+  INSERT INTO posts (ticket_id, author_id, body, is_original, post_type)
+  VALUES (_tid4, '00000000-0000-0000-0000-000000000015',
+    E'My invoice for this month shows $299 but my plan is $99/month. This is the third time this has happened.\n\n```\nInvoice #12345\nAmount: $299.00\nExpected: $99.00\n```',
+    true, 'post');
+
+  INSERT INTO ticket_followers (ticket_id, user_id) VALUES (_tid4, '00000000-0000-0000-0000-000000000015');
+
+  -- Ticket 5: Bob - closed, duplicate of ticket 1 (Alice's password reset)
+  INSERT INTO tickets (title, slug, status, urgency, severity, is_private, type_id, creator_id, duplicate_of_id)
+  VALUES ('Cannot reset password', 'cannot-reset-password', 'closed', 'medium', 'medium', false, _type_issue,
+          '00000000-0000-0000-0000-000000000015', _tid1)
+  RETURNING id INTO _tid5;
+
+  INSERT INTO posts (ticket_id, author_id, body, is_original, post_type)
+  VALUES (_tid5, '00000000-0000-0000-0000-000000000015',
+    'When I try to reset my password, the reset email never arrives. I have tried multiple times.',
+    true, 'post');
+
+  INSERT INTO posts (ticket_id, author_id, body, post_type)
+  VALUES (_tid5, '00000000-0000-0000-0000-000000000012',
+    E'This ticket has been closed as a duplicate of [#' || _tid1 || '](/tickets/' || _tid1 || '/password-reset-not-working).',
+    'post');
+
+  INSERT INTO ticket_followers (ticket_id, user_id) VALUES (_tid5, '00000000-0000-0000-0000-000000000015');
+
+  -- --------------------------------------------------------
+  -- Carol's tickets (2): one open, one pending
+  -- --------------------------------------------------------
+
+  -- Ticket 6: Carol - open, private
+  INSERT INTO tickets (title, slug, status, urgency, severity, is_private, type_id, creator_id, assigned_agent_id)
+  VALUES ('Bug in search results', 'bug-in-search-results', 'open', 'high', 'high', true, _type_issue,
+          '00000000-0000-0000-0000-000000000016', '00000000-0000-0000-0000-000000000012')
+  RETURNING id INTO _tid6;
+
+  INSERT INTO posts (ticket_id, author_id, body, is_original, post_type)
+  VALUES (_tid6, '00000000-0000-0000-0000-000000000016',
+    E'The search feature is returning completely irrelevant results. When I search for "billing", I get results about "password reset".\n\nThis started happening after the last update.',
+    true, 'post');
+
+  INSERT INTO posts (ticket_id, author_id, body, post_type)
+  VALUES (_tid6, '00000000-0000-0000-0000-000000000012',
+    'Thanks for reporting this. We have identified the issue with the search indexing. Working on a fix now.',
+    'post');
+
+  -- Comment (will render in Phase 6)
+  INSERT INTO posts (ticket_id, author_id, body, post_type, parent_post_id)
+  VALUES (_tid6, '00000000-0000-0000-0000-000000000016',
+    'Any ETA on the fix?',
+    'comment',
+    (SELECT id FROM posts WHERE ticket_id = _tid6 AND author_id = '00000000-0000-0000-0000-000000000012' AND post_type = 'post' LIMIT 1));
+
+  INSERT INTO ticket_followers (ticket_id, user_id) VALUES (_tid6, '00000000-0000-0000-0000-000000000016');
+
+  -- Ticket 7: Carol - pending, public
+  INSERT INTO tickets (title, slug, status, urgency, severity, is_private, type_id, creator_id)
+  VALUES ('How to change notification settings?', 'how-to-change-notification-settings', 'pending', 'low', 'low', false, _type_question,
+          '00000000-0000-0000-0000-000000000016')
+  RETURNING id INTO _tid7;
+
+  INSERT INTO posts (ticket_id, author_id, body, is_original, post_type)
+  VALUES (_tid7, '00000000-0000-0000-0000-000000000016',
+    'Where can I find the notification settings? I am getting too many email notifications.',
+    true, 'post');
+
+  INSERT INTO posts (ticket_id, author_id, body, post_type)
+  VALUES (_tid7, '00000000-0000-0000-0000-000000000013',
+    E'You can manage your notifications from **Profile > Notification Settings**.\n\nYou can:\n- Disable email notifications entirely\n- Choose which events trigger notifications\n- Set a digest frequency\n\nDoes that help?',
+    'post');
+
+  INSERT INTO ticket_followers (ticket_id, user_id) VALUES (_tid7, '00000000-0000-0000-0000-000000000016');
+
+  -- --------------------------------------------------------
+  -- Dave's tickets (2): one open, one closed (no team)
+  -- --------------------------------------------------------
+
+  -- Ticket 8: Dave - open, public
+  INSERT INTO tickets (title, slug, status, urgency, severity, is_private, type_id, creator_id)
+  VALUES ('Suggestion: keyboard shortcuts', 'suggestion-keyboard-shortcuts', 'open', 'low', 'low', false, _type_suggestion,
+          '00000000-0000-0000-0000-000000000017')
+  RETURNING id INTO _tid8;
+
+  INSERT INTO posts (ticket_id, author_id, body, is_original, post_type)
+  VALUES (_tid8, '00000000-0000-0000-0000-000000000017',
+    E'It would be great to have keyboard shortcuts for common actions:\n\n- `Ctrl+N` — New ticket\n- `Ctrl+Enter` — Submit reply\n- `Esc` — Close modal\n\nThis would greatly improve productivity for power users.',
+    true, 'post');
+
+  INSERT INTO ticket_followers (ticket_id, user_id) VALUES (_tid8, '00000000-0000-0000-0000-000000000017');
+
+  -- Ticket 9: Dave - closed, private
+  INSERT INTO tickets (title, slug, status, urgency, severity, is_private, type_id, creator_id, assigned_agent_id)
+  VALUES ('Login issue on mobile', 'login-issue-on-mobile', 'closed', 'medium', 'medium', true, _type_issue,
+          '00000000-0000-0000-0000-000000000017', '00000000-0000-0000-0000-000000000013')
+  RETURNING id INTO _tid9;
+
+  INSERT INTO posts (ticket_id, author_id, body, is_original, post_type)
+  VALUES (_tid9, '00000000-0000-0000-0000-000000000017',
+    'I cannot log in from my phone (iPhone 15, Safari). The login button does not respond to taps. Works fine on desktop.',
+    true, 'post');
+
+  INSERT INTO posts (ticket_id, author_id, body, post_type)
+  VALUES (_tid9, '00000000-0000-0000-0000-000000000013',
+    'We have identified and fixed the touch event handling issue on iOS Safari. The fix is deployed. Could you try again?',
+    'post');
+
+  INSERT INTO posts (ticket_id, author_id, body, post_type)
+  VALUES (_tid9, '00000000-0000-0000-0000-000000000017',
+    'It works now. Thank you for the quick fix!',
+    'post');
+
+  INSERT INTO ticket_followers (ticket_id, user_id) VALUES (_tid9, '00000000-0000-0000-0000-000000000017');
+
+  -- Eve has 0 tickets (testing empty state per §3.3)
+
+END $$;

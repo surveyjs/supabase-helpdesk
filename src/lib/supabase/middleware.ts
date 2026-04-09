@@ -1,6 +1,8 @@
 import { createServerClient } from '@supabase/ssr';
 import { type NextRequest, NextResponse } from 'next/server';
 
+const AUTH_ROUTES = ['/login', '/signup', '/forgot-password'];
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
   const supabase = createServerClient(
@@ -21,6 +23,12 @@ export async function updateSession(request: NextRequest) {
       },
     }
   );
-  await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  // Redirect authenticated users away from auth pages
+  if (user && AUTH_ROUTES.includes(request.nextUrl.pathname)) {
+    return NextResponse.redirect(new URL('/', request.url));
+  }
+
   return supabaseResponse;
 }

@@ -14,7 +14,7 @@ This is Phase 0: set up the project skeleton with all tooling, CI, and a verifie
 npx create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --import-alias "@/*" --use-npm
 ```
 
-> **Note:** The directory already contains `docs/` and `promts/` folders. `create-next-app` may warn about a non-empty directory — accept the prompt to proceed, or pass `--yes` to skip confirmation. These existing folders will not be overwritten.
+> **IMPORTANT:** The directory already contains `docs/` and `promts/` folders. **DO NOT delete, move, or modify any existing files or folders.** `create-next-app` may warn about a non-empty directory — accept the prompt to proceed. These existing folders must be preserved as-is.
 
 - Use Next.js 15 (latest) with App Router
 - TypeScript strict mode enabled
@@ -49,7 +49,13 @@ npx supabase init
 
 This creates a `supabase/` directory at the project root.
 
-Create `supabase/config.toml` adjustments if needed for local dev (default port settings are fine).
+After init, open `supabase/config.toml` and change the `project_id` to `"helpdesk"`:
+
+```toml
+project_id = "helpdesk"
+```
+
+Adjust other local dev settings if needed (default port settings are fine).
 
 ### 4. Configure Geist Font
 

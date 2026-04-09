@@ -383,7 +383,7 @@ describe('4. RLS — Tickets', () => {
 
   it('f. User cannot update another user\'s ticket', async () => {
     const c = await clientForUser('dave@test.com');
-    const { error } = await c.from('tickets').update({ title: 'hacked' }).eq('id', aliceTicketId);
+    const { error: _error } = await c.from('tickets').update({ title: 'hacked' }).eq('id', aliceTicketId);
     // Should affect 0 rows (RLS filters it out)
     const { data } = await c.from('tickets').select('title').eq('id', aliceTicketId);
     expect(data).toHaveLength(0); // dave can't even see it
@@ -462,7 +462,7 @@ describe('4. RLS — Tickets', () => {
 
 describe('5. RLS — Posts', () => {
   let publicTicketId: number;
-  let privateTicketId: number;
+  let _privateTicketId: number;
   let publicPostId: string;
   let privatePostId: string;
   let commentOnPrivateId: string;
@@ -498,7 +498,7 @@ describe('5. RLS — Posts', () => {
       })
       .select('id')
       .single();
-    privateTicketId = pvt!.id;
+    _privateTicketId = pvt!.id;
 
     // Public post on public ticket
     const { data: pp } = await admin
@@ -660,7 +660,7 @@ describe('5. RLS — Posts', () => {
       .single();
 
     // Agent1 cannot edit agent2's note
-    const { error: e2 } = await c.from('posts').update({ body: 'Hacked note' }).eq('id', a2note!.id);
+    const { error: _e2 } = await c.from('posts').update({ body: 'Hacked note' }).eq('id', a2note!.id);
     // RLS will filter, so no rows matched — verify body unchanged
     const { data: check } = await admin.from('posts').select('body').eq('id', a2note!.id).single();
     expect(check!.body).toBe('Agent2 note');
@@ -672,7 +672,7 @@ describe('5. RLS — Posts', () => {
 
   it('k. Original post (is_original=true) cannot be deleted even by admin', async () => {
     const c = await clientForUser('admin@test.com');
-    const { error } = await c.from('posts').delete().eq('id', originalPostId);
+    const { error: _error } = await c.from('posts').delete().eq('id', originalPostId);
     // RLS blocks delete on is_original=true — should affect 0 rows
     const { data } = await admin.from('posts').select('id').eq('id', originalPostId);
     expect(data).toHaveLength(1);
@@ -718,7 +718,7 @@ describe('6. RLS — Other Tables', () => {
     expect(data!.length).toBeGreaterThan(0);
 
     // Not writable by user
-    const { error: writeErr } = await alice
+    const { error: _writeErr } = await alice
       .from('app_settings')
       .update({ value: '999' })
       .eq('key', 'ticket_creation_rate_limit');
@@ -744,11 +744,11 @@ describe('6. RLS — Other Tables', () => {
 
   it('b. login_attempts: NOT accessible by authenticated or anon users', async () => {
     const alice = await clientForUser('alice@test.com');
-    const { data: d1, error: e1 } = await alice.from('login_attempts').select('*');
+    const { data: d1, error: _e1 } = await alice.from('login_attempts').select('*');
     expect(d1).toHaveLength(0); // RLS blocks all
 
     const anon = createClient(supabaseUrl, anonKey);
-    const { data: d2, error: e2 } = await anon.from('login_attempts').select('*');
+    const { data: d2, error: _e2 } = await anon.from('login_attempts').select('*');
     // Either error or empty array, both acceptable
     expect(d2?.length ?? 0).toBe(0);
   });
@@ -793,7 +793,7 @@ describe('6. RLS — Other Tables', () => {
     const dave = await clientForUser('dave@test.com');
     const { data: daveData } = await dave.from('agent_tickets').select('id');
     // Dave should not see Alice's private tickets (not teammate)
-    const alicePrivateInView = daveData?.some((t: any) => t.title === 'Alice private ticket');
+    const alicePrivateInView = daveData?.some((t: Record<string, unknown>) => t.title === 'Alice private ticket');
     expect(alicePrivateInView).toBeFalsy();
   });
 });
@@ -1200,6 +1200,6 @@ describe('11. Text Search', () => {
       .from('tickets')
       .select('id')
       .textSearch('search_vector', 'billing');
-    expect(data!.some((t: any) => t.id === searchTicketId)).toBe(true);
+    expect(data!.some((t: Record<string, unknown>) => t.id === searchTicketId)).toBe(true);
   });
 });

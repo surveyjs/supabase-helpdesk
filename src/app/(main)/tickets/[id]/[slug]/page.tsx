@@ -6,6 +6,16 @@ import { generateSlug } from '@/lib/utils/slug';
 import { renderMarkdown } from '@/lib/utils/markdown';
 import { Badge } from '@/components/ui/Badge';
 import { ReplyForm } from './ReplyForm';
+import { EditablePost } from './EditablePost';
+import { EditableTitle } from './EditableTitle';
+import { ReplyToggle } from './ReplyToggle';
+import { NoteForm } from './NoteForm';
+import { CollapsibleTimeline, CollapsibleComments } from './CollapsibleTimeline';
+import {
+  deletePost,
+  togglePostPrivacy,
+  publishDraft,
+} from '@/lib/actions/tickets';
 import {
   changeTicketStatus,
   assignAgent,
@@ -16,7 +26,7 @@ import {
   changeSeverity,
   changeType,
   changeCategory,
-  toggleTicketPrivacy,
+  toggleTicketPrivacy as toggleTicketPrivacyAction,
   addTagToTicket,
   removeTagFromTicket,
 } from '@/lib/actions/agent';
@@ -79,7 +89,7 @@ export default async function TicketDetailPage({
     teamName = team?.name ?? null;
   }
 
-  // Fetch posts (include notes for agents)
+  // Fetch posts (include notes/drafts/comments for agents)
   const { data: profile } = await supabase
     .from('profiles')
     .select('role')
@@ -88,32 +98,340 @@ export default async function TicketDetailPage({
 
   const isAgent = profile?.role === 'agent' || profile?.role === 'admin';
 
-  let postsQuery = supabase
+  const { data: posts } = await supabase
     .from('posts')
     .select(`
-      id, body, is_original, created_at, post_type,
+      id, body, is_original, created_at, post_type, is_private, is_draft, edited_at,
+      parent_post_id, parent_comment_id,
       author:profiles!posts_author_id_fkey(id, display_name)
     `)
     .eq('ticket_id', ticket.id)
-    .eq('is_draft', false)
     .order('created_at', { ascending: true });
 
-  if (!isAgent) {
-    postsQuery = postsQuery.eq('post_type', 'post');
-  }
+  // Fetch activity log
+  const { data: activityLog } = await supabase
+    .from('activity_log')
+    .select('id, action, details, created_at, actor:profiles!activity_log_actor_id_fkey(id, display_name)')
+    .eq('ticket_id', ticket.id)
+    .order('created_at', { ascending: true });
 
-  const { data: posts } = await postsQuery;
+  // Fetch timeline thresholds
+  const { data: postsThresholdSetting } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'visible_posts_threshold')
+    .single();
+  const { data: commentsThresholdSetting } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'visible_comments_threshold')
+    .single();
+
+  const visiblePostsThreshold = postsThresholdSetting ? parseInt(postsThresholdSetting.value, 10) : 10;
+  const visibleCommentsThreshold = commentsThresholdSetting ? parseInt(commentsThresholdSetting.value, 10) : 3;
 
   // Check if user can reply (non-agents cannot reply to duplicates)
   const canReply = isAgent || !ticket.duplicate_of_id;
+  const canEditTitle = isAgent || ticket.creator_id === user.id;
 
-  // Render markdown for all posts
+  // Render markdown for all visible posts
+  const allPosts = posts ?? [];
   const renderedPosts = await Promise.all(
-    (posts ?? []).map(async (post) => ({
+    allPosts.map(async (post) => ({
       ...post,
       htmlBody: await renderMarkdown(post.body),
     })),
   );
+
+  // Organize posts: original, root posts, comments by parent
+  const originalPost = renderedPosts.find((p) => p.is_original);
+  const rootPosts = renderedPosts.filter(
+    (p) => !p.is_original && !p.parent_post_id && !p.parent_comment_id && p.post_type !== 'comment',
+  );
+  const commentsByParentPost = new Map<string, typeof renderedPosts>();
+  const commentsByParentComment = new Map<string, typeof renderedPosts>();
+
+  for (const p of renderedPosts) {
+    if (p.post_type === 'comment' && p.parent_post_id) {
+      if (p.parent_comment_id) {
+        const arr = commentsByParentComment.get(p.parent_comment_id) ?? [];
+        arr.push(p);
+        commentsByParentComment.set(p.parent_comment_id, arr);
+      } else {
+        const arr = commentsByParentPost.get(p.parent_post_id) ?? [];
+        arr.push(p);
+        commentsByParentPost.set(p.parent_post_id, arr);
+      }
+    }
+  }
+
+  // Build interleaved timeline of root posts + activity entries
+  type TimelineItem =
+    | { kind: 'post'; data: (typeof renderedPosts)[number] }
+    | { kind: 'activity'; data: NonNullable<typeof activityLog>[number] };
+
+  const timelineItems: TimelineItem[] = [];
+  for (const p of rootPosts) {
+    timelineItems.push({ kind: 'post', data: p });
+  }
+  for (const a of activityLog ?? []) {
+    // Filter agent-only activity from non-agents
+    if (!isAgent && (a.action === 'draft_published' || a.action === 'post_privacy_changed')) continue;
+    timelineItems.push({ kind: 'activity', data: a });
+  }
+  timelineItems.sort((a, b) => {
+    const aDate = a.kind === 'post' ? a.data.created_at : a.data.created_at;
+    const bDate = b.kind === 'post' ? b.data.created_at : b.data.created_at;
+    return new Date(aDate).getTime() - new Date(bDate).getTime();
+  });
+
+  // Collapsible: determine hidden vs visible
+  const postItemsCount = timelineItems.filter((i) => i.kind === 'post').length;
+  const shouldCollapse = postItemsCount > visiblePostsThreshold;
+  let hiddenItems: TimelineItem[] = [];
+  let visibleItems: TimelineItem[] = timelineItems;
+  if (shouldCollapse) {
+    // Find the cutoff: keep the last N post-items and any activity entries between them
+    const postIndices: number[] = [];
+    timelineItems.forEach((item, i) => {
+      if (item.kind === 'post') postIndices.push(i);
+    });
+    const cutoffIndex = postIndices[postIndices.length - visiblePostsThreshold];
+    hiddenItems = timelineItems.slice(0, cutoffIndex);
+    visibleItems = timelineItems.slice(cutoffIndex);
+  }
+
+  const hiddenPostCount = hiddenItems.filter((i) => i.kind === 'post').length;
+
+  function formatTime(dateStr: string) {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffMin = Math.floor(diffMs / 60000);
+    if (diffMin < 1) return 'just now';
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHours = Math.floor(diffMin / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return d.toLocaleDateString();
+  }
+
+  function formatActivityMessage(entry: NonNullable<typeof activityLog>[number]) {
+    const actor = Array.isArray(entry.actor) ? entry.actor[0] : entry.actor;
+    const actorName = actor?.display_name ?? 'Unknown';
+    const d = entry.details as Record<string, unknown> | null;
+
+    switch (entry.action) {
+      case 'status_changed':
+        return `${actorName} changed status from ${d?.from ?? '?'} to ${d?.to ?? '?'}`;
+      case 'agent_assigned':
+        return `${actorName} assigned an agent`;
+      case 'agent_reassigned':
+        return `${actorName} reassigned agent${d?.reason ? ` (${d.reason})` : ''}`;
+      case 'agent_unassigned':
+        return `${actorName} unassigned agent`;
+      case 'urgency_changed':
+        return `${actorName} changed urgency from ${d?.from ?? '?'} to ${d?.to ?? '?'}`;
+      case 'severity_changed':
+        return `${actorName} changed severity from ${d?.from ?? '?'} to ${d?.to ?? '?'}`;
+      case 'type_changed':
+        return `${actorName} changed type`;
+      case 'category_changed':
+        return `${actorName} changed category`;
+      case 'title_changed':
+        return `${actorName} changed title from "${d?.from ?? '?'}" to "${d?.to ?? '?'}"`;
+      case 'tag_added':
+        return `${actorName} added tag "${d?.tag_name ?? ''}"`;
+      case 'tag_removed':
+        return `${actorName} removed tag "${d?.tag_name ?? ''}"`;
+      case 'ticket_privacy_changed':
+        return `${actorName} changed ticket privacy`;
+      case 'post_privacy_changed':
+        return `${actorName} changed post privacy`;
+      case 'draft_published':
+        return `${actorName} published a draft`;
+      case 'marked_duplicate':
+        return `${actorName} marked as duplicate`;
+      case 'merged':
+        return `${actorName} merged ticket`;
+      default:
+        return `${actorName} performed ${entry.action}`;
+    }
+  }
+
+  function renderPostCard(
+    post: (typeof renderedPosts)[number],
+    level: 0 | 1 | 2 = 0,
+  ) {
+    const author = Array.isArray(post.author) ? post.author[0] : post.author;
+    const authorName = author?.display_name ?? 'Unknown';
+    const isCurrentUser = author?.id === user.id;
+    const isNote = post.post_type === 'note';
+    const isDraft = post.is_draft;
+    const isOriginal = post.is_original;
+
+    // Permission checks
+    const canEditPost = !isOriginal && (
+      isCurrentUser
+      || (isAgent && post.post_type !== 'note')
+      || (isAgent && post.post_type === 'note' && isCurrentUser)
+    );
+    const canDeletePost = !isOriginal && (
+      (isAgent && post.post_type !== 'note')
+      || (isAgent && post.post_type === 'note' && isCurrentUser)
+      || (profile?.role === 'admin' && post.post_type === 'note')
+    );
+    const canTogglePrivacy = isAgent && !isOriginal && !isNote;
+    const canReplyToPost = canReply && !isDraft && !isNote && level < 2;
+
+    const indentClass = level === 1 ? 'ml-6' : level === 2 ? 'ml-12' : '';
+    const bgClass = isNote
+      ? 'bg-amber-50 border-amber-200'
+      : isDraft
+        ? 'bg-white border-dashed border-gray-400'
+        : isOriginal
+          ? 'bg-white border-gray-200'
+          : isCurrentUser
+            ? 'bg-blue-50 border-blue-200'
+            : 'bg-white border-gray-200';
+
+    // Comments on this post
+    const postComments = commentsByParentPost.get(post.id) ?? [];
+    const visibleCommentCount = visibleCommentsThreshold;
+    const shouldCollapseComments = postComments.length > visibleCommentCount;
+    const hiddenComments = shouldCollapseComments ? postComments.slice(0, postComments.length - visibleCommentCount) : [];
+    const shownComments = shouldCollapseComments ? postComments.slice(postComments.length - visibleCommentCount) : postComments;
+
+    return (
+      <div key={post.id} className={indentClass} data-testid={`post-${post.id}`}>
+        <div className={`rounded-lg border p-4 ${bgClass}`}>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-gray-900">
+              {authorName}
+              {isOriginal && (
+                <span className="ml-2 text-xs text-gray-500">(Original post)</span>
+              )}
+              {isNote && (
+                <span className="ml-2 text-xs text-amber-600 font-medium">(Internal note)</span>
+              )}
+              {isDraft && (
+                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                  Draft
+                </span>
+              )}
+              {post.is_private && !isNote && (
+                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                  Private
+                </span>
+              )}
+              {post.edited_at && (
+                <span className="ml-2 text-xs text-gray-400">(edited)</span>
+              )}
+            </span>
+            <time dateTime={post.created_at} className="text-xs text-gray-500">
+              {formatTime(post.created_at)}
+            </time>
+          </div>
+
+          <EditablePost
+            postId={post.id}
+            htmlBody={post.htmlBody}
+            rawBody={post.body}
+            canEdit={canEditPost}
+          />
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-3 mt-2">
+            {canDeletePost && (
+              <form action={deletePost} className="inline">
+                <input type="hidden" name="post_id" value={post.id} />
+                <button
+                  type="submit"
+                  className="text-xs text-red-600 hover:text-red-800"
+                  data-testid="delete-post-btn"
+                >
+                  Delete
+                </button>
+              </form>
+            )}
+            {canTogglePrivacy && (
+              <form action={togglePostPrivacy} className="inline">
+                <input type="hidden" name="post_id" value={post.id} />
+                <button
+                  type="submit"
+                  className="text-xs text-gray-600 hover:text-gray-800"
+                >
+                  {post.is_private ? 'Make Public' : 'Make Private'}
+                </button>
+              </form>
+            )}
+            {isDraft && isCurrentUser && (
+              <form action={publishDraft} className="inline">
+                <input type="hidden" name="post_id" value={post.id} />
+                <button
+                  type="submit"
+                  className="text-xs text-green-600 hover:text-green-800 font-medium"
+                  data-testid="publish-draft-btn"
+                >
+                  Publish
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+
+        {/* Comments on this post (only for root-level / level-1) */}
+        {level === 0 && postComments.length > 0 && (
+          <div className="mt-1 space-y-1">
+            {shouldCollapseComments && (
+              <CollapsibleComments hiddenCount={hiddenComments.length}>
+                {hiddenComments.map((c) => renderPostCard(c, 1))}
+              </CollapsibleComments>
+            )}
+            {shownComments.map((c) => renderPostCard(c, 1))}
+          </div>
+        )}
+
+        {/* Level-1 comments: render their replies (level 2) */}
+        {level === 1 && (commentsByParentComment.get(post.id) ?? []).length > 0 && (
+          <div className="mt-1 space-y-1">
+            {(commentsByParentComment.get(post.id) ?? []).map((c) =>
+              renderPostCard(c, 2),
+            )}
+          </div>
+        )}
+
+        {/* Reply button */}
+        {canReplyToPost && level === 0 && (
+          <div className="mt-1 ml-6">
+            <ReplyToggle parentPostId={post.id} />
+          </div>
+        )}
+        {canReplyToPost && level === 1 && (
+          <div className="mt-1 ml-12">
+            <ReplyToggle parentPostId={post.parent_post_id!} parentCommentId={post.id} />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function renderActivityEntry(entry: NonNullable<typeof activityLog>[number]) {
+    return (
+      <div key={entry.id} className="py-1 px-4 text-xs text-gray-500" data-testid={`activity-${entry.id}`}>
+        <span>{formatActivityMessage(entry)}</span>
+        <span className="ml-2 text-gray-400">{formatTime(entry.created_at)}</span>
+      </div>
+    );
+  }
+
+  function renderTimelineItems(items: TimelineItem[]) {
+    return items.map((item) => {
+      if (item.kind === 'post') return renderPostCard(item.data, 0);
+      return renderActivityEntry(item.data);
+    });
+  }
 
   // Fetch agent-specific data only if agent
   let allTypes: { id: string; name: string }[] = [];
@@ -192,7 +510,7 @@ export default async function TicketDetailPage({
 
       {/* Ticket header */}
       <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-        <h1 className="text-xl font-semibold text-gray-900 mb-4">{ticket.title}</h1>
+        <EditableTitle ticketId={ticket.id} title={ticket.title} canEdit={canEditTitle} />
 
         <div className="flex flex-wrap gap-2 mb-4">
           <Badge variant="status" value={ticket.status} />
@@ -483,7 +801,7 @@ export default async function TicketDetailPage({
             {/* Privacy toggle */}
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1">Privacy</label>
-              <form action={toggleTicketPrivacy}>
+              <form action={toggleTicketPrivacyAction}>
                 <input type="hidden" name="ticket_id" value={ticket.id} />
                 <button type="submit" className={`px-3 py-1 text-xs rounded ${ticket.is_private ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}>
                   {ticket.is_private ? 'Make Public' : 'Make Private'}
@@ -496,54 +814,32 @@ export default async function TicketDetailPage({
 
       {/* Posts timeline */}
       <div className="space-y-4 mb-6">
-        {renderedPosts.map((post) => {
-          const author = Array.isArray(post.author) ? post.author[0] : post.author;
-          const authorName = author?.display_name ?? 'Unknown';
-          const isCurrentUser = author?.id === user.id;
-          const isNote = post.post_type === 'note';
+        {/* Original post always first */}
+        {originalPost && renderPostCard(originalPost, 0)}
 
-          return (
-            <div
-              key={post.id}
-              className={`rounded-lg border p-4 ${
-                isNote
-                  ? 'bg-amber-50 border-amber-200'
-                  : isCurrentUser
-                    ? 'bg-blue-50 border-blue-200'
-                    : 'bg-white border-gray-200'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-900">
-                  {authorName}
-                  {post.is_original && (
-                    <span className="ml-2 text-xs text-gray-500">(Original post)</span>
-                  )}
-                  {isNote && (
-                    <span className="ml-2 text-xs text-amber-600 font-medium">(Internal note)</span>
-                  )}
-                </span>
-                <time
-                  dateTime={post.created_at}
-                  className="text-xs text-gray-500"
-                >
-                  {new Date(post.created_at).toLocaleString()}
-                </time>
-              </div>
-              <div
-                className="prose prose-sm max-w-none"
-                dangerouslySetInnerHTML={{ __html: post.htmlBody }}
-              />
-            </div>
-          );
-        })}
+        {/* Collapsible older items */}
+        {shouldCollapse && hiddenPostCount > 0 && (
+          <CollapsibleTimeline hiddenCount={hiddenPostCount}>
+            {renderTimelineItems(hiddenItems)}
+          </CollapsibleTimeline>
+        )}
+
+        {/* Visible timeline items */}
+        {renderTimelineItems(visibleItems)}
       </div>
 
       {/* Reply form */}
       {canReply && (
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-4">
           <h2 className="text-lg font-medium text-gray-900 mb-4">Reply</h2>
           <ReplyForm ticketId={ticket.id} />
+        </div>
+      )}
+
+      {/* Note form (agents only) */}
+      {isAgent && (
+        <div className="mb-6">
+          <NoteForm ticketId={ticket.id} />
         </div>
       )}
     </div>

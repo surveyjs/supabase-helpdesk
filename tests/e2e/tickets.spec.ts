@@ -88,7 +88,7 @@ test.describe('Tickets', () => {
 
     // Fill reply
     await page.getByLabel('Reply body').fill('This is a test reply from E2E.');
-    await page.getByRole('button', { name: 'Reply' }).click();
+    await page.locator('form').filter({ has: page.getByLabel('Reply body') }).getByRole('button', { name: 'Reply' }).click();
 
     // Verify reply appears
     await expect(page.getByText('This is a test reply from E2E.')).toBeVisible({ timeout: 10000 });

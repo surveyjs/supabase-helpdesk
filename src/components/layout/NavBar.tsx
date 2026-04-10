@@ -44,6 +44,11 @@ export default async function NavBar() {
               Agent Dashboard
             </Link>
           )}
+          {profile && profile.role === 'admin' && (
+            <Link href="/admin/types" className="text-sm text-gray-600 hover:text-gray-900">
+              Setup
+            </Link>
+          )}
         </div>
 
         {/* Right side */}

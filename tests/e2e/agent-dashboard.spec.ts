@@ -256,7 +256,7 @@ test.describe('Agent Ticket Detail Controls', () => {
     const btn = page.getByRole('button', { name: 'Assign to me' });
     if (await btn.isVisible()) {
       await btn.click();
-      await expect(page.getByText('Agent Smith', { exact: true })).toBeVisible({ timeout: 10000 });
+      await expect(page.getByRole('main').getByText('Agent Smith', { exact: true })).toBeVisible({ timeout: 10000 });
       // Cleanup: unassign
       await page.getByRole('button', { name: 'Unassign' }).click();
     }

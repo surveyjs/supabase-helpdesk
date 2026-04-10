@@ -376,3 +376,73 @@ export async function toggleTicketPrivacy(formData: FormData): Promise<void> {
   revalidatePath(`/tickets/${ticketId}/${ticket.slug}`);
   revalidatePath('/agent');
 }
+
+// ============================================================
+// Tag management on tickets (agent)
+// ============================================================
+
+export async function addTagToTicket(formData: FormData): Promise<void> {
+  const { supabase, user } = await requireAgentRole();
+
+  const ticketId = Number(formData.get('ticket_id'));
+  const tagId = formData.get('tag_id') as string;
+  if (!ticketId || !tagId) return;
+
+  const { data: ticket } = await supabase
+    .from('tickets')
+    .select('id, slug')
+    .eq('id', ticketId)
+    .single();
+
+  if (!ticket) return;
+
+  const { error } = await supabase
+    .from('ticket_tags')
+    .insert({ ticket_id: ticketId, tag_id: tagId });
+
+  if (error) return;
+
+  await supabase.from('activity_log').insert({
+    ticket_id: ticketId,
+    actor_id: user.id,
+    action: 'tag_added',
+    details: { tag_id: tagId },
+  });
+
+  revalidatePath(`/tickets/${ticketId}/${ticket.slug}`);
+  revalidatePath('/agent');
+}
+
+export async function removeTagFromTicket(formData: FormData): Promise<void> {
+  const { supabase, user } = await requireAgentRole();
+
+  const ticketId = Number(formData.get('ticket_id'));
+  const tagId = formData.get('tag_id') as string;
+  if (!ticketId || !tagId) return;
+
+  const { data: ticket } = await supabase
+    .from('tickets')
+    .select('id, slug')
+    .eq('id', ticketId)
+    .single();
+
+  if (!ticket) return;
+
+  const { error } = await supabase
+    .from('ticket_tags')
+    .delete()
+    .eq('ticket_id', ticketId)
+    .eq('tag_id', tagId);
+
+  if (error) return;
+
+  await supabase.from('activity_log').insert({
+    ticket_id: ticketId,
+    actor_id: user.id,
+    action: 'tag_removed',
+    details: { tag_id: tagId },
+  });
+
+  revalidatePath(`/tickets/${ticketId}/${ticket.slug}`);
+  revalidatePath('/agent');
+}

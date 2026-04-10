@@ -10,6 +10,7 @@ export type AgentTicketFilters = {
   type?: string;
   agent?: string;
   team?: string;
+  tags?: string;
   sort?: string;
   page?: string;
 };
@@ -143,6 +144,22 @@ export async function getAgentTickets(filters: AgentTicketFilters): Promise<{
     query = query.eq('creator_team_id', filters.team);
   }
 
+  // Tag filter (OR logic: any of the selected tags)
+  if (filters.tags?.trim()) {
+    const tagIds = filters.tags.split(',').filter(Boolean);
+    if (tagIds.length > 0) {
+      const { data: taggedTickets } = await supabase
+        .from('ticket_tags')
+        .select('ticket_id')
+        .in('tag_id', tagIds);
+      const tagTicketIds = [...new Set((taggedTickets ?? []).map((r) => r.ticket_id))];
+      if (tagTicketIds.length === 0) {
+        return { tickets: [], total: 0, pageSize };
+      }
+      query = query.in('id', tagTicketIds);
+    }
+  }
+
   // Sort
   if (filters.sort === 'created') {
     query = query.order('created_at', { ascending: false });
@@ -213,11 +230,14 @@ export async function getFilterOptions() {
     supabase.from('teams').select('id, name').order('name'),
   ]);
 
+  const { data: tags } = await supabase.from('tags').select('id, name, color').order('name');
+
   return {
     categories: categories ?? [],
     types: types ?? [],
     agents: agents ?? [],
     teams: teams ?? [],
+    tags: tags ?? [],
   };
 }
 

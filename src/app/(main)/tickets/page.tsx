@@ -19,43 +19,95 @@ export default async function MyTicketsPage({
   const statusFilter = (params.status as string) ?? 'all';
   const search = (params.q as string) ?? '';
   const currentPage = Math.max(1, parseInt((params.page as string) ?? '1', 10) || 1);
+  const view = (params.view as string) ?? 'my';
 
-  // Build query
-  let query = supabase
-    .from('tickets')
-    .select('id, title, slug, status, updated_at', { count: 'exact' })
-    .eq('creator_id', user.id)
-    .order('updated_at', { ascending: false });
+  // Check if user belongs to a team
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('team_id')
+    .eq('id', user.id)
+    .single();
 
-  // Status filter
-  if (statusFilter === 'active') {
-    query = query.in('status', ['open', 'pending']);
-  } else if (statusFilter === 'closed') {
-    query = query.eq('status', 'closed');
+  const hasTeam = !!profile?.team_id;
+  const isTeamView = hasTeam && view === 'team';
+
+  // For team view, get all team members
+  let teamMemberIds: string[] = [];
+  if (isTeamView && profile?.team_id) {
+    const { data: members } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('team_id', profile.team_id);
+    teamMemberIds = (members ?? []).map((m) => m.id);
   }
 
-  // Full-text search
-  if (search.trim()) {
-    const searchTerms = search.trim().split(/\s+/).join(' & ');
-    query = query.textSearch('search_vector', searchTerms, { type: 'plain', config: 'english' });
-  }
-
-  // Pagination
+  // Shared filter values
+  const searchTerms = search.trim() ? search.trim().split(/\s+/).join(' & ') : '';
   const from = (currentPage - 1) * PAGE_SIZE;
-  query = query.range(from, from + PAGE_SIZE - 1);
 
-  const { data: tickets, count } = await query;
+  let ticketsForList: { id: number; title: string; slug: string; status: string; updated_at: string; creator_name?: string }[];
+  let count: number | null;
+
+  if (isTeamView) {
+    let query = supabase
+      .from('tickets')
+      .select('id, title, slug, status, updated_at, creator:profiles!tickets_creator_id_fkey(display_name)', { count: 'exact' })
+      .order('updated_at', { ascending: false })
+      .in('creator_id', teamMemberIds);
+    if (statusFilter === 'active') query = query.in('status', ['open', 'pending']);
+    else if (statusFilter === 'closed') query = query.eq('status', 'closed');
+    if (searchTerms) query = query.textSearch('search_vector', searchTerms, { type: 'plain', config: 'english' });
+    query = query.range(from, from + PAGE_SIZE - 1);
+
+    const { data: tickets, count: c } = await query;
+    count = c;
+    ticketsForList = (tickets ?? []).map((t) => {
+      const creator = Array.isArray(t.creator) ? t.creator[0] : t.creator;
+      return {
+        id: t.id,
+        title: t.title,
+        slug: t.slug,
+        status: t.status,
+        updated_at: t.updated_at,
+        creator_name: creator?.display_name ?? 'Unknown',
+      };
+    });
+  } else {
+    let query = supabase
+      .from('tickets')
+      .select('id, title, slug, status, updated_at', { count: 'exact' })
+      .order('updated_at', { ascending: false })
+      .eq('creator_id', user.id);
+    if (statusFilter === 'active') query = query.in('status', ['open', 'pending']);
+    else if (statusFilter === 'closed') query = query.eq('status', 'closed');
+    if (searchTerms) query = query.textSearch('search_vector', searchTerms, { type: 'plain', config: 'english' });
+    query = query.range(from, from + PAGE_SIZE - 1);
+
+    const { data: tickets, count: c } = await query;
+    count = c;
+    ticketsForList = (tickets ?? []).map((t) => ({
+      id: t.id,
+      title: t.title,
+      slug: t.slug,
+      status: t.status,
+      updated_at: t.updated_at,
+    }));
+  }
+
   const totalPages = Math.ceil((count ?? 0) / PAGE_SIZE);
 
   // Build params for links
   const linkParams: Record<string, string> = {};
   if (statusFilter !== 'all') linkParams.status = statusFilter;
   if (search) linkParams.q = search;
+  if (isTeamView) linkParams.view = 'team';
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">My Tickets</h1>
+        <h1 className="text-2xl font-semibold text-gray-900">
+          {isTeamView ? 'Team Tickets' : 'My Tickets'}
+        </h1>
         <Link
           href="/tickets/new"
           className="bg-blue-600 text-white rounded px-4 py-2 text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
@@ -64,16 +116,45 @@ export default async function MyTicketsPage({
         </Link>
       </div>
 
+      {/* Team toggle */}
+      {hasTeam && (
+        <div className="flex gap-2 mb-4" data-testid="team-toggle">
+          <Link
+            href={`/tickets${statusFilter !== 'all' ? `?status=${statusFilter}` : ''}${search ? `${statusFilter !== 'all' ? '&' : '?'}q=${encodeURIComponent(search)}` : ''}`}
+            className={`px-3 py-1.5 text-sm rounded font-medium ${
+              !isTeamView
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            My Tickets
+          </Link>
+          <Link
+            href={`/tickets?view=team${statusFilter !== 'all' ? `&status=${statusFilter}` : ''}${search ? `&q=${encodeURIComponent(search)}` : ''}`}
+            className={`px-3 py-1.5 text-sm rounded font-medium ${
+              isTeamView
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Team Tickets
+          </Link>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-4">
         <StatusFilter
           current={statusFilter}
           basePath="/tickets"
-          searchParams={linkParams}
+          searchParams={isTeamView ? { ...linkParams } : linkParams}
         />
 
         <form method="get" action="/tickets" className="flex gap-2 flex-1 max-w-md">
           {statusFilter !== 'all' && (
             <input type="hidden" name="status" value={statusFilter} />
+          )}
+          {isTeamView && (
+            <input type="hidden" name="view" value="team" />
           )}
           <input
             type="search"
@@ -91,7 +172,7 @@ export default async function MyTicketsPage({
           </button>
           {search && (
             <Link
-              href={statusFilter !== 'all' ? `/tickets?status=${statusFilter}` : '/tickets'}
+              href={`/tickets${isTeamView ? '?view=team' : ''}${statusFilter !== 'all' ? `${isTeamView ? '&' : '?'}status=${statusFilter}` : ''}`}
               className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700"
             >
               Clear
@@ -109,7 +190,7 @@ export default async function MyTicketsPage({
         </Link>
       </div>
 
-      <TicketList tickets={tickets ?? []} />
+      <TicketList tickets={ticketsForList} showCreator={isTeamView} />
 
       <Pagination
         currentPage={currentPage}

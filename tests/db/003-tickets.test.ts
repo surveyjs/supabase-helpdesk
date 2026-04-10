@@ -205,9 +205,8 @@ describe('Ticket CRUD & RLS', () => {
   });
 
   it('user can read public tickets', async () => {
-    // Create a public ticket
-    const alice = await clientForUser('alice@test.com');
-    const { data: pub, error: pubError } = await alice
+    // Create a public ticket via service role to avoid clock-skew JWT issues
+    const { data: pub, error: pubError } = await admin
       .from('tickets')
       .insert({
         title: 'Public ticket by Alice',

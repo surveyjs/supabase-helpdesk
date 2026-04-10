@@ -9,6 +9,21 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
   await expect(page).toHaveURL('/', { timeout: 10000 });
 }
 
+/** Look up the posts-test ticket URL from DB (survives serial-retry context loss). */
+async function resolveTicketUrl(): Promise<string> {
+  const admin = createServiceRoleClient();
+  // Try renamed slug first (after "edit title" test), then original
+  for (const slug of ['e2e-posts-renamed-ticket', 'e2e-posts-test-ticket']) {
+    const { data } = await admin
+      .from('tickets')
+      .select('id, slug')
+      .eq('slug', slug)
+      .maybeSingle();
+    if (data) return `/tickets/${data.id}/${data.slug}`;
+  }
+  throw new Error('Could not find posts test ticket in DB');
+}
+
 test.describe('Posts, Comments & Notes', () => {
   test.describe.configure({ mode: 'serial' });
 
@@ -46,7 +61,7 @@ test.describe('Posts, Comments & Notes', () => {
 
   test('add a reply to the ticket', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
-    await page.goto(ticketUrl);
+    await page.goto(ticketUrl || await resolveTicketUrl());
 
     await page.getByLabel('Reply body').fill('A root reply to the ticket.');
     // Use the submit button inside the reply form (not the ReplyToggle button)
@@ -57,7 +72,7 @@ test.describe('Posts, Comments & Notes', () => {
 
   test('add a comment on a post → comment appears indented', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
-    await page.goto(ticketUrl);
+    await page.goto(ticketUrl || await resolveTicketUrl());
 
     // Click the Reply button on the root reply post
     const replyBtns = page.locator('[data-testid="reply-btn"]');
@@ -78,7 +93,7 @@ test.describe('Posts, Comments & Notes', () => {
 
   test('reply to a comment → reply appears at level 2', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
-    await page.goto(ticketUrl);
+    await page.goto(ticketUrl || await resolveTicketUrl());
 
     // The level-1 comment should have a Reply button
     // Find the reply button near the threaded comment
@@ -99,7 +114,7 @@ test.describe('Posts, Comments & Notes', () => {
 
   test('level-2 comment has no Reply action', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
-    await page.goto(ticketUrl);
+    await page.goto(ticketUrl || await resolveTicketUrl());
 
     // The level-2 reply should exist
     await expect(page.getByText('A level-2 reply to the comment.')).toBeVisible();
@@ -117,7 +132,7 @@ test.describe('Posts, Comments & Notes', () => {
   test('agent can add an internal note → note visible to agent, not to regular user', async ({ page }) => {
     // Login as agent and add note
     await loginAs(page, 'agent.smith@example.com');
-    await page.goto(ticketUrl);
+    await page.goto(ticketUrl || await resolveTicketUrl());
 
     await page.getByLabel('Note body').fill('Internal agent note content.');
     await page.getByRole('button', { name: 'Add Note' }).click();
@@ -128,14 +143,14 @@ test.describe('Posts, Comments & Notes', () => {
 
   test('note not visible to regular user', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
-    await page.goto(ticketUrl);
+    await page.goto(ticketUrl || await resolveTicketUrl());
 
     await expect(page.getByText('Internal agent note content.')).not.toBeVisible();
   });
 
   test('edit a post → "(edited)" indicator shows', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
-    await page.goto(ticketUrl);
+    await page.goto(ticketUrl || await resolveTicketUrl());
 
     // Find the edit button on Alice's reply
     const editBtns = page.locator('[data-testid="edit-post-btn"]');
@@ -153,7 +168,7 @@ test.describe('Posts, Comments & Notes', () => {
 
   test('edit title → URL redirects to new slug', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
-    await page.goto(ticketUrl);
+    await page.goto(ticketUrl || await resolveTicketUrl());
 
     // Click the edit title button
     await page.locator('[data-testid="edit-title-btn"]').click();
@@ -175,7 +190,7 @@ test.describe('Posts, Comments & Notes', () => {
     // We'll test draft creation via the agent's perspective
     // For now, create a draft via the service role and verify it shows for agents
     await loginAs(page, 'agent.smith@example.com');
-    await page.goto(ticketUrl);
+    await page.goto(ticketUrl || await resolveTicketUrl());
 
     // The Reply form should be visible for agents
     await expect(page.getByLabel('Reply body')).toBeVisible();
@@ -183,7 +198,7 @@ test.describe('Posts, Comments & Notes', () => {
 
   test('agent can make a post private → privacy badge shows', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
-    await page.goto(ticketUrl);
+    await page.goto(ticketUrl || await resolveTicketUrl());
 
     // Look for the "Make Private" button on a non-original post
     const makePrivateBtn = page.getByRole('button', { name: 'Make Private' }).first();
@@ -196,7 +211,7 @@ test.describe('Posts, Comments & Notes', () => {
   test('agent can delete a non-original post → post disappears', async ({ page }) => {
     // Login as agent and add a temporary post
     await loginAs(page, 'agent.smith@example.com');
-    await page.goto(ticketUrl);
+    await page.goto(ticketUrl || await resolveTicketUrl());
 
     await page.getByLabel('Reply body').fill('Temporary post to be deleted.');
     await page.locator('form').filter({ has: page.getByLabel('Reply body') }).getByRole('button', { name: 'Reply' }).click();
@@ -213,12 +228,14 @@ test.describe('Posts, Comments & Notes', () => {
 
   test('activity log entries display inline', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
-    await page.goto(ticketUrl);
+    await page.goto(ticketUrl || await resolveTicketUrl());
 
     // There should be activity log entries from previous actions (title changed, privacy changed, etc.)
-    // Look for activity text patterns
+    // Wait for at least one activity entry to appear before asserting count
+    const firstActivity = page.locator('[data-testid^="activity-"]').first();
+    await expect(firstActivity).toBeVisible({ timeout: 15000 });
+
     const activityEntries = page.locator('[data-testid^="activity-"]');
-    // We should have at least the title change activity
     const count = await activityEntries.count();
     expect(count).toBeGreaterThanOrEqual(1);
   });

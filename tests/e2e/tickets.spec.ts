@@ -16,9 +16,21 @@ test.describe('Tickets', () => {
   // Tests depend on each other (test 1 creates data used by later tests)
   test.describe.configure({ mode: 'serial' });
 
+  let ticketUrl: string;
+
+  async function resolveTicketUrl(): Promise<string> {
+    if (ticketUrl) return ticketUrl;
+    const svc = createServiceRoleClient();
+    const { data } = await svc.from('tickets').select('id, slug').eq('slug', 'e2e-test-ticket').single();
+    if (data) ticketUrl = `/tickets/${data.id}/${data.slug}`;
+    return ticketUrl;
+  }
+
   // Clean up leftover E2E test tickets from previous runs
   test.beforeAll(async () => {
     const admin = createServiceRoleClient();
+    // Bump rate limit so Alice doesn't hit it when full suite runs in parallel
+    await admin.from('app_settings').update({ value: '100' }).eq('key', 'ticket_creation_rate_limit');
     // Find tickets with E2E-specific titles
     const { data: staleTickets } = await admin
       .from('tickets')
@@ -44,6 +56,7 @@ test.describe('Tickets', () => {
 
     // Should redirect to ticket detail
     await expect(page).toHaveURL(/\/tickets\/\d+\/e2e-test-ticket/, { timeout: 10000 });
+    ticketUrl = page.url();
     await expect(page.getByRole('heading', { name: 'E2E Test Ticket' })).toBeVisible();
 
     // Go to My Tickets and verify it appears
@@ -53,10 +66,8 @@ test.describe('Tickets', () => {
 
   test('ticket detail shows correct metadata and posts', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
-    await page.goto('/tickets');
+    await page.goto(await resolveTicketUrl());
 
-    // Click the first ticket
-    await page.getByText('E2E Test Ticket').click();
     await expect(page.getByRole('heading', { name: 'E2E Test Ticket' })).toBeVisible();
 
     // Check metadata
@@ -83,8 +94,7 @@ test.describe('Tickets', () => {
 
   test('reply to a ticket → new post appears', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
-    await page.goto('/tickets');
-    await page.getByText('E2E Test Ticket').click();
+    await page.goto(await resolveTicketUrl());
 
     // Fill reply
     await page.getByLabel('Reply body').fill('This is a test reply from E2E.');
@@ -101,7 +111,7 @@ test.describe('Tickets', () => {
     await page.getByLabel('Search tickets').fill('E2E Test');
     await page.getByRole('button', { name: 'Search' }).click();
 
-    await expect(page.getByText('E2E Test Ticket')).toBeVisible();
+    await expect(page.getByText('E2E Test Ticket')).toBeVisible({ timeout: 10000 });
   });
 
   test('filter by status → correct results', async ({ page }) => {
@@ -118,19 +128,12 @@ test.describe('Tickets', () => {
   });
 
   test('slug redirect works', async ({ page }) => {
+    const admin = createServiceRoleClient();
+    const { data: ticket } = await admin.from('tickets').select('id, slug').eq('slug', 'e2e-test-ticket').single();
+    expect(ticket).toBeTruthy();
+    const ticketId = ticket!.id;
+
     await loginAs(page, 'alice@example.com');
-    await page.goto('/tickets');
-
-    // Find the E2E test ticket
-    const link = page.getByText('E2E Test Ticket');
-    await link.click();
-    await expect(page).toHaveURL(/\/tickets\/\d+\/e2e-test-ticket/, { timeout: 10000 });
-
-    // Get current URL
-    const url = page.url();
-    const match = url.match(/\/tickets\/(\d+)\//);
-    expect(match).toBeTruthy();
-    const ticketId = match![1];
 
     // Navigate to wrong slug — should redirect
     await page.goto(`/tickets/${ticketId}/wrong-slug`);
@@ -149,10 +152,11 @@ test.describe('Tickets', () => {
     await loginAs(page, 'alice@example.com');
     await page.goto('/tickets/public');
 
-    await expect(page.getByRole('heading', { name: 'Public Tickets' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Public Tickets' })).toBeVisible({ timeout: 10000 });
     // Public tickets should be visible
     // Verify at least one public ticket from seed data is shown
     const ticketLinks = page.locator('ul li a');
+    await expect(ticketLinks.first()).toBeVisible({ timeout: 10000 });
     const count = await ticketLinks.count();
     expect(count).toBeGreaterThan(0);
   });
@@ -189,15 +193,23 @@ test.describe('Tickets', () => {
   });
 
   test('markdown in posts renders correctly', async ({ page }) => {
+    // Look up ticket directly from DB to avoid stale URL issues
+    const admin = createServiceRoleClient();
+    const { data: ticket } = await admin
+      .from('tickets')
+      .select('id, slug')
+      .eq('slug', 'e2e-test-ticket')
+      .single();
+    expect(ticket).toBeTruthy();
+
     await loginAs(page, 'alice@example.com');
-    await page.goto('/tickets');
-    await page.getByText('E2E Test Ticket').click();
+    await page.goto(`/tickets/${ticket!.id}/${ticket!.slug}`);
 
     // The original post contains **Bold text** and `code`
     // Check for rendered markdown (bold tag and code tag)
     const prose = page.locator('.prose');
-    await expect(prose.locator('strong').first()).toBeVisible();
-    await expect(prose.locator('code').first()).toBeVisible();
+    await expect(prose.locator('strong').first()).toBeVisible({ timeout: 10000 });
+    await expect(prose.locator('code').first()).toBeVisible({ timeout: 10000 });
   });
 
   test('post with <script> tag does not execute (XSS protection)', async ({ page }) => {

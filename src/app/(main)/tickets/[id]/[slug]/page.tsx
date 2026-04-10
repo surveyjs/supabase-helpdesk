@@ -11,6 +11,8 @@ import { EditableTitle } from './EditableTitle';
 import { ReplyToggle } from './ReplyToggle';
 import { NoteForm } from './NoteForm';
 import { CollapsibleTimeline, CollapsibleComments } from './CollapsibleTimeline';
+import { AttachmentList } from '@/components/features/attachments/AttachmentList';
+import { FileUpload } from '@/components/features/attachments/FileUpload';
 import {
   deletePost,
   togglePostPrivacy,
@@ -130,6 +132,35 @@ export default async function TicketDetailPage({
 
   const visiblePostsThreshold = postsThresholdSetting ? parseInt(postsThresholdSetting.value, 10) : 10;
   const visibleCommentsThreshold = commentsThresholdSetting ? parseInt(commentsThresholdSetting.value, 10) : 3;
+
+  // Fetch file upload settings
+  const [allowedTypesRes, maxSizeRes, maxFilesRes] = await Promise.all([
+    supabase.from('app_settings').select('value').eq('key', 'allowed_file_types').single(),
+    supabase.from('app_settings').select('value').eq('key', 'max_file_size_mb').single(),
+    supabase.from('app_settings').select('value').eq('key', 'max_files_per_post').single(),
+  ]);
+  const allowedFileTypes: string[] = allowedTypesRes.data
+    ? JSON.parse(allowedTypesRes.data.value)
+    : ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'pdf', 'txt'];
+  const maxFileSizeMb = maxSizeRes.data ? parseInt(maxSizeRes.data.value, 10) : 10;
+  const maxFilesPerPost = maxFilesRes.data ? parseInt(maxFilesRes.data.value, 10) : 5;
+
+  // Fetch attachment counts per post
+  const attachmentCountMap = new Map<string, number>();
+  if (posts) {
+    const countResults = await Promise.all(
+      posts.map(async (p) => {
+        const { count } = await supabase
+          .from('attachments')
+          .select('id', { count: 'exact', head: true })
+          .eq('post_id', p.id);
+        return { postId: p.id as string, count: count ?? 0 };
+      }),
+    );
+    for (const { postId: pid, count } of countResults) {
+      attachmentCountMap.set(pid, count);
+    }
+  }
 
   // Check if user can reply (non-agents cannot reply to duplicates)
   const canReply = isAgent || !ticket.duplicate_of_id;
@@ -256,6 +287,10 @@ export default async function TicketDetailPage({
         return `${actorName} marked as duplicate`;
       case 'merged':
         return `${actorName} merged ticket`;
+      case 'file_uploaded':
+        return `${actorName} uploaded file "${d?.filename ?? ''}"`;
+      case 'file_deleted':
+        return `${actorName} deleted file "${d?.filename ?? ''}"`;
       default:
         return `${actorName} performed ${entry.action}`;
     }
@@ -380,6 +415,23 @@ export default async function TicketDetailPage({
               </form>
             )}
           </div>
+
+          {/* Attachments */}
+          <AttachmentList
+            postId={post.id}
+            canDelete={isCurrentUser || isAgent}
+          />
+
+          {/* File upload (for post author or agent, not on drafts) */}
+          {!isDraft && (isCurrentUser || isAgent) && (
+            <FileUpload
+              postId={post.id}
+              allowedTypes={allowedFileTypes}
+              maxFileSizeMb={maxFileSizeMb}
+              maxFilesPerPost={maxFilesPerPost}
+              existingCount={attachmentCountMap.get(post.id) ?? 0}
+            />
+          )}
         </div>
 
         {/* Comments on this post (only for root-level / level-1) */}

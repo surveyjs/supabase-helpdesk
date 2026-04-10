@@ -102,6 +102,12 @@ test.describe('Agent management', () => {
 test.describe('Custom fields', () => {
   test.describe.configure({ mode: 'serial' });
 
+  test.beforeAll(async () => {
+    // Bump rate limit so Alice doesn't hit it when full suite runs in parallel
+    const svc = createServiceRoleClient();
+    await svc.from('app_settings').update({ value: '100' }).eq('key', 'ticket_creation_rate_limit');
+  });
+
   test.afterAll(async () => {
     // Clean up test custom fields
     const svc = createServiceRoleClient();

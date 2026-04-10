@@ -1,0 +1,424 @@
+import Link from 'next/link';
+import { redirect } from 'next/navigation';
+import { createServerClient } from '@/lib/supabase/server';
+import { requireAgent } from '@/lib/supabase/auth';
+import {
+  getAgentTickets,
+  getFilterOptions,
+  getSavedViews,
+  getAgentStats,
+  type AgentTicketFilters,
+} from '@/lib/queries/agent-dashboard';
+import { Badge } from '@/components/ui/Badge';
+import { Pagination } from '@/components/ui/Pagination';
+import { createSavedView, renameSavedView, deleteSavedView } from '@/lib/actions/saved-views';
+
+export default async function AgentDashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const user = await requireAgent();
+  const supabase = await createServerClient();
+
+  // Get current user profile
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id, role')
+    .eq('id', user.id)
+    .single();
+
+  if (!profile) redirect('/');
+
+  const params = await searchParams;
+
+  const filters: AgentTicketFilters = {
+    status: (params.status as string) ?? 'all',
+    q: (params.q as string) ?? '',
+    email: (params.email as string) ?? '',
+    urgency: (params.urgency as string) ?? '',
+    severity: (params.severity as string) ?? '',
+    category: (params.category as string) ?? '',
+    type: (params.type as string) ?? '',
+    agent: (params.agent as string) ?? '',
+    team: (params.team as string) ?? '',
+    sort: (params.sort as string) ?? '',
+    page: (params.page as string) ?? '1',
+  };
+
+  const [{ tickets, total, pageSize }, filterOptions, savedViews, stats] =
+    await Promise.all([
+      getAgentTickets(filters),
+      getFilterOptions(),
+      getSavedViews(user.id),
+      getAgentStats(user.id),
+    ]);
+
+  const currentPage = Math.max(1, parseInt(filters.page ?? '1', 10) || 1);
+  const totalPages = Math.ceil(total / pageSize);
+
+  // Build URL search params for pagination links (preserve all filters)
+  const linkParams: Record<string, string> = {};
+  for (const [key, value] of Object.entries(filters)) {
+    if (value && value !== 'all' && value !== '1' && key !== 'page') {
+      linkParams[key] = value;
+    }
+  }
+
+  // Serialize current filters for saved view
+  const currentFiltersJson = JSON.stringify(linkParams);
+
+  return (
+    <div>
+      <h1 className="text-2xl font-semibold text-gray-900 mb-4">Agent Dashboard</h1>
+
+      {/* Stats Panel */}
+      <details className="mb-6 bg-white rounded-lg border border-gray-200">
+        <summary className="px-4 py-3 cursor-pointer text-sm font-medium text-gray-700 hover:text-gray-900 list-none flex items-center justify-between">
+          <span>My Stats (Last 30 Days)</span>
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </summary>
+        <div className="px-4 pb-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4" data-testid="agent-stats">
+          <div>
+            <dt className="text-xs text-gray-500">Tickets Assigned</dt>
+            <dd className="text-lg font-semibold text-gray-900">{stats.ticketsAssigned}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-gray-500">Tickets Resolved</dt>
+            <dd className="text-lg font-semibold text-gray-900">{stats.ticketsResolved}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-gray-500">Avg Response Time</dt>
+            <dd className="text-lg font-semibold text-gray-900">{stats.avgResponseTime}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-gray-500">Avg Resolution Time</dt>
+            <dd className="text-lg font-semibold text-gray-900">{stats.avgResolutionTime}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-gray-500">Avg CSAT Rating</dt>
+            <dd className="text-lg font-semibold text-gray-900">{stats.avgCsatRating}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-gray-500">SLA Compliance</dt>
+            <dd className="text-lg font-semibold text-gray-900">{stats.slaComplianceRate}</dd>
+          </div>
+        </div>
+      </details>
+
+      {/* Saved Views */}
+      <div className="mb-4 bg-white rounded-lg border border-gray-200 p-4">
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <span className="text-sm font-medium text-gray-700">Saved Views:</span>
+          {savedViews.length === 0 && (
+            <span className="text-sm text-gray-400">None yet</span>
+          )}
+          {savedViews.map((view) => {
+            const viewFilters = (view.filters ?? {}) as Record<string, string>;
+            const viewParams = new URLSearchParams(viewFilters);
+            return (
+              <span key={view.id} className="inline-flex items-center gap-1">
+                <a
+                  href={`/agent?${viewParams.toString()}`}
+                  className="text-sm text-blue-600 hover:text-blue-800 px-2 py-0.5 rounded bg-blue-50 hover:bg-blue-100"
+                >
+                  {view.name}
+                </a>
+                <form action={renameSavedView} className="inline-flex items-center">
+                  <input type="hidden" name="view_id" value={view.id} />
+                  <input
+                    type="text"
+                    name="name"
+                    defaultValue={view.name}
+                    className="w-20 text-xs border border-gray-300 rounded px-1 py-0.5 hidden"
+                    aria-label={`Rename ${view.name}`}
+                  />
+                </form>
+                <form action={deleteSavedView}>
+                  <input type="hidden" name="view_id" value={view.id} />
+                  <button
+                    type="submit"
+                    className="text-xs text-red-500 hover:text-red-700"
+                    title={`Delete ${view.name}`}
+                    aria-label={`Delete saved view ${view.name}`}
+                  >
+                    ×
+                  </button>
+                </form>
+              </span>
+            );
+          })}
+        </div>
+        <form action={createSavedView} className="flex items-center gap-2">
+          <input type="hidden" name="filters" value={currentFiltersJson} />
+          <input
+            type="text"
+            name="name"
+            placeholder="View name…"
+            maxLength={100}
+            className="text-sm rounded border border-gray-300 px-2 py-1 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            aria-label="Saved view name"
+          />
+          <button
+            type="submit"
+            className="text-sm px-3 py-1 bg-gray-100 rounded hover:bg-gray-200 text-gray-700"
+          >
+            Save Current View
+          </button>
+        </form>
+      </div>
+
+      {/* Filter Bar */}
+      <form method="get" action="/agent" className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+          {/* Search */}
+          <div>
+            <label htmlFor="filter-q" className="block text-xs font-medium text-gray-500 mb-1">Search</label>
+            <input
+              id="filter-q"
+              type="search"
+              name="q"
+              defaultValue={filters.q}
+              placeholder="Search title & all posts…"
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            />
+          </div>
+
+          {/* Submitter email */}
+          <div>
+            <label htmlFor="filter-email" className="block text-xs font-medium text-gray-500 mb-1">Submitter Email</label>
+            <input
+              id="filter-email"
+              type="text"
+              name="email"
+              defaultValue={filters.email}
+              placeholder="email@…"
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            />
+          </div>
+
+          {/* Status */}
+          <div>
+            <label htmlFor="filter-status" className="block text-xs font-medium text-gray-500 mb-1">Status</label>
+            <select
+              id="filter-status"
+              name="status"
+              defaultValue={filters.status}
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            >
+              <option value="all">All</option>
+              <option value="active">Active</option>
+              <option value="closed">Closed</option>
+            </select>
+          </div>
+
+          {/* Sort */}
+          <div>
+            <label htmlFor="filter-sort" className="block text-xs font-medium text-gray-500 mb-1">Sort By</label>
+            <select
+              id="filter-sort"
+              name="sort"
+              defaultValue={filters.sort}
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            >
+              <option value="">Last Modified</option>
+              <option value="created">Created Date</option>
+            </select>
+          </div>
+
+          {/* Urgency */}
+          <div>
+            <label htmlFor="filter-urgency" className="block text-xs font-medium text-gray-500 mb-1">Urgency</label>
+            <select
+              id="filter-urgency"
+              name="urgency"
+              defaultValue={filters.urgency}
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            >
+              <option value="">All</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="critical">Critical</option>
+            </select>
+          </div>
+
+          {/* Severity */}
+          <div>
+            <label htmlFor="filter-severity" className="block text-xs font-medium text-gray-500 mb-1">Severity</label>
+            <select
+              id="filter-severity"
+              name="severity"
+              defaultValue={filters.severity}
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            >
+              <option value="">All</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="critical">Critical</option>
+            </select>
+          </div>
+
+          {/* Type */}
+          <div>
+            <label htmlFor="filter-type" className="block text-xs font-medium text-gray-500 mb-1">Type</label>
+            <select
+              id="filter-type"
+              name="type"
+              defaultValue={filters.type}
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            >
+              <option value="">All</option>
+              {filterOptions.types.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Category (only if categories exist) */}
+          {filterOptions.categories.length > 0 && (
+            <div>
+              <label htmlFor="filter-category" className="block text-xs font-medium text-gray-500 mb-1">Category</label>
+              <select
+                id="filter-category"
+                name="category"
+                defaultValue={filters.category}
+                className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+              >
+                <option value="">All</option>
+                {filterOptions.categories.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Assigned Agent */}
+          <div>
+            <label htmlFor="filter-agent" className="block text-xs font-medium text-gray-500 mb-1">Assigned Agent</label>
+            <select
+              id="filter-agent"
+              name="agent"
+              defaultValue={filters.agent}
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            >
+              <option value="">All</option>
+              <option value="unassigned">Unassigned</option>
+              {filterOptions.agents.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.display_name ?? 'Agent'} ({a.email})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Team */}
+          <div>
+            <label htmlFor="filter-team" className="block text-xs font-medium text-gray-500 mb-1">Team</label>
+            <select
+              id="filter-team"
+              name="team"
+              defaultValue={filters.team}
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            >
+              <option value="">All</option>
+              <option value="none">No team</option>
+              {filterOptions.teams.map((team) => (
+                <option key={team.id} value={team.id}>{team.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            type="submit"
+            className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
+          >
+            Apply Filters
+          </button>
+          <Link
+            href="/agent"
+            className="px-4 py-1.5 text-sm text-gray-600 hover:text-gray-800"
+          >
+            Clear All
+          </Link>
+        </div>
+      </form>
+
+      {/* Result count */}
+      <p className="text-sm text-gray-600 mb-4" data-testid="result-count">
+        {total} ticket{total !== 1 ? 's' : ''} found
+      </p>
+
+      {/* Ticket List */}
+      {tickets.length === 0 ? (
+        <div className="text-center py-12 text-gray-500">
+          No tickets match your filters.
+        </div>
+      ) : (
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Title</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Submitter</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Urgency</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Severity</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Posts</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Updated</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {tickets.map((ticket) => (
+                <tr key={ticket.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    <Link
+                      href={`/tickets/${ticket.id}/${ticket.slug}`}
+                      className="text-sm font-medium text-blue-600 hover:text-blue-800"
+                    >
+                      {ticket.title}
+                    </Link>
+                    {ticket.is_private && (
+                      <span className="ml-1 text-xs text-gray-400" title="Private">🔒</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-700">
+                    {ticket.creator_display_name ?? `User`}
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge variant="status" value={ticket.status} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge variant="priority" value={ticket.urgency} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge variant="priority" value={ticket.severity} />
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-600">
+                    {ticket.post_count}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-500">
+                    {new Date(ticket.updated_at).toLocaleDateString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        basePath="/agent"
+        searchParams={linkParams}
+        pageSize={pageSize}
+      />
+    </div>
+  );
+}

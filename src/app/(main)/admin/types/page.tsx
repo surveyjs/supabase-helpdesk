@@ -1,6 +1,4 @@
-import { requireAdmin } from '@/lib/supabase/auth';
 import { createServerClient } from '@/lib/supabase/server';
-import Link from 'next/link';
 import {
   createTicketType,
   renameTicketType,
@@ -9,7 +7,6 @@ import {
 } from '@/lib/actions/admin';
 
 export default async function AdminTypesPage() {
-  await requireAdmin();
   const supabase = await createServerClient();
 
   const { data: types } = await supabase
@@ -19,17 +16,7 @@ export default async function AdminTypesPage() {
 
   return (
     <div>
-      <div className="flex items-center gap-4 mb-6">
-        <Link href="/tickets" className="text-sm text-blue-600 hover:text-blue-800">← Back</Link>
-        <h1 className="text-2xl font-semibold text-gray-900">Manage Ticket Types</h1>
-      </div>
-
-      <nav className="flex gap-4 mb-6 text-sm">
-        <span className="font-medium text-gray-900">Types</span>
-        <Link href="/admin/categories" className="text-blue-600 hover:text-blue-800">Categories</Link>
-        <Link href="/admin/tags" className="text-blue-600 hover:text-blue-800">Tags</Link>
-        <Link href="/admin/teams" className="text-blue-600 hover:text-blue-800">Teams</Link>
-      </nav>
+      <h1 className="text-2xl font-semibold text-gray-900 mb-6">Manage Ticket Types</h1>
 
       <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
         {(!types || types.length === 0) ? (

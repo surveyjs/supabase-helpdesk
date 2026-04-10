@@ -7,15 +7,25 @@ const initialState: TicketActionState = {};
 
 type TicketType = { id: string; name: string; is_default: boolean };
 type Category = { id: string; name: string };
+type CustomField = {
+  id: string;
+  name: string;
+  field_type: string;
+  is_required: boolean;
+  default_value: string | null;
+  options: string[] | null;
+};
 
 export function TicketForm({
   ticketTypes,
   categories,
+  customFields,
   defaultPrivate,
   showPrivacyControl,
 }: {
   ticketTypes: TicketType[];
   categories: Category[];
+  customFields?: CustomField[];
   defaultPrivate: boolean;
   showPrivacyControl: boolean;
 }) {
@@ -132,6 +142,78 @@ export function TicketForm({
           <p className="mt-1 text-sm text-red-600">{state.fieldErrors.body}</p>
         )}
       </div>
+
+      {/* Custom fields */}
+      {customFields && customFields.length > 0 && (
+        <div className="space-y-4 border-t border-gray-200 pt-4">
+          <h3 className="text-sm font-medium text-gray-700">Additional Fields</h3>
+          {customFields.map((field) => (
+            <div key={field.id}>
+              <label htmlFor={`cf-${field.name}`} className="block text-sm font-medium text-gray-700 mb-1">
+                {field.name}
+                {field.is_required && <span className="text-red-500"> *</span>}
+              </label>
+              {field.field_type === 'text' && (
+                <input
+                  id={`cf-${field.name}`}
+                  type="text"
+                  name={`cf_${field.name}`}
+                  defaultValue={field.default_value ?? ''}
+                  maxLength={1000}
+                  required={field.is_required}
+                  className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                />
+              )}
+              {field.field_type === 'number' && (
+                <input
+                  id={`cf-${field.name}`}
+                  type="number"
+                  name={`cf_${field.name}`}
+                  defaultValue={field.default_value ?? ''}
+                  required={field.is_required}
+                  className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                />
+              )}
+              {field.field_type === 'dropdown' && (
+                <select
+                  id={`cf-${field.name}`}
+                  name={`cf_${field.name}`}
+                  defaultValue={field.default_value ?? ''}
+                  required={field.is_required}
+                  className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                >
+                  <option value="">Select…</option>
+                  {field.options?.map((opt) => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+              )}
+              {field.field_type === 'checkbox' && (
+                <input
+                  id={`cf-${field.name}`}
+                  type="checkbox"
+                  name={`cf_${field.name}`}
+                  defaultChecked={field.default_value === 'true'}
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+              )}
+              {field.field_type === 'date' && (
+                <input
+                  id={`cf-${field.name}`}
+                  type="date"
+                  name={`cf_${field.name}`}
+                  defaultValue={field.default_value ?? ''}
+                  required={field.is_required}
+                  className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                />
+              )}
+              {state.fieldErrors?.[`cf_${field.name}`] && (
+                <p className="mt-1 text-sm text-red-600">{state.fieldErrors[`cf_${field.name}`]}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {showPrivacyControl && (
         <div className="flex items-center gap-2">

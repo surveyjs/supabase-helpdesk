@@ -1,6 +1,4 @@
-import { requireAdmin } from '@/lib/supabase/auth';
 import { createServerClient } from '@/lib/supabase/server';
-import Link from 'next/link';
 import {
   createTag,
   renameTag,
@@ -18,7 +16,6 @@ function getContrastColor(hex: string): string {
 }
 
 export default async function AdminTagsPage() {
-  await requireAdmin();
   const supabase = await createServerClient();
 
   const { data: tags } = await supabase
@@ -28,17 +25,7 @@ export default async function AdminTagsPage() {
 
   return (
     <div>
-      <div className="flex items-center gap-4 mb-6">
-        <Link href="/admin/types" className="text-sm text-blue-600 hover:text-blue-800">← Back</Link>
-        <h1 className="text-2xl font-semibold text-gray-900">Manage Tags</h1>
-      </div>
-
-      <nav className="flex gap-4 mb-6 text-sm">
-        <Link href="/admin/types" className="text-blue-600 hover:text-blue-800">Types</Link>
-        <Link href="/admin/categories" className="text-blue-600 hover:text-blue-800">Categories</Link>
-        <span className="font-medium text-gray-900">Tags</span>
-        <Link href="/admin/teams" className="text-blue-600 hover:text-blue-800">Teams</Link>
-      </nav>
+      <h1 className="text-2xl font-semibold text-gray-900 mb-6">Manage Tags</h1>
 
       <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
         {(!tags || tags.length === 0) ? (

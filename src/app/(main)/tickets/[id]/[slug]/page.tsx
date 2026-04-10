@@ -30,6 +30,7 @@ import {
   addTagToTicket,
   removeTagFromTicket,
 } from '@/lib/actions/agent';
+import { updateCustomFieldValue } from '@/lib/actions/admin';
 
 function getContrastColor(hex: string): string {
   const c = hex.replace('#', '');
@@ -55,7 +56,7 @@ export default async function TicketDetailPage({
     .select(`
       id, title, slug, status, urgency, severity, is_private,
       created_at, updated_at, duplicate_of_id, merged_into_id,
-      creator_id, assigned_agent_id, type_id, category_id,
+      creator_id, assigned_agent_id, type_id, category_id, custom_fields,
       type:ticket_types(id, name),
       category:categories(id, name),
       assigned_agent:profiles!tickets_assigned_agent_id_fkey(id, display_name),
@@ -470,6 +471,15 @@ export default async function TicketDetailPage({
   const ticketTagIds = new Set(ticketTags.map((t) => t.id));
   const availableTags = allTags.filter((t) => !ticketTagIds.has(t.id));
 
+  // Fetch custom fields definitions and ticket custom field values
+  const { data: customFieldDefs } = await supabase
+    .from('custom_fields')
+    .select('*')
+    .order('display_order');
+
+  const ticketCustomFields = (ticket.custom_fields ?? {}) as Record<string, unknown>;
+  const isOwner = ticket.creator_id === user.id;
+
   const creatorName = creator?.display_name ?? `User #${ticket.creator_id}`;
   const assignedAgentName = assignedAgent?.display_name ?? null;
   const typeName = ticketType?.name ?? 'Unknown';
@@ -616,6 +626,62 @@ export default async function TicketDetailPage({
               Add Tag
             </button>
           </form>
+        )}
+
+        {/* Custom fields display */}
+        {customFieldDefs && customFieldDefs.length > 0 && (
+          <div className="mt-4 border-t border-gray-200 pt-4" data-testid="custom-fields">
+            <h3 className="text-sm font-medium text-gray-500 mb-2">Custom Fields</h3>
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+              {customFieldDefs.map((field) => {
+                const val = ticketCustomFields[field.name];
+                const displayVal = field.field_type === 'checkbox'
+                  ? (val ? 'Yes' : 'No')
+                  : val != null ? String(val) : '—';
+                return (
+                  <div key={field.id}>
+                    <dt className="text-gray-500">{field.name}</dt>
+                    <dd className="text-gray-900 flex items-center gap-2">
+                      <span>{displayVal}</span>
+                      {(isAgent || isOwner) && (
+                        <details className="inline">
+                          <summary className="text-xs text-blue-600 cursor-pointer">Edit</summary>
+                          <form action={updateCustomFieldValue} className="mt-1 flex gap-1 items-center">
+                            <input type="hidden" name="ticket_id" value={ticket.id} />
+                            <input type="hidden" name="field_name" value={field.name} />
+                            {field.field_type === 'text' && (
+                              <input type="text" name="value" defaultValue={val != null ? String(val) : ''} maxLength={1000} className="rounded border border-gray-300 px-2 py-1 text-xs" />
+                            )}
+                            {field.field_type === 'number' && (
+                              <input type="number" name="value" defaultValue={val != null ? String(val) : ''} className="rounded border border-gray-300 px-2 py-1 text-xs" />
+                            )}
+                            {field.field_type === 'dropdown' && (
+                              <select name="value" defaultValue={val != null ? String(val) : ''} className="rounded border border-gray-300 px-2 py-1 text-xs">
+                                <option value="">Select…</option>
+                                {(field.options as string[] | null)?.map((opt: string) => (
+                                  <option key={opt} value={opt}>{opt}</option>
+                                ))}
+                              </select>
+                            )}
+                            {field.field_type === 'checkbox' && (
+                              <select name="value" defaultValue={val ? 'true' : 'false'} className="rounded border border-gray-300 px-2 py-1 text-xs">
+                                <option value="true">Yes</option>
+                                <option value="false">No</option>
+                              </select>
+                            )}
+                            {field.field_type === 'date' && (
+                              <input type="date" name="value" defaultValue={val != null ? String(val) : ''} className="rounded border border-gray-300 px-2 py-1 text-xs" />
+                            )}
+                            <button type="submit" className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200">Save</button>
+                          </form>
+                        </details>
+                      )}
+                    </dd>
+                  </div>
+                );
+              })}
+            </dl>
+          </div>
         )}
       </div>
 

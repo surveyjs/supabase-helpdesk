@@ -7,6 +7,7 @@ dotenv.config({ path: '.env.test' });
 export default defineConfig({
   test: {
     globals: true,
+    fileParallelism: false,
   },
   resolve: {
     alias: {

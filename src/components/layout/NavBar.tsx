@@ -35,9 +35,9 @@ export default async function NavBar() {
             HelpDesk
           </Link>
           {user && (
-            <a href="/tickets" className="text-sm text-gray-600 hover:text-gray-900">
+            <Link href="/tickets" className="text-sm text-gray-600 hover:text-gray-900">
               My Tickets
-            </a>
+            </Link>
           )}
         </div>
 

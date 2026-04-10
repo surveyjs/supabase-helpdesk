@@ -312,4 +312,56 @@ BEGIN
 
   -- Eve has 0 tickets (testing empty state per §3.3)
 
+  -- ============================================================
+  -- Phase 5 — Categories, Tags, and Assignments
+  -- ============================================================
+
+  -- Categories (3)
+  INSERT INTO categories (id, name) VALUES
+    ('00000000-0000-0000-0000-000000000201', 'Billing'),
+    ('00000000-0000-0000-0000-000000000202', 'Technical'),
+    ('00000000-0000-0000-0000-000000000203', 'Account');
+
+  -- Tags (5, with distinct colors)
+  INSERT INTO tags (id, name, color) VALUES
+    ('00000000-0000-0000-0000-000000000301', 'urgent', '#EF4444'),
+    ('00000000-0000-0000-0000-000000000302', 'bug', '#F97316'),
+    ('00000000-0000-0000-0000-000000000303', 'feature-request', '#3B82F6'),
+    ('00000000-0000-0000-0000-000000000304', 'documentation', '#14B8A6'),
+    ('00000000-0000-0000-0000-000000000305', 'UI', '#8B5CF6');
+
+  -- Category assignments on existing tickets
+  -- Ticket 1 (Password reset not working) → Account
+  UPDATE tickets SET category_id = '00000000-0000-0000-0000-000000000203' WHERE id = _tid1;
+  -- Ticket 4 (Billing shows wrong amount) → Billing
+  UPDATE tickets SET category_id = '00000000-0000-0000-0000-000000000201' WHERE id = _tid4;
+  -- Ticket 6 (Bug in search results) → Technical
+  UPDATE tickets SET category_id = '00000000-0000-0000-0000-000000000202' WHERE id = _tid6;
+  -- Ticket 8 (Suggestion: keyboard shortcuts) → Technical
+  UPDATE tickets SET category_id = '00000000-0000-0000-0000-000000000202' WHERE id = _tid8;
+  -- Ticket 9 (Login issue on mobile) → Account
+  UPDATE tickets SET category_id = '00000000-0000-0000-0000-000000000203' WHERE id = _tid9;
+
+  -- Tag assignments on existing tickets (2-3 tags per ticket, 5 tickets)
+  -- Ticket 1 → urgent, bug
+  INSERT INTO ticket_tags (ticket_id, tag_id) VALUES
+    (_tid1, '00000000-0000-0000-0000-000000000301'),
+    (_tid1, '00000000-0000-0000-0000-000000000302');
+  -- Ticket 2 → feature-request
+  INSERT INTO ticket_tags (ticket_id, tag_id) VALUES
+    (_tid2, '00000000-0000-0000-0000-000000000303');
+  -- Ticket 4 → urgent, bug, UI
+  INSERT INTO ticket_tags (ticket_id, tag_id) VALUES
+    (_tid4, '00000000-0000-0000-0000-000000000301'),
+    (_tid4, '00000000-0000-0000-0000-000000000302'),
+    (_tid4, '00000000-0000-0000-0000-000000000305');
+  -- Ticket 6 → bug, UI
+  INSERT INTO ticket_tags (ticket_id, tag_id) VALUES
+    (_tid6, '00000000-0000-0000-0000-000000000302'),
+    (_tid6, '00000000-0000-0000-0000-000000000305');
+  -- Ticket 8 → feature-request, documentation
+  INSERT INTO ticket_tags (ticket_id, tag_id) VALUES
+    (_tid8, '00000000-0000-0000-0000-000000000303'),
+    (_tid8, '00000000-0000-0000-0000-000000000304');
+
 END $$;

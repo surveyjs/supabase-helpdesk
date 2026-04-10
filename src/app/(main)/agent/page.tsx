@@ -13,6 +13,26 @@ import { Badge } from '@/components/ui/Badge';
 import { Pagination } from '@/components/ui/Pagination';
 import { createSavedView, renameSavedView, deleteSavedView } from '@/lib/actions/saved-views';
 
+function getContrastColor(hex: string): string {
+  const c = hex.replace('#', '');
+  const r = parseInt(c.substring(0, 2), 16) / 255;
+  const g = parseInt(c.substring(2, 4), 16) / 255;
+  const b = parseInt(c.substring(4, 6), 16) / 255;
+  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return luminance < 0.5 ? '#FFFFFF' : '#111827';
+}
+
+function buildTagFilterUrl(filters: Record<string, string | undefined>, newTags: string): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value && value !== 'all' && value !== '1' && key !== 'page' && key !== 'tags') {
+      params.set(key, value);
+    }
+  }
+  if (newTags) params.set('tags', newTags);
+  return params.toString();
+}
+
 export default async function AgentDashboardPage({
   searchParams,
 }: {
@@ -42,6 +62,7 @@ export default async function AgentDashboardPage({
     type: (params.type as string) ?? '',
     agent: (params.agent as string) ?? '',
     team: (params.team as string) ?? '',
+    tags: (params.tags as string) ?? '',
     sort: (params.sort as string) ?? '',
     page: (params.page as string) ?? '1',
   };
@@ -333,7 +354,39 @@ export default async function AgentDashboardPage({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Tag filter (multi-select pills) */}
+        {filterOptions.tags.length > 0 && (
+          <div className="mt-3" data-testid="tag-filter">
+            <span className="block text-xs font-medium text-gray-500 mb-1">Tags</span>
+            <div className="flex flex-wrap gap-1">
+              {filterOptions.tags.map((tag) => {
+                const selectedTagIds = filters.tags ? filters.tags.split(',').filter(Boolean) : [];
+                const isSelected = selectedTagIds.includes(tag.id);
+                const newTags = isSelected
+                  ? selectedTagIds.filter((t) => t !== tag.id).join(',')
+                  : [...selectedTagIds, tag.id].join(',');
+                const textColor = getContrastColor(tag.color);
+                return (
+                  <a
+                    key={tag.id}
+                    href={`/agent?${buildTagFilterUrl(filters, newTags)}`}
+                    className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${
+                      isSelected ? 'ring-2 ring-offset-1 ring-blue-500' : 'opacity-70 hover:opacity-100'
+                    }`}
+                    style={{ backgroundColor: tag.color, color: textColor }}
+                  >
+                    {tag.name}
+                  </a>
+                );
+              })}
+            </div>
+            {filters.tags && (
+              <input type="hidden" name="tags" value={filters.tags} />
+            )}
+          </div>
+        )}
+
+        <div className="flex items-center gap-2 mt-3">
           <button
             type="submit"
             className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"

@@ -17,7 +17,18 @@ import {
   changeType,
   changeCategory,
   toggleTicketPrivacy,
+  addTagToTicket,
+  removeTagFromTicket,
 } from '@/lib/actions/agent';
+
+function getContrastColor(hex: string): string {
+  const c = hex.replace('#', '');
+  const r = parseInt(c.substring(0, 2), 16) / 255;
+  const g = parseInt(c.substring(2, 4), 16) / 255;
+  const b = parseInt(c.substring(4, 6), 16) / 255;
+  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return luminance < 0.5 ? '#FFFFFF' : '#111827';
+}
 
 export default async function TicketDetailPage({
   params,
@@ -108,8 +119,9 @@ export default async function TicketDetailPage({
   let allTypes: { id: string; name: string }[] = [];
   let allCategories: { id: string; name: string }[] = [];
   let allAgents: { id: string; display_name: string | null; email: string }[] = [];
+  let allTags: { id: string; name: string; color: string }[] = [];
   if (isAgent) {
-    const [typesRes, catsRes, agentsRes] = await Promise.all([
+    const [typesRes, catsRes, agentsRes, tagsRes] = await Promise.all([
       supabase.from('ticket_types').select('id, name').order('name'),
       supabase.from('categories').select('id, name').order('name'),
       supabase
@@ -117,11 +129,28 @@ export default async function TicketDetailPage({
         .select('id, display_name, email')
         .in('role', ['agent', 'admin'])
         .order('display_name'),
+      supabase.from('tags').select('id, name, color').order('name'),
     ]);
     allTypes = typesRes.data ?? [];
     allCategories = catsRes.data ?? [];
     allAgents = agentsRes.data ?? [];
+    allTags = tagsRes.data ?? [];
   }
+
+  // Fetch ticket tags
+  const { data: ticketTagRows } = await supabase
+    .from('ticket_tags')
+    .select('tag_id, tags(id, name, color)')
+    .eq('ticket_id', ticket.id);
+
+  const ticketTags = (ticketTagRows ?? []).map((row) => {
+    const tag = Array.isArray(row.tags) ? row.tags[0] : row.tags;
+    return tag as { id: string; name: string; color: string };
+  }).filter(Boolean);
+
+  // Tags not yet on the ticket (for agent "Add Tag" dropdown)
+  const ticketTagIds = new Set(ticketTags.map((t) => t.id));
+  const availableTags = allTags.filter((t) => !ticketTagIds.has(t.id));
 
   const creatorName = creator?.display_name ?? `User #${ticket.creator_id}`;
   const assignedAgentName = assignedAgent?.display_name ?? null;
@@ -215,6 +244,61 @@ export default async function TicketDetailPage({
             </dd>
           </div>
         </dl>
+
+        {/* Tags display */}
+        {ticketTags.length > 0 && (
+          <div className="mt-4" data-testid="ticket-tags">
+            <span className="text-sm text-gray-500 mr-2">Tags:</span>
+            <span className="inline-flex flex-wrap gap-1">
+              {ticketTags.map((tag) => {
+                const textColor = getContrastColor(tag.color);
+                return (
+                  <span key={tag.id} className="inline-flex items-center gap-1">
+                    <span
+                      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+                      style={{ backgroundColor: tag.color, color: textColor }}
+                    >
+                      {tag.name}
+                    </span>
+                    {isAgent && (
+                      <form action={removeTagFromTicket} className="inline">
+                        <input type="hidden" name="ticket_id" value={ticket.id} />
+                        <input type="hidden" name="tag_id" value={tag.id} />
+                        <button
+                          type="submit"
+                          className="text-xs text-gray-400 hover:text-red-500"
+                          aria-label={`Remove tag ${tag.name}`}
+                          title={`Remove ${tag.name}`}
+                        >
+                          ×
+                        </button>
+                      </form>
+                    )}
+                  </span>
+                );
+              })}
+            </span>
+          </div>
+        )}
+
+        {/* Agent: Add tag */}
+        {isAgent && availableTags.length > 0 && (
+          <form action={addTagToTicket} className="mt-2 flex gap-2 items-center" data-testid="add-tag-form">
+            <input type="hidden" name="ticket_id" value={ticket.id} />
+            <select
+              name="tag_id"
+              className="rounded border border-gray-300 px-2 py-1 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+              aria-label="Select tag to add"
+            >
+              {availableTags.map((tag) => (
+                <option key={tag.id} value={tag.id}>{tag.name}</option>
+              ))}
+            </select>
+            <button type="submit" className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200">
+              Add Tag
+            </button>
+          </form>
+        )}
       </div>
 
       {/* Agent controls */}

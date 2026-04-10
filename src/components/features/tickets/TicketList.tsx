@@ -7,9 +7,10 @@ type TicketEntry = {
   slug: string;
   status: string;
   updated_at: string;
+  creator_name?: string;
 };
 
-export function TicketList({ tickets }: { tickets: TicketEntry[] }) {
+export function TicketList({ tickets, showCreator }: { tickets: TicketEntry[]; showCreator?: boolean }) {
   if (tickets.length === 0) {
     return (
       <div className="text-center py-12 text-gray-500">
@@ -38,6 +39,11 @@ export function TicketList({ tickets }: { tickets: TicketEntry[] }) {
                 <span className="text-sm font-medium text-gray-900 truncate">
                   {ticket.title}
                 </span>
+                {showCreator && ticket.creator_name && (
+                  <span className="text-xs text-gray-500 shrink-0">
+                    by {ticket.creator_name}
+                  </span>
+                )}
               </div>
               <time
                 dateTime={ticket.updated_at}

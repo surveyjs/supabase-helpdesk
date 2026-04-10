@@ -74,6 +74,12 @@ export async function uploadAttachments(
 
   if (!post) return { error: 'Post not found.' };
 
+  // Permission: only post author or agent can upload
+  const isAgent = profile.role === 'agent' || profile.role === 'admin';
+  if (post.author_id !== user.id && !isAgent) {
+    return { error: 'You do not have permission to upload to this post.' };
+  }
+
   // Fetch the ticket to get slug for revalidation
   const { data: ticket } = await supabase
     .from('tickets')
@@ -90,11 +96,16 @@ export async function uploadAttachments(
     supabase.from('app_settings').select('value').eq('key', 'max_files_per_post').single(),
   ]);
 
-  const allowedTypes: string[] = allowedTypesRes.data
-    ? JSON.parse(allowedTypesRes.data.value)
-    : ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'pdf', 'txt'];
-  const maxSizeMb = maxSizeRes.data ? parseInt(maxSizeRes.data.value, 10) : 10;
-  const maxFilesPerPost = maxFilesRes.data ? parseInt(maxFilesRes.data.value, 10) : 5;
+  let allowedTypes: string[] = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'pdf', 'txt'];
+  if (allowedTypesRes.data) {
+    try {
+      allowedTypes = JSON.parse(allowedTypesRes.data.value);
+    } catch { /* use defaults */ }
+  }
+  const parsedMaxSize = maxSizeRes.data ? parseInt(maxSizeRes.data.value, 10) : NaN;
+  const maxSizeMb = Number.isFinite(parsedMaxSize) && parsedMaxSize > 0 ? parsedMaxSize : 10;
+  const parsedMaxFiles = maxFilesRes.data ? parseInt(maxFilesRes.data.value, 10) : NaN;
+  const maxFilesPerPost = Number.isFinite(parsedMaxFiles) && parsedMaxFiles > 0 ? parsedMaxFiles : 5;
   const maxSizeBytes = maxSizeMb * 1024 * 1024;
 
   // Get files from formData
@@ -114,6 +125,9 @@ export async function uploadAttachments(
 
   // Validate each file
   for (const file of files) {
+    if (file.name.length > 255) {
+      return { error: `Filename "${file.name.slice(0, 50)}…" exceeds the 255-character limit.` };
+    }
     const ext = getFileExtension(file.name);
     if (!allowedTypes.includes(ext)) {
       return { error: `File type ".${ext}" is not allowed. Allowed: ${allowedTypes.join(', ')}` };
@@ -160,7 +174,7 @@ export async function uploadAttachments(
       .insert({
         post_id: postId,
         storage_path: storagePath,
-        original_filename: file.name.slice(0, 255),
+        original_filename: file.name,
         file_size: file.size,
         mime_type: file.type,
       });
@@ -223,11 +237,26 @@ export async function deleteAttachment(formData: FormData): Promise<void> {
   const isAgent = profile.role === 'agent' || profile.role === 'admin';
   if (post.author_id !== user.id && !isAgent) return;
 
-  // Delete from storage
-  await supabase.storage.from('attachments').remove([attachment.storage_path]);
+  // Delete from storage first so we don't orphan the DB row on failure
+  const { error: storageDeleteError } = await supabase.storage
+    .from('attachments')
+    .remove([attachment.storage_path]);
 
-  // Delete record
-  await supabase.from('attachments').delete().eq('id', attachmentId);
+  if (storageDeleteError) {
+    console.error(`Failed to delete attachment from storage: ${storageDeleteError.message}`);
+    return; // Don't delete the DB row if storage cleanup failed
+  }
+
+  // Delete record only after the storage object was removed successfully
+  const { error: attachmentDeleteError } = await supabase
+    .from('attachments')
+    .delete()
+    .eq('id', attachmentId);
+
+  if (attachmentDeleteError) {
+    console.error(`Failed to delete attachment record: ${attachmentDeleteError.message}`);
+    return;
+  }
 
   // Log activity
   const { data: ticket } = await supabase

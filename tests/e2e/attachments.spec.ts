@@ -28,12 +28,15 @@ test.describe('File Attachments', () => {
     if (ticketUrl) return ticketUrl;
     const svc = createServiceRoleClient();
     const { data } = await svc.from('tickets').select('id, slug').eq('slug', 'e2e-attachments-test-ticket').single();
-    if (data) ticketUrl = `/tickets/${data.id}/${data.slug}`;
+    if (!data) throw new Error('Could not find e2e-attachments-test-ticket in DB');
+    ticketUrl = `/tickets/${data.id}/${data.slug}`;
     return ticketUrl;
   }
 
   test.beforeAll(async () => {
     const admin = createServiceRoleClient();
+    // Bump rate limit so Alice doesn't hit it when full suite runs in parallel
+    await admin.from('app_settings').update({ value: '100' }).eq('key', 'ticket_creation_rate_limit');
     // Clean up any stale test tickets
     const { data: staleTickets } = await admin
       .from('tickets')
@@ -57,6 +60,9 @@ test.describe('File Attachments', () => {
   });
 
   test.afterAll(async () => {
+    // Restore rate limit to default
+    const admin = createServiceRoleClient();
+    await admin.from('app_settings').update({ value: '10' }).eq('key', 'ticket_creation_rate_limit');
     // Clean temp dir
     if (fs.existsSync(tmpDir)) {
       fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -150,13 +156,16 @@ test.describe('File Attachments', () => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(await resolveTicketUrl());
 
-    // Agent should see delete buttons on attachments
-    const deleteBtn = page.locator('[data-testid="delete-attachment-btn"]').first();
-    await expect(deleteBtn).toBeVisible({ timeout: 10000 });
-    await deleteBtn.click();
+    // Count attachments before deletion
+    const deleteBtns = page.locator('[data-testid="delete-attachment-btn"]');
+    await expect(deleteBtns.first()).toBeVisible({ timeout: 10000 });
+    const countBefore = await deleteBtns.count();
 
-    // Wait for page to reload / attachment to be removed
-    await page.waitForTimeout(2000);
+    // Click the first delete button
+    await deleteBtns.first().click();
+
+    // Wait for attachment count to decrease
+    await expect(deleteBtns).toHaveCount(countBefore - 1, { timeout: 15000 });
   });
 
   test('admin file settings page exists', async ({ page }) => {

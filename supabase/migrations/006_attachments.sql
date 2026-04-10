@@ -20,16 +20,22 @@ ALTER TABLE attachments ENABLE ROW LEVEL SECURITY;
 -- Attachments inherit post visibility via RLS
 -- Users who can see the post can see its attachments
 CREATE POLICY attachments_select ON attachments
-  FOR SELECT USING (
+  FOR SELECT TO authenticated USING (
     EXISTS (
       SELECT 1 FROM posts p
       WHERE p.id = attachments.post_id
     )
   );
 
--- Authenticated users can insert (the Server Action validates further)
+-- Post author or agent can insert attachments
 CREATE POLICY attachments_insert ON attachments
-  FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
+  FOR INSERT WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM posts p
+      WHERE p.id = attachments.post_id
+      AND (p.author_id = auth.uid() OR is_agent())
+    )
+  );
 
 -- Author or agent can delete
 CREATE POLICY attachments_delete ON attachments
@@ -42,7 +48,7 @@ CREATE POLICY attachments_delete ON attachments
   );
 
 -- Storage policies for the attachments bucket
--- Authenticated users can upload
+-- Authenticated users can upload to the attachments bucket
 CREATE POLICY storage_attachments_insert ON storage.objects
   FOR INSERT WITH CHECK (
     bucket_id = 'attachments' AND auth.uid() IS NOT NULL
@@ -54,16 +60,18 @@ CREATE POLICY storage_attachments_select ON storage.objects
     bucket_id = 'attachments' AND auth.uid() IS NOT NULL
   );
 
--- Authenticated users can update their uploads
+-- Only owner or agent can update storage objects
 CREATE POLICY storage_attachments_update ON storage.objects
   FOR UPDATE USING (
-    bucket_id = 'attachments' AND auth.uid() IS NOT NULL
+    bucket_id = 'attachments'
+    AND (owner_id = auth.uid() OR is_agent())
   );
 
--- Authenticated users can delete (further permission checks in server action)
+-- Only owner or agent can delete storage objects
 CREATE POLICY storage_attachments_delete ON storage.objects
   FOR DELETE USING (
-    bucket_id = 'attachments' AND auth.uid() IS NOT NULL
+    bucket_id = 'attachments'
+    AND (owner_id = auth.uid() OR is_agent())
   );
 
 -- File upload settings in app_settings

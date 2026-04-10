@@ -31,15 +31,25 @@ export async function AttachmentList({
 
   if (!attachments || attachments.length === 0) return null;
 
-  // Generate signed URLs for all attachments
-  const attachmentsWithUrls = await Promise.all(
-    attachments.map(async (att) => {
-      const { data } = await supabase.storage
-        .from('attachments')
-        .createSignedUrl(att.storage_path, 3600);
-      return { ...att, signedUrl: data?.signedUrl ?? null };
-    }),
-  );
+  // Generate signed URLs in a single batch call
+  const paths = attachments.map((att) => att.storage_path);
+  const { data: signedUrlData } = await supabase.storage
+    .from('attachments')
+    .createSignedUrls(paths, 3600);
+
+  const signedUrlMap = new Map<string, string>();
+  if (signedUrlData) {
+    for (const entry of signedUrlData) {
+      if (entry.signedUrl && entry.path) {
+        signedUrlMap.set(entry.path, entry.signedUrl);
+      }
+    }
+  }
+
+  const attachmentsWithUrls = attachments.map((att) => ({
+    ...att,
+    signedUrl: signedUrlMap.get(att.storage_path) ?? null,
+  }));
 
   return (
     <div className="mt-3 space-y-2" data-testid="attachment-list">

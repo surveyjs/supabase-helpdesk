@@ -109,6 +109,12 @@ test.describe('Custom fields', () => {
   });
 
   test.afterAll(async () => {
+    // Restore rate limit to default
+    const svc = createServiceRoleClient();
+    await svc.from('app_settings').update({ value: '10' }).eq('key', 'ticket_creation_rate_limit');
+  });
+
+  test.afterAll(async () => {
     // Clean up test custom fields
     const svc = createServiceRoleClient();
     await svc.from('custom_fields').delete().ilike('name', 'E2E%');

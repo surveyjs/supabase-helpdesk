@@ -1007,11 +1007,11 @@ export async function updateFileSettings(formData: FormData): Promise<void> {
   const maxFiles = parseInt(maxFilesRaw, 10);
   if (isNaN(maxFiles) || maxFiles < 1 || maxFiles > 20) return;
 
-  // Parse allowed types
+  // Parse and normalize allowed types (strip leading dots, reject non-extension chars)
   const allowedTypes = allowedTypesRaw
     .split(',')
-    .map((t) => t.trim().toLowerCase())
-    .filter(Boolean);
+    .map((t) => t.trim().toLowerCase().replace(/^\.+/, ''))
+    .filter((t) => t.length > 0 && /^[a-z0-9]+(\.[a-z0-9]+)?$/.test(t));
 
   if (allowedTypes.length === 0) return;
 

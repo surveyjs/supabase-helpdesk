@@ -118,47 +118,45 @@ export default async function TicketDetailPage({
     .eq('ticket_id', ticket.id)
     .order('created_at', { ascending: true });
 
-  // Fetch timeline thresholds
-  const { data: postsThresholdSetting } = await supabase
+  // Fetch timeline thresholds and file upload settings in a single batch
+  const { data: allSettings } = await supabase
     .from('app_settings')
-    .select('value')
-    .eq('key', 'visible_posts_threshold')
-    .single();
-  const { data: commentsThresholdSetting } = await supabase
-    .from('app_settings')
-    .select('value')
-    .eq('key', 'visible_comments_threshold')
-    .single();
+    .select('key, value')
+    .in('key', [
+      'visible_posts_threshold',
+      'visible_comments_threshold',
+      'allowed_file_types',
+      'max_file_size_mb',
+      'max_files_per_post',
+    ]);
 
-  const visiblePostsThreshold = postsThresholdSetting ? parseInt(postsThresholdSetting.value, 10) : 10;
-  const visibleCommentsThreshold = commentsThresholdSetting ? parseInt(commentsThresholdSetting.value, 10) : 3;
+  const settingsMap = new Map(allSettings?.map((s) => [s.key, s.value]) ?? []);
 
-  // Fetch file upload settings
-  const [allowedTypesRes, maxSizeRes, maxFilesRes] = await Promise.all([
-    supabase.from('app_settings').select('value').eq('key', 'allowed_file_types').single(),
-    supabase.from('app_settings').select('value').eq('key', 'max_file_size_mb').single(),
-    supabase.from('app_settings').select('value').eq('key', 'max_files_per_post').single(),
-  ]);
-  const allowedFileTypes: string[] = allowedTypesRes.data
-    ? JSON.parse(allowedTypesRes.data.value)
-    : ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'pdf', 'txt'];
-  const maxFileSizeMb = maxSizeRes.data ? parseInt(maxSizeRes.data.value, 10) : 10;
-  const maxFilesPerPost = maxFilesRes.data ? parseInt(maxFilesRes.data.value, 10) : 5;
+  const visiblePostsThreshold = parseInt(settingsMap.get('visible_posts_threshold') ?? '10', 10) || 10;
+  const visibleCommentsThreshold = parseInt(settingsMap.get('visible_comments_threshold') ?? '3', 10) || 3;
 
-  // Fetch attachment counts per post
+  let allowedFileTypes: string[] = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'pdf', 'txt'];
+  const allowedTypesRaw = settingsMap.get('allowed_file_types');
+  if (allowedTypesRaw) {
+    try { allowedFileTypes = JSON.parse(allowedTypesRaw); } catch { /* use defaults */ }
+  }
+  const parsedMaxSize = parseInt(settingsMap.get('max_file_size_mb') ?? '10', 10);
+  const maxFileSizeMb = Number.isFinite(parsedMaxSize) && parsedMaxSize > 0 ? parsedMaxSize : 10;
+  const parsedMaxFiles = parseInt(settingsMap.get('max_files_per_post') ?? '5', 10);
+  const maxFilesPerPost = Number.isFinite(parsedMaxFiles) && parsedMaxFiles > 0 ? parsedMaxFiles : 5;
+
+  // Fetch attachment counts per post in a single query
   const attachmentCountMap = new Map<string, number>();
-  if (posts) {
-    const countResults = await Promise.all(
-      posts.map(async (p) => {
-        const { count } = await supabase
-          .from('attachments')
-          .select('id', { count: 'exact', head: true })
-          .eq('post_id', p.id);
-        return { postId: p.id as string, count: count ?? 0 };
-      }),
-    );
-    for (const { postId: pid, count } of countResults) {
-      attachmentCountMap.set(pid, count);
+  if (posts && posts.length > 0) {
+    const postIds = posts.map((p) => p.id);
+    const { data: attachmentRows } = await supabase
+      .from('attachments')
+      .select('post_id')
+      .in('post_id', postIds);
+    if (attachmentRows) {
+      for (const row of attachmentRows) {
+        attachmentCountMap.set(row.post_id, (attachmentCountMap.get(row.post_id) ?? 0) + 1);
+      }
     }
   }
 

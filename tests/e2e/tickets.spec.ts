@@ -22,7 +22,8 @@ test.describe('Tickets', () => {
     if (ticketUrl) return ticketUrl;
     const svc = createServiceRoleClient();
     const { data } = await svc.from('tickets').select('id, slug').eq('slug', 'e2e-test-ticket').single();
-    if (data) ticketUrl = `/tickets/${data.id}/${data.slug}`;
+    if (!data) throw new Error('Could not find e2e-test-ticket in DB');
+    ticketUrl = `/tickets/${data.id}/${data.slug}`;
     return ticketUrl;
   }
 
@@ -42,6 +43,12 @@ test.describe('Tickets', () => {
       await admin.from('posts').delete().in('ticket_id', ids);
       await admin.from('tickets').delete().in('id', ids);
     }
+  });
+
+  test.afterAll(async () => {
+    // Restore rate limit to default
+    const admin = createServiceRoleClient();
+    await admin.from('app_settings').update({ value: '10' }).eq('key', 'ticket_creation_rate_limit');
   });
 
   test('create a ticket with all fields → appears in "My Tickets"', async ({ page }) => {

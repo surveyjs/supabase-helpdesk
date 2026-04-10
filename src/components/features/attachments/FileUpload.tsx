@@ -60,7 +60,14 @@ export function FileUpload({
   }
 
   function removeFile(index: number) {
-    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
+    setSelectedFiles((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      // Sync the <input> with remaining files via a DataTransfer
+      const dt = new DataTransfer();
+      for (const f of next) dt.items.add(f);
+      if (fileInputRef.current) fileInputRef.current.files = dt.files;
+      return next;
+    });
     setClientError(null);
   }
 

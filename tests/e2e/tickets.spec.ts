@@ -220,17 +220,50 @@ test.describe('Tickets', () => {
   });
 
   test('post with <script> tag does not execute (XSS protection)', async ({ page }) => {
+    // Create the XSS ticket via service role to avoid rate limit issues
+    const admin = createServiceRoleClient();
+    const { data: aliceProfile } = await admin
+      .from('profiles')
+      .select('id')
+      .eq('email', 'alice@example.com')
+      .single();
+    const { data: defaultType } = await admin
+      .from('ticket_types')
+      .select('id')
+      .eq('is_default', true)
+      .single();
+
+    // Clean up any stale XSS ticket
+    const { data: stale } = await admin.from('tickets').select('id').eq('slug', 'xss-test-ticket');
+    if (stale && stale.length > 0) {
+      const ids = stale.map((t: { id: number }) => t.id);
+      await admin.from('ticket_followers').delete().in('ticket_id', ids);
+      await admin.from('posts').delete().in('ticket_id', ids);
+      await admin.from('tickets').delete().in('id', ids);
+    }
+
+    const { data: xssTicket } = await admin
+      .from('tickets')
+      .insert({
+        title: 'XSS Test Ticket',
+        slug: 'xss-test-ticket',
+        creator_id: aliceProfile!.id,
+        type_id: defaultType!.id,
+      })
+      .select('id, slug')
+      .single();
+
+    await admin.from('posts').insert({
+      ticket_id: xssTicket!.id,
+      author_id: aliceProfile!.id,
+      body: 'Normal text <script>window.__xss=true</script> more text',
+      post_type: 'post',
+      is_original: true,
+    });
+
     await loginAs(page, 'alice@example.com');
-
-    // Create a ticket with script tag in body
-    await page.goto('/tickets/new');
-    await page.getByLabel('Title').fill('XSS Test Ticket');
-    await page.getByLabel(/Description/).fill(
-      'Normal text <script>window.__xss=true</script> more text'
-    );
-    await page.getByRole('button', { name: 'Create Ticket' }).click();
-
-    await expect(page).toHaveURL(/\/tickets\/\d+\/xss-test-ticket/, { timeout: 10000 });
+    await page.goto(`/tickets/${xssTicket!.id}/${xssTicket!.slug}`);
+    await expect(page.getByRole('heading', { name: 'XSS Test Ticket' })).toBeVisible({ timeout: 10000 });
 
     // Verify XSS did not execute
     const xssResult = await page.evaluate(() => (window as unknown as { __xss?: boolean }).__xss);

@@ -241,7 +241,7 @@ describe('Comment Nesting', () => {
 
 describe('Post Editing', () => {
   let alicePostId: string;
-  let agentPostId: string;
+  let _agentPostId: string;
   let agentNoteId: string;
   let agent2NoteId: string;
 
@@ -274,7 +274,7 @@ describe('Post Editing', () => {
       })
       .select('id')
       .single();
-    agentPostId = agPost!.id;
+    _agentPostId = agPost!.id;
 
     // Agent creates a note
     const { data: agNote } = await agent

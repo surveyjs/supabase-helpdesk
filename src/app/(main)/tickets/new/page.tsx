@@ -18,6 +18,12 @@ export default async function NewTicketPage() {
     .select('id, name')
     .order('name');
 
+  // Fetch custom fields
+  const { data: customFields } = await supabase
+    .from('custom_fields')
+    .select('*')
+    .order('display_order');
+
   // Fetch privacy settings
   const { data: defaultPrivacySetting } = await supabase
     .from('app_settings')
@@ -41,6 +47,7 @@ export default async function NewTicketPage() {
         <TicketForm
           ticketTypes={ticketTypes ?? []}
           categories={categories ?? []}
+          customFields={customFields ?? []}
           defaultPrivate={defaultPrivate}
           showPrivacyControl={showPrivacyControl}
         />

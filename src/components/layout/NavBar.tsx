@@ -45,7 +45,7 @@ export default async function NavBar() {
             </Link>
           )}
           {profile && profile.role === 'admin' && (
-            <Link href="/admin/types" className="text-sm text-gray-600 hover:text-gray-900">
+            <Link href="/admin" className="text-sm text-gray-600 hover:text-gray-900">
               Setup
             </Link>
           )}

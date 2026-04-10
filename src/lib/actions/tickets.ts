@@ -118,6 +118,45 @@ export async function createTicket(
   // Generate slug
   const slug = generateSlug(title);
 
+  // Process custom fields
+  const { data: customFieldDefs } = await supabase
+    .from('custom_fields')
+    .select('*')
+    .order('display_order');
+
+  const customFieldValues: Record<string, unknown> = {};
+  if (customFieldDefs) {
+    for (const def of customFieldDefs) {
+      const raw = formData.get(`cf_${def.name}`) as string | null;
+      if (def.field_type === 'checkbox') {
+        customFieldValues[def.name] = raw === 'on';
+      } else if (def.field_type === 'number' && raw) {
+        const num = parseFloat(raw);
+        if (!isNaN(num)) customFieldValues[def.name] = num;
+      } else if (def.field_type === 'text' && raw) {
+        if (raw.length > 1000) {
+          fieldErrors[`cf_${def.name}`] = 'Maximum 1,000 characters.';
+        } else {
+          customFieldValues[def.name] = raw;
+        }
+      } else if (def.field_type === 'dropdown' && raw) {
+        const opts = def.options as string[];
+        if (opts && !opts.includes(raw)) {
+          fieldErrors[`cf_${def.name}`] = 'Invalid option.';
+        } else {
+          customFieldValues[def.name] = raw;
+        }
+      } else if (raw) {
+        customFieldValues[def.name] = raw;
+      }
+      if (def.is_required && !raw && def.field_type !== 'checkbox') {
+        fieldErrors[`cf_${def.name}`] = `${def.name} is required.`;
+      }
+    }
+  }
+
+  if (Object.keys(fieldErrors).length > 0) return { fieldErrors };
+
   // Insert ticket
   const { data: ticket, error: ticketError } = await supabase
     .from('tickets')
@@ -129,6 +168,7 @@ export async function createTicket(
       category_id: categoryId,
       creator_id: user.id,
       is_private: isPrivate,
+      custom_fields: Object.keys(customFieldValues).length > 0 ? customFieldValues : {},
     })
     .select('id, slug')
     .single();

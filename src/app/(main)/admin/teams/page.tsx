@@ -1,6 +1,4 @@
-import { requireAdmin } from '@/lib/supabase/auth';
 import { createServerClient } from '@/lib/supabase/server';
-import Link from 'next/link';
 import {
   createTeam,
   renameTeam,
@@ -10,7 +8,6 @@ import {
 } from '@/lib/actions/admin';
 
 export default async function AdminTeamsPage() {
-  await requireAdmin();
   const supabase = await createServerClient();
 
   const { data: teams } = await supabase.from('teams').select('id, name').order('name');
@@ -29,17 +26,7 @@ export default async function AdminTeamsPage() {
 
   return (
     <div>
-      <div className="flex items-center gap-4 mb-6">
-        <Link href="/admin/types" className="text-sm text-blue-600 hover:text-blue-800">← Back</Link>
-        <h1 className="text-2xl font-semibold text-gray-900">Manage Teams</h1>
-      </div>
-
-      <nav className="flex gap-4 mb-6 text-sm">
-        <Link href="/admin/types" className="text-blue-600 hover:text-blue-800">Types</Link>
-        <Link href="/admin/categories" className="text-blue-600 hover:text-blue-800">Categories</Link>
-        <Link href="/admin/tags" className="text-blue-600 hover:text-blue-800">Tags</Link>
-        <span className="font-medium text-gray-900">Teams</span>
-      </nav>
+      <h1 className="text-2xl font-semibold text-gray-900 mb-6">Manage Teams</h1>
 
       <div className="space-y-4 mb-6">
         {teamsWithMembers.length === 0 ? (

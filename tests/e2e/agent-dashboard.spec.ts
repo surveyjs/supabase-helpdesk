@@ -141,14 +141,14 @@ test.describe('Agent Ticket Detail Controls', () => {
     const pendingBtn = page.getByRole('button', { name: 'Mark Pending' });
     if (await pendingBtn.isVisible()) {
       await pendingBtn.click();
-      await expect(page.getByText('Pending')).toBeVisible({ timeout: 10000 });
+      await expect(page.getByTestId('agent-controls').getByText('Pending')).toBeVisible({ timeout: 10000 });
     }
 
     // Re-open
     const reopenBtn = page.getByRole('button', { name: 'Mark Open' });
     if (await reopenBtn.isVisible()) {
       await reopenBtn.click();
-      await expect(page.getByText('Open')).toBeVisible({ timeout: 10000 });
+      await expect(page.getByTestId('agent-controls').getByText('Open')).toBeVisible({ timeout: 10000 });
     }
   });
 
@@ -192,13 +192,14 @@ test.describe('Agent Ticket Detail Controls', () => {
     await page.goto(ticketUrl);
 
     // Ticket is public (is_private=false) based on seed data
-    const privacyBtn = page.getByRole('button', { name: /Make Private|Make Public/ });
+    const controls = page.getByTestId('agent-controls');
+    const privacyBtn = controls.getByRole('button', { name: /Make Private|Make Public/ });
     const btnText = await privacyBtn.textContent();
     await privacyBtn.click();
     await page.waitForTimeout(1000);
 
     // Toggle back
-    const newBtn = page.getByRole('button', { name: /Make Private|Make Public/ });
+    const newBtn = controls.getByRole('button', { name: /Make Private|Make Public/ });
     const newText = await newBtn.textContent();
     expect(newText).not.toBe(btnText);
     await newBtn.click();

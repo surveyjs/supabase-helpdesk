@@ -247,3 +247,491 @@ export async function replyToTicket(
   revalidatePath(`/tickets/${ticket.id}/${ticket.slug}`);
   return {};
 }
+
+// ---------------------------------------------------------------------------
+// addComment
+// ---------------------------------------------------------------------------
+export async function addComment(
+  _prev: TicketActionState,
+  formData: FormData,
+): Promise<TicketActionState> {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id, role, is_blocked')
+    .eq('id', user.id)
+    .single();
+
+  if (!profile) return { error: 'Profile not found.' };
+  if (profile.is_blocked) return { error: 'Your account has been blocked.' };
+
+  const body = (formData.get('body') as string) ?? '';
+  const parentPostId = formData.get('parent_post_id') as string;
+  const parentCommentId = (formData.get('parent_comment_id') as string) || null;
+
+  const bodyError = validateBody(body);
+  if (bodyError) return { error: bodyError };
+  if (!parentPostId) return { error: 'Parent post ID is required.' };
+
+  // If replying to a comment, check nesting limit
+  if (parentCommentId) {
+    const { data: parentComment } = await supabase
+      .from('posts')
+      .select('id, parent_comment_id, ticket_id')
+      .eq('id', parentCommentId)
+      .single();
+
+    if (!parentComment) return { error: 'Parent comment not found.' };
+    if (parentComment.parent_comment_id) {
+      return { error: 'Comments can only be nested up to 2 levels.' };
+    }
+  }
+
+  // Fetch the parent post to get ticket info
+  const { data: parentPost } = await supabase
+    .from('posts')
+    .select('id, ticket_id')
+    .eq('id', parentPostId)
+    .single();
+
+  if (!parentPost) return { error: 'Parent post not found.' };
+
+  // Check ticket access & duplicate restriction
+  const { data: ticket } = await supabase
+    .from('tickets')
+    .select('id, slug, status, creator_id, duplicate_of_id')
+    .eq('id', parentPost.ticket_id)
+    .single();
+
+  if (!ticket) return { error: 'Ticket not found.' };
+
+  const isAgent = profile.role === 'agent' || profile.role === 'admin';
+  if (!isAgent && ticket.duplicate_of_id) {
+    return { error: 'This ticket has been marked as a duplicate.' };
+  }
+
+  // Insert comment
+  const { error: insertError } = await supabase
+    .from('posts')
+    .insert({
+      ticket_id: ticket.id,
+      author_id: user.id,
+      body,
+      post_type: 'comment',
+      parent_post_id: parentPostId,
+      parent_comment_id: parentCommentId,
+    });
+
+  if (insertError) {
+    if (insertError.message.includes('nested up to 2 levels')) {
+      return { error: 'Comments can only be nested up to 2 levels.' };
+    }
+    return { error: 'Failed to add comment. Please try again.' };
+  }
+
+  // Auto-transition for non-agents
+  if (!isAgent && (ticket.status === 'pending' || ticket.status === 'closed')) {
+    const { error: statusError } = await supabase
+      .from('tickets')
+      .update({ status: 'open' })
+      .eq('id', ticket.id);
+
+    if (!statusError) {
+      await supabase.from('activity_log').insert({
+        ticket_id: ticket.id,
+        actor_id: user.id,
+        action: 'status_changed',
+        details: { from: ticket.status, to: 'open', reason: 'User comment auto-transition' },
+      });
+    }
+  }
+
+  revalidatePath(`/tickets/${ticket.id}/${ticket.slug}`);
+  return {};
+}
+
+// ---------------------------------------------------------------------------
+// addNote
+// ---------------------------------------------------------------------------
+export async function addNote(
+  _prev: TicketActionState,
+  formData: FormData,
+): Promise<TicketActionState> {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id, role')
+    .eq('id', user.id)
+    .single();
+
+  if (!profile || !['agent', 'admin'].includes(profile.role)) {
+    return { error: 'Forbidden.' };
+  }
+
+  const body = (formData.get('body') as string) ?? '';
+  const ticketId = formData.get('ticket_id') as string;
+
+  const bodyError = validateBody(body);
+  if (bodyError) return { error: bodyError };
+  if (!ticketId) return { error: 'Ticket ID is required.' };
+
+  const { data: ticket } = await supabase
+    .from('tickets')
+    .select('id, slug')
+    .eq('id', ticketId)
+    .single();
+
+  if (!ticket) return { error: 'Ticket not found.' };
+
+  const { error: insertError } = await supabase
+    .from('posts')
+    .insert({
+      ticket_id: ticket.id,
+      author_id: user.id,
+      body,
+      post_type: 'note',
+      is_private: true,
+    });
+
+  if (insertError) return { error: 'Failed to add note. Please try again.' };
+
+  revalidatePath(`/tickets/${ticket.id}/${ticket.slug}`);
+  return {};
+}
+
+// ---------------------------------------------------------------------------
+// editPost
+// ---------------------------------------------------------------------------
+export async function editPost(
+  _prev: TicketActionState,
+  formData: FormData,
+): Promise<TicketActionState> {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id, role')
+    .eq('id', user.id)
+    .single();
+
+  if (!profile) return { error: 'Profile not found.' };
+
+  const postId = formData.get('post_id') as string;
+  const body = (formData.get('body') as string) ?? '';
+
+  if (!postId) return { error: 'Post ID is required.' };
+  const bodyError = validateBody(body);
+  if (bodyError) return { error: bodyError };
+
+  const { data: post } = await supabase
+    .from('posts')
+    .select('id, author_id, is_original, post_type, ticket_id')
+    .eq('id', postId)
+    .single();
+
+  if (!post) return { error: 'Post not found.' };
+  if (post.is_original) return { error: 'The original post cannot be edited.' };
+
+  const isAgent = profile.role === 'agent' || profile.role === 'admin';
+
+  // Permission check
+  if (post.author_id !== user.id) {
+    if (!isAgent) return { error: 'You can only edit your own posts.' };
+    if (post.post_type === 'note') return { error: 'You can only edit your own notes.' };
+  }
+
+  const { error: updateError } = await supabase
+    .from('posts')
+    .update({ body, edited_at: new Date().toISOString() })
+    .eq('id', postId);
+
+  if (updateError) return { error: 'Failed to edit post. Please try again.' };
+
+  const { data: ticket } = await supabase
+    .from('tickets')
+    .select('id, slug')
+    .eq('id', post.ticket_id)
+    .single();
+
+  if (ticket) revalidatePath(`/tickets/${ticket.id}/${ticket.slug}`);
+  return {};
+}
+
+// ---------------------------------------------------------------------------
+// editTicketTitle
+// ---------------------------------------------------------------------------
+export async function editTicketTitle(
+  _prev: TicketActionState,
+  formData: FormData,
+): Promise<TicketActionState> {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id, role')
+    .eq('id', user.id)
+    .single();
+
+  if (!profile) return { error: 'Profile not found.' };
+
+  const ticketId = formData.get('ticket_id') as string;
+  const title = (formData.get('title') as string)?.trim() ?? '';
+
+  if (!ticketId) return { error: 'Ticket ID is required.' };
+  const titleError = validateTitle(title);
+  if (titleError) return { error: titleError };
+
+  const { data: ticket } = await supabase
+    .from('tickets')
+    .select('id, title, slug, creator_id')
+    .eq('id', ticketId)
+    .single();
+
+  if (!ticket) return { error: 'Ticket not found.' };
+
+  const isAgent = profile.role === 'agent' || profile.role === 'admin';
+  if (ticket.creator_id !== user.id && !isAgent) {
+    return { error: 'You can only edit the title of your own tickets.' };
+  }
+
+  const oldTitle = ticket.title;
+  const newSlug = generateSlug(title);
+
+  const { error: updateError } = await supabase
+    .from('tickets')
+    .update({ title, slug: newSlug })
+    .eq('id', ticketId);
+
+  if (updateError) return { error: 'Failed to update title. Please try again.' };
+
+  // Log title change
+  await supabase.from('activity_log').insert({
+    ticket_id: ticket.id,
+    actor_id: user.id,
+    action: 'title_changed',
+    details: { from: oldTitle, to: title },
+  });
+
+  revalidatePath(`/tickets/${ticket.id}/${newSlug}`);
+  redirect(`/tickets/${ticket.id}/${newSlug}`);
+}
+
+// ---------------------------------------------------------------------------
+// deletePost
+// ---------------------------------------------------------------------------
+export async function deletePost(formData: FormData): Promise<void> {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id, role')
+    .eq('id', user.id)
+    .single();
+
+  if (!profile) return;
+
+  const postId = formData.get('post_id') as string;
+  if (!postId) return;
+
+  const { data: post } = await supabase
+    .from('posts')
+    .select('id, author_id, is_original, post_type, ticket_id')
+    .eq('id', postId)
+    .single();
+
+  if (!post) return;
+  if (post.is_original) return;
+
+  const isAgent = profile.role === 'agent' || profile.role === 'admin';
+  const isAdmin = profile.role === 'admin';
+
+  // Regular users cannot delete any posts
+  if (!isAgent) return;
+
+  // Agents can delete posts/comments
+  // Agents can delete own notes, admins can delete any note
+  if (post.post_type === 'note' && post.author_id !== user.id && !isAdmin) return;
+
+  const { data: ticket } = await supabase
+    .from('tickets')
+    .select('id, slug')
+    .eq('id', post.ticket_id)
+    .single();
+
+  await supabase.from('posts').delete().eq('id', postId);
+
+  if (ticket) revalidatePath(`/tickets/${ticket.id}/${ticket.slug}`);
+}
+
+// ---------------------------------------------------------------------------
+// togglePostPrivacy
+// ---------------------------------------------------------------------------
+export async function togglePostPrivacy(formData: FormData): Promise<void> {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id, role')
+    .eq('id', user.id)
+    .single();
+
+  if (!profile || !['agent', 'admin'].includes(profile.role)) return;
+
+  const postId = formData.get('post_id') as string;
+  if (!postId) return;
+
+  const { data: post } = await supabase
+    .from('posts')
+    .select('id, is_original, is_private, ticket_id')
+    .eq('id', postId)
+    .single();
+
+  if (!post || post.is_original) return;
+
+  const { error } = await supabase
+    .from('posts')
+    .update({ is_private: !post.is_private })
+    .eq('id', postId);
+
+  if (error) return;
+
+  const { data: ticket } = await supabase
+    .from('tickets')
+    .select('id, slug')
+    .eq('id', post.ticket_id)
+    .single();
+
+  if (ticket) {
+    await supabase.from('activity_log').insert({
+      ticket_id: ticket.id,
+      actor_id: user.id,
+      action: 'post_privacy_changed',
+      details: { post_id: postId, is_private: !post.is_private },
+    });
+    revalidatePath(`/tickets/${ticket.id}/${ticket.slug}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// saveDraft
+// ---------------------------------------------------------------------------
+export async function saveDraft(
+  _prev: TicketActionState,
+  formData: FormData,
+): Promise<TicketActionState> {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id, role')
+    .eq('id', user.id)
+    .single();
+
+  if (!profile || !['agent', 'admin'].includes(profile.role)) {
+    return { error: 'Forbidden.' };
+  }
+
+  const body = (formData.get('body') as string) ?? '';
+  const ticketId = formData.get('ticket_id') as string;
+  const postType = (formData.get('post_type') as string) || 'post';
+
+  const bodyError = validateBody(body);
+  if (bodyError) return { error: bodyError };
+  if (!ticketId) return { error: 'Ticket ID is required.' };
+
+  const { data: ticket } = await supabase
+    .from('tickets')
+    .select('id, slug')
+    .eq('id', ticketId)
+    .single();
+
+  if (!ticket) return { error: 'Ticket not found.' };
+
+  const insertData: Record<string, unknown> = {
+    ticket_id: ticket.id,
+    author_id: user.id,
+    body,
+    post_type: postType,
+    is_draft: true,
+  };
+
+  if (postType === 'note') {
+    insertData.is_private = true;
+  }
+
+  const { error: insertError } = await supabase
+    .from('posts')
+    .insert(insertData);
+
+  if (insertError) return { error: 'Failed to save draft. Please try again.' };
+
+  revalidatePath(`/tickets/${ticket.id}/${ticket.slug}`);
+  return {};
+}
+
+// ---------------------------------------------------------------------------
+// publishDraft
+// ---------------------------------------------------------------------------
+export async function publishDraft(formData: FormData): Promise<void> {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id, role')
+    .eq('id', user.id)
+    .single();
+
+  if (!profile || !['agent', 'admin'].includes(profile.role)) return;
+
+  const postId = formData.get('post_id') as string;
+  if (!postId) return;
+
+  const { data: post } = await supabase
+    .from('posts')
+    .select('id, is_draft, author_id, ticket_id')
+    .eq('id', postId)
+    .single();
+
+  if (!post || !post.is_draft || post.author_id !== user.id) return;
+
+  const { error } = await supabase
+    .from('posts')
+    .update({ is_draft: false })
+    .eq('id', postId);
+
+  if (error) return;
+
+  const { data: ticket } = await supabase
+    .from('tickets')
+    .select('id, slug')
+    .eq('id', post.ticket_id)
+    .single();
+
+  if (ticket) {
+    await supabase.from('activity_log').insert({
+      ticket_id: ticket.id,
+      actor_id: user.id,
+      action: 'draft_published',
+      details: { post_id: postId },
+    });
+    revalidatePath(`/tickets/${ticket.id}/${ticket.slug}`);
+  }
+}

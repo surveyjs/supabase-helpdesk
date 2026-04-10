@@ -54,6 +54,15 @@ test.describe('Tag Display and Management', () => {
       .eq('title', 'Password reset not working')
       .single();
     ticketUrl = `/tickets/${ticket!.id}/${ticket!.slug}`;
+
+    // Reset ticket tags to seed state (urgent, bug only) to ensure idempotency
+    const { data: urgentTag } = await admin.from('tags').select('id').eq('name', 'urgent').single();
+    const { data: bugTag } = await admin.from('tags').select('id').eq('name', 'bug').single();
+    await admin.from('ticket_tags').delete().eq('ticket_id', ticket!.id);
+    await admin.from('ticket_tags').insert([
+      { ticket_id: ticket!.id, tag_id: urgentTag!.id },
+      { ticket_id: ticket!.id, tag_id: bugTag!.id },
+    ]);
   });
 
   test('ticket detail shows tags as colored pills', async ({ page }) => {
@@ -218,6 +227,8 @@ test.describe('Admin Categories Management', () => {
   test('admin can create and delete a category', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await page.goto('/admin/categories');
+
+    await expect(page.getByRole('heading', { name: 'Manage Categories' })).toBeVisible({ timeout: 10000 });
 
     await page.locator('#new-category-name').fill('E2E Test Category');
     await page.getByRole('button', { name: 'Add Category' }).click();

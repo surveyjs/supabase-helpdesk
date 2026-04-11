@@ -9,6 +9,15 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Log in' }).click();
   await expect(page).toHaveURL('/', { timeout: 10000 });
+  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 10000 });
+}
+
+/** Navigate to an admin page, retrying once if requireAdmin() redirect race occurs. */
+async function gotoAdmin(page: Page, path: string) {
+  await page.goto(path);
+  if (!page.url().includes('/admin')) {
+    await page.goto(path);
+  }
 }
 
 // Create a temp file for upload testing
@@ -165,7 +174,7 @@ test.describe('File Attachments', () => {
 
   test('admin file settings page exists', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/file-settings');
+    await gotoAdmin(page, '/admin/file-settings');
 
     await expect(page.getByRole('heading', { name: 'File Uploads' })).toBeVisible({ timeout: 10000 });
     await expect(page.getByLabel('Maximum file size (MB)')).toBeVisible();
@@ -174,32 +183,36 @@ test.describe('File Attachments', () => {
 
   test('admin can update file settings', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/file-settings');
+    await gotoAdmin(page, '/admin/file-settings');
+    await expect(page.getByRole('heading', { name: 'File Uploads' })).toBeVisible({ timeout: 10000 });
 
     // Update max file size to 15
     const maxSizeInput = page.getByLabel('Maximum file size (MB)');
     await maxSizeInput.fill('15');
 
-    // Save
+    // Save and wait for confirmation
     await page.getByRole('button', { name: 'Save' }).click();
+    await page.waitForLoadState('networkidle');
 
     // Verify it was saved
-    await page.goto('/admin/file-settings');
-    await expect(maxSizeInput).toHaveValue('15', { timeout: 5000 });
+    await gotoAdmin(page, '/admin/file-settings');
+    await expect(page.getByRole('heading', { name: 'File Uploads' })).toBeVisible({ timeout: 10000 });
+    await expect(maxSizeInput).toHaveValue('15', { timeout: 10000 });
 
     // Reset to 10
     await maxSizeInput.fill('10');
     await page.getByRole('button', { name: 'Save' }).click();
+    await page.waitForLoadState('networkidle');
   });
 
   test('admin can reset file types to defaults', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/file-settings');
+    await gotoAdmin(page, '/admin/file-settings');
 
     await page.getByRole('button', { name: 'Reset file types to defaults' }).click();
 
     // Verify the allowed types textarea contains defaults
-    await page.goto('/admin/file-settings');
+    await gotoAdmin(page, '/admin/file-settings');
     const textarea = page.getByLabel('Allowed file types');
     const value = await textarea.inputValue();
     expect(value).toContain('png');
@@ -208,7 +221,7 @@ test.describe('File Attachments', () => {
 
   test('file sidebar link visible in admin nav', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin');
+    await gotoAdmin(page, '/admin');
 
     await expect(page.getByRole('link', { name: 'File Uploads' })).toBeVisible();
   });

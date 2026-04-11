@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createServerClient } from '@/lib/supabase/server';
+import { notifyTicketRecipients, notifyAgent } from '@/lib/email/notify';
 
 const VALID_PRIORITIES = ['low', 'medium', 'high', 'critical'];
 
@@ -31,7 +32,7 @@ export async function changeTicketStatus(formData: FormData): Promise<void> {
 
   const { data: ticket } = await supabase
     .from('tickets')
-    .select('id, status, merged_into_id, slug')
+    .select('id, status, merged_into_id, slug, duplicate_of_id')
     .eq('id', ticketId)
     .single();
 
@@ -50,6 +51,17 @@ export async function changeTicketStatus(formData: FormData): Promise<void> {
     action: 'status_changed',
     details: { from: ticket.status, to: newStatus },
   });
+
+  // Notify owner + followers (skip if duplicate closure)
+  if (!ticket.duplicate_of_id) {
+    notifyTicketRecipients(
+      ticketId,
+      'status_changed',
+      { oldStatus: ticket.status, newStatus },
+      user.id,
+      user.id,
+    ).catch((err) => console.error('[notify]', err));
+  }
 
   revalidatePath(`/tickets/${ticketId}/${ticket.slug}`);
   revalidatePath('/agent');
@@ -82,6 +94,28 @@ export async function assignAgent(formData: FormData): Promise<void> {
     action: 'agent_assigned',
     details: { agent_id: agentId },
   });
+
+  // Get agent name for notifications
+  const { data: assignedAgent } = await supabase
+    .from('profiles')
+    .select('display_name, email')
+    .eq('id', agentId)
+    .single();
+  const agentName = assignedAgent?.display_name ?? assignedAgent?.email ?? '';
+
+  // Notify owner + followers
+  notifyTicketRecipients(
+    ticketId,
+    'agent_assigned',
+    { agentName },
+    user.id,
+    user.id,
+  ).catch((err) => console.error('[notify]', err));
+
+  // Notify the assigned agent (if not the actor)
+  if (agentId !== user.id) {
+    notifyAgent(agentId, 'agent_assigned_to_agent', ticketId, { agentName }).catch((err) => console.error('[notify]', err));
+  }
 
   revalidatePath(`/tickets/${ticketId}/${ticket.slug}`);
   revalidatePath('/agent');
@@ -129,6 +163,31 @@ export async function reassignAgent(formData: FormData): Promise<void> {
     },
   });
 
+  // Get new agent name
+  const { data: newAgent } = await supabase
+    .from('profiles')
+    .select('display_name, email')
+    .eq('id', newAgentId)
+    .single();
+  const agentName = newAgent?.display_name ?? newAgent?.email ?? '';
+
+  // Notify owner + followers
+  notifyTicketRecipients(
+    ticketId,
+    'agent_assigned',
+    { agentName },
+    user.id,
+    user.id,
+  ).catch((err) => console.error('[notify]', err));
+
+  // Notify the new agent (if not the actor)
+  if (newAgentId !== user.id) {
+    notifyAgent(newAgentId, 'agent_assigned_to_agent', ticketId, {
+      agentName,
+      ...(reason ? { reason } : {}),
+    }).catch((err) => console.error('[notify]', err));
+  }
+
   revalidatePath(`/tickets/${ticketId}/${ticket.slug}`);
   revalidatePath('/agent');
 }
@@ -159,6 +218,15 @@ export async function unassignAgent(formData: FormData): Promise<void> {
     action: 'agent_unassigned',
     details: { previous_agent_id: ticket.assigned_agent_id },
   });
+
+  // Notify owner + followers
+  notifyTicketRecipients(
+    ticketId,
+    'agent_assigned',
+    { agentName: 'Unassigned' },
+    user.id,
+    user.id,
+  ).catch((err) => console.error('[notify]', err));
 
   revalidatePath(`/tickets/${ticketId}/${ticket.slug}`);
   revalidatePath('/agent');
@@ -225,6 +293,14 @@ export async function changeUrgency(formData: FormData): Promise<void> {
     details: { from: ticket.urgency, to: newUrgency },
   });
 
+  notifyTicketRecipients(
+    ticketId,
+    'urgency_changed',
+    { oldUrgency: ticket.urgency, newUrgency },
+    user.id,
+    user.id,
+  ).catch((err) => console.error('[notify]', err));
+
   revalidatePath(`/tickets/${ticketId}/${ticket.slug}`);
   revalidatePath('/agent');
 }
@@ -258,6 +334,14 @@ export async function changeSeverity(formData: FormData): Promise<void> {
     action: 'severity_changed',
     details: { from: ticket.severity, to: newSeverity },
   });
+
+  notifyTicketRecipients(
+    ticketId,
+    'severity_changed',
+    { oldSeverity: ticket.severity, newSeverity },
+    user.id,
+    user.id,
+  ).catch((err) => console.error('[notify]', err));
 
   revalidatePath(`/tickets/${ticketId}/${ticket.slug}`);
   revalidatePath('/agent');
@@ -372,6 +456,14 @@ export async function toggleTicketPrivacy(formData: FormData): Promise<void> {
     action: 'privacy_changed',
     details: { from: ticket.is_private, to: newPrivacy },
   });
+
+  notifyTicketRecipients(
+    ticketId,
+    'privacy_changed',
+    {},
+    user.id,
+    user.id,
+  ).catch((err) => console.error('[notify]', err));
 
   revalidatePath(`/tickets/${ticketId}/${ticket.slug}`);
   revalidatePath('/agent');

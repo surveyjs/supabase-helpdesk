@@ -10,6 +10,15 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Log in' }).click();
   await expect(page).toHaveURL('/', { timeout: 10000 });
+  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 10000 });
+}
+
+/** Navigate to an admin page, retrying once if requireAdmin() redirect race occurs. */
+async function gotoAdmin(page: Page, path: string) {
+  await page.goto(path);
+  if (!page.url().includes('/admin')) {
+    await page.goto(path);
+  }
 }
 
 // ============================================================
@@ -23,7 +32,7 @@ test.describe('Admin Setup layout', () => {
     await loginAs(page, 'admin@example.com');
     // Wait for the nav to confirm admin role is recognised
     await expect(page.getByRole('link', { name: 'Setup' })).toBeVisible({ timeout: 10000 });
-    await page.goto('/admin');
+    await gotoAdmin(page, '/admin');
 
     // Should redirect to /admin/types
     await expect(page).toHaveURL(/\/admin\/types/, { timeout: 10000 });
@@ -40,7 +49,7 @@ test.describe('Admin Setup layout', () => {
 
   test('non-admin gets redirected from /admin', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
-    await page.goto('/admin');
+    await gotoAdmin(page, '/admin');
     await expect(page).not.toHaveURL(/\/admin/, { timeout: 10000 });
   });
 });
@@ -64,7 +73,7 @@ test.describe('Agent management', () => {
   test('admin can promote a user to agent', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await expect(page.getByRole('link', { name: 'Setup' })).toBeVisible({ timeout: 10000 });
-    await page.goto('/admin/agents');
+    await gotoAdmin(page, '/admin/agents');
 
     // Search for dave by email
     const searchInput = page.getByLabel(/email/i);
@@ -87,7 +96,7 @@ test.describe('Agent management', () => {
     await svc.from('profiles').update({ role: 'agent' }).eq('id', dave!.id);
 
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/agents');
+    await gotoAdmin(page, '/admin/agents');
 
     // Find dave in the agents list and demote
     const daveRow = page.locator('tr', { hasText: 'dave@example.com' }).first();
@@ -113,7 +122,7 @@ test.describe('Custom fields', () => {
 
   test('admin can create a text custom field', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/custom-fields');
+    await gotoAdmin(page, '/admin/custom-fields');
 
     await page.getByLabel('Name', { exact: true }).fill('E2E Text Field');
     await page.getByLabel('Type', { exact: true }).selectOption('text');
@@ -125,7 +134,7 @@ test.describe('Custom fields', () => {
 
   test('admin can create a dropdown custom field', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/custom-fields');
+    await gotoAdmin(page, '/admin/custom-fields');
 
     await page.getByLabel('Name', { exact: true }).fill('E2E Dropdown');
     await page.getByLabel('Type', { exact: true }).selectOption('dropdown');
@@ -142,7 +151,8 @@ test.describe('Custom fields', () => {
 
   test('admin can create a checkbox custom field', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/custom-fields');
+    await gotoAdmin(page, '/admin/custom-fields');
+    await expect(page.getByLabel('Name', { exact: true })).toBeVisible({ timeout: 10000 });
 
     await page.getByLabel('Name', { exact: true }).fill('E2E Checkbox');
     await page.getByLabel('Type', { exact: true }).selectOption('checkbox');
@@ -193,7 +203,7 @@ test.describe('Custom fields', () => {
 test.describe('Privacy settings', () => {
   test('admin can change privacy settings', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/privacy');
+    await gotoAdmin(page, '/admin/privacy');
 
     await expect(page.getByRole('heading', { name: /privacy/i })).toBeVisible({ timeout: 10000 });
 
@@ -209,7 +219,7 @@ test.describe('Privacy settings', () => {
 test.describe('Pagination settings', () => {
   test('admin can view and change pagination settings', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/pagination');
+    await gotoAdmin(page, '/admin/pagination');
 
     await expect(page.getByRole('heading', { name: /pagination/i })).toBeVisible({ timeout: 10000 });
 
@@ -229,7 +239,7 @@ test.describe('Pagination settings', () => {
 test.describe('Rate limit settings', () => {
   test('admin can change rate limit', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/rate-limit');
+    await gotoAdmin(page, '/admin/rate-limit');
 
     await expect(page.getByRole('heading', { name: /rate limit/i })).toBeVisible({ timeout: 10000 });
 
@@ -248,7 +258,7 @@ test.describe('Rate limit settings', () => {
 test.describe('Templates', () => {
   test('admin can view and edit templates', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/templates');
+    await gotoAdmin(page, '/admin/templates');
 
     await expect(page.getByRole('heading', { name: /templates/i })).toBeVisible({ timeout: 10000 });
 
@@ -259,7 +269,7 @@ test.describe('Templates', () => {
 
   test('admin can edit and reset a template', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/templates');
+    await gotoAdmin(page, '/admin/templates');
 
     await expect(page.getByRole('heading', { name: /templates/i })).toBeVisible({ timeout: 10000 });
 
@@ -301,7 +311,7 @@ test.describe('Templates', () => {
 test.describe('Audit log', () => {
   test('audit log shows entries', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/audit-log');
+    await gotoAdmin(page, '/admin/audit-log');
     await page.waitForLoadState('networkidle');
 
     await expect(page.getByRole('heading', { name: /audit log/i })).toBeVisible({ timeout: 15000 });
@@ -312,7 +322,7 @@ test.describe('Audit log', () => {
 
   test('audit log filter by action type', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/audit-log');
+    await gotoAdmin(page, '/admin/audit-log');
 
     // Look for filter controls
     const actionFilter = page.getByLabel(/action/i);

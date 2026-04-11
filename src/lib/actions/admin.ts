@@ -1047,3 +1047,155 @@ export async function resetFileTypesToDefault(): Promise<void> {
 
   revalidatePath('/admin/file-settings');
 }
+
+// ============================================================
+// Email Configuration (§16.7)
+// ============================================================
+
+export async function updateEmailConfig(formData: FormData): Promise<{ message?: string }> {
+  const { supabase, profile: adminProfile } = await requireAdminRole();
+
+  const smtpHost = (formData.get('smtp_host') as string)?.trim() ?? '';
+  const smtpPort = parseInt(formData.get('smtp_port') as string, 10) || 587;
+  const smtpUsername = (formData.get('smtp_username') as string)?.trim() ?? '';
+  const smtpPassword = (formData.get('smtp_password') as string) ?? '';
+  const senderEmail = (formData.get('sender_email') as string)?.trim() ?? '';
+  const senderName = (formData.get('sender_name') as string)?.trim() || 'HelpDesk';
+
+  if (!smtpHost || !senderEmail) {
+    return { message: 'SMTP host and sender email are required.' };
+  }
+
+  // Get existing config to handle password
+  const serviceClient = createServiceRoleClient();
+  const { data: existing } = await serviceClient
+    .from('email_config')
+    .select('id, smtp_password')
+    .limit(1)
+    .single();
+
+  if (!existing) return { message: 'Email config not found.' };
+
+  // Only overwrite password if a new one was provided
+  const effectivePassword = smtpPassword || existing.smtp_password;
+
+  const { error } = await serviceClient
+    .from('email_config')
+    .update({
+      smtp_host: smtpHost,
+      smtp_port: smtpPort,
+      smtp_username: smtpUsername,
+      smtp_password: effectivePassword,
+      sender_email: senderEmail,
+      sender_name: senderName,
+      is_verified: false,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', existing.id);
+
+  if (error) return { message: 'Failed to save email config.' };
+
+  await logAudit(supabase, adminProfile.id, 'update_email_config', 'email_config', existing.id, {
+    smtp_host: smtpHost,
+    smtp_port: smtpPort,
+    sender_email: senderEmail,
+    sender_name: senderName,
+    password_changed: !!smtpPassword,
+  });
+
+  revalidatePath('/admin/email');
+  return { message: 'Email configuration saved.' };
+}
+
+export async function sendTestEmail(): Promise<{ message?: string; success?: boolean }> {
+  const { supabase, user, profile: adminProfile } = await requireAdminRole();
+
+  const serviceClient = createServiceRoleClient();
+  const { data: config } = await serviceClient
+    .from('email_config')
+    .select('*')
+    .limit(1)
+    .single();
+
+  if (!config || !config.smtp_host || !config.sender_email) {
+    return { message: 'SMTP not configured. Save your settings first.', success: false };
+  }
+
+  const { sendTestEmailRaw } = await import('@/lib/email/send');
+  const result = await sendTestEmailRaw({
+    smtp_host: config.smtp_host,
+    smtp_port: config.smtp_port,
+    smtp_username: config.smtp_username,
+    smtp_password: config.smtp_password,
+    sender_email: config.sender_email,
+    sender_name: config.sender_name,
+  }, user.email ?? '');
+
+  if (result.success) {
+    // Mark as verified
+    await serviceClient
+      .from('email_config')
+      .update({ is_verified: true, updated_at: new Date().toISOString() })
+      .eq('id', config.id);
+
+    await logAudit(supabase, adminProfile.id, 'verify_email_config', 'email_config', config.id, {
+      test_recipient: user.email,
+    });
+
+    revalidatePath('/admin/email');
+    return { message: 'Test email sent successfully! Configuration verified.', success: true };
+  }
+
+  return { message: `Test email failed: ${result.error}`, success: false };
+}
+
+// ============================================================
+// Notification Coalescing Delay (§16.29)
+// ============================================================
+
+export async function updateCoalescingDelay(formData: FormData): Promise<{ message?: string }> {
+  const { supabase, profile: adminProfile } = await requireAdminRole();
+
+  const raw = formData.get('delay_minutes') as string;
+  const val = parseInt(raw, 10);
+  if (isNaN(val) || val < 0 || val > 15) {
+    return { message: 'Delay must be between 0 and 15 minutes.' };
+  }
+
+  await supabase
+    .from('app_settings')
+    .update({ value: String(val) })
+    .eq('key', 'notification_coalescing_delay_minutes');
+
+  await logAudit(supabase, adminProfile.id, 'update_coalescing_delay', 'app_settings', null, {
+    notification_coalescing_delay_minutes: val,
+  });
+
+  revalidatePath('/admin/email');
+  return { message: 'Coalescing delay saved.' };
+}
+
+// ============================================================
+// Default Notification Preferences (§16.26)
+// ============================================================
+
+export async function updateDefaultNotificationPreferences(formData: FormData): Promise<void> {
+  const { supabase, profile: adminProfile } = await requireAdminRole();
+
+  const prefsRaw = formData.get('preferences') as string;
+  if (!prefsRaw) return;
+
+  try {
+    const prefs = JSON.parse(prefsRaw);
+    await supabase
+      .from('app_settings')
+      .update({ value: JSON.stringify(prefs) })
+      .eq('key', 'default_notification_preferences');
+
+    await logAudit(supabase, adminProfile.id, 'update_default_notification_preferences', 'app_settings', null, {});
+
+    revalidatePath('/admin/user-settings');
+  } catch {
+    return;
+  }
+}

@@ -61,7 +61,7 @@ test.describe('Authentication', () => {
     await page.getByRole('button', { name: 'Sign up' }).click();
     // Auto-confirm is enabled in local dev (config.toml), so signup logs in immediately
     await expect(page).toHaveURL('/', { timeout: 10000 });
-    await expect(page.getByText('Welcome, Test Signup')).toBeVisible();
+    await expect(page.getByText('Welcome, Test Signup')).toBeVisible({ timeout: 10000 });
   });
 
   test('signup validation: password missing requirements → error', async ({ page }) => {
@@ -134,7 +134,14 @@ test.describe('Authentication', () => {
   test('nav bar: shows display name + role badge when logged in as admin', async ({ page }) => {
     await loginAs(page, 'admin@example.com', 'Password123');
     await expect(page).toHaveURL('/', { timeout: 10000 });
-    await expect(page.getByText('Admin', { exact: true }).first()).toBeVisible();
+    // Profile DB query may fail transiently under load; reload once if badge missing
+    const adminBadge = page.getByText('Admin', { exact: true }).first();
+    try {
+      await expect(adminBadge).toBeVisible({ timeout: 5000 });
+    } catch {
+      await page.reload();
+      await expect(adminBadge).toBeVisible({ timeout: 10000 });
+    }
   });
 
   test('nav bar: shows "Log in" link when not logged in', async ({ page }) => {

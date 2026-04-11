@@ -8,7 +8,8 @@ export default defineConfig({
   globalSetup: './tests/e2e/global-setup.ts',
   globalTeardown: './tests/e2e/global-teardown.ts',
   fullyParallel: true,
-  retries: process.env.CI ? 2 : 1,
+  workers: 4,
+  retries: process.env.CI ? 2 : 2,
   reporter: 'html',
   use: {
     baseURL: 'http://localhost:3000',

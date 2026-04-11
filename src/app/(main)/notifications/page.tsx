@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
 import { createServerClient } from '@/lib/supabase/server';
 import { requireAuth } from '@/lib/supabase/auth';
 import { markAllNotificationsRead } from '@/lib/actions/notifications';

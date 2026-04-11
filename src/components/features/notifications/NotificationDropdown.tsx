@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useState, use } from 'react';
 import Link from 'next/link';
 import { createBrowserClient } from '@/lib/supabase/client';
 import { markNotificationRead, markAllNotificationsRead } from '@/lib/actions/notifications';
@@ -55,32 +55,29 @@ function relativeTime(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString();
 }
 
+function fetchNotificationsPromise(userId: string) {
+  const supabase = createBrowserClient();
+  return supabase
+    .from('notifications')
+    .select('id, event_type, ticket_id, message, is_read, created_at')
+    .eq('recipient_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(10)
+    .then(({ data }) => data ?? []);
+}
+
 export function NotificationDropdown({ userId, onClose, onMarkAllRead }: NotificationDropdownProps) {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [promiseRef] = useState(() => fetchNotificationsPromise(userId));
+  const initialData = use(promiseRef);
+  const [notifications, setNotifications] = useState<Notification[] | null>(null);
 
-  const fetchNotifications = useCallback(async () => {
-    const supabase = createBrowserClient();
-    const { data } = await supabase
-      .from('notifications')
-      .select('id, event_type, ticket_id, message, is_read, created_at')
-      .eq('recipient_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(10);
-
-    setNotifications(data ?? []);
-    setLoading(false);
-  }, [userId]);
-
-  useEffect(() => {
-    fetchNotifications();
-  }, [fetchNotifications]);
+  const displayNotifications = notifications ?? initialData;
 
   async function handleClickNotification(notif: Notification) {
     if (!notif.is_read) {
       await markNotificationRead(notif.id);
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === notif.id ? { ...n, is_read: true } : n)),
+      setNotifications(
+        displayNotifications.map((n) => (n.id === notif.id ? { ...n, is_read: true } : n)),
       );
     }
     onClose();
@@ -88,7 +85,7 @@ export function NotificationDropdown({ userId, onClose, onMarkAllRead }: Notific
 
   async function handleMarkAllRead() {
     await markAllNotificationsRead();
-    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    setNotifications(displayNotifications.map((n) => ({ ...n, is_read: true })));
     onMarkAllRead();
   }
 
@@ -108,12 +105,10 @@ export function NotificationDropdown({ userId, onClose, onMarkAllRead }: Notific
 
       {/* Notification list */}
       <div className="max-h-96 overflow-y-auto">
-        {loading ? (
-          <div className="px-4 py-6 text-center text-sm text-gray-500">Loading…</div>
-        ) : notifications.length === 0 ? (
+        {displayNotifications.length === 0 ? (
           <div className="px-4 py-6 text-center text-sm text-gray-500">No notifications</div>
         ) : (
-          notifications.map((notif) => {
+          displayNotifications.map((notif) => {
             const href = notif.ticket_id ? `/tickets/${notif.ticket_id}` : '#';
             return (
               <Link

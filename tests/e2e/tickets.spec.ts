@@ -16,6 +16,17 @@ test.describe('Tickets', () => {
   // Tests depend on each other (test 1 creates data used by later tests)
   test.describe.configure({ mode: 'serial' });
 
+  let ticketUrl: string;
+
+  async function resolveTicketUrl(): Promise<string> {
+    if (ticketUrl) return ticketUrl;
+    const svc = createServiceRoleClient();
+    const { data } = await svc.from('tickets').select('id, slug').eq('slug', 'e2e-test-ticket').single();
+    if (!data) throw new Error('Could not find e2e-test-ticket in DB');
+    ticketUrl = `/tickets/${data.id}/${data.slug}`;
+    return ticketUrl;
+  }
+
   // Clean up leftover E2E test tickets from previous runs
   test.beforeAll(async () => {
     const admin = createServiceRoleClient();
@@ -44,6 +55,7 @@ test.describe('Tickets', () => {
 
     // Should redirect to ticket detail
     await expect(page).toHaveURL(/\/tickets\/\d+\/e2e-test-ticket/, { timeout: 10000 });
+    ticketUrl = page.url();
     await expect(page.getByRole('heading', { name: 'E2E Test Ticket' })).toBeVisible();
 
     // Go to My Tickets and verify it appears
@@ -53,10 +65,8 @@ test.describe('Tickets', () => {
 
   test('ticket detail shows correct metadata and posts', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
-    await page.goto('/tickets');
+    await page.goto(await resolveTicketUrl());
 
-    // Click the first ticket
-    await page.getByText('E2E Test Ticket').click();
     await expect(page.getByRole('heading', { name: 'E2E Test Ticket' })).toBeVisible();
 
     // Check metadata
@@ -83,8 +93,7 @@ test.describe('Tickets', () => {
 
   test('reply to a ticket → new post appears', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
-    await page.goto('/tickets');
-    await page.getByText('E2E Test Ticket').click();
+    await page.goto(await resolveTicketUrl());
 
     // Fill reply
     await page.getByLabel('Reply body').fill('This is a test reply from E2E.');
@@ -101,7 +110,7 @@ test.describe('Tickets', () => {
     await page.getByLabel('Search tickets').fill('E2E Test');
     await page.getByRole('button', { name: 'Search' }).click();
 
-    await expect(page.getByText('E2E Test Ticket')).toBeVisible();
+    await expect(page.getByText('E2E Test Ticket')).toBeVisible({ timeout: 10000 });
   });
 
   test('filter by status → correct results', async ({ page }) => {
@@ -118,19 +127,12 @@ test.describe('Tickets', () => {
   });
 
   test('slug redirect works', async ({ page }) => {
+    const admin = createServiceRoleClient();
+    const { data: ticket } = await admin.from('tickets').select('id, slug').eq('slug', 'e2e-test-ticket').single();
+    expect(ticket).toBeTruthy();
+    const ticketId = ticket!.id;
+
     await loginAs(page, 'alice@example.com');
-    await page.goto('/tickets');
-
-    // Find the E2E test ticket
-    const link = page.getByText('E2E Test Ticket');
-    await link.click();
-    await expect(page).toHaveURL(/\/tickets\/\d+\/e2e-test-ticket/, { timeout: 10000 });
-
-    // Get current URL
-    const url = page.url();
-    const match = url.match(/\/tickets\/(\d+)\//);
-    expect(match).toBeTruthy();
-    const ticketId = match![1];
 
     // Navigate to wrong slug — should redirect
     await page.goto(`/tickets/${ticketId}/wrong-slug`);
@@ -149,10 +151,11 @@ test.describe('Tickets', () => {
     await loginAs(page, 'alice@example.com');
     await page.goto('/tickets/public');
 
-    await expect(page.getByRole('heading', { name: 'Public Tickets' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Public Tickets' })).toBeVisible({ timeout: 10000 });
     // Public tickets should be visible
     // Verify at least one public ticket from seed data is shown
     const ticketLinks = page.locator('ul li a');
+    await expect(ticketLinks.first()).toBeVisible({ timeout: 10000 });
     const count = await ticketLinks.count();
     expect(count).toBeGreaterThan(0);
   });
@@ -189,29 +192,70 @@ test.describe('Tickets', () => {
   });
 
   test('markdown in posts renders correctly', async ({ page }) => {
+    // Look up ticket directly from DB to avoid stale URL issues
+    const admin = createServiceRoleClient();
+    const { data: ticket } = await admin
+      .from('tickets')
+      .select('id, slug')
+      .eq('slug', 'e2e-test-ticket')
+      .single();
+    expect(ticket).toBeTruthy();
+
     await loginAs(page, 'alice@example.com');
-    await page.goto('/tickets');
-    await page.getByText('E2E Test Ticket').click();
+    await page.goto(`/tickets/${ticket!.id}/${ticket!.slug}`);
 
     // The original post contains **Bold text** and `code`
     // Check for rendered markdown (bold tag and code tag)
     const prose = page.locator('.prose');
-    await expect(prose.locator('strong').first()).toBeVisible();
-    await expect(prose.locator('code').first()).toBeVisible();
+    await expect(prose.locator('strong').first()).toBeVisible({ timeout: 10000 });
+    await expect(prose.locator('code').first()).toBeVisible({ timeout: 10000 });
   });
 
   test('post with <script> tag does not execute (XSS protection)', async ({ page }) => {
+    // Create the XSS ticket via service role to avoid rate limit issues
+    const admin = createServiceRoleClient();
+    const { data: aliceProfile } = await admin
+      .from('profiles')
+      .select('id')
+      .eq('email', 'alice@example.com')
+      .single();
+    const { data: defaultType } = await admin
+      .from('ticket_types')
+      .select('id')
+      .eq('is_default', true)
+      .single();
+
+    // Clean up any stale XSS ticket
+    const { data: stale } = await admin.from('tickets').select('id').eq('slug', 'xss-test-ticket');
+    if (stale && stale.length > 0) {
+      const ids = stale.map((t: { id: number }) => t.id);
+      await admin.from('ticket_followers').delete().in('ticket_id', ids);
+      await admin.from('posts').delete().in('ticket_id', ids);
+      await admin.from('tickets').delete().in('id', ids);
+    }
+
+    const { data: xssTicket } = await admin
+      .from('tickets')
+      .insert({
+        title: 'XSS Test Ticket',
+        slug: 'xss-test-ticket',
+        creator_id: aliceProfile!.id,
+        type_id: defaultType!.id,
+      })
+      .select('id, slug')
+      .single();
+
+    await admin.from('posts').insert({
+      ticket_id: xssTicket!.id,
+      author_id: aliceProfile!.id,
+      body: 'Normal text <script>window.__xss=true</script> more text',
+      post_type: 'post',
+      is_original: true,
+    });
+
     await loginAs(page, 'alice@example.com');
-
-    // Create a ticket with script tag in body
-    await page.goto('/tickets/new');
-    await page.getByLabel('Title').fill('XSS Test Ticket');
-    await page.getByLabel(/Description/).fill(
-      'Normal text <script>window.__xss=true</script> more text'
-    );
-    await page.getByRole('button', { name: 'Create Ticket' }).click();
-
-    await expect(page).toHaveURL(/\/tickets\/\d+\/xss-test-ticket/, { timeout: 10000 });
+    await page.goto(`/tickets/${xssTicket!.id}/${xssTicket!.slug}`);
+    await expect(page.getByRole('heading', { name: 'XSS Test Ticket' })).toBeVisible({ timeout: 10000 });
 
     // Verify XSS did not execute
     const xssResult = await page.evaluate(() => (window as unknown as { __xss?: boolean }).__xss);

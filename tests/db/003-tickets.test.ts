@@ -43,7 +43,15 @@ async function ensureAuthUser(
 }
 
 async function clientForUser(email: string, password = 'Password123') {
-  if (clients[email]) return clients[email];
+  if (clients[email]) {
+    // Verify the cached client still works (guards against JWT clock-skew)
+    const { error } = await clients[email].from('profiles').select('id').limit(1);
+    if (error?.message?.includes('JWT')) {
+      delete clients[email];
+    } else {
+      return clients[email];
+    }
+  }
   const c = createClient(supabaseUrl, anonKey);
   const { error } = await c.auth.signInWithPassword({ email, password });
   if (error) throw new Error(`signIn(${email}): ${error.message}`);

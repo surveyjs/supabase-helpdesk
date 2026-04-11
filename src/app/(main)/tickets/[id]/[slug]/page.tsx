@@ -11,6 +11,8 @@ import { EditableTitle } from './EditableTitle';
 import { ReplyToggle } from './ReplyToggle';
 import { NoteForm } from './NoteForm';
 import { CollapsibleTimeline, CollapsibleComments } from './CollapsibleTimeline';
+import { AttachmentList } from '@/components/features/attachments/AttachmentList';
+import { FileUpload } from '@/components/features/attachments/FileUpload';
 import {
   deletePost,
   togglePostPrivacy,
@@ -116,20 +118,47 @@ export default async function TicketDetailPage({
     .eq('ticket_id', ticket.id)
     .order('created_at', { ascending: true });
 
-  // Fetch timeline thresholds
-  const { data: postsThresholdSetting } = await supabase
+  // Fetch timeline thresholds and file upload settings in a single batch
+  const { data: allSettings } = await supabase
     .from('app_settings')
-    .select('value')
-    .eq('key', 'visible_posts_threshold')
-    .single();
-  const { data: commentsThresholdSetting } = await supabase
-    .from('app_settings')
-    .select('value')
-    .eq('key', 'visible_comments_threshold')
-    .single();
+    .select('key, value')
+    .in('key', [
+      'visible_posts_threshold',
+      'visible_comments_threshold',
+      'allowed_file_types',
+      'max_file_size_mb',
+      'max_files_per_post',
+    ]);
 
-  const visiblePostsThreshold = postsThresholdSetting ? parseInt(postsThresholdSetting.value, 10) : 10;
-  const visibleCommentsThreshold = commentsThresholdSetting ? parseInt(commentsThresholdSetting.value, 10) : 3;
+  const settingsMap = new Map(allSettings?.map((s) => [s.key, s.value]) ?? []);
+
+  const visiblePostsThreshold = parseInt(settingsMap.get('visible_posts_threshold') ?? '10', 10) || 10;
+  const visibleCommentsThreshold = parseInt(settingsMap.get('visible_comments_threshold') ?? '3', 10) || 3;
+
+  let allowedFileTypes: string[] = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'pdf', 'txt'];
+  const allowedTypesRaw = settingsMap.get('allowed_file_types');
+  if (allowedTypesRaw) {
+    try { allowedFileTypes = JSON.parse(allowedTypesRaw); } catch { /* use defaults */ }
+  }
+  const parsedMaxSize = parseInt(settingsMap.get('max_file_size_mb') ?? '10', 10);
+  const maxFileSizeMb = Number.isFinite(parsedMaxSize) && parsedMaxSize > 0 ? parsedMaxSize : 10;
+  const parsedMaxFiles = parseInt(settingsMap.get('max_files_per_post') ?? '5', 10);
+  const maxFilesPerPost = Number.isFinite(parsedMaxFiles) && parsedMaxFiles > 0 ? parsedMaxFiles : 5;
+
+  // Fetch attachment counts per post in a single query
+  const attachmentCountMap = new Map<string, number>();
+  if (posts && posts.length > 0) {
+    const postIds = posts.map((p) => p.id);
+    const { data: attachmentRows } = await supabase
+      .from('attachments')
+      .select('post_id')
+      .in('post_id', postIds);
+    if (attachmentRows) {
+      for (const row of attachmentRows) {
+        attachmentCountMap.set(row.post_id, (attachmentCountMap.get(row.post_id) ?? 0) + 1);
+      }
+    }
+  }
 
   // Check if user can reply (non-agents cannot reply to duplicates)
   const canReply = isAgent || !ticket.duplicate_of_id;
@@ -256,6 +285,10 @@ export default async function TicketDetailPage({
         return `${actorName} marked as duplicate`;
       case 'merged':
         return `${actorName} merged ticket`;
+      case 'file_uploaded':
+        return `${actorName} uploaded file "${d?.filename ?? ''}"`;
+      case 'file_deleted':
+        return `${actorName} deleted file "${d?.filename ?? ''}"`;
       default:
         return `${actorName} performed ${entry.action}`;
     }
@@ -380,6 +413,23 @@ export default async function TicketDetailPage({
               </form>
             )}
           </div>
+
+          {/* Attachments */}
+          <AttachmentList
+            postId={post.id}
+            canDelete={isCurrentUser || isAgent}
+          />
+
+          {/* File upload (for post author or agent, not on drafts) */}
+          {!isDraft && (isCurrentUser || isAgent) && (
+            <FileUpload
+              postId={post.id}
+              allowedTypes={allowedFileTypes}
+              maxFileSizeMb={maxFileSizeMb}
+              maxFilesPerPost={maxFilesPerPost}
+              existingCount={attachmentCountMap.get(post.id) ?? 0}
+            />
+          )}
         </div>
 
         {/* Comments on this post (only for root-level / level-1) */}

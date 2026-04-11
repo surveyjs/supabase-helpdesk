@@ -982,3 +982,68 @@ export async function updateCustomFieldValue(formData: FormData): Promise<void> 
 
   revalidatePath(`/tickets/${ticketId}`);
 }
+
+// ============================================================
+// File Upload Settings (§16.25)
+// ============================================================
+
+const DEFAULT_ALLOWED_FILE_TYPES = [
+  'png','jpg','jpeg','gif','webp','svg','pdf','doc','docx',
+  'xls','xlsx','txt','csv','md','zip','rar','7z','tar.gz',
+];
+
+export async function updateFileSettings(formData: FormData): Promise<void> {
+  const { supabase, profile: adminProfile } = await requireAdminRole();
+
+  const allowedTypesRaw = formData.get('allowed_file_types') as string;
+  const maxSizeRaw = formData.get('max_file_size_mb') as string;
+  const maxFilesRaw = formData.get('max_files_per_post') as string;
+
+  // Validate max_file_size_mb
+  const maxSize = parseInt(maxSizeRaw, 10);
+  if (isNaN(maxSize) || maxSize < 1 || maxSize > 50) return;
+
+  // Validate max_files_per_post
+  const maxFiles = parseInt(maxFilesRaw, 10);
+  if (isNaN(maxFiles) || maxFiles < 1 || maxFiles > 20) return;
+
+  // Parse and normalize allowed types (strip leading dots, reject non-extension chars)
+  const allowedTypes = allowedTypesRaw
+    .split(',')
+    .map((t) => t.trim().toLowerCase().replace(/^\.+/, ''))
+    .filter((t) => t.length > 0 && /^[a-z0-9]+(\.[a-z0-9]+)?$/.test(t));
+
+  if (allowedTypes.length === 0) return;
+
+  const settings: Record<string, string> = {
+    allowed_file_types: JSON.stringify(allowedTypes),
+    max_file_size_mb: String(maxSize),
+    max_files_per_post: String(maxFiles),
+  };
+
+  for (const [key, value] of Object.entries(settings)) {
+    await supabase
+      .from('app_settings')
+      .update({ value })
+      .eq('key', key);
+  }
+
+  await logAudit(supabase, adminProfile.id, 'update_file_settings', 'app_settings', null, settings);
+
+  revalidatePath('/admin/file-settings');
+}
+
+export async function resetFileTypesToDefault(): Promise<void> {
+  const { supabase, profile: adminProfile } = await requireAdminRole();
+
+  await supabase
+    .from('app_settings')
+    .update({ value: JSON.stringify(DEFAULT_ALLOWED_FILE_TYPES) })
+    .eq('key', 'allowed_file_types');
+
+  await logAudit(supabase, adminProfile.id, 'reset_file_types', 'app_settings', null, {
+    allowed_file_types: DEFAULT_ALLOWED_FILE_TYPES,
+  });
+
+  revalidatePath('/admin/file-settings');
+}

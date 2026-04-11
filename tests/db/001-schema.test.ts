@@ -69,7 +69,14 @@ async function createAuthUser(
 
 /** Get a cached authenticated Supabase client for a specific user */
 async function clientForUser(email: string, password = 'Password123') {
-  if (clients[email]) return clients[email];
+  if (clients[email]) {
+    const { error } = await clients[email].from('profiles').select('id').limit(1);
+    if (error?.message?.includes('JWT')) {
+      delete clients[email];
+    } else {
+      return clients[email];
+    }
+  }
   const c = createClient(supabaseUrl, anonKey);
   const { error } = await c.auth.signInWithPassword({ email, password });
   if (error) throw new Error(`signIn(${email}): ${error.message}`);
@@ -711,6 +718,14 @@ describe('5. RLS — Posts', () => {
 
 describe('6. RLS — Other Tables', () => {
   it('a. app_settings: readable by authenticated, writable only by admin', async () => {
+    // Capture current value before testing
+    const { data: before } = await admin
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'ticket_creation_rate_limit')
+      .single();
+    const originalValue = before!.value;
+
     // Readable by user
     const alice = await clientForUser('alice@test.com');
     const { data, error } = await alice.from('app_settings').select('*');
@@ -728,7 +743,7 @@ describe('6. RLS — Other Tables', () => {
       .select('value')
       .eq('key', 'ticket_creation_rate_limit')
       .single();
-    expect(check!.value).toBe('10');
+    expect(check!.value).toBe(originalValue);
 
     // Writable by admin
     const adm = await clientForUser('admin@test.com');
@@ -739,7 +754,7 @@ describe('6. RLS — Other Tables', () => {
     expect(admErr).toBeNull();
 
     // Reset
-    await admin.from('app_settings').update({ value: '10' }).eq('key', 'ticket_creation_rate_limit');
+    await admin.from('app_settings').update({ value: originalValue }).eq('key', 'ticket_creation_rate_limit');
   });
 
   it('b. login_attempts: NOT accessible by authenticated or anon users', async () => {

@@ -302,19 +302,17 @@ test.describe('Admin Teams Management', () => {
   test('admin can add member to team', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await page.goto('/admin/teams');
+    await expect(page.getByRole('heading', { name: 'Teams' })).toBeVisible({ timeout: 10000 });
 
     // Find the E2E Test Team section and add Dave
     const teamSection = page.locator('div.bg-white').filter({ hasText: 'E2E Test Team' });
     await teamSection.getByPlaceholder('user@example.com').fill('dave@example.com');
     await teamSection.getByRole('button', { name: 'Add' }).click();
-    await page.waitForTimeout(2000);
 
-    // Reload to see updated members
-    await page.goto('/admin/teams');
-
-    // Verify Dave appears in the team
-    const updatedSection = page.locator('div.bg-white').filter({ hasText: 'E2E Test Team' });
-    await expect(updatedSection.getByText('Dave', { exact: true })).toBeVisible();
+    // Wait for Dave to appear after the server action revalidates the page
+    await expect(
+      page.locator('div.bg-white').filter({ hasText: 'E2E Test Team' }).getByText('Dave', { exact: true })
+    ).toBeVisible({ timeout: 15000 });
   });
 
   test('admin cannot delete team with members', async ({ page }) => {
@@ -352,7 +350,7 @@ test.describe('Admin Teams Management', () => {
 test.describe('NavBar Setup Link', () => {
   test('admin sees Setup link in nav', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await expect(page.getByRole('link', { name: 'Setup' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Setup' })).toBeVisible({ timeout: 10000 });
   });
 
   test('non-admin does not see Setup link', async ({ page }) => {

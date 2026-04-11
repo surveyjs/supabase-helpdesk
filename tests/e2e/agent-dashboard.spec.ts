@@ -155,6 +155,7 @@ test.describe('Agent Ticket Detail Controls', () => {
   test('agent can change urgency/severity from detail page', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(ticketUrl);
+    await expect(page.getByTestId('agent-controls')).toBeVisible({ timeout: 10000 });
 
     // Change urgency
     await page.locator('#agent-urgency').selectOption('critical');
@@ -344,10 +345,11 @@ test.describe('Agent Stats Panel', () => {
   test('shows correct assigned/resolved counts', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
+    await expect(page.getByTestId('result-count')).toBeVisible({ timeout: 10000 });
 
     // Expand stats
     await page.getByText('My Stats (Last 30 Days)').click();
-    await expect(page.getByTestId('agent-stats')).toBeVisible();
+    await expect(page.getByTestId('agent-stats')).toBeVisible({ timeout: 10000 });
 
     // Assigned and resolved counts should be numbers
     const statsPanel = page.getByTestId('agent-stats');

@@ -39,6 +39,22 @@ export const DEFAULT_TEMPLATES: Record<string, { subject: string; body: string }
     subject: 'Merge stub banner',
     body: 'This ticket has been merged into [#{{ticketId}}](/tickets/{{ticketId}}). All posts have been moved.',
   },
+  urgency_changed: {
+    subject: 'Ticket urgency updated',
+    body: 'The urgency of your ticket "{{ticketTitle}}" has been changed to {{newUrgency}}.',
+  },
+  severity_changed: {
+    subject: 'Ticket severity updated',
+    body: 'The severity of your ticket "{{ticketTitle}}" has been changed to {{newSeverity}}.',
+  },
+  privacy_changed: {
+    subject: 'Ticket privacy updated',
+    body: 'The privacy setting of your ticket "{{ticketTitle}}" has been updated.',
+  },
+  consolidated_update: {
+    subject: 'Updates on your ticket',
+    body: 'There have been updates to your ticket "{{ticketTitle}}":\n\n{{changeList}}',
+  },
 };
 
 /** Available placeholders per event type */
@@ -52,6 +68,10 @@ export const TEMPLATE_PLACEHOLDERS: Record<string, string[]> = {
   duplicate_post: ['ticketId'],
   merge_post: ['ticketId'],
   merge_banner: ['ticketId'],
+  urgency_changed: ['ticketTitle', 'ticketId', 'oldUrgency', 'newUrgency'],
+  severity_changed: ['ticketTitle', 'ticketId', 'oldSeverity', 'newSeverity'],
+  privacy_changed: ['ticketTitle', 'ticketId'],
+  consolidated_update: ['ticketTitle', 'ticketId', 'ticketUrl', 'changeList', 'agentName', 'ownerName'],
 };
 
 /** Human-readable label for event types */
@@ -65,4 +85,8 @@ export const TEMPLATE_LABELS: Record<string, string> = {
   duplicate_post: 'Duplicate Post',
   merge_post: 'Merge Post',
   merge_banner: 'Merge Banner',
+  urgency_changed: 'Urgency Changed',
+  severity_changed: 'Severity Changed',
+  privacy_changed: 'Privacy Changed',
+  consolidated_update: 'Consolidated Update',
 };

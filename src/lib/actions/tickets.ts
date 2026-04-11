@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { createServerClient } from '@/lib/supabase/server';
 import { generateSlug } from '@/lib/utils/slug';
 import { validateTitle, validateBody } from '@/lib/utils/validation';
+import { notifyTicketRecipients, notifyAgent } from '@/lib/email/notify';
 
 export type TicketActionState = {
   error?: string;
@@ -218,7 +219,7 @@ export async function replyToTicket(
   // Get profile
   const { data: profile } = await supabase
     .from('profiles')
-    .select('id, role, is_blocked')
+    .select('id, role, is_blocked, display_name')
     .eq('id', user.id)
     .single();
 
@@ -263,6 +264,7 @@ export async function replyToTicket(
   }
 
   // If ticket is pending/closed and user is not agent: transition to 'open'
+  let autoReopened = false;
   if (!isAgent && (ticket.status === 'pending' || ticket.status === 'closed')) {
     const { error: statusError } = await supabase
       .from('tickets')
@@ -270,6 +272,7 @@ export async function replyToTicket(
       .eq('id', ticket.id);
 
     if (!statusError) {
+      autoReopened = true;
       // Log status change
       await supabase.from('activity_log').insert({
         ticket_id: ticket.id,
@@ -281,6 +284,33 @@ export async function replyToTicket(
           reason: 'User reply auto-transition',
         },
       });
+    }
+  }
+
+  // --- Notifications ---
+  const placeholders = { authorName: profile.display_name ?? user.email ?? '' };
+
+  if (isAgent) {
+    // Agent reply → notify ticket owner + followers (coalesced)
+    notifyTicketRecipients(ticket.id, 'new_post', placeholders, user.id, user.id).catch(() => {});
+  } else {
+    // User reply → notify ticket owner + followers (non-agent, no coalescing)
+    notifyTicketRecipients(ticket.id, 'new_post', placeholders, user.id).catch(() => {});
+
+    // Notify assigned agent
+    const { data: ticketFull } = await supabase
+      .from('tickets')
+      .select('assigned_agent_id')
+      .eq('id', ticket.id)
+      .single();
+
+    if (ticketFull?.assigned_agent_id && ticketFull.assigned_agent_id !== user.id) {
+      notifyAgent(ticketFull.assigned_agent_id, 'user_reply_to_agent', ticket.id, placeholders).catch(() => {});
+    }
+
+    // If auto-reopened, also send auto_reopen notification
+    if (autoReopened) {
+      notifyTicketRecipients(ticket.id, 'auto_reopen', placeholders, user.id).catch(() => {});
     }
   }
 
@@ -301,7 +331,7 @@ export async function addComment(
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('id, role, is_blocked')
+    .select('id, role, is_blocked, display_name')
     .eq('id', user.id)
     .single();
 
@@ -386,6 +416,23 @@ export async function addComment(
         action: 'status_changed',
         details: { from: ticket.status, to: 'open', reason: 'User comment auto-transition' },
       });
+    }
+  }
+
+  // --- Notifications ---
+  const commentPlaceholders = { authorName: profile.display_name ?? user.email ?? '' };
+  if (isAgent) {
+    notifyTicketRecipients(ticket.id, 'new_post', commentPlaceholders, user.id, user.id).catch(() => {});
+  } else {
+    notifyTicketRecipients(ticket.id, 'new_post', commentPlaceholders, user.id).catch(() => {});
+    // Notify assigned agent
+    const { data: tkt } = await supabase
+      .from('tickets')
+      .select('assigned_agent_id')
+      .eq('id', ticket.id)
+      .single();
+    if (tkt?.assigned_agent_id && tkt.assigned_agent_id !== user.id) {
+      notifyAgent(tkt.assigned_agent_id, 'user_reply_to_agent', ticket.id, commentPlaceholders).catch(() => {});
     }
   }
 
@@ -735,7 +782,7 @@ export async function publishDraft(formData: FormData): Promise<void> {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('id, role')
+    .select('id, role, display_name')
     .eq('id', user.id)
     .single();
 
@@ -772,6 +819,16 @@ export async function publishDraft(formData: FormData): Promise<void> {
       action: 'draft_published',
       details: { post_id: postId },
     });
+
+    // Notify owner + followers (agent-triggered, coalesced)
+    notifyTicketRecipients(
+      ticket.id,
+      'new_post',
+      { authorName: profile.display_name ?? user.email ?? '' },
+      user.id,
+      user.id,
+    ).catch(() => {});
+
     revalidatePath(`/tickets/${ticket.id}/${ticket.slug}`);
   }
 }

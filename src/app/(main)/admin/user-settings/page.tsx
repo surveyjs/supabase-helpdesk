@@ -1,5 +1,8 @@
 import { createServerClient } from '@/lib/supabase/server';
 import { updateUserSettings } from '@/lib/actions/admin';
+import { DefaultNotificationPreferencesForm } from './DefaultNotificationPreferencesForm';
+
+type Prefs = Record<string, { email?: boolean; in_app?: boolean }>;
 
 export default async function AdminUserSettingsPage() {
   const supabase = await createServerClient();
@@ -12,11 +15,24 @@ export default async function AdminUserSettingsPage() {
 
   const enforceUniqueness = setting?.value === 'true';
 
+  const { data: prefsSetting } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'default_notification_preferences')
+    .single();
+
+  let defaultPrefs: Prefs = {};
+  try {
+    defaultPrefs = prefsSetting ? JSON.parse(prefsSetting.value) : {};
+  } catch {
+    defaultPrefs = {};
+  }
+
   return (
     <div>
       <h1 className="text-2xl font-semibold text-gray-900 mb-6">User Settings</h1>
 
-      <form action={updateUserSettings} className="bg-white rounded-lg border border-gray-200 p-6 space-y-6">
+      <form action={updateUserSettings} className="bg-white rounded-lg border border-gray-200 p-6 space-y-6 mb-6">
         <div className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -30,13 +46,6 @@ export default async function AdminUserSettingsPage() {
           </label>
         </div>
 
-        <div className="border-t border-gray-200 pt-4">
-          <h3 className="text-sm font-medium text-gray-700 mb-2">Default Notification Preferences</h3>
-          <p className="text-sm text-gray-500">
-            Notification preferences will be configurable after email notifications are implemented in Phase 9.
-          </p>
-        </div>
-
         <button
           type="submit"
           className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
@@ -44,6 +53,8 @@ export default async function AdminUserSettingsPage() {
           Save
         </button>
       </form>
+
+      <DefaultNotificationPreferencesForm preferences={defaultPrefs} />
     </div>
   );
 }

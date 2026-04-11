@@ -41,7 +41,7 @@ export async function updateSession(request: NextRequest) {
     const isPublic = PUBLIC_ROUTES.includes(pathname)
       || pathname.startsWith('/_next/')
       || pathname.startsWith('/api/')
-      || /\.\w+$/.test(pathname); // static files (e.g. .svg, .png)
+      || /\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js)$/.test(pathname); // static asset files
     const isProtected = PROTECTED_PREFIXES.some((prefix) => pathname.startsWith(prefix))
       || pathname === '/';
 

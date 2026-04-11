@@ -73,6 +73,14 @@ export async function assignAgent(formData: FormData): Promise<void> {
   const ticketId = Number(formData.get('ticket_id'));
   const agentId = formData.get('agent_id') as string;
 
+  // Validate that the target user actually has an agent or admin role
+  const { data: targetProfile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', agentId)
+    .single();
+  if (!targetProfile || !['agent', 'admin'].includes(targetProfile.role)) return;
+
   const { data: ticket } = await supabase
     .from('tickets')
     .select('id, slug')
@@ -127,6 +135,14 @@ export async function reassignAgent(formData: FormData): Promise<void> {
   const ticketId = Number(formData.get('ticket_id'));
   const newAgentId = formData.get('agent_id') as string;
   const reason = (formData.get('reason') as string)?.trim() || null;
+
+  // Validate that the target user actually has an agent or admin role
+  const { data: targetProfile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', newAgentId)
+    .single();
+  if (!targetProfile || !['agent', 'admin'].includes(targetProfile.role)) return;
 
   const { data: ticket } = await supabase
     .from('tickets')

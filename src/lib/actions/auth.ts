@@ -134,9 +134,10 @@ export async function forgotPassword(_prev: AuthState, formData: FormData): Prom
     return { error: 'Email is too long.' };
   }
 
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://127.0.0.1:3000';
   const supabase = await createServerClient();
   await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_SUPABASE_URL ? 'http://127.0.0.1:3000' : ''}/auth/callback?next=/reset-password`,
+    redirectTo: `${appUrl}/auth/callback?next=/reset-password`,
   });
 
   // Always show success to prevent email enumeration

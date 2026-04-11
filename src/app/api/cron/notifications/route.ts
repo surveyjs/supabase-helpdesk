@@ -48,9 +48,11 @@ async function shouldSendEmail(
  * Secured by service role key check.
  */
 export async function POST(request: Request) {
-  // Verify authorization via service role key
+  // Verify authorization via a dedicated cron secret (not the service role key).
+  // Falls back to SUPABASE_SERVICE_ROLE_KEY if CRON_SECRET is not set yet,
+  // but CRON_SECRET should be configured in production.
   const authHeader = request.headers.get('Authorization');
-  const expectedKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const expectedKey = process.env.CRON_SECRET ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!expectedKey || authHeader !== `Bearer ${expectedKey}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

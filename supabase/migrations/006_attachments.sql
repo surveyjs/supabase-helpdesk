@@ -64,14 +64,14 @@ CREATE POLICY storage_attachments_select ON storage.objects
 CREATE POLICY storage_attachments_update ON storage.objects
   FOR UPDATE USING (
     bucket_id = 'attachments'
-    AND (owner_id = auth.uid() OR is_agent())
+    AND (owner_id = auth.uid()::text OR is_agent())
   );
 
 -- Only owner or agent can delete storage objects
 CREATE POLICY storage_attachments_delete ON storage.objects
   FOR DELETE USING (
     bucket_id = 'attachments'
-    AND (owner_id = auth.uid() OR is_agent())
+    AND (owner_id = auth.uid()::text OR is_agent())
   );
 
 -- File upload settings in app_settings

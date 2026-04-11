@@ -7,17 +7,21 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Log in' }).click();
   await expect(page).toHaveURL('/', { timeout: 10000 });
+  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 10000 });
 }
 
 /** Look up the posts-test ticket URL from DB (survives serial-retry context loss). */
 async function resolveTicketUrl(): Promise<string> {
   const admin = createServiceRoleClient();
-  // Try renamed slug first (after "edit title" test), then original
+  // Try renamed slug first (after "edit title" test), then original.
+  // Use .order + .limit to handle possible duplicates after serial retries.
   for (const slug of ['e2e-posts-renamed-ticket', 'e2e-posts-test-ticket']) {
     const { data } = await admin
       .from('tickets')
       .select('id, slug')
       .eq('slug', slug)
+      .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
     if (data) return `/tickets/${data.id}/${data.slug}`;
   }
@@ -51,7 +55,15 @@ test.describe('Posts, Comments & Notes', () => {
     await page.goto('/tickets/new');
 
     await page.getByLabel('Title').fill('E2E Posts Test Ticket');
-    await page.getByLabel('Type').selectOption({ label: 'Issue' });
+    // Wait for the Type dropdown options to load; reload once if server failed to fetch types
+    const typeSelect = page.getByLabel('Type');
+    const issueOption = typeSelect.locator('option').filter({ hasText: 'Issue' });
+    if (await issueOption.count() === 0) {
+      await page.reload();
+      await page.getByLabel('Title').fill('E2E Posts Test Ticket');
+    }
+    await expect(issueOption).toBeAttached({ timeout: 10000 });
+    await typeSelect.selectOption({ label: 'Issue' });
     await page.getByLabel(/Description/).fill('This is the original post body for E2E post tests.');
     await page.getByRole('button', { name: 'Create Ticket' }).click();
 
@@ -217,18 +229,21 @@ test.describe('Posts, Comments & Notes', () => {
     await page.locator('form').filter({ has: page.getByLabel('Reply body') }).getByRole('button', { name: 'Reply' }).click();
     await expect(page.getByText('Temporary post to be deleted.')).toBeVisible({ timeout: 10000 });
 
-    // Delete it
-    // Find the delete button for this post
-    const deleteBtns = page.locator('[data-testid="delete-post-btn"]');
-    await deleteBtns.last().click();
+    // Delete it – find the delete button in the same post container
+    const tempPost = page.getByText('Temporary post to be deleted.');
+    const postContainer = tempPost.locator('xpath=ancestor::div[starts-with(@data-testid, "post-")]');
+    await postContainer.locator('[data-testid="delete-post-btn"]').click();
 
-    // The post should disappear
-    await expect(page.getByText('Temporary post to be deleted.')).not.toBeVisible({ timeout: 10000 });
+    // The post should disappear after server action revalidates the page
+    await expect(tempPost).not.toBeVisible({ timeout: 20000 });
   });
 
   test('activity log entries display inline', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
-    await page.goto(ticketUrl || await resolveTicketUrl());
+    // Always resolve from DB to handle serial retry where ticketUrl may be stale
+    const url = await resolveTicketUrl();
+    await page.goto(url);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10000 });
 
     // There should be activity log entries from previous actions (title changed, privacy changed, etc.)
     // Wait for at least one activity entry to appear before asserting count

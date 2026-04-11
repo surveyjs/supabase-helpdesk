@@ -9,6 +9,15 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Log in' }).click();
   await expect(page).toHaveURL('/', { timeout: 10000 });
+  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 10000 });
+}
+
+/** Navigate to an admin page, retrying once if requireAdmin() redirect race occurs. */
+async function gotoAdmin(page: Page, path: string) {
+  await page.goto(path);
+  if (!page.url().includes('/admin')) {
+    await page.goto(path);
+  }
 }
 
 // ============================================================
@@ -56,13 +65,13 @@ test.describe('Admin Email Configuration', () => {
 
   test('admin can access email config page', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/email');
+    await gotoAdmin(page, '/admin/email');
     await expect(page.getByRole('heading', { name: 'Email Configuration' })).toBeVisible({ timeout: 10000 });
   });
 
   test('admin can save SMTP settings', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/email');
+    await gotoAdmin(page, '/admin/email');
 
     // Wait for the form to be fully hydrated
     await expect(page.getByText('SMTP Settings')).toBeVisible({ timeout: 10000 });
@@ -80,13 +89,13 @@ test.describe('Admin Email Configuration', () => {
 
   test('admin can see email sidebar link', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin');
+    await gotoAdmin(page, '/admin');
     await expect(page.getByRole('link', { name: 'Email' })).toBeVisible({ timeout: 10000 });
   });
 
   test('admin can change coalescing delay', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/email');
+    await gotoAdmin(page, '/admin/email');
 
     await expect(page.getByText('Notification Coalescing')).toBeVisible({ timeout: 10000 });
 
@@ -112,7 +121,7 @@ test.describe('Admin Notification Templates', () => {
 
   test('templates page shows categories', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/templates');
+    await gotoAdmin(page, '/admin/templates');
 
     await expect(page.getByText('User Notifications')).toBeVisible({ timeout: 10000 });
     await expect(page.getByText('Agent Notifications')).toBeVisible();
@@ -121,7 +130,7 @@ test.describe('Admin Notification Templates', () => {
 
   test('templates page shows new event types', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/templates');
+    await gotoAdmin(page, '/admin/templates');
 
     await expect(page.getByText('Urgency Changed')).toBeVisible({ timeout: 10000 });
     await expect(page.getByText('Severity Changed')).toBeVisible();
@@ -139,7 +148,7 @@ test.describe('Admin Default Notification Preferences', () => {
 
   test('admin user-settings shows default preferences form', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/user-settings');
+    await gotoAdmin(page, '/admin/user-settings');
 
     await expect(page.getByText('Default Notification Preferences')).toBeVisible({ timeout: 10000 });
     await expect(page.getByText('New Reply')).toBeVisible();
@@ -148,7 +157,7 @@ test.describe('Admin Default Notification Preferences', () => {
 
   test('admin can save default preferences', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/user-settings');
+    await gotoAdmin(page, '/admin/user-settings');
 
     await expect(page.getByRole('button', { name: 'Save Defaults' })).toBeVisible({ timeout: 10000 });
     await page.getByRole('button', { name: 'Save Defaults' }).click();

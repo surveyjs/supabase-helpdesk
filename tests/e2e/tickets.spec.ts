@@ -10,6 +10,7 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Log in' }).click();
   await expect(page).toHaveURL('/', { timeout: 10000 });
+  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 10000 });
 }
 
 test.describe('Tickets', () => {

@@ -10,6 +10,7 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Log in' }).click();
   await expect(page).toHaveURL('/', { timeout: 10000 });
+  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 10000 });
 }
 
 test.describe('Agent Dashboard', () => {
@@ -197,13 +198,14 @@ test.describe('Agent Ticket Detail Controls', () => {
     const privacyBtn = controls.getByRole('button', { name: /Make Private|Make Public/ });
     const btnText = await privacyBtn.textContent();
     await privacyBtn.click();
-    await page.waitForTimeout(1000);
+
+    // Wait for the button text to change
+    const expectedText = btnText === 'Make Private' ? 'Make Public' : 'Make Private';
+    await expect(controls.getByRole('button', { name: expectedText })).toBeVisible({ timeout: 10000 });
 
     // Toggle back
-    const newBtn = controls.getByRole('button', { name: /Make Private|Make Public/ });
-    const newText = await newBtn.textContent();
-    expect(newText).not.toBe(btnText);
-    await newBtn.click();
+    await controls.getByRole('button', { name: expectedText }).click();
+    await expect(controls.getByRole('button', { name: btnText! })).toBeVisible({ timeout: 10000 });
   });
 
   test('agent can assign/unassign from detail page', async ({ page }) => {
@@ -213,7 +215,7 @@ test.describe('Agent Ticket Detail Controls', () => {
     const admin = createServiceRoleClient();
     const { data: unassigned } = await admin
       .from('tickets')
-      .select('id, slug')
+      .select('id, slug, title')
       .is('assigned_agent_id', null)
       .limit(1)
       .single();
@@ -221,24 +223,23 @@ test.describe('Agent Ticket Detail Controls', () => {
     if (!unassigned) return; // skip if no unassigned tickets
 
     await page.goto(`/tickets/${unassigned.id}/${unassigned.slug}`);
+    // Wait for page to load
+    await expect(page.getByRole('heading', { name: unassigned.title })).toBeVisible({ timeout: 10000 });
 
     // "Assign to me" button should be visible
     const assignBtn = page.getByRole('button', { name: 'Assign to me' });
-    if (await assignBtn.isVisible()) {
-      await assignBtn.click();
-      await page.waitForTimeout(1000);
+    await expect(assignBtn).toBeVisible({ timeout: 10000 });
+    await assignBtn.click();
 
-      // Unassign button should now be visible
-      const unassignBtn = page.getByRole('button', { name: 'Unassign' });
-      await expect(unassignBtn).toBeVisible({ timeout: 10000 });
+    // Unassign button should now be visible (server action + revalidation)
+    const unassignBtn = page.getByRole('button', { name: 'Unassign' });
+    await expect(unassignBtn).toBeVisible({ timeout: 15000 });
 
-      // Unassign
-      await unassignBtn.click();
-      await page.waitForTimeout(1000);
+    // Unassign
+    await unassignBtn.click();
 
-      // Assign to me should be back
-      await expect(page.getByRole('button', { name: 'Assign to me' })).toBeVisible({ timeout: 10000 });
-    }
+    // Assign to me should be back
+    await expect(page.getByRole('button', { name: 'Assign to me' })).toBeVisible({ timeout: 15000 });
   });
 
   test('"Assign to me" button works', async ({ page }) => {

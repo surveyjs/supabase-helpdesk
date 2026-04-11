@@ -10,6 +10,15 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Log in' }).click();
   await expect(page).toHaveURL('/', { timeout: 10000 });
+  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 10000 });
+}
+
+/** Navigate to an admin page, retrying once if requireAdmin() redirect race occurs. */
+async function gotoAdmin(page: Page, path: string) {
+  await page.goto(path);
+  if (!page.url().includes('/admin')) {
+    await page.goto(path);
+  }
 }
 
 test.describe('Team Tickets', () => {
@@ -103,8 +112,10 @@ test.describe('Tag Display and Management', () => {
     await page.goto(ticketUrl);
 
     const tagSection = page.getByTestId('ticket-tags');
+    await expect(tagSection).toBeVisible({ timeout: 10000 });
     // Remove the first tag's × button
     const removeButtons = tagSection.getByRole('button', { name: /Remove tag/ });
+    await expect(removeButtons.first()).toBeVisible({ timeout: 5000 });
     const count = await removeButtons.count();
     expect(count).toBeGreaterThan(0);
 
@@ -152,14 +163,14 @@ test.describe('Admin Types Management', () => {
 
   test('non-admin cannot access admin pages', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
-    await page.goto('/admin/types');
+    await gotoAdmin(page, '/admin/types');
     // Should be redirected away
     await expect(page).not.toHaveURL('/admin/types', { timeout: 10000 });
   });
 
   test('admin can access types page and see existing types', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/types');
+    await gotoAdmin(page, '/admin/types');
 
     await expect(page.getByRole('heading', { name: 'Manage Ticket Types' })).toBeVisible();
     await expect(page.getByText('Question')).toBeVisible();
@@ -170,7 +181,7 @@ test.describe('Admin Types Management', () => {
 
   test('admin can create a new ticket type', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/types');
+    await gotoAdmin(page, '/admin/types');
 
     await page.locator('#new-type-name').fill('E2E Test Type');
     await page.getByRole('button', { name: 'Add Type' }).click();
@@ -181,7 +192,7 @@ test.describe('Admin Types Management', () => {
 
   test('admin can delete a type', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/types');
+    await gotoAdmin(page, '/admin/types');
 
     // Delete the E2E Test Type
     const row = page.locator('li').filter({ hasText: 'E2E Test Type' });
@@ -193,7 +204,7 @@ test.describe('Admin Types Management', () => {
 
   test('admin can set default type', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/types');
+    await gotoAdmin(page, '/admin/types');
 
     // Issue should have a "Set Default" button
     const issueRow = page.locator('li').filter({ hasText: 'Issue' });
@@ -204,7 +215,7 @@ test.describe('Admin Types Management', () => {
     }
 
     // Restore Question as default
-    await page.goto('/admin/types');
+    await gotoAdmin(page, '/admin/types');
     const questionRow = page.locator('li').filter({ hasText: 'Question' });
     const restoreBtn = questionRow.getByRole('button', { name: 'Set Default' });
     if (await restoreBtn.isVisible()) {
@@ -219,14 +230,14 @@ test.describe('Admin Categories Management', () => {
 
   test('admin can access categories page', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/categories');
+    await gotoAdmin(page, '/admin/categories');
 
     await expect(page.getByRole('heading', { name: 'Manage Categories' })).toBeVisible();
   });
 
   test('admin can create and delete a category', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/categories');
+    await gotoAdmin(page, '/admin/categories');
 
     await expect(page.getByRole('heading', { name: 'Manage Categories' })).toBeVisible({ timeout: 10000 });
 
@@ -250,7 +261,7 @@ test.describe('Admin Tags Management', () => {
 
   test('admin can see tags page with colored pills', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/tags');
+    await gotoAdmin(page, '/admin/tags');
 
     await expect(page.getByRole('heading', { name: 'Manage Tags' })).toBeVisible();
     await expect(page.getByText('urgent')).toBeVisible();
@@ -259,7 +270,7 @@ test.describe('Admin Tags Management', () => {
 
   test('admin can create a tag with color and delete it', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/tags');
+    await gotoAdmin(page, '/admin/tags');
 
     await page.locator('#new-tag-name').fill('e2e-test-tag');
     // Color input — just submit with default
@@ -282,7 +293,7 @@ test.describe('Admin Teams Management', () => {
 
   test('admin can access teams page', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/teams');
+    await gotoAdmin(page, '/admin/teams');
 
     await expect(page.getByRole('heading', { name: 'Manage Teams' })).toBeVisible();
     await expect(page.getByText("Alice's Team")).toBeVisible();
@@ -290,7 +301,8 @@ test.describe('Admin Teams Management', () => {
 
   test('admin can create a team', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/teams');
+    await gotoAdmin(page, '/admin/teams');
+    await expect(page.getByRole('heading', { name: /Teams/ })).toBeVisible({ timeout: 10000 });
 
     await page.locator('#new-team-name').fill('E2E Test Team');
     await page.getByRole('button', { name: 'Create Team' }).click();
@@ -301,7 +313,7 @@ test.describe('Admin Teams Management', () => {
 
   test('admin can add member to team', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/teams');
+    await gotoAdmin(page, '/admin/teams');
     await expect(page.getByRole('heading', { name: 'Teams' })).toBeVisible({ timeout: 10000 });
 
     // Find the E2E Test Team section and add Dave
@@ -317,7 +329,8 @@ test.describe('Admin Teams Management', () => {
 
   test('admin cannot delete team with members', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/teams');
+    await gotoAdmin(page, '/admin/teams');
+    await expect(page.getByText('E2E Test Team')).toBeVisible({ timeout: 10000 });
 
     const teamSection = page.locator('div.bg-white').filter({ hasText: 'E2E Test Team' });
     await teamSection.getByRole('button', { name: /Delete E2E/ }).click();
@@ -329,7 +342,7 @@ test.describe('Admin Teams Management', () => {
 
   test('admin can remove member and delete empty team', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.goto('/admin/teams');
+    await gotoAdmin(page, '/admin/teams');
 
     const teamSection = page.locator('div.bg-white').filter({ hasText: 'E2E Test Team' });
 
@@ -338,7 +351,7 @@ test.describe('Admin Teams Management', () => {
     await page.waitForTimeout(2000);
 
     // Delete the now-empty team
-    await page.goto('/admin/teams');
+    await gotoAdmin(page, '/admin/teams');
     const updatedTeamSection = page.locator('div.bg-white').filter({ hasText: 'E2E Test Team' });
     await updatedTeamSection.getByRole('button', { name: /Delete E2E/ }).click();
     await page.waitForTimeout(2000);

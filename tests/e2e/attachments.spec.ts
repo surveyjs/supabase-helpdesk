@@ -35,8 +35,6 @@ test.describe('File Attachments', () => {
 
   test.beforeAll(async () => {
     const admin = createServiceRoleClient();
-    // Bump rate limit so Alice doesn't hit it when full suite runs in parallel
-    await admin.from('app_settings').update({ value: '100' }).eq('key', 'ticket_creation_rate_limit');
     // Clean up any stale test tickets
     const { data: staleTickets } = await admin
       .from('tickets')
@@ -60,9 +58,6 @@ test.describe('File Attachments', () => {
   });
 
   test.afterAll(async () => {
-    // Restore rate limit to default
-    const admin = createServiceRoleClient();
-    await admin.from('app_settings').update({ value: '10' }).eq('key', 'ticket_creation_rate_limit');
     // Clean temp dir
     if (fs.existsSync(tmpDir)) {
       fs.rmSync(tmpDir, { recursive: true, force: true });

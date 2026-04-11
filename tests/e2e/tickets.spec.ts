@@ -30,8 +30,6 @@ test.describe('Tickets', () => {
   // Clean up leftover E2E test tickets from previous runs
   test.beforeAll(async () => {
     const admin = createServiceRoleClient();
-    // Bump rate limit so Alice doesn't hit it when full suite runs in parallel
-    await admin.from('app_settings').update({ value: '100' }).eq('key', 'ticket_creation_rate_limit');
     // Find tickets with E2E-specific titles
     const { data: staleTickets } = await admin
       .from('tickets')
@@ -43,12 +41,6 @@ test.describe('Tickets', () => {
       await admin.from('posts').delete().in('ticket_id', ids);
       await admin.from('tickets').delete().in('id', ids);
     }
-  });
-
-  test.afterAll(async () => {
-    // Restore rate limit to default
-    const admin = createServiceRoleClient();
-    await admin.from('app_settings').update({ value: '10' }).eq('key', 'ticket_creation_rate_limit');
   });
 
   test('create a ticket with all fields → appears in "My Tickets"', async ({ page }) => {

@@ -21,6 +21,8 @@ test.describe('Admin Setup layout', () => {
 
   test('admin can access Setup page and sees sidebar', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
+    // Wait for the nav to confirm admin role is recognised
+    await expect(page.getByRole('link', { name: 'Setup' })).toBeVisible({ timeout: 10000 });
     await page.goto('/admin');
 
     // Should redirect to /admin/types
@@ -61,6 +63,7 @@ test.describe('Agent management', () => {
 
   test('admin can promote a user to agent', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
+    await expect(page.getByRole('link', { name: 'Setup' })).toBeVisible({ timeout: 10000 });
     await page.goto('/admin/agents');
 
     // Search for dave by email
@@ -101,18 +104,6 @@ test.describe('Agent management', () => {
 
 test.describe('Custom fields', () => {
   test.describe.configure({ mode: 'serial' });
-
-  test.beforeAll(async () => {
-    // Bump rate limit so Alice doesn't hit it when full suite runs in parallel
-    const svc = createServiceRoleClient();
-    await svc.from('app_settings').update({ value: '100' }).eq('key', 'ticket_creation_rate_limit');
-  });
-
-  test.afterAll(async () => {
-    // Restore rate limit to default
-    const svc = createServiceRoleClient();
-    await svc.from('app_settings').update({ value: '10' }).eq('key', 'ticket_creation_rate_limit');
-  });
 
   test.afterAll(async () => {
     // Clean up test custom fields
@@ -311,8 +302,9 @@ test.describe('Audit log', () => {
   test('audit log shows entries', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await page.goto('/admin/audit-log');
+    await page.waitForLoadState('networkidle');
 
-    await expect(page.getByRole('heading', { name: /audit log/i })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: /audit log/i })).toBeVisible({ timeout: 15000 });
 
     // The log table or list should be present
     // It may be empty or have entries from earlier tests

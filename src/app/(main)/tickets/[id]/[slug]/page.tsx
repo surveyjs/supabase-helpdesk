@@ -13,6 +13,7 @@ import { NoteForm } from './NoteForm';
 import { CollapsibleTimeline, CollapsibleComments } from './CollapsibleTimeline';
 import { AttachmentList } from '@/components/features/attachments/AttachmentList';
 import { FileUpload } from '@/components/features/attachments/FileUpload';
+import { RealtimeTicketUpdates } from '@/components/features/tickets/RealtimeTicketUpdates';
 import {
   deletePost,
   togglePostPrivacy,
@@ -958,6 +959,9 @@ export default async function TicketDetailPage({
           <NoteForm ticketId={ticket.id} />
         </div>
       )}
+
+      {/* Realtime subscription for live updates */}
+      <RealtimeTicketUpdates ticketId={ticket.id} />
     </div>
   );
 }

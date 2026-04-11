@@ -44,10 +44,13 @@ export async function sendEmail(
           : undefined,
     });
 
+    // Strip CR/LF to prevent email header injection
+    const safeSubject = subject.replace(/[\r\n]/g, ' ');
+
     await transporter.sendMail({
       from: `"${config.sender_name}" <${config.sender_email}>`,
       to,
-      subject,
+      subject: safeSubject,
       html: htmlBody,
     });
 

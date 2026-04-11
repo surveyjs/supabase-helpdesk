@@ -53,7 +53,9 @@ async function getCoalescingDelay(): Promise<number> {
     .eq('key', 'notification_coalescing_delay_minutes')
     .single();
 
-  return data ? parseInt(data.value, 10) || 0 : 2;
+  if (!data) return 2;
+  const parsed = parseInt(data.value, 10);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : 2;
 }
 
 /**

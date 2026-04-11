@@ -60,7 +60,7 @@ export async function changeTicketStatus(formData: FormData): Promise<void> {
       { oldStatus: ticket.status, newStatus },
       user.id,
       user.id,
-    ).catch(() => {});
+    ).catch((err) => console.error('[notify]', err));
   }
 
   revalidatePath(`/tickets/${ticketId}/${ticket.slug}`);
@@ -110,11 +110,11 @@ export async function assignAgent(formData: FormData): Promise<void> {
     { agentName },
     user.id,
     user.id,
-  ).catch(() => {});
+  ).catch((err) => console.error('[notify]', err));
 
   // Notify the assigned agent (if not the actor)
   if (agentId !== user.id) {
-    notifyAgent(agentId, 'agent_assigned_to_agent', ticketId, { agentName }).catch(() => {});
+    notifyAgent(agentId, 'agent_assigned_to_agent', ticketId, { agentName }).catch((err) => console.error('[notify]', err));
   }
 
   revalidatePath(`/tickets/${ticketId}/${ticket.slug}`);
@@ -178,14 +178,14 @@ export async function reassignAgent(formData: FormData): Promise<void> {
     { agentName },
     user.id,
     user.id,
-  ).catch(() => {});
+  ).catch((err) => console.error('[notify]', err));
 
   // Notify the new agent (if not the actor)
   if (newAgentId !== user.id) {
     notifyAgent(newAgentId, 'agent_assigned_to_agent', ticketId, {
       agentName,
       ...(reason ? { reason } : {}),
-    }).catch(() => {});
+    }).catch((err) => console.error('[notify]', err));
   }
 
   revalidatePath(`/tickets/${ticketId}/${ticket.slug}`);
@@ -226,7 +226,7 @@ export async function unassignAgent(formData: FormData): Promise<void> {
     { agentName: 'Unassigned' },
     user.id,
     user.id,
-  ).catch(() => {});
+  ).catch((err) => console.error('[notify]', err));
 
   revalidatePath(`/tickets/${ticketId}/${ticket.slug}`);
   revalidatePath('/agent');
@@ -299,7 +299,7 @@ export async function changeUrgency(formData: FormData): Promise<void> {
     { oldUrgency: ticket.urgency, newUrgency },
     user.id,
     user.id,
-  ).catch(() => {});
+  ).catch((err) => console.error('[notify]', err));
 
   revalidatePath(`/tickets/${ticketId}/${ticket.slug}`);
   revalidatePath('/agent');
@@ -341,7 +341,7 @@ export async function changeSeverity(formData: FormData): Promise<void> {
     { oldSeverity: ticket.severity, newSeverity },
     user.id,
     user.id,
-  ).catch(() => {});
+  ).catch((err) => console.error('[notify]', err));
 
   revalidatePath(`/tickets/${ticketId}/${ticket.slug}`);
   revalidatePath('/agent');
@@ -463,7 +463,7 @@ export async function toggleTicketPrivacy(formData: FormData): Promise<void> {
     {},
     user.id,
     user.id,
-  ).catch(() => {});
+  ).catch((err) => console.error('[notify]', err));
 
   revalidatePath(`/tickets/${ticketId}/${ticket.slug}`);
   revalidatePath('/agent');

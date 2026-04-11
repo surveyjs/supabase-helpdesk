@@ -74,9 +74,9 @@ CREATE INDEX idx_coalescing_queue_send_after
 
 ALTER TABLE notification_coalescing_queue ENABLE ROW LEVEL SECURITY;
 
--- Only authenticated users (service role bypasses RLS regardless)
-CREATE POLICY coalescing_queue_service ON notification_coalescing_queue
-  FOR ALL USING (auth.uid() IS NOT NULL);
+-- Deny all via RLS; only service_role (which bypasses RLS) accesses this table
+CREATE POLICY coalescing_queue_deny_all ON notification_coalescing_queue
+  FOR ALL USING (false);
 
 -- --------------------------------------------------------
 -- Default Notification Preferences & Coalescing Delay

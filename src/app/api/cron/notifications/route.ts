@@ -3,6 +3,45 @@ import { createServiceRoleClient } from '@/lib/supabase/server';
 import { sendEmail } from '@/lib/email/send';
 import { renderTemplate } from '@/lib/email/templates';
 
+type NotificationPrefs = Record<string, { email?: boolean; in_app?: boolean }>;
+
+/**
+ * Re-check whether user still wants email for the given event types.
+ * Returns `true` if at least one event should still be sent.
+ */
+async function shouldSendEmail(
+  recipientId: string,
+  eventTypes: string[],
+): Promise<boolean> {
+  const supabase = createServiceRoleClient();
+
+  const { data: defaultSetting } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'default_notification_preferences')
+    .single();
+
+  let defaults: NotificationPrefs = {};
+  try { defaults = defaultSetting ? JSON.parse(defaultSetting.value) : {}; } catch { defaults = {}; }
+
+  const { data: userPrefs } = await supabase
+    .from('notification_preferences')
+    .select('preferences')
+    .eq('user_id', recipientId)
+    .single();
+
+  const overrides: NotificationPrefs = userPrefs?.preferences
+    ? (userPrefs.preferences as NotificationPrefs)
+    : {};
+
+  const merged = { ...defaults, ...overrides };
+
+  return eventTypes.some((et) => {
+    const p = merged[et];
+    return !p || p.email !== false;
+  });
+}
+
 /**
  * Cron endpoint: process the notification coalescing queue.
  * Called every minute by pg_cron or equivalent scheduler.
@@ -64,11 +103,23 @@ export async function POST(request: Request) {
         continue;
       }
 
+      // Re-check current user preferences before sending
+      const eventTypes = events.map((e) => e.event_type);
+      if (!(await shouldSendEmail(entry.recipient_id, eventTypes))) {
+        await supabase
+          .from('notification_coalescing_queue')
+          .delete()
+          .eq('id', entry.id);
+        continue;
+      }
+
+      let sent = false;
+
       if (events.length === 1) {
         // Single event: use standard template
         const evt = events[0];
         const { subject, html } = await renderTemplate(evt.event_type, evt.placeholders);
-        await sendEmail(recipient.email, subject, html);
+        sent = await sendEmail(recipient.email, subject, html);
       } else {
         // Multiple events: use consolidated update template
         // Build changeList from events
@@ -91,16 +142,19 @@ export async function POST(request: Request) {
         };
 
         const { subject, html } = await renderTemplate('consolidated_update', placeholders);
-        await sendEmail(recipient.email, subject, html);
+        sent = await sendEmail(recipient.email, subject, html);
       }
 
-      // Delete processed entry
-      await supabase
-        .from('notification_coalescing_queue')
-        .delete()
-        .eq('id', entry.id);
-
-      processed++;
+      if (sent) {
+        // Delete only on successful send
+        await supabase
+          .from('notification_coalescing_queue')
+          .delete()
+          .eq('id', entry.id);
+        processed++;
+      } else {
+        console.warn('[cron/notifications] Email send failed for entry:', entry.id, '— will retry next cycle');
+      }
     } catch (err) {
       console.error('[cron/notifications] Error processing entry:', entry.id, err);
       // Continue processing other entries

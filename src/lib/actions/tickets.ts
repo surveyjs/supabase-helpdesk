@@ -237,7 +237,7 @@ export async function replyToTicket(
   // Check ticket exists and user can access it
   const { data: ticket } = await supabase
     .from('tickets')
-    .select('id, slug, status, creator_id, duplicate_of_id')
+    .select('id, slug, status, creator_id, duplicate_of_id, assigned_agent_id')
     .eq('id', ticketId)
     .single();
 
@@ -292,25 +292,19 @@ export async function replyToTicket(
 
   if (isAgent) {
     // Agent reply → notify ticket owner + followers (coalesced)
-    notifyTicketRecipients(ticket.id, 'new_post', placeholders, user.id, user.id).catch(() => {});
+    notifyTicketRecipients(ticket.id, 'new_post', placeholders, user.id, user.id).catch((err) => console.error('[notify]', err));
   } else {
     // User reply → notify ticket owner + followers (non-agent, no coalescing)
-    notifyTicketRecipients(ticket.id, 'new_post', placeholders, user.id).catch(() => {});
+    notifyTicketRecipients(ticket.id, 'new_post', placeholders, user.id).catch((err) => console.error('[notify]', err));
 
-    // Notify assigned agent
-    const { data: ticketFull } = await supabase
-      .from('tickets')
-      .select('assigned_agent_id')
-      .eq('id', ticket.id)
-      .single();
-
-    if (ticketFull?.assigned_agent_id && ticketFull.assigned_agent_id !== user.id) {
-      notifyAgent(ticketFull.assigned_agent_id, 'user_reply_to_agent', ticket.id, placeholders).catch(() => {});
+    // Notify assigned agent (already fetched in initial ticket query)
+    if (ticket.assigned_agent_id && ticket.assigned_agent_id !== user.id) {
+      notifyAgent(ticket.assigned_agent_id, 'user_reply_to_agent', ticket.id, placeholders).catch((err) => console.error('[notify]', err));
     }
 
     // If auto-reopened, also send auto_reopen notification
     if (autoReopened) {
-      notifyTicketRecipients(ticket.id, 'auto_reopen', placeholders, user.id).catch(() => {});
+      notifyTicketRecipients(ticket.id, 'auto_reopen', placeholders, user.id).catch((err) => console.error('[notify]', err));
     }
   }
 
@@ -422,9 +416,9 @@ export async function addComment(
   // --- Notifications ---
   const commentPlaceholders = { authorName: profile.display_name ?? user.email ?? '' };
   if (isAgent) {
-    notifyTicketRecipients(ticket.id, 'new_post', commentPlaceholders, user.id, user.id).catch(() => {});
+    notifyTicketRecipients(ticket.id, 'new_post', commentPlaceholders, user.id, user.id).catch((err) => console.error('[notify]', err));
   } else {
-    notifyTicketRecipients(ticket.id, 'new_post', commentPlaceholders, user.id).catch(() => {});
+    notifyTicketRecipients(ticket.id, 'new_post', commentPlaceholders, user.id).catch((err) => console.error('[notify]', err));
     // Notify assigned agent
     const { data: tkt } = await supabase
       .from('tickets')
@@ -432,7 +426,7 @@ export async function addComment(
       .eq('id', ticket.id)
       .single();
     if (tkt?.assigned_agent_id && tkt.assigned_agent_id !== user.id) {
-      notifyAgent(tkt.assigned_agent_id, 'user_reply_to_agent', ticket.id, commentPlaceholders).catch(() => {});
+      notifyAgent(tkt.assigned_agent_id, 'user_reply_to_agent', ticket.id, commentPlaceholders).catch((err) => console.error('[notify]', err));
     }
   }
 
@@ -827,7 +821,7 @@ export async function publishDraft(formData: FormData): Promise<void> {
       { authorName: profile.display_name ?? user.email ?? '' },
       user.id,
       user.id,
-    ).catch(() => {});
+    ).catch((err) => console.error('[notify]', err));
 
     revalidatePath(`/tickets/${ticket.id}/${ticket.slug}`);
   }

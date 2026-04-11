@@ -151,7 +151,7 @@ describe('Email Notifications', () => {
 
     it('non-admin cannot read email config (RLS)', async () => {
       const user = await clientForUser('notif-user@test.com');
-      const { data, error } = await user.from('email_config').select('*');
+      const { data } = await user.from('email_config').select('*');
       // RLS should return empty or error
       expect(data?.length ?? 0).toBe(0);
     });

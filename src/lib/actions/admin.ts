@@ -1053,7 +1053,7 @@ export async function resetFileTypesToDefault(): Promise<void> {
 // ============================================================
 
 export async function updateEmailConfig(formData: FormData): Promise<{ message?: string }> {
-  const { supabase, user, profile: adminProfile } = await requireAdminRole();
+  const { supabase, profile: adminProfile } = await requireAdminRole();
 
   const smtpHost = (formData.get('smtp_host') as string)?.trim() ?? '';
   const smtpPort = parseInt(formData.get('smtp_port') as string, 10) || 587;

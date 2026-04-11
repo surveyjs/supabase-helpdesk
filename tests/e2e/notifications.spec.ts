@@ -1,5 +1,4 @@
 import { test, expect, Page } from '@playwright/test';
-import { createServiceRoleClient } from '../helpers/supabase';
 
 /**
  * Helper: log in via the login form.

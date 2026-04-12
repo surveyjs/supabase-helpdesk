@@ -312,8 +312,6 @@ test.describe('Audit log', () => {
   test('audit log shows entries', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/audit-log');
-    await page.waitForLoadState('networkidle');
-
     await expect(page.getByRole('heading', { name: /audit log/i })).toBeVisible({ timeout: 15000 });
 
     // The log table or list should be present

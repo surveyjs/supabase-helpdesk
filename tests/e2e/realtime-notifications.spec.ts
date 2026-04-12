@@ -44,11 +44,11 @@ test.describe('Realtime Notifications', () => {
     await loginAs(page, 'alice@example.com');
     const aliceId = '00000000-0000-0000-0000-000000000014';
 
-    // Clear existing notifications for alice
+    // Clear this test's notification if leftover from a prior run
     const admin = svc();
-    await admin.from('notifications').delete().eq('recipient_id', aliceId);
+    await admin.from('notifications').delete().eq('recipient_id', aliceId).eq('message', 'Test notification for badge update');
 
-    // Reload so the bell starts with 0 unread (no badge)
+    // Reload so the bell starts fresh
     await page.reload();
     await expect(page.getByLabel('Notifications')).toBeVisible({ timeout: 10000 });
 
@@ -61,15 +61,15 @@ test.describe('Realtime Notifications', () => {
     });
 
     // Reload so the server-rendered unread count picks up the new notification
-    await page.reload({ waitUntil: 'networkidle' });
+    await page.reload();
     await expect(page.getByLabel('Notifications')).toBeVisible({ timeout: 10000 });
 
     // Badge (red circle) should now be visible
     const badge = page.getByLabel('Notifications').locator('span.bg-red-500');
     await expect(badge).toBeVisible({ timeout: 10000 });
 
-    // Clean up
-    await admin.from('notifications').delete().eq('recipient_id', aliceId);
+    // Clean up only this test's notification
+    await admin.from('notifications').delete().eq('recipient_id', aliceId).eq('message', 'Test notification for badge update');
   });
 
   test('dropdown shows notifications', async ({ page }) => {
@@ -78,7 +78,7 @@ test.describe('Realtime Notifications', () => {
 
     // Insert a notification
     const admin = svc();
-    await admin.from('notifications').delete().eq('recipient_id', aliceId);
+    await admin.from('notifications').delete().eq('recipient_id', aliceId).eq('message', 'Ticket #42 status changed to resolved');
     await admin.from('notifications').insert({
       recipient_id: aliceId,
       event_type: 'status_changed',
@@ -93,7 +93,7 @@ test.describe('Realtime Notifications', () => {
     await expect(page.getByText('Ticket #42 status changed to resolved')).toBeVisible({ timeout: 10000 });
 
     // Clean up
-    await admin.from('notifications').delete().eq('recipient_id', aliceId);
+    await admin.from('notifications').delete().eq('recipient_id', aliceId).eq('message', 'Ticket #42 status changed to resolved');
   });
 
   test('mark all as read clears badge', async ({ page }) => {
@@ -102,10 +102,10 @@ test.describe('Realtime Notifications', () => {
 
     // Insert notifications
     const admin = svc();
-    await admin.from('notifications').delete().eq('recipient_id', aliceId);
+    await admin.from('notifications').delete().eq('recipient_id', aliceId).in('message', ['MarkRead Msg 1', 'MarkRead Msg 2']);
     await admin.from('notifications').insert([
-      { recipient_id: aliceId, event_type: 'new_post', message: 'Msg 1' },
-      { recipient_id: aliceId, event_type: 'new_post', message: 'Msg 2' },
+      { recipient_id: aliceId, event_type: 'new_post', message: 'MarkRead Msg 1' },
+      { recipient_id: aliceId, event_type: 'new_post', message: 'MarkRead Msg 2' },
     ]);
 
     await page.waitForTimeout(500);
@@ -123,7 +123,7 @@ test.describe('Realtime Notifications', () => {
     await expect(badge).not.toBeVisible({ timeout: 5000 });
 
     // Clean up
-    await admin.from('notifications').delete().eq('recipient_id', aliceId);
+    await admin.from('notifications').delete().eq('recipient_id', aliceId).in('message', ['MarkRead Msg 1', 'MarkRead Msg 2']);
   });
 });
 
@@ -143,7 +143,7 @@ test.describe('Notifications Page', () => {
   test('notifications page shows all notifications', async ({ page }) => {
     const aliceId = '00000000-0000-0000-0000-000000000014';
     const admin = svc();
-    await admin.from('notifications').delete().eq('recipient_id', aliceId);
+    await admin.from('notifications').delete().eq('recipient_id', aliceId).in('message', ['Page test notification 1', 'Page test notification 2']);
 
     await admin.from('notifications').insert([
       { recipient_id: aliceId, event_type: 'new_post', message: 'Page test notification 1' },
@@ -152,14 +152,14 @@ test.describe('Notifications Page', () => {
 
     await loginAs(page, 'alice@example.com');
 
-    // Navigate to notifications with networkidle to ensure full render
-    await page.goto('/notifications', { waitUntil: 'networkidle' });
+    // Navigate with cache-busting param to ensure fresh server render
+    await page.goto(`/notifications?t=${Date.now()}`);
 
     await expect(page.getByText('Page test notification 1')).toBeVisible({ timeout: 10000 });
     await expect(page.getByText('Page test notification 2')).toBeVisible();
 
     // Clean up
-    await admin.from('notifications').delete().eq('recipient_id', aliceId);
+    await admin.from('notifications').delete().eq('recipient_id', aliceId).in('message', ['Page test notification 1', 'Page test notification 2']);
   });
 
   test('notifications page has mark all as read', async ({ page }) => {
@@ -176,7 +176,7 @@ test.describe('Notifications Page', () => {
 test.describe('Agent Dashboard Realtime', () => {
   test('agent dashboard page loads with realtime component', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
-    await page.goto('/agent', { waitUntil: 'networkidle' });
+    await page.goto('/agent');
     await expect(page.getByRole('heading', { name: 'Agent Dashboard' })).toBeVisible({ timeout: 10000 });
   });
 });
@@ -190,7 +190,7 @@ test.describe('Ticket Detail Realtime', () => {
     await loginAs(page, 'alice@example.com');
 
     // Create a ticket to verify realtime component is present
-    await page.goto('/tickets/new', { waitUntil: 'networkidle' });
+    await page.goto('/tickets/new');
     await page.getByLabel('Title').fill('Realtime Test Ticket');
     await page.locator('textarea, [role="textbox"]').first().fill('Testing realtime updates.');
 

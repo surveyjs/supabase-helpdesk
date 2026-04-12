@@ -10,7 +10,7 @@ interface CsatFormProps {
   existingComment?: string;
 }
 
-export function CsatForm({ token, ticketId, existingRating, existingComment }: CsatFormProps) {
+export function CsatForm({ token, existingRating, existingComment }: CsatFormProps) {
   const [rating, setRating] = useState<number>(existingRating ?? 0);
   const [hoveredStar, setHoveredStar] = useState<number>(0);
   const [comment, setComment] = useState(existingComment ?? '');

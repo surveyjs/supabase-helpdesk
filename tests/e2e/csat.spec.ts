@@ -147,7 +147,7 @@ test.describe('CSAT Rating Page', () => {
     await expect(page.getByTestId('csat-update-link')).toBeVisible();
   });
 
-  test('rating with comment — stores correctly', async ({ page }) => {
+  test('rating with comment — stores correctly', async () => {
     const svc = createServiceRoleClient();
 
     // Verify the rating in the DB

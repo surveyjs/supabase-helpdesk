@@ -12,6 +12,7 @@ import {
 import { Badge } from '@/components/ui/Badge';
 import { Pagination } from '@/components/ui/Pagination';
 import { createSavedView, renameSavedView, deleteSavedView } from '@/lib/actions/saved-views';
+import { RealtimeDashboard } from '@/components/features/agent/RealtimeDashboard';
 
 function getContrastColor(hex: string): string {
   const c = hex.replace('#', '');
@@ -472,6 +473,9 @@ export default async function AgentDashboardPage({
         searchParams={linkParams}
         pageSize={pageSize}
       />
+
+      {/* Realtime subscription for live dashboard updates */}
+      <RealtimeDashboard />
     </div>
   );
 }

@@ -5,6 +5,71 @@ import { renderTemplate } from '@/lib/email/templates';
 type NotificationPrefs = Record<string, { email?: boolean; in_app?: boolean }>;
 
 /**
+ * Format a short human-readable notification message for in-app display.
+ */
+export function formatNotificationMessage(
+  eventType: string,
+  placeholders: Record<string, string>,
+): string {
+  const tid = placeholders.ticketId ?? '?';
+  const author = placeholders.authorName ?? placeholders.agentName ?? 'Someone';
+  const agent = placeholders.agentName ?? 'An agent';
+  const status = placeholders.newStatus ?? placeholders.to ?? '';
+
+  switch (eventType) {
+    case 'new_post':
+      return `${author} replied to ticket #${tid}`;
+    case 'status_changed':
+      return `Ticket #${tid} status changed to ${status}`;
+    case 'agent_assigned':
+      return `${agent} was assigned to ticket #${tid}`;
+    case 'agent_assigned_to_agent':
+      return `You were assigned to ticket #${tid}`;
+    case 'user_reply_to_agent':
+      return `${author} replied to ticket #${tid}`;
+    case 'auto_reopen':
+      return `Ticket #${tid} was automatically reopened`;
+    case 'urgency_changed':
+      return `Ticket #${tid} urgency changed to ${placeholders.to ?? ''}`;
+    case 'severity_changed':
+      return `Ticket #${tid} severity changed to ${placeholders.to ?? ''}`;
+    case 'privacy_changed':
+      return `Ticket #${tid} privacy was changed`;
+    default:
+      return `Update on ticket #${tid}`;
+  }
+}
+
+/**
+ * Create an in-app notification record for a user.
+ */
+async function createInAppNotification(
+  recipientId: string,
+  eventType: string,
+  ticketId: number,
+  placeholders: Record<string, string>,
+): Promise<void> {
+  const supabase = createServiceRoleClient();
+  const message = formatNotificationMessage(eventType, placeholders);
+
+  const { error } = await supabase.from('notifications').insert({
+    recipient_id: recipientId,
+    event_type: eventType,
+    ticket_id: ticketId,
+    message,
+  });
+
+  if (error) {
+    console.error('Failed to create in-app notification', {
+      recipientId,
+      eventType,
+      ticketId,
+      error,
+    });
+  }
+}
+
+/**
  * Get effective notification preferences for a user.
  * Falls back to system defaults for any missing event type.
  */
@@ -151,6 +216,13 @@ export async function notifyUser(
   // Get preferences
   const prefs = await getEffectivePreferences(recipientId);
   const eventPrefs = prefs[eventType];
+
+  // In-app notification (never coalesced — always immediate for real-time delivery)
+  if (!eventPrefs || eventPrefs.in_app !== false) {
+    await createInAppNotification(recipientId, eventType, ticketId, placeholders);
+  }
+
+  // Email notification
   if (eventPrefs && eventPrefs.email === false) return;
 
   // Check coalescing
@@ -197,6 +269,13 @@ export async function notifyAgent(
   // Check preferences
   const prefs = await getEffectivePreferences(agentId);
   const eventPrefs = prefs[eventType];
+
+  // In-app notification (always immediate)
+  if (!eventPrefs || eventPrefs.in_app !== false) {
+    await createInAppNotification(agentId, eventType, ticketId, placeholders);
+  }
+
+  // Email notification
   if (eventPrefs && eventPrefs.email === false) return;
 
   // Send immediately

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { createBrowserClient } from '@/lib/supabase/client';
-import { NotificationDropdown } from './NotificationDropdown';
+import { NotificationDropdown, type Notification } from './NotificationDropdown';
 
 interface NotificationBellProps {
   initialUnreadCount: number;
@@ -12,7 +12,23 @@ interface NotificationBellProps {
 export function NotificationBell({ initialUnreadCount, userId }: NotificationBellProps) {
   const [unreadCount, setUnreadCount] = useState(initialUnreadCount);
   const [isOpen, setIsOpen] = useState(false);
+  const [dropdownNotifications, setDropdownNotifications] = useState<Notification[] | null>(null);
   const bellRef = useRef<HTMLDivElement>(null);
+
+  async function handleToggle() {
+    if (!isOpen) {
+      // Fetch notifications before opening
+      const supabase = createBrowserClient();
+      const { data } = await supabase
+        .from('notifications')
+        .select('id, event_type, ticket_id, message, is_read, created_at')
+        .eq('recipient_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(10);
+      setDropdownNotifications(data ?? []);
+    }
+    setIsOpen((prev) => !prev);
+  }
 
   // Subscribe to realtime notification changes
   useEffect(() => {
@@ -69,7 +85,7 @@ export function NotificationBell({ initialUnreadCount, userId }: NotificationBel
     <div ref={bellRef} className="relative">
       <button
         type="button"
-        onClick={() => setIsOpen((prev) => !prev)}
+        onClick={handleToggle}
         className="relative text-gray-500 hover:text-gray-700 focus:outline-none"
         aria-label="Notifications"
       >
@@ -95,9 +111,9 @@ export function NotificationBell({ initialUnreadCount, userId }: NotificationBel
         )}
       </button>
 
-      {isOpen && (
+      {isOpen && dropdownNotifications && (
         <NotificationDropdown
-          userId={userId}
+          initialNotifications={dropdownNotifications}
           onClose={() => setIsOpen(false)}
           onMarkAllRead={() => setUnreadCount(0)}
         />

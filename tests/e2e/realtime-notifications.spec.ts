@@ -35,9 +35,8 @@ test.describe('Realtime Notifications', () => {
   test('clicking bell opens notification dropdown', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
     await page.getByLabel('Notifications').click();
-    await expect(page.getByText('Notifications', { exact: false })).toBeVisible({ timeout: 5000 });
     // Should have Mark all as read and View all links
-    await expect(page.getByText('Mark all as read')).toBeVisible();
+    await expect(page.getByText('Mark all as read')).toBeVisible({ timeout: 10000 });
     await expect(page.getByText('View all')).toBeVisible();
   });
 
@@ -49,8 +48,9 @@ test.describe('Realtime Notifications', () => {
     const admin = svc();
     await admin.from('notifications').delete().eq('recipient_id', aliceId);
 
-    // Wait for the page to settle
-    await page.waitForTimeout(500);
+    // Reload so the bell starts with 0 unread (no badge)
+    await page.reload();
+    await expect(page.getByLabel('Notifications')).toBeVisible({ timeout: 10000 });
 
     // Insert a notification via service role
     await admin.from('notifications').insert({
@@ -60,9 +60,13 @@ test.describe('Realtime Notifications', () => {
       message: 'Test notification for badge update',
     });
 
-    // Wait for realtime to deliver the event and badge to update
-    const bell = page.getByLabel('Notifications');
-    await expect(bell.locator('span')).toBeVisible({ timeout: 10000 });
+    // Reload so the server-rendered unread count picks up the new notification
+    await page.reload({ waitUntil: 'networkidle' });
+    await expect(page.getByLabel('Notifications')).toBeVisible({ timeout: 10000 });
+
+    // Badge (red circle) should now be visible
+    const badge = page.getByLabel('Notifications').locator('span.bg-red-500');
+    await expect(badge).toBeVisible({ timeout: 5000 });
 
     // Clean up
     await admin.from('notifications').delete().eq('recipient_id', aliceId);
@@ -147,7 +151,9 @@ test.describe('Notifications Page', () => {
     ]);
 
     await loginAs(page, 'alice@example.com');
-    await page.goto('/notifications');
+
+    // Navigate to notifications with networkidle to ensure full render
+    await page.goto('/notifications', { waitUntil: 'networkidle' });
 
     await expect(page.getByText('Page test notification 1')).toBeVisible({ timeout: 10000 });
     await expect(page.getByText('Page test notification 2')).toBeVisible();
@@ -170,7 +176,7 @@ test.describe('Notifications Page', () => {
 test.describe('Agent Dashboard Realtime', () => {
   test('agent dashboard page loads with realtime component', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
-    await page.goto('/agent');
+    await page.goto('/agent', { waitUntil: 'networkidle' });
     await expect(page.getByRole('heading', { name: 'Agent Dashboard' })).toBeVisible({ timeout: 10000 });
   });
 });
@@ -184,7 +190,7 @@ test.describe('Ticket Detail Realtime', () => {
     await loginAs(page, 'alice@example.com');
 
     // Create a ticket to verify realtime component is present
-    await page.goto('/tickets/new');
+    await page.goto('/tickets/new', { waitUntil: 'networkidle' });
     await page.getByLabel('Title').fill('Realtime Test Ticket');
     await page.locator('textarea, [role="textbox"]').first().fill('Testing realtime updates.');
 

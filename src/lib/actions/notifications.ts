@@ -67,3 +67,56 @@ export async function updateNotificationPreferences(
   revalidatePath('/notification-settings');
   return {};
 }
+
+export async function markNotificationRead(
+  notificationId: string,
+): Promise<{ error?: string }> {
+  const supabase = await createServerClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+
+  const { error } = await supabase
+    .from('notifications')
+    .update({ is_read: true })
+    .eq('id', notificationId)
+    .eq('recipient_id', user.id);
+
+  if (error) return { error: 'Failed to mark notification as read.' };
+
+  revalidatePath('/notifications');
+  return {};
+}
+
+export async function markAllNotificationsRead(): Promise<{ error?: string }> {
+  const supabase = await createServerClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+
+  const { error } = await supabase
+    .from('notifications')
+    .update({ is_read: true })
+    .eq('recipient_id', user.id)
+    .eq('is_read', false);
+
+  if (error) return { error: 'Failed to mark all notifications as read.' };
+
+  revalidatePath('/notifications');
+  return {};
+}
+
+export async function getUnreadCount(): Promise<number> {
+  const supabase = await createServerClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return 0;
+
+  const { count } = await supabase
+    .from('notifications')
+    .select('id', { count: 'exact', head: true })
+    .eq('recipient_id', user.id)
+    .eq('is_read', false);
+
+  return count || 0;
+}

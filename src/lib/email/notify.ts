@@ -5,6 +5,39 @@ import { renderTemplate } from '@/lib/email/templates';
 type NotificationPrefs = Record<string, { email?: boolean; in_app?: boolean }>;
 
 /**
+ * Format a notification message for in-app display.
+ */
+function formatNotificationMessage(
+  eventType: string,
+  placeholders: Record<string, string>,
+): string {
+  const { authorName, ticketId, newStatus, agentName, newUrgency, newSeverity } = placeholders;
+
+  switch (eventType) {
+    case 'new_post':
+      return `${authorName || 'Someone'} replied to your ticket #${ticketId}`;
+    case 'status_changed':
+      return `Ticket #${ticketId} status changed to ${newStatus}`;
+    case 'agent_assigned':
+      return `${agentName || 'An agent'} was assigned to your ticket #${ticketId}`;
+    case 'agent_assigned_to_agent':
+      return `You were assigned to ticket #${ticketId}`;
+    case 'user_reply_to_agent':
+      return `${authorName || 'Someone'} replied to ticket #${ticketId}`;
+    case 'auto_reopen':
+      return `Ticket #${ticketId} was automatically reopened`;
+    case 'urgency_changed':
+      return `Ticket #${ticketId} urgency changed to ${newUrgency}`;
+    case 'severity_changed':
+      return `Ticket #${ticketId} severity changed to ${newSeverity}`;
+    case 'privacy_changed':
+      return `Ticket #${ticketId} privacy settings were updated`;
+    default:
+      return `Update on ticket #${ticketId}`;
+  }
+}
+
+/**
  * Get effective notification preferences for a user.
  * Falls back to system defaults for any missing event type.
  */
@@ -151,7 +184,26 @@ export async function notifyUser(
   // Get preferences
   const prefs = await getEffectivePreferences(recipientId);
   const eventPrefs = prefs[eventType];
-  if (eventPrefs && eventPrefs.email === false) return;
+
+  // Check if email notification should be sent
+  const shouldSendEmail = eventPrefs?.email !== false;
+  const shouldSendInApp = eventPrefs?.in_app !== false;
+
+  // Create in-app notification immediately (never coalesced)
+  if (shouldSendInApp) {
+    const message = formatNotificationMessage(eventType, placeholders);
+    await supabase
+      .from('notifications')
+      .insert({
+        recipient_id: recipientId,
+        event_type: eventType,
+        ticket_id: ticketId,
+        message,
+      });
+  }
+
+  // Handle email notification
+  if (!shouldSendEmail) return;
 
   // Check coalescing
   const coalescingDelay = await getCoalescingDelay();
@@ -197,7 +249,26 @@ export async function notifyAgent(
   // Check preferences
   const prefs = await getEffectivePreferences(agentId);
   const eventPrefs = prefs[eventType];
-  if (eventPrefs && eventPrefs.email === false) return;
+
+  // Check if email notification should be sent
+  const shouldSendEmail = eventPrefs?.email !== false;
+  const shouldSendInApp = eventPrefs?.in_app !== false;
+
+  // Create in-app notification immediately (never coalesced)
+  if (shouldSendInApp) {
+    const message = formatNotificationMessage(eventType, placeholders);
+    await supabase
+      .from('notifications')
+      .insert({
+        recipient_id: agentId,
+        event_type: eventType,
+        ticket_id: ticketId,
+        message,
+      });
+  }
+
+  // Handle email notification
+  if (!shouldSendEmail) return;
 
   // Send immediately
   const { subject, html } = await renderTemplate(eventType, placeholders);

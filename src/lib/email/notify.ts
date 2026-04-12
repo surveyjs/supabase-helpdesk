@@ -52,12 +52,21 @@ async function createInAppNotification(
   const supabase = createServiceRoleClient();
   const message = formatNotificationMessage(eventType, placeholders);
 
-  await supabase.from('notifications').insert({
+  const { error } = await supabase.from('notifications').insert({
     recipient_id: recipientId,
     event_type: eventType,
     ticket_id: ticketId,
     message,
   });
+
+  if (error) {
+    console.error('Failed to create in-app notification', {
+      recipientId,
+      eventType,
+      ticketId,
+      error,
+    });
+  }
 }
 
 /**

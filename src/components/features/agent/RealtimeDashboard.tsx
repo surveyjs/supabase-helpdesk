@@ -9,18 +9,38 @@ export function RealtimeDashboard() {
 
   useEffect(() => {
     const supabase = createBrowserClient();
+    const refreshDashboard = () => {
+      router.refresh();
+    };
+
     const channel = supabase
       .channel('agent-dashboard')
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: 'INSERT',
           schema: 'public',
           table: 'tickets',
         },
-        () => {
-          router.refresh();
+        refreshDashboard,
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'tickets',
         },
+        refreshDashboard,
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'tickets',
+        },
+        refreshDashboard,
       )
       .subscribe();
 

@@ -33,9 +33,9 @@ ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 CREATE POLICY notifications_select ON notifications
   FOR SELECT USING (auth.uid() = recipient_id);
 
--- Insert via service role (notifications are system-generated)
+-- Insert via service role only (notifications are system-generated)
 CREATE POLICY notifications_insert ON notifications
-  FOR INSERT WITH CHECK (true);
+  FOR INSERT TO service_role WITH CHECK (true);
 
 -- Users can update their own notifications (mark read/unread)
 CREATE POLICY notifications_update ON notifications

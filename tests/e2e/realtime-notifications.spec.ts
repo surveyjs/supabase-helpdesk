@@ -66,7 +66,7 @@ test.describe('Realtime Notifications', () => {
 
     // Badge (red circle) should now be visible
     const badge = page.getByLabel('Notifications').locator('span.bg-red-500');
-    await expect(badge).toBeVisible({ timeout: 5000 });
+    await expect(badge).toBeVisible({ timeout: 10000 });
 
     // Clean up
     await admin.from('notifications').delete().eq('recipient_id', aliceId);

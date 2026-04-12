@@ -79,36 +79,45 @@ export default async function NotificationsPage({
       ) : (
         <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-100">
           {notifications.map((notif) => {
-            const href = notif.ticket_id ? `/tickets/${notif.ticket_id}` : '#';
-            return (
+            const content = (
+              <div className="flex items-start gap-3">
+                <span className="text-lg flex-shrink-0" aria-hidden="true">
+                  {eventIcon(notif.event_type)}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p
+                    className={`text-sm ${
+                      !notif.is_read ? 'font-medium text-gray-900' : 'text-gray-700'
+                    }`}
+                  >
+                    {notif.message}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {new Date(notif.created_at).toLocaleString()}
+                  </p>
+                </div>
+                {!notif.is_read && (
+                  <span className="h-2 w-2 rounded-full bg-blue-500 flex-shrink-0 mt-1.5" />
+                )}
+              </div>
+            );
+
+            const className = `block px-4 py-3 hover:bg-gray-50 ${
+              !notif.is_read ? 'bg-blue-50' : ''
+            }`;
+
+            return notif.ticket_id ? (
               <Link
                 key={notif.id}
-                href={href}
-                className={`block px-4 py-3 hover:bg-gray-50 ${
-                  !notif.is_read ? 'bg-blue-50' : ''
-                }`}
+                href={`/tickets/${notif.ticket_id}`}
+                className={className}
               >
-                <div className="flex items-start gap-3">
-                  <span className="text-lg flex-shrink-0" aria-hidden="true">
-                    {eventIcon(notif.event_type)}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p
-                      className={`text-sm ${
-                        !notif.is_read ? 'font-medium text-gray-900' : 'text-gray-700'
-                      }`}
-                    >
-                      {notif.message}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      {new Date(notif.created_at).toLocaleString()}
-                    </p>
-                  </div>
-                  {!notif.is_read && (
-                    <span className="h-2 w-2 rounded-full bg-blue-500 flex-shrink-0 mt-1.5" />
-                  )}
-                </div>
+                {content}
               </Link>
+            ) : (
+              <div key={notif.id} className={className}>
+                {content}
+              </div>
             );
           })}
         </div>

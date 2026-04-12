@@ -59,9 +59,10 @@ function relativeTime(dateStr: string): string {
 export function NotificationDropdown({ initialNotifications, onClose, onMarkAllRead }: NotificationDropdownProps) {
   const [notifications, setNotifications] = useState<Notification[]>(initialNotifications);
 
-  async function handleClickNotification(notif: Notification) {
+  function handleClickNotification(notif: Notification) {
     if (!notif.is_read) {
-      await markNotificationRead(notif.id);
+      // Mark read optimistically — fire-and-forget so navigation isn't blocked
+      markNotificationRead(notif.id);
       setNotifications((prev) =>
         prev.map((n) => (n.id === notif.id ? { ...n, is_read: true } : n)),
       );
@@ -95,33 +96,47 @@ export function NotificationDropdown({ initialNotifications, onClose, onMarkAllR
           <div className="px-4 py-6 text-center text-sm text-gray-500">No notifications</div>
         ) : (
           notifications.map((notif) => {
-            const href = notif.ticket_id ? `/tickets/${notif.ticket_id}` : '#';
-            return (
+            const notificationContent = (
+              <div className="flex items-start gap-2">
+                <span className="text-base flex-shrink-0" aria-hidden="true">
+                  {eventIcon(notif.event_type)}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm ${!notif.is_read ? 'font-medium text-gray-900' : 'text-gray-700'}`}>
+                    {notif.message}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {relativeTime(notif.created_at)}
+                  </p>
+                </div>
+                {!notif.is_read && (
+                  <span className="h-2 w-2 rounded-full bg-blue-500 flex-shrink-0 mt-1.5" />
+                )}
+              </div>
+            );
+
+            const className = `block px-4 py-3 hover:bg-gray-50 border-b border-gray-50 ${
+              !notif.is_read ? 'bg-blue-50' : ''
+            }`;
+
+            return notif.ticket_id ? (
               <Link
                 key={notif.id}
-                href={href}
+                href={`/tickets/${notif.ticket_id}`}
                 onClick={() => handleClickNotification(notif)}
-                className={`block px-4 py-3 hover:bg-gray-50 border-b border-gray-50 ${
-                  !notif.is_read ? 'bg-blue-50' : ''
-                }`}
+                className={className}
               >
-                <div className="flex items-start gap-2">
-                  <span className="text-base flex-shrink-0" aria-hidden="true">
-                    {eventIcon(notif.event_type)}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-sm ${!notif.is_read ? 'font-medium text-gray-900' : 'text-gray-700'}`}>
-                      {notif.message}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      {relativeTime(notif.created_at)}
-                    </p>
-                  </div>
-                  {!notif.is_read && (
-                    <span className="h-2 w-2 rounded-full bg-blue-500 flex-shrink-0 mt-1.5" />
-                  )}
-                </div>
+                {notificationContent}
               </Link>
+            ) : (
+              <button
+                key={notif.id}
+                type="button"
+                onClick={() => handleClickNotification(notif)}
+                className={`${className} w-full text-left`}
+              >
+                {notificationContent}
+              </button>
             );
           })
         )}

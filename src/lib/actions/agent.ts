@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createServerClient } from '@/lib/supabase/server';
 import { notifyTicketRecipients, notifyAgent } from '@/lib/email/notify';
+import { scheduleCsatSurvey, cancelCsatSurvey } from '@/lib/actions/csat';
 
 const VALID_PRIORITIES = ['low', 'medium', 'high', 'critical'];
 
@@ -65,6 +66,13 @@ export async function changeTicketStatus(formData: FormData): Promise<void> {
 
   revalidatePath(`/tickets/${ticketId}/${ticket.slug}`);
   revalidatePath('/agent');
+
+  // CSAT: schedule survey on close, cancel on re-open
+  if (newStatus === 'closed') {
+    scheduleCsatSurvey(ticketId).catch((err) => console.error('[csat]', err));
+  } else if (ticket.status === 'closed' && newStatus === 'open') {
+    cancelCsatSurvey(ticketId).catch((err) => console.error('[csat]', err));
+  }
 }
 
 export async function assignAgent(formData: FormData): Promise<void> {

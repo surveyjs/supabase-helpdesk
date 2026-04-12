@@ -35,6 +35,8 @@ export function formatNotificationMessage(
       return `Ticket #${tid} severity changed to ${placeholders.to ?? ''}`;
     case 'privacy_changed':
       return `Ticket #${tid} privacy was changed`;
+    case 'csat_submitted':
+      return `${author} submitted a ${placeholders.rating ?? '?'}-star CSAT rating on ticket #${tid}`;
     default:
       return `Update on ticket #${tid}`;
   }

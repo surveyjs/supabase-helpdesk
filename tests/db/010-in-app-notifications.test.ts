@@ -1,12 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createClient } from '@supabase/supabase-js';
-import { Database } from '@/lib/database.types';
 
 const supabaseUrl = process.env.SUPABASE_URL || 'http://127.0.0.1:54321';
 const supabaseKey = process.env.SUPABASE_ANON_KEY || '';
 
 describe('010 - In-App Notifications', () => {
-  let supabase: ReturnType<typeof createClient<Database>>;
+  let supabase: ReturnType<typeof createClient>;
   let adminToken: string;
   let agentToken: string;
   let userToken: string;
@@ -15,21 +14,21 @@ describe('010 - In-App Notifications', () => {
   let ticketId: number;
 
   beforeAll(async () => {
-    supabase = createClient<Database>(supabaseUrl, supabaseKey);
+    supabase = createClient(supabaseUrl, supabaseKey);
 
     // Sign in as admin
     const adminRes = await supabase.auth.signInWithPassword({
       email: 'admin@test.com',
       password: 'admin123',
     });
-    adminToken = adminRes.data.session!.accessToken;
+    adminToken = adminRes.data.session!.access_token;
 
     // Sign in as agent
     const agentRes = await supabase.auth.signInWithPassword({
       email: 'agent@test.com',
       password: 'agent123',
     });
-    agentToken = agentRes.data.session!.accessToken;
+    agentToken = agentRes.data.session!.access_token;
     agentId = agentRes.data.user!.id;
 
     // Sign in as user
@@ -37,11 +36,11 @@ describe('010 - In-App Notifications', () => {
       email: 'user@test.com',
       password: 'user123',
     });
-    userToken = userRes.data.session!.accessToken;
+    userToken = userRes.data.session!.access_token;
     userId = userRes.data.user!.id;
 
     // Create a test ticket
-    const userSupabase = createClient<Database>(supabaseUrl, supabaseKey, {
+    const userSupabase = createClient(supabaseUrl, supabaseKey, {
       global: { headers: { Authorization: `Bearer ${userToken}` } },
     });
 
@@ -56,7 +55,7 @@ describe('010 - In-App Notifications', () => {
 
   afterAll(async () => {
     // Clean up
-    const adminSupabase = createClient<Database>(supabaseUrl, supabaseKey, {
+    const adminSupabase = createClient(supabaseUrl, supabaseKey, {
       global: { headers: { Authorization: `Bearer ${adminToken}` } },
     });
 
@@ -64,7 +63,7 @@ describe('010 - In-App Notifications', () => {
   });
 
   it('should create notification for correct recipient', async () => {
-    const agentSupabase = createClient<Database>(supabaseUrl, supabaseKey, {
+    const agentSupabase = createClient(supabaseUrl, supabaseKey, {
       global: { headers: { Authorization: `Bearer ${agentToken}` } },
     });
 
@@ -87,7 +86,7 @@ describe('010 - In-App Notifications', () => {
   });
 
   it('should allow user to read own notifications (RLS)', async () => {
-    const userSupabase = createClient<Database>(supabaseUrl, supabaseKey, {
+    const userSupabase = createClient(supabaseUrl, supabaseKey, {
       global: { headers: { Authorization: `Bearer ${userToken}` } },
     });
 
@@ -102,7 +101,7 @@ describe('010 - In-App Notifications', () => {
   });
 
   it('should not allow user to read others notifications (RLS)', async () => {
-    const userSupabase = createClient<Database>(supabaseUrl, supabaseKey, {
+    const userSupabase = createClient(supabaseUrl, supabaseKey, {
       global: { headers: { Authorization: `Bearer ${userToken}` } },
     });
 
@@ -116,7 +115,7 @@ describe('010 - In-App Notifications', () => {
   });
 
   it('should allow user to mark own notification as read', async () => {
-    const userSupabase = createClient<Database>(supabaseUrl, supabaseKey, {
+    const userSupabase = createClient(supabaseUrl, supabaseKey, {
       global: { headers: { Authorization: `Bearer ${userToken}` } },
     });
 
@@ -147,7 +146,7 @@ describe('010 - In-App Notifications', () => {
   });
 
   it('should not allow user to modify others notifications', async () => {
-    const agentSupabase = createClient<Database>(supabaseUrl, supabaseKey, {
+    const agentSupabase = createClient(supabaseUrl, supabaseKey, {
       global: { headers: { Authorization: `Bearer ${agentToken}` } },
     });
 
@@ -164,7 +163,7 @@ describe('010 - In-App Notifications', () => {
       .single();
 
     // Try to update it as user
-    const userSupabase = createClient<Database>(supabaseUrl, supabaseKey, {
+    const userSupabase = createClient(supabaseUrl, supabaseKey, {
       global: { headers: { Authorization: `Bearer ${userToken}` } },
     });
 
@@ -179,7 +178,7 @@ describe('010 - In-App Notifications', () => {
   });
 
   it('should cascade delete notifications when ticket is deleted', async () => {
-    const adminSupabase = createClient<Database>(supabaseUrl, supabaseKey, {
+    const adminSupabase = createClient(supabaseUrl, supabaseKey, {
       global: { headers: { Authorization: `Bearer ${adminToken}` } },
     });
 
@@ -216,7 +215,7 @@ describe('010 - In-App Notifications', () => {
   });
 
   it('should return correct unread count', async () => {
-    const userSupabase = createClient<Database>(supabaseUrl, supabaseKey, {
+    const userSupabase = createClient(supabaseUrl, supabaseKey, {
       global: { headers: { Authorization: `Bearer ${userToken}` } },
     });
 
@@ -230,7 +229,7 @@ describe('010 - In-App Notifications', () => {
   });
 
   it('should mark all notifications as read', async () => {
-    const userSupabase = createClient<Database>(supabaseUrl, supabaseKey, {
+    const userSupabase = createClient(supabaseUrl, supabaseKey, {
       global: { headers: { Authorization: `Bearer ${userToken}` } },
     });
 
@@ -252,7 +251,7 @@ describe('010 - In-App Notifications', () => {
   });
 
   it('should have correct message format for event types', async () => {
-    const userSupabase = createClient<Database>(supabaseUrl, supabaseKey, {
+    const userSupabase = createClient(supabaseUrl, supabaseKey, {
       global: { headers: { Authorization: `Bearer ${userToken}` } },
     });
 

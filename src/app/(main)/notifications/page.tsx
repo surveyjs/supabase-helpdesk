@@ -47,8 +47,13 @@ function formatTimestamp(dateString: string): string {
 }
 
 async function MarkAllReadButton() {
+  async function handleMarkAllRead() {
+    'use server';
+    await markAllNotificationsRead();
+  }
+
   return (
-    <form action={markAllNotificationsRead}>
+    <form action={handleMarkAllRead}>
       <button
         type="submit"
         className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"

@@ -188,7 +188,7 @@ test.describe('CSAT on Ticket Detail', () => {
     const { data: agent } = await svc
       .from('profiles')
       .select('id')
-      .eq('email', 'agent@example.com')
+      .eq('email', 'agent.smith@example.com')
       .single();
 
     const { data: typeData } = await svc.from('ticket_types').select('id').limit(1).single();
@@ -248,7 +248,7 @@ test.describe('CSAT on Ticket Detail', () => {
   });
 
   test('agent cannot see "Rate this ticket" link', async ({ page }) => {
-    await loginAs(page, 'agent@example.com');
+    await loginAs(page, 'agent.smith@example.com');
     await page.goto(`/tickets/${ticketId}/${ticketSlug}`);
 
     // Agent should see the ticket but not the rate link
@@ -271,7 +271,7 @@ test.describe('CSAT on Ticket Detail', () => {
       submitted_at: new Date().toISOString(),
     });
 
-    await loginAs(page, 'agent@example.com');
+    await loginAs(page, 'agent.smith@example.com');
     await page.goto(`/tickets/${ticketId}/${ticketSlug}`);
 
     await expect(page.getByTestId('csat-rating-display')).toBeVisible({ timeout: 10000 });
@@ -305,7 +305,7 @@ test.describe('CSAT Admin Settings', () => {
     await expect(page.getByRole('link', { name: 'Setup' })).toBeVisible({ timeout: 10000 });
     await gotoAdmin(page, '/admin/csat');
 
-    await expect(page.getByText('CSAT Settings')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'CSAT Settings' })).toBeVisible({ timeout: 10000 });
     await expect(page.getByTestId('csat-enabled-toggle')).toBeVisible();
   });
 

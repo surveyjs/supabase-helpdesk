@@ -94,13 +94,17 @@ export async function processPendingCsatSurveys(): Promise<void> {
         csatLink,
       });
 
-      await sendEmail(owner.email, subject, html);
+      const emailSent = await sendEmail(owner.email, subject, html);
 
-      // Mark as sent
-      await supabase
-        .from('csat_survey_schedule')
-        .update({ is_sent: true })
-        .eq('id', schedule.id);
+      if (emailSent) {
+        // Mark as sent only after successful delivery handoff
+        await supabase
+          .from('csat_survey_schedule')
+          .update({ is_sent: true })
+          .eq('id', schedule.id);
+      } else {
+        console.warn(`[csat] Email send returned false for ticket ${schedule.ticket_id}; leaving survey pending for retry.`);
+      }
     } catch (err) {
       console.error(`[csat] Failed to process survey for ticket ${schedule.ticket_id}:`, err);
     }

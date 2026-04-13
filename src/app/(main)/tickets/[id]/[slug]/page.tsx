@@ -631,7 +631,7 @@ export default async function TicketDetailPage({
         </dl>
 
         {/* CSAT Rating display */}
-        {(csatRating || canRate || (isOwner && isRegularUser && csatRating)) && (
+        {(csatRating || canRate) && (
           <div className="mt-4 border-t border-gray-200 pt-4" data-testid="csat-section">
             <h3 className="text-sm font-medium text-gray-500 mb-2">Customer Satisfaction</h3>
             {csatRating ? (

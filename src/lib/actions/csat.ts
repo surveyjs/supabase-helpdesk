@@ -2,7 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { createServerClient, createServiceRoleClient } from '@/lib/supabase/server';
-import { validateCsatToken, reissueCsatToken, createCsatToken } from '@/lib/utils/csat';
+import { validateCsatToken, reissueCsatToken } from '@/lib/utils/csat';
 import { notifyAgent } from '@/lib/email/notify';
 
 // ============================================================
@@ -55,14 +55,13 @@ export async function submitCsatRating(
     return { success: false, error: 'Agents and admins cannot submit CSAT ratings.' };
   }
 
-  // Update the csat_ratings row
+  // Update the csat_ratings row (keep is_used=false so same token stays valid for updates)
   const { error: updateError } = await supabase
     .from('csat_ratings')
     .update({
       rating,
       comment: comment?.trim() || null,
       submitted_at: new Date().toISOString(),
-      is_used: true,
     })
     .eq('token', token);
 
@@ -70,8 +69,8 @@ export async function submitCsatRating(
     return { success: false, error: 'Failed to submit rating. Please try again.' };
   }
 
-  // Issue a new token so user can update their rating later
-  const newToken = await createCsatToken(ticketId);
+  // Reuse the current token so later updates keep the same rating context
+  const newToken = token;
 
   // Log to activity_log
   await supabase.from('activity_log').insert({
@@ -83,12 +82,12 @@ export async function submitCsatRating(
 
   // Notify assigned agent
   if (ticket.assigned_agent_id) {
-    const userName = creatorProfile?.display_name ?? creatorProfile?.email ?? 'Customer';
+    const authorName = creatorProfile?.display_name ?? creatorProfile?.email ?? 'Customer';
     notifyAgent(ticket.assigned_agent_id, 'csat_submitted', ticketId, {
       ticketId: String(ticketId),
       ticketTitle: ticket.title,
       rating: String(rating),
-      userName,
+      authorName,
       comment: comment?.trim() || '(no comment)',
     }).catch((err) => console.error('[notify]', err));
   }
@@ -217,15 +216,19 @@ export async function requestCsatToken(ticketId: number): Promise<void> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  // Verify user is the ticket owner
+  // Verify user is the ticket owner and ticket is closed
   const { data: ticket } = await supabase
     .from('tickets')
-    .select('id, creator_id')
+    .select('id, creator_id, status')
     .eq('id', ticketId)
     .single();
 
   if (!ticket || ticket.creator_id !== user.id) {
     throw new Error('Forbidden');
+  }
+
+  if (ticket.status !== 'closed') {
+    throw new Error('CSAT ratings can only be submitted for closed tickets.');
   }
 
   // Verify user is not agent/admin

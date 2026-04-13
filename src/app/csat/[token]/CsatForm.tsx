@@ -62,7 +62,7 @@ export function CsatForm({ token, existingRating, existingComment }: CsatFormPro
                 className="text-blue-600 hover:text-blue-800 underline break-all"
                 data-testid="csat-update-link"
               >
-                {typeof window !== 'undefined' ? window.location.origin : ''}/csat/{result.newToken}
+                /csat/{result.newToken}
               </a>
             </p>
           </div>

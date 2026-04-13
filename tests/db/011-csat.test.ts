@@ -560,27 +560,27 @@ describe('CSAT (Customer Satisfaction)', () => {
   // ==================== RLS Tests ====================
 
   describe('RLS policies', () => {
-    it('regular user can read csat_ratings (open SELECT policy)', async () => {
+    it('regular user cannot read csat_ratings (service_role-only SELECT)', async () => {
       const user = await clientForUser('csat-user@test.com');
-      const { data, error } = await user
+      const { data } = await user
         .from('csat_ratings')
         .select('id, rating')
         .eq('ticket_id', ticketId)
         .limit(1);
 
-      expect(error).toBeNull();
-      expect(data).toBeDefined();
+      // RLS should filter — user sees nothing
+      expect(data).toHaveLength(0);
     });
 
-    it('admin can read csat_survey_schedule', async () => {
+    it('admin cannot read csat_survey_schedule (service_role-only SELECT)', async () => {
       const admin = await clientForUser('csat-admin@test.com');
-      const { data, error } = await admin
+      const { data } = await admin
         .from('csat_survey_schedule')
         .select('id')
         .eq('ticket_id', ticketId);
 
-      expect(error).toBeNull();
-      expect(data).toBeDefined();
+      // RLS should filter — even admin sees nothing (service_role only)
+      expect(data).toHaveLength(0);
     });
 
     it('regular user cannot read csat_survey_schedule (admin-only SELECT)', async () => {

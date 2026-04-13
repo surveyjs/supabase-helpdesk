@@ -23,17 +23,17 @@ CREATE INDEX idx_csat_ratings_token ON csat_ratings (token);
 
 ALTER TABLE csat_ratings ENABLE ROW LEVEL SECURITY;
 
--- Public (unauthenticated) read by token for the rating page
+-- Service role only — no direct public/user access to CSAT tokens or feedback
 CREATE POLICY csat_ratings_select_by_token ON csat_ratings
-  FOR SELECT USING (true);
+  FOR SELECT TO service_role USING (true);
 
 -- Insert via service role (system-generated tokens)
 CREATE POLICY csat_ratings_insert ON csat_ratings
-  FOR INSERT WITH CHECK (true);
+  FOR INSERT TO service_role WITH CHECK (true);
 
 -- Update via service role (rating submission)
 CREATE POLICY csat_ratings_update ON csat_ratings
-  FOR UPDATE USING (true);
+  FOR UPDATE TO service_role USING (true);
 
 -- --------------------------------------------------------------------------
 -- CSAT Survey Schedule Table
@@ -56,11 +56,11 @@ ALTER TABLE csat_survey_schedule ENABLE ROW LEVEL SECURITY;
 
 -- Service role only — no direct user access
 CREATE POLICY csat_survey_schedule_select ON csat_survey_schedule
-  FOR SELECT USING (is_admin());
+  FOR SELECT TO service_role USING (true);
 CREATE POLICY csat_survey_schedule_insert ON csat_survey_schedule
-  FOR INSERT WITH CHECK (true);
+  FOR INSERT TO service_role WITH CHECK (true);
 CREATE POLICY csat_survey_schedule_update ON csat_survey_schedule
-  FOR UPDATE USING (true);
+  FOR UPDATE TO service_role USING (true);
 
 -- --------------------------------------------------------------------------
 -- CSAT Settings in app_settings
@@ -103,23 +103,14 @@ VALUES (
 ON CONFLICT (event_type) DO NOTHING;
 
 -- --------------------------------------------------------------------------
--- CSAT Survey Cron Job (process pending surveys every 5 minutes)
+-- CSAT Survey Dispatch
 -- --------------------------------------------------------------------------
 
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
-    PERFORM cron.schedule(
-      'send-csat-surveys',
-      '*/5 * * * *',
-      $cron$
-      UPDATE csat_survey_schedule
-      SET is_sent = true
-      WHERE is_sent = false
-        AND is_cancelled = false
-        AND scheduled_at <= now();
-      $cron$
-    );
-  END IF;
-END
-$$;
+-- Intentionally do not install a DB-side pg_cron job that marks rows in
+-- csat_survey_schedule as sent. Updating `is_sent = true` here without going
+-- through the real email delivery path would cause pending surveys to be
+-- permanently skipped by application-side processors that select only
+-- `is_sent = false` rows.
+--
+-- If automated dispatch is needed, schedule the application/edge send path
+-- and only set `is_sent = true` after a successful send.

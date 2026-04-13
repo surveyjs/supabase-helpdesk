@@ -77,12 +77,12 @@ export async function validateCsatToken(
     return { valid: false };
   }
 
-  // Used without a rating (invalidated by reissue)?
-  if (data.is_used && data.rating === null) {
+  // Any used token is invalid, whether it was submitted or invalidated by reissue.
+  if (data.is_used) {
     return { valid: false };
   }
 
-  // If used with a rating, return existing info so user can see/update
+  // If token has a rating, return existing info so user can update
   if (data.rating !== null) {
     return {
       valid: true,

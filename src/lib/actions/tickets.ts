@@ -7,6 +7,7 @@ import { generateSlug } from '@/lib/utils/slug';
 import { validateTitle, validateBody } from '@/lib/utils/validation';
 import { notifyTicketRecipients, notifyAgent } from '@/lib/email/notify';
 import { cancelCsatSurvey } from '@/lib/actions/csat';
+import { initializeSlaTimer, stopFirstResponseTimer, resumeSlaTimer } from '@/lib/utils/sla';
 
 export type TicketActionState = {
   error?: string;
@@ -204,6 +205,9 @@ export async function createTicket(
     .from('ticket_followers')
     .insert({ ticket_id: ticket.id, user_id: user.id });
 
+  // Initialize SLA timer (defaults to medium severity)
+  initializeSlaTimer(ticket.id, 'medium').catch((err) => console.error('[sla]', err));
+
   redirect(`/tickets/${ticket.id}/${ticket.slug}`);
 }
 
@@ -278,6 +282,8 @@ export async function replyToTicket(
       if (ticket.status === 'closed') {
         cancelCsatSurvey(ticket.id).catch((err) => console.error('[csat]', err));
       }
+      // Resume SLA timer on auto re-open (pending→open or closed→open)
+      resumeSlaTimer(ticket.id).catch((err) => console.error('[sla]', err));
       // Log status change
       await supabase.from('activity_log').insert({
         ticket_id: ticket.id,
@@ -298,6 +304,19 @@ export async function replyToTicket(
   if (isAgent) {
     // Agent reply → notify ticket owner + followers (coalesced)
     notifyTicketRecipients(ticket.id, 'new_post', placeholders, user.id, user.id).catch((err) => console.error('[notify]', err));
+
+    // Check if this is the first agent reply — stop first response timer
+    const { count: agentReplyCount } = await supabase
+      .from('posts')
+      .select('id', { count: 'exact', head: true })
+      .eq('ticket_id', ticket.id)
+      .eq('post_type', 'post')
+      .eq('is_original', false)
+      .neq('author_id', ticket.creator_id);
+
+    if (agentReplyCount !== null && agentReplyCount <= 1) {
+      stopFirstResponseTimer(ticket.id).catch((err) => console.error('[sla]', err));
+    }
   } else {
     // User reply → notify ticket owner + followers (non-agent, no coalescing)
     notifyTicketRecipients(ticket.id, 'new_post', placeholders, user.id).catch((err) => console.error('[notify]', err));

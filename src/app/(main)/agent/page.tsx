@@ -247,6 +247,7 @@ export default async function AgentDashboardPage({
             >
               <option value="">Last Modified</option>
               <option value="created">Created Date</option>
+              <option value="sla">SLA Risk</option>
             </select>
           </div>
 
@@ -423,6 +424,7 @@ export default async function AgentDashboardPage({
                 <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                 <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Urgency</th>
                 <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Severity</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">SLA</th>
                 <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Posts</th>
                 <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Updated</th>
               </tr>
@@ -452,6 +454,45 @@ export default async function AgentDashboardPage({
                   </td>
                   <td className="px-4 py-3">
                     <Badge variant="priority" value={ticket.severity} />
+                  </td>
+                  <td className="px-4 py-3" data-testid={`sla-cell-${ticket.id}`}>
+                    {ticket.sla_status && ticket.sla_status !== 'no_sla' ? (
+                      <span
+                        className="inline-flex items-center"
+                        aria-label={`SLA: ${
+                          ticket.sla_status === 'breached' ? 'Breached' :
+                          ticket.sla_status === 'approaching' ? 'Approaching' :
+                          ticket.sla_status === 'met' ? 'On track' :
+                          ticket.sla_status.replace('_', ' ')
+                        }`}
+                        title={`SLA: ${
+                          ticket.sla_status === 'breached' ? 'Breached' :
+                          ticket.sla_status === 'approaching' ? 'Approaching' :
+                          ticket.sla_status === 'met' ? 'On track' :
+                          ticket.sla_status.replace('_', ' ')
+                        }`}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={`inline-block w-2.5 h-2.5 rounded-full ${
+                            ticket.sla_status === 'breached' ? 'bg-red-500' :
+                            ticket.sla_status === 'approaching' ? 'bg-yellow-500' :
+                            ticket.sla_status === 'met' ? 'bg-green-500' :
+                            'bg-green-500'
+                          }`}
+                        />
+                        <span className="sr-only">
+                          SLA: {
+                            ticket.sla_status === 'breached' ? 'Breached' :
+                            ticket.sla_status === 'approaching' ? 'Approaching' :
+                            ticket.sla_status === 'met' ? 'On track' :
+                            ticket.sla_status.replace('_', ' ')
+                          }
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-400">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600">
                     {ticket.post_count}

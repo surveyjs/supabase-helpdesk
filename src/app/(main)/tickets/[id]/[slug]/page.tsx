@@ -20,6 +20,7 @@ import {
   publishDraft,
 } from '@/lib/actions/tickets';
 import { getCsatRating, requestCsatToken } from '@/lib/actions/csat';
+import { getSlaStatus, type SlaTimer, type SlaIndicatorStatus } from '@/lib/utils/sla';
 import {
   changeTicketStatus,
   assignAgent,
@@ -43,6 +44,31 @@ function getContrastColor(hex: string): string {
   const b = parseInt(c.substring(4, 6), 16) / 255;
   const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
   return luminance < 0.5 ? '#FFFFFF' : '#111827';
+}
+
+const SLA_DOT_COLORS: Record<SlaIndicatorStatus, string> = {
+  on_track: 'bg-green-500',
+  approaching: 'bg-yellow-500',
+  breached: 'bg-red-500',
+  met: 'bg-green-500',
+  no_sla: 'bg-gray-300',
+};
+
+function SlaStatusDot({ status }: { status: SlaIndicatorStatus }) {
+  return (
+    <span
+      className={`inline-block w-2.5 h-2.5 rounded-full ${SLA_DOT_COLORS[status]}`}
+      title={status.replace('_', ' ')}
+      data-testid={`sla-dot-${status}`}
+    />
+  );
+}
+
+function formatMinutesAsHours(minutes: number): string {
+  if (minutes < 60) return `${minutes}m`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
 export default async function TicketDetailPage({
@@ -537,6 +563,19 @@ export default async function TicketDetailPage({
   const isRegularUser = profile?.role === 'user';
   const canRate = isOwner && isRegularUser && ticket.status === 'closed';
 
+  // Fetch SLA timer (agents only)
+  let slaStatus: Awaited<ReturnType<typeof getSlaStatus>> | null = null;
+  if (isAgent) {
+    const { data: slaTimer } = await supabase
+      .from('sla_timers')
+      .select('*')
+      .eq('ticket_id', ticket.id)
+      .single();
+    if (slaTimer) {
+      slaStatus = await getSlaStatus(slaTimer as SlaTimer);
+    }
+  }
+
   const creatorName = creator?.display_name ?? `User #${ticket.creator_id}`;
   const assignedAgentName = assignedAgent?.display_name ?? null;
   const typeName = ticketType?.name ?? 'Unknown';
@@ -629,6 +668,57 @@ export default async function TicketDetailPage({
             </dd>
           </div>
         </dl>
+
+        {/* SLA Indicators (agents only) */}
+        {isAgent && (
+          <div className="mt-4 border-t border-gray-200 pt-4" data-testid="sla-indicators">
+            <h3 className="text-sm font-medium text-gray-500 mb-2">SLA Status</h3>
+            {slaStatus ? (
+              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                <div>
+                  <dt className="text-gray-500">First Response SLA</dt>
+                  <dd className="text-gray-900 flex items-center gap-2">
+                    <SlaStatusDot status={slaStatus.firstResponse.status} />
+                    {slaStatus.firstResponse.status === 'met' ? (
+                      <span className="text-green-700">
+                        ✓ First response in {formatMinutesAsHours(slaStatus.firstResponse.elapsedMinutes)}
+                      </span>
+                    ) : slaStatus.firstResponse.status === 'breached' && slaStatus.firstResponse.completedAt ? (
+                      <span className="text-red-700">
+                        ✗ First response breached ({formatMinutesAsHours(slaStatus.firstResponse.elapsedMinutes)} of {formatMinutesAsHours(slaStatus.firstResponse.targetMinutes)})
+                      </span>
+                    ) : (
+                      <span>
+                        {formatMinutesAsHours(slaStatus.firstResponse.elapsedMinutes)} of {formatMinutesAsHours(slaStatus.firstResponse.targetMinutes)} elapsed ({slaStatus.firstResponse.percentage}%)
+                      </span>
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-gray-500">Resolution SLA</dt>
+                  <dd className="text-gray-900 flex items-center gap-2">
+                    <SlaStatusDot status={slaStatus.resolution.status} />
+                    {slaStatus.resolution.status === 'met' ? (
+                      <span className="text-green-700">
+                        ✓ Resolved in {formatMinutesAsHours(slaStatus.resolution.elapsedMinutes)}
+                      </span>
+                    ) : slaStatus.resolution.status === 'breached' && slaStatus.resolution.completedAt ? (
+                      <span className="text-red-700">
+                        ✗ Resolution breached ({formatMinutesAsHours(slaStatus.resolution.elapsedMinutes)} of {formatMinutesAsHours(slaStatus.resolution.targetMinutes)})
+                      </span>
+                    ) : (
+                      <span>
+                        {formatMinutesAsHours(slaStatus.resolution.elapsedMinutes)} of {formatMinutesAsHours(slaStatus.resolution.targetMinutes)} elapsed ({slaStatus.resolution.percentage}%)
+                      </span>
+                    )}
+                  </dd>
+                </div>
+              </dl>
+            ) : (
+              <p className="text-sm text-gray-400">No SLA</p>
+            )}
+          </div>
+        )}
 
         {/* CSAT Rating display */}
         {(csatRating || canRate) && (

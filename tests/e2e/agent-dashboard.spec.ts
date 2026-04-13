@@ -129,17 +129,25 @@ test.describe('Agent Ticket Detail Controls', () => {
 
     await expect(page.getByTestId('agent-controls')).toBeVisible();
 
+    // Helper: wait for Next.js server action POST to complete before asserting
+    const clickAction = async (btn: ReturnType<typeof page.getByRole>) => {
+      await Promise.all([
+        page.waitForResponse(r => r.request().method() === 'POST', { timeout: 30_000 }),
+        btn.click(),
+      ]);
+    };
+
     // Find and click "Mark Pending"
     const pendingBtn = page.getByRole('button', { name: 'Mark Pending' });
     if (await pendingBtn.isVisible()) {
-      await pendingBtn.click();
+      await clickAction(pendingBtn);
       await expect(page.getByTestId('agent-controls').getByText('Pending')).toBeVisible();
     }
 
     // Re-open
     const reopenBtn = page.getByRole('button', { name: 'Mark Open' });
     if (await reopenBtn.isVisible()) {
-      await reopenBtn.click();
+      await clickAction(reopenBtn);
       await expect(page.getByTestId('agent-controls').getByText('Open')).toBeVisible();
     }
   });
@@ -149,58 +157,89 @@ test.describe('Agent Ticket Detail Controls', () => {
     await page.goto(ticketUrl);
     await expect(page.getByTestId('agent-controls')).toBeVisible();
 
+    // Helper: wait for Next.js server action POST to complete before asserting
+    const clickAction = async (btn: ReturnType<typeof page.getByRole>) => {
+      await Promise.all([
+        page.waitForResponse(r => r.request().method() === 'POST', { timeout: 30_000 }),
+        btn.click(),
+      ]);
+    };
+
     // Change urgency
     await page.locator('#agent-urgency').selectOption('critical');
-    await page.locator('#agent-urgency').locator('..').getByRole('button', { name: 'Set' }).click();
+    await clickAction(page.locator('#agent-urgency').locator('..').getByRole('button', { name: 'Set' }));
     await expect(page.getByText('Urgency: Critical')).toBeVisible();
 
     // Change severity
     await page.locator('#agent-severity').selectOption('high');
-    await page.locator('#agent-severity').locator('..').getByRole('button', { name: 'Set' }).click();
+    await clickAction(page.locator('#agent-severity').locator('..').getByRole('button', { name: 'Set' }));
     await expect(page.getByText('Severity: High')).toBeVisible();
 
-    // Restore
+    // Restore urgency
     await page.locator('#agent-urgency').selectOption('high');
-    await page.locator('#agent-urgency').locator('..').getByRole('button', { name: 'Set' }).click();
+    await clickAction(page.locator('#agent-urgency').locator('..').getByRole('button', { name: 'Set' }));
+
+    // Restore severity
     await page.locator('#agent-severity').selectOption('medium');
-    await page.locator('#agent-severity').locator('..').getByRole('button', { name: 'Set' }).click();
+    await clickAction(page.locator('#agent-severity').locator('..').getByRole('button', { name: 'Set' }));
   });
 
   test('agent can change type/category from detail page', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(ticketUrl);
 
+    const clickAction = async (btn: ReturnType<typeof page.getByRole>) => {
+      await Promise.all([
+        page.waitForResponse(r => r.request().method() === 'POST', { timeout: 30_000 }),
+        btn.click(),
+      ]);
+    };
+
     // Change type
     await page.locator('#agent-type').selectOption({ label: 'Question' });
-    await page.locator('#agent-type').locator('..').getByRole('button', { name: 'Set' }).click();
+    await clickAction(page.locator('#agent-type').locator('..').getByRole('button', { name: 'Set' }));
     await expect(page.getByTestId('agent-controls').getByText('Type')).toBeVisible();
 
     // Restore to Issue
     await page.locator('#agent-type').selectOption({ label: 'Issue' });
-    await page.locator('#agent-type').locator('..').getByRole('button', { name: 'Set' }).click();
+    await clickAction(page.locator('#agent-type').locator('..').getByRole('button', { name: 'Set' }));
   });
 
   test('agent can toggle privacy from detail page', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(ticketUrl);
 
+    const clickAction = async (btn: ReturnType<typeof page.getByRole>) => {
+      await Promise.all([
+        page.waitForResponse(r => r.request().method() === 'POST', { timeout: 30_000 }),
+        btn.click(),
+      ]);
+    };
+
     // Ticket is public (is_private=false) based on seed data
     const controls = page.getByTestId('agent-controls');
     const privacyBtn = controls.getByRole('button', { name: /Make Private|Make Public/ });
     const btnText = await privacyBtn.textContent();
-    await privacyBtn.click();
+    await clickAction(privacyBtn);
 
     // Wait for the button text to change
     const expectedText = btnText === 'Make Private' ? 'Make Public' : 'Make Private';
     await expect(controls.getByRole('button', { name: expectedText })).toBeVisible();
 
     // Toggle back
-    await controls.getByRole('button', { name: expectedText }).click();
+    await clickAction(controls.getByRole('button', { name: expectedText }));
     await expect(controls.getByRole('button', { name: btnText! })).toBeVisible();
   });
 
   test('agent can assign/unassign from detail page', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
+
+    const clickAction = async (btn: ReturnType<typeof page.getByRole>) => {
+      await Promise.all([
+        page.waitForResponse(r => r.request().method() === 'POST', { timeout: 30_000 }),
+        btn.click(),
+      ]);
+    };
 
     // Use an unassigned ticket from seed data
     const admin = createServiceRoleClient();
@@ -220,21 +259,28 @@ test.describe('Agent Ticket Detail Controls', () => {
     // "Assign to me" button should be visible
     const assignBtn = page.getByRole('button', { name: 'Assign to me' });
     await expect(assignBtn).toBeVisible();
-    await assignBtn.click();
+    await clickAction(assignBtn);
 
     // Unassign button should now be visible (server action + revalidation)
     const unassignBtn = page.getByRole('button', { name: 'Unassign' });
-    await expect(unassignBtn).toBeVisible({ timeout: 15000 });
+    await expect(unassignBtn).toBeVisible();
 
     // Unassign
-    await unassignBtn.click();
+    await clickAction(unassignBtn);
 
     // Assign to me should be back
-    await expect(page.getByRole('button', { name: 'Assign to me' })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole('button', { name: 'Assign to me' })).toBeVisible();
   });
 
   test('"Assign to me" button works', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
+
+    const clickAction = async (btn: ReturnType<typeof page.getByRole>) => {
+      await Promise.all([
+        page.waitForResponse(r => r.request().method() === 'POST', { timeout: 30_000 }),
+        btn.click(),
+      ]);
+    };
 
     // Find an unassigned ticket
     const admin = createServiceRoleClient();
@@ -249,10 +295,10 @@ test.describe('Agent Ticket Detail Controls', () => {
     await page.goto(`/tickets/${tickets[0].id}/${tickets[0].slug}`);
     const btn = page.getByRole('button', { name: 'Assign to me' });
     if (await btn.isVisible()) {
-      await btn.click();
+      await clickAction(btn);
       await expect(page.getByRole('main').getByText('Agent Smith', { exact: true })).toBeVisible();
       // Cleanup: unassign
-      await page.getByRole('button', { name: 'Unassign' }).click();
+      await clickAction(page.getByRole('button', { name: 'Unassign' }));
     }
   });
 
@@ -260,17 +306,24 @@ test.describe('Agent Ticket Detail Controls', () => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(ticketUrl);
 
+    const clickAction = async (btn: ReturnType<typeof page.getByRole>) => {
+      await Promise.all([
+        page.waitForResponse(r => r.request().method() === 'POST', { timeout: 30_000 }),
+        btn.click(),
+      ]);
+    };
+
     // Make sure ticket is assigned first
     const assignBtn = page.getByRole('button', { name: 'Assign to me' });
     if (await assignBtn.isVisible()) {
-      await assignBtn.click();
+      await clickAction(assignBtn);
       await expect(page.getByRole('button', { name: 'Unassign' })).toBeVisible();
     }
 
     // Select a different agent and reassign
     const agentSelect = page.getByLabel('Select agent');
     await agentSelect.selectOption({ value: '00000000-0000-0000-0000-000000000013' });
-    await page.getByRole('button', { name: 'Reassign' }).click();
+    await clickAction(page.getByRole('button', { name: 'Reassign' }));
 
     // Verify agent changed in display
     await page.reload();
@@ -296,7 +349,10 @@ test.describe('Saved Views', () => {
 
     // Create a saved view
     await page.getByLabel('Saved view name').fill('Test E2E View');
-    await page.getByRole('button', { name: 'Save Current View' }).click();
+    await Promise.all([
+      page.waitForResponse(r => r.request().method() === 'POST', { timeout: 30_000 }),
+      page.getByRole('button', { name: 'Save Current View' }).click(),
+    ]);
 
     // View should appear
     await expect(page.getByText('Test E2E View')).toBeVisible();
@@ -305,7 +361,10 @@ test.describe('Saved Views', () => {
     await page.getByRole('link', { name: 'Test E2E View' }).click();
 
     // Delete the view
-    await page.getByLabel('Delete saved view Test E2E View').click();
+    await Promise.all([
+      page.waitForResponse(r => r.request().method() === 'POST', { timeout: 30_000 }),
+      page.getByLabel('Delete saved view Test E2E View').click(),
+    ]);
 
     // View should be gone
     await expect(page.getByRole('link', { name: 'Test E2E View' })).not.toBeVisible();

@@ -127,7 +127,7 @@ test.describe('Agent Ticket Detail Controls', () => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(ticketUrl);
 
-    await expect(page.getByTestId('agent-controls')).toBeVisible();
+    await expect(page.getByTestId('agent-controls')).toBeVisible({ timeout: 10000 });
 
     // Find and click "Mark Pending"
     const pendingBtn = page.getByRole('button', { name: 'Mark Pending' });
@@ -173,7 +173,7 @@ test.describe('Agent Ticket Detail Controls', () => {
     // Change type
     await page.locator('#agent-type').selectOption({ label: 'Question' });
     await page.locator('#agent-type').locator('..').getByRole('button', { name: 'Set' }).click();
-    await page.waitForTimeout(1000);
+    await expect(page.getByTestId('agent-controls').getByText('Type')).toBeVisible();
 
     // Restore to Issue
     await page.locator('#agent-type').selectOption({ label: 'Issue' });
@@ -264,14 +264,13 @@ test.describe('Agent Ticket Detail Controls', () => {
     const assignBtn = page.getByRole('button', { name: 'Assign to me' });
     if (await assignBtn.isVisible()) {
       await assignBtn.click();
-      await page.waitForTimeout(1000);
+      await expect(page.getByRole('button', { name: 'Unassign' })).toBeVisible({ timeout: 10000 });
     }
 
     // Select a different agent and reassign
     const agentSelect = page.getByLabel('Select agent');
     await agentSelect.selectOption({ value: '00000000-0000-0000-0000-000000000013' });
     await page.getByRole('button', { name: 'Reassign' }).click();
-    await page.waitForTimeout(1000);
 
     // Verify agent changed in display
     await page.reload();
@@ -298,18 +297,15 @@ test.describe('Saved Views', () => {
     // Create a saved view
     await page.getByLabel('Saved view name').fill('Test E2E View');
     await page.getByRole('button', { name: 'Save Current View' }).click();
-    await page.waitForTimeout(1000);
 
     // View should appear
     await expect(page.getByText('Test E2E View')).toBeVisible({ timeout: 10000 });
 
     // Click to apply
     await page.getByRole('link', { name: 'Test E2E View' }).click();
-    await page.waitForTimeout(500);
 
     // Delete the view
     await page.getByLabel('Delete saved view Test E2E View').click();
-    await page.waitForTimeout(1000);
 
     // View should be gone
     await expect(page.getByRole('link', { name: 'Test E2E View' })).not.toBeVisible();

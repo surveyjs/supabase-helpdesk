@@ -177,7 +177,7 @@ test.describe('File Attachments', () => {
 
     // Save and wait for confirmation
     await page.getByRole('button', { name: 'Save' }).click();
-    await page.waitForTimeout(1000);
+    await expect(page.getByText(/saved|success/i)).toBeVisible({ timeout: 10000 }).catch(() => {});
 
     // Verify it was saved
     await gotoAdmin(page, '/admin/file-settings');
@@ -187,7 +187,7 @@ test.describe('File Attachments', () => {
     // Reset to 10
     await maxSizeInput.fill('10');
     await page.getByRole('button', { name: 'Save' }).click();
-    await page.waitForTimeout(1000);
+    await expect(page.getByText(/saved|success/i)).toBeVisible({ timeout: 10000 }).catch(() => {});
   });
 
   test('admin can reset file types to defaults', async ({ page }) => {

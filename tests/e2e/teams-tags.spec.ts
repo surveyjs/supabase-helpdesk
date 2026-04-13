@@ -81,11 +81,10 @@ test.describe('Tag Display and Management', () => {
     const addedTagName = options[0];
 
     await addTagForm.getByRole('button', { name: 'Add Tag' }).click();
-    await page.waitForTimeout(2000);
 
     // Tag should now appear
     const tagSection = page.getByTestId('ticket-tags');
-    await expect(tagSection.getByText(addedTagName)).toBeVisible();
+    await expect(tagSection.getByText(addedTagName)).toBeVisible({ timeout: 10000 });
   });
 
   test('agent can remove a tag from a ticket', async ({ page }) => {
@@ -102,16 +101,16 @@ test.describe('Tag Display and Management', () => {
 
     const firstTagName = await tagSection.locator('span[style]').first().textContent();
     await removeButtons.first().click();
-    await page.waitForTimeout(2000);
 
     // Restore the tag for other tests
     const addTagForm = page.getByTestId('add-tag-form');
-    if (await addTagForm.isVisible()) {
+    await expect(addTagForm).toBeVisible({ timeout: 10000 });
+    if (firstTagName) {
       const options = await addTagForm.getByRole('combobox').locator('option').allTextContents();
-      if (firstTagName && options.includes(firstTagName)) {
+      if (options.includes(firstTagName)) {
         await addTagForm.getByRole('combobox').selectOption({ label: firstTagName });
         await addTagForm.getByRole('button', { name: 'Add Tag' }).click();
-        await page.waitForTimeout(1000);
+        await expect(page.getByTestId('ticket-tags').getByText(firstTagName)).toBeVisible({ timeout: 10000 });
       }
     }
   });
@@ -166,9 +165,8 @@ test.describe('Admin Types Management', () => {
 
     await page.locator('#new-type-name').fill('E2E Test Type');
     await page.getByRole('button', { name: 'Add Type' }).click();
-    await page.waitForTimeout(2000);
 
-    await expect(page.getByText('E2E Test Type')).toBeVisible();
+    await expect(page.getByText('E2E Test Type')).toBeVisible({ timeout: 10000 });
   });
 
   test('admin can delete a type', async ({ page }) => {
@@ -178,9 +176,8 @@ test.describe('Admin Types Management', () => {
     // Delete the E2E Test Type
     const row = page.locator('li').filter({ hasText: 'E2E Test Type' });
     await row.getByRole('button', { name: /Delete/ }).click();
-    await page.waitForTimeout(2000);
 
-    await expect(page.getByText('E2E Test Type')).not.toBeVisible();
+    await expect(page.getByText('E2E Test Type')).not.toBeVisible({ timeout: 10000 });
   });
 
   test('admin can set default type', async ({ page }) => {
@@ -192,7 +189,7 @@ test.describe('Admin Types Management', () => {
     const setDefaultBtn = issueRow.getByRole('button', { name: 'Set Default' });
     if (await setDefaultBtn.isVisible()) {
       await setDefaultBtn.click();
-      await page.waitForTimeout(2000);
+      await expect(issueRow.getByText('(default)')).toBeVisible({ timeout: 10000 });
     }
 
     // Restore Question as default
@@ -201,7 +198,7 @@ test.describe('Admin Types Management', () => {
     const restoreBtn = questionRow.getByRole('button', { name: 'Set Default' });
     if (await restoreBtn.isVisible()) {
       await restoreBtn.click();
-      await page.waitForTimeout(2000);
+      await expect(questionRow.getByText('(default)')).toBeVisible({ timeout: 10000 });
     }
   });
 });
@@ -224,16 +221,14 @@ test.describe('Admin Categories Management', () => {
 
     await page.locator('#new-category-name').fill('E2E Test Category');
     await page.getByRole('button', { name: 'Add Category' }).click();
-    await page.waitForTimeout(2000);
 
-    await expect(page.getByText('E2E Test Category')).toBeVisible();
+    await expect(page.getByText('E2E Test Category')).toBeVisible({ timeout: 10000 });
 
     // Delete it
     const row = page.locator('li').filter({ hasText: 'E2E Test Category' });
     await row.getByRole('button', { name: /Delete/ }).click();
-    await page.waitForTimeout(2000);
 
-    await expect(page.getByText('E2E Test Category')).not.toBeVisible();
+    await expect(page.getByText('E2E Test Category')).not.toBeVisible({ timeout: 10000 });
   });
 });
 
@@ -313,9 +308,8 @@ test.describe('Admin Teams Management', () => {
 
     const teamSection = page.locator('div.bg-white').filter({ hasText: 'E2E Test Team' });
     await teamSection.getByRole('button', { name: /Delete E2E/ }).click();
-    await page.waitForTimeout(2000);
 
-    // Team should still be there
+    // Team should still be there (has members)
     await expect(page.getByText('E2E Test Team')).toBeVisible();
   });
 
@@ -327,15 +321,14 @@ test.describe('Admin Teams Management', () => {
 
     // Remove Dave
     await teamSection.getByRole('button', { name: /Remove/ }).click();
-    await page.waitForTimeout(2000);
+    await expect(teamSection.getByText('Dave', { exact: true })).not.toBeVisible({ timeout: 10000 });
 
     // Delete the now-empty team
     await gotoAdmin(page, '/admin/teams');
     const updatedTeamSection = page.locator('div.bg-white').filter({ hasText: 'E2E Test Team' });
     await updatedTeamSection.getByRole('button', { name: /Delete E2E/ }).click();
-    await page.waitForTimeout(2000);
 
-    await expect(page.getByText('E2E Test Team')).not.toBeVisible();
+    await expect(page.getByText('E2E Test Team')).not.toBeVisible({ timeout: 10000 });
   });
 });
 

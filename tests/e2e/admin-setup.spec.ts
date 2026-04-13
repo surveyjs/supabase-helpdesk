@@ -65,9 +65,8 @@ test.describe('Agent management', () => {
     await expect(page.getByText('dave@example.com').first()).toBeVisible({ timeout: 10000 });
     await page.getByRole('button', { name: /promote to agent/i }).click();
 
-    // Verify the page reloaded and dave appears in agents list
-    await page.waitForTimeout(2000);
-    await expect(page.getByText('dave@example.com').first()).toBeVisible();
+    // Verify dave appears in agents list
+    await expect(page.getByText('dave@example.com').first()).toBeVisible({ timeout: 10000 });
   });
 
   test('admin can demote agent to user', async ({ page }) => {
@@ -83,7 +82,7 @@ test.describe('Agent management', () => {
     const daveRow = page.locator('tr', { hasText: 'dave@example.com' }).first();
     if (await daveRow.isVisible()) {
       await daveRow.getByRole('button', { name: /demote to user/i }).click();
-      await page.waitForTimeout(2000);
+      await expect(daveRow).not.toBeVisible({ timeout: 10000 });
     }
   });
 });
@@ -256,7 +255,6 @@ test.describe('Templates', () => {
     const editLink = page.getByText('Edit Template').first();
     await expect(editLink).toBeVisible();
     await editLink.click();
-    await page.waitForTimeout(500);
 
     // The subject input should now be visible — scope to the template card containing the opened details
     const openDetails = page.locator('details[open]').first();
@@ -267,18 +265,17 @@ test.describe('Templates', () => {
 
     // Save
     await openDetails.getByRole('button', { name: /save/i }).click();
-    await page.waitForTimeout(2000);
 
     // After save, the page reloads. Re-open to reset.
     const editLinkAfter = page.getByText('Edit Template').first();
+    await expect(editLinkAfter).toBeVisible({ timeout: 10000 });
     await editLinkAfter.click();
-    await page.waitForTimeout(500);
 
     const openDetailsAfter = page.locator('details[open]').first();
     const resetBtn = openDetailsAfter.getByRole('button', { name: /reset/i });
     if (await resetBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
       await resetBtn.click();
-      await page.waitForTimeout(2000);
+      await expect(page.getByText('Edit Template').first()).toBeVisible({ timeout: 10000 });
     }
   });
 });
@@ -310,7 +307,7 @@ test.describe('Audit log', () => {
       if (options.length > 1) {
         await actionFilter.selectOption({ index: 1 });
         await page.getByRole('button', { name: /filter|apply/i }).click();
-        await page.waitForTimeout(2000);
+        await expect(page.getByRole('heading', { name: /audit log/i })).toBeVisible();
       }
     }
   });

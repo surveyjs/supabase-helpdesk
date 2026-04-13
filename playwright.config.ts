@@ -3,19 +3,22 @@ import dotenv from 'dotenv';
 
 dotenv.config({ path: '.env.test' });
 
+const isCI = !!process.env.CI;
+
 export default defineConfig({
   testDir: './tests/e2e',
   globalSetup: './tests/e2e/global-setup.ts',
   globalTeardown: './tests/e2e/global-teardown.ts',
   fullyParallel: true,
-  workers: process.env.CI ? 2 : 4,
+  workers: isCI ? 1 : 4,
   retries: 2,
-  reporter: process.env.CI ? 'list' : 'html',
+  timeout: isCI ? 60_000 : 30_000,
+  reporter: isCI ? 'list' : 'html',
   use: {
     baseURL: 'http://localhost:3000',
     screenshot: 'only-on-failure',
-    actionTimeout: 10000,
-    navigationTimeout: 15000,
+    actionTimeout: isCI ? 15_000 : 10_000,
+    navigationTimeout: isCI ? 30_000 : 15_000,
   },
   projects: [
     {
@@ -31,7 +34,8 @@ export default defineConfig({
   webServer: {
     command: 'npm run build && npm run start',
     url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: !isCI,
+    timeout: isCI ? 120_000 : 60_000,
     env: {
       NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL!,
       NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,

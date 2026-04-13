@@ -311,7 +311,7 @@ test.describe('CSAT Admin Settings', () => {
     await page.getByTestId('csat-save-btn').click();
 
     // Verify saved
-    await page.waitForTimeout(1000);
+    await expect(page.getByTestId('csat-save-btn')).toBeEnabled({ timeout: 10000 });
     const svc = createServiceRoleClient();
     const { data } = await svc.from('app_settings').select('value').eq('key', 'csat_survey_delay').single();
     expect(data!.value).toBe('4_hours');

@@ -97,15 +97,12 @@ test.describe('Realtime Notifications', () => {
       { recipient_id: aliceId, event_type: 'new_post', message: 'MarkRead Msg 2' },
     ]);
 
-    await page.waitForTimeout(500);
-
     // Open dropdown and click mark all as read
     await page.getByLabel('Notifications').click();
     await expect(page.getByText('Mark all as read')).toBeVisible({ timeout: 5000 });
     await page.getByText('Mark all as read').click();
 
     // Badge should disappear (no unread)
-    await page.waitForTimeout(1000);
     const bell = page.getByLabel('Notifications');
     // The badge span should not have text content > 0
     const badge = bell.locator('span.bg-red-500');

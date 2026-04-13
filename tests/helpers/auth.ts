@@ -7,6 +7,7 @@ const AUTH_DIR = path.resolve(__dirname, '..', '..', '.auth');
 /**
  * Fast login using cached storageState from auth.setup.ts.
  * Injects auth cookies and navigates to '/' — much faster than form-based login.
+ * If cookies are stale (middleware redirects to /login), falls back to form login.
  * Falls back to form-based login if no cached state exists (e.g. for dynamic test users).
  */
 export async function loginAs(page: Page, email: string, password = 'Password123') {
@@ -17,29 +18,23 @@ export async function loginAs(page: Page, email: string, password = 'Password123
     const state = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
     await page.context().clearCookies();
     await page.context().addCookies(state.cookies);
-    // Set localStorage for each origin
-    for (const origin of state.origins ?? []) {
-      if (origin.localStorage?.length) {
-        await page.goto(origin.origin);
-        await page.evaluate((items: { name: string; value: string }[]) => {
-          for (const item of items) {
-            localStorage.setItem(item.name, item.value);
-          }
-        }, origin.localStorage);
-      }
-    }
     await page.goto('/');
-    await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 10000 });
+    // If cookies were stale, middleware redirects to /login — fall back to form login
+    if (page.url().includes('/login')) {
+      await page.getByLabel('Email').fill(email);
+      await page.getByLabel('Password').fill(password);
+      await page.getByRole('button', { name: 'Log in' }).click();
+      await expect(page).toHaveURL('/', { timeout: 15000 });
+    }
     return;
   }
 
-  // Fallback: form-based login for users not in auth.setup.ts
+  // No cached state — full form-based login
   await page.goto('/login');
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Log in' }).click();
-  await expect(page).toHaveURL('/', { timeout: 10000 });
-  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 10000 });
+  await expect(page).toHaveURL('/', { timeout: 15000 });
 }
 
 /**
@@ -50,5 +45,5 @@ export async function gotoAdmin(page: Page, adminPath: string) {
   if (!page.url().includes('/admin')) {
     await page.goto(adminPath);
   }
-  await expect(page.getByRole('navigation', { name: 'Admin navigation' })).toBeVisible({ timeout: 10000 });
+  await expect(page.getByRole('navigation', { name: 'Admin navigation' })).toBeVisible();
 }

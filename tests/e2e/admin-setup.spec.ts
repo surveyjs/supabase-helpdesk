@@ -13,12 +13,15 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
   await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 10000 });
 }
 
-/** Navigate to an admin page, retrying once if requireAdmin() redirect race occurs. */
+/** Navigate to an admin page, retrying if requireAdmin() redirect race occurs. */
 async function gotoAdmin(page: Page, path: string) {
   await page.goto(path);
   if (!page.url().includes('/admin')) {
+    await page.waitForTimeout(500);
     await page.goto(path);
   }
+  // Wait for the admin sidebar nav to confirm the page loaded
+  await expect(page.getByRole('navigation', { name: 'Admin navigation' })).toBeVisible({ timeout: 10000 });
 }
 
 // ============================================================
@@ -49,7 +52,7 @@ test.describe('Admin Setup layout', () => {
 
   test('non-admin gets redirected from /admin', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
-    await gotoAdmin(page, '/admin');
+    await page.goto('/admin');
     await expect(page).not.toHaveURL(/\/admin/, { timeout: 10000 });
   });
 });
@@ -321,6 +324,7 @@ test.describe('Audit log', () => {
   test('audit log filter by action type', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/audit-log');
+    await expect(page.getByRole('heading', { name: /audit log/i })).toBeVisible({ timeout: 15000 });
 
     // Look for filter controls
     const actionFilter = page.getByLabel(/action/i);

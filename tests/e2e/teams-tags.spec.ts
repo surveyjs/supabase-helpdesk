@@ -275,16 +275,14 @@ test.describe('Admin Tags Management', () => {
     await page.locator('#new-tag-name').fill('e2e-test-tag');
     // Color input — just submit with default
     await page.getByRole('button', { name: 'Add Tag' }).click();
-    await page.waitForTimeout(2000);
 
-    await expect(page.getByText('e2e-test-tag')).toBeVisible();
+    await expect(page.getByText('e2e-test-tag')).toBeVisible({ timeout: 10000 });
 
     // Delete it
     const row = page.locator('li').filter({ hasText: 'e2e-test-tag' });
     await row.getByRole('button', { name: /Delete/ }).click();
-    await page.waitForTimeout(2000);
 
-    await expect(page.getByText('e2e-test-tag')).not.toBeVisible();
+    await expect(page.getByText('e2e-test-tag')).not.toBeVisible({ timeout: 10000 });
   });
 });
 

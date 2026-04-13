@@ -46,12 +46,14 @@ test.describe('Agent Dashboard', () => {
   test('status filter works', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
+    await expect(page.getByRole('heading', { name: 'Agent Dashboard' })).toBeVisible({ timeout: 10000 });
 
     // Filter by closed
     await page.getByLabel('Status').selectOption('closed');
     await page.getByRole('button', { name: 'Apply Filters' }).click();
 
     await expect(page).toHaveURL(/status=closed/);
+    await expect(page.getByTestId('result-count')).toBeVisible({ timeout: 10000 });
     const resultText = await page.getByTestId('result-count').textContent();
     expect(resultText).toMatch(/\d+ tickets? found/);
   });

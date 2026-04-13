@@ -1231,3 +1231,149 @@ export async function updateDefaultNotificationPreferences(formData: FormData): 
     return;
   }
 }
+
+// ============================================================
+// SLA Configuration (§16.15)
+// ============================================================
+
+export async function createSlaPolicy(formData: FormData): Promise<void> {
+  const { supabase, profile: adminProfile } = await requireAdminRole();
+
+  const name = (formData.get('name') as string)?.trim();
+  const firstResponseMinutes = parseInt(formData.get('first_response_minutes') as string, 10);
+  const resolutionMinutes = parseInt(formData.get('resolution_minutes') as string, 10);
+
+  if (!name || name.length > 100) return;
+  if (isNaN(firstResponseMinutes) || firstResponseMinutes < 1) return;
+  if (isNaN(resolutionMinutes) || resolutionMinutes < 1) return;
+
+  const { data: created, error } = await supabase
+    .from('sla_policies')
+    .insert({ name, first_response_minutes: firstResponseMinutes, resolution_minutes: resolutionMinutes })
+    .select('id')
+    .single();
+
+  if (error) return;
+
+  await logAudit(supabase, adminProfile.id, 'create_sla_policy', 'sla_policy', created?.id, {
+    name, first_response_minutes: firstResponseMinutes, resolution_minutes: resolutionMinutes,
+  });
+
+  revalidatePath('/admin/sla');
+}
+
+export async function updateSlaPolicy(formData: FormData): Promise<void> {
+  const { supabase, profile: adminProfile } = await requireAdminRole();
+
+  const policyId = formData.get('policy_id') as string;
+  const name = (formData.get('name') as string)?.trim();
+  const firstResponseMinutes = parseInt(formData.get('first_response_minutes') as string, 10);
+  const resolutionMinutes = parseInt(formData.get('resolution_minutes') as string, 10);
+
+  if (!policyId || !name || name.length > 100) return;
+  if (isNaN(firstResponseMinutes) || firstResponseMinutes < 1) return;
+  if (isNaN(resolutionMinutes) || resolutionMinutes < 1) return;
+
+  const { error } = await supabase
+    .from('sla_policies')
+    .update({ name, first_response_minutes: firstResponseMinutes, resolution_minutes: resolutionMinutes, updated_at: new Date().toISOString() })
+    .eq('id', policyId);
+
+  if (error) return;
+
+  await logAudit(supabase, adminProfile.id, 'update_sla_policy', 'sla_policy', policyId, {
+    name, first_response_minutes: firstResponseMinutes, resolution_minutes: resolutionMinutes,
+  });
+
+  revalidatePath('/admin/sla');
+}
+
+export async function deleteSlaPolicy(formData: FormData): Promise<void> {
+  const { supabase, profile: adminProfile } = await requireAdminRole();
+
+  const policyId = formData.get('policy_id') as string;
+  if (!policyId) return;
+
+  const { data: existing } = await supabase.from('sla_policies').select('name').eq('id', policyId).single();
+
+  const { error } = await supabase
+    .from('sla_policies')
+    .delete()
+    .eq('id', policyId);
+
+  if (error) return;
+
+  await logAudit(supabase, adminProfile.id, 'delete_sla_policy', 'sla_policy', policyId, { name: existing?.name });
+
+  revalidatePath('/admin/sla');
+}
+
+export async function updateSlaSeverityMapping(formData: FormData): Promise<void> {
+  const { supabase, profile: adminProfile } = await requireAdminRole();
+
+  const severities = ['low', 'medium', 'high', 'critical'];
+  const mappings: Record<string, string | null> = {};
+
+  for (const sev of severities) {
+    const val = formData.get(`mapping_${sev}`) as string;
+    mappings[sev] = val || null;
+  }
+
+  for (const [severity, policyId] of Object.entries(mappings)) {
+    await supabase
+      .from('sla_severity_mapping')
+      .update({ sla_policy_id: policyId })
+      .eq('severity', severity);
+  }
+
+  await logAudit(supabase, adminProfile.id, 'update_sla_severity_mapping', 'sla_severity_mapping', null, mappings);
+
+  revalidatePath('/admin/sla');
+}
+
+export async function updateBusinessHours(formData: FormData): Promise<void> {
+  const { supabase, profile: adminProfile } = await requireAdminRole();
+
+  const timezone = (formData.get('timezone') as string)?.trim() || 'UTC';
+  const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+
+  const schedule: Record<string, { start: string; end: string } | null> = {};
+
+  for (const day of days) {
+    const enabled = formData.get(`${day}_enabled`) === 'true';
+    if (enabled) {
+      const start = (formData.get(`${day}_start`) as string) || '09:00';
+      const end = (formData.get(`${day}_end`) as string) || '17:00';
+      schedule[day] = { start, end };
+    } else {
+      schedule[day] = null;
+    }
+  }
+
+  const config = { timezone, schedule };
+
+  await supabase
+    .from('app_settings')
+    .update({ value: JSON.stringify(config) })
+    .eq('key', 'sla_business_hours');
+
+  await logAudit(supabase, adminProfile.id, 'update_business_hours', 'app_settings', null, config);
+
+  revalidatePath('/admin/sla');
+}
+
+export async function updateSlaThreshold(formData: FormData): Promise<void> {
+  const { supabase, profile: adminProfile } = await requireAdminRole();
+
+  const threshold = parseInt(formData.get('threshold') as string, 10);
+  if (isNaN(threshold) || threshold < 50 || threshold > 95) return;
+
+  await supabase
+    .from('app_settings')
+    .update({ value: String(threshold) })
+    .eq('key', 'sla_approaching_threshold');
+
+  await logAudit(supabase, adminProfile.id, 'update_sla_threshold', 'app_settings', null, { threshold });
+
+  revalidatePath('/admin/sla');
+}

@@ -1,4 +1,10 @@
 import { createServerClient } from '@/lib/supabase/server';
+import { createServiceRoleClient } from '@/lib/supabase/server';
+import {
+  getBusinessHoursConfig,
+  calculateBusinessMinutesElapsed,
+  calculateSlaPercentage,
+} from '@/lib/utils/business-hours';
 
 export type AgentTicketFilters = {
   status?: string;
@@ -33,6 +39,8 @@ export type AgentTicketRow = {
   type_name: string;
   category_name: string | null;
   post_count: number;
+  sla_status?: 'on_track' | 'approaching' | 'breached' | 'met' | 'no_sla';
+  sla_remaining_minutes?: number;
 };
 
 export async function getAgentDashboardPageSize(): Promise<number> {
@@ -163,7 +171,10 @@ export async function getAgentTickets(filters: AgentTicketFilters): Promise<{
   // Sort
   if (filters.sort === 'created') {
     query = query.order('created_at', { ascending: false });
+  } else if (filters.sort !== 'sla') {
+    query = query.order('updated_at', { ascending: false });
   } else {
+    // For SLA sort, we'll sort client-side after enriching with SLA data
     query = query.order('updated_at', { ascending: false });
   }
 
@@ -173,8 +184,124 @@ export async function getAgentTickets(filters: AgentTicketFilters): Promise<{
 
   const { data, count } = await query;
 
+  let tickets = (data ?? []) as AgentTicketRow[];
+
+  // Enrich tickets with SLA status
+  if (tickets.length > 0) {
+    const ticketIds = tickets.map((t) => t.id);
+    const svc = createServiceRoleClient();
+    const { data: timers } = await svc
+      .from('sla_timers')
+      .select('ticket_id, sla_policy_id, first_response_met, resolution_met, first_response_elapsed_minutes, resolution_elapsed_minutes, is_paused, created_at')
+      .in('ticket_id', ticketIds);
+
+    if (timers && timers.length > 0) {
+      const config = await getBusinessHoursConfig();
+      const now = new Date();
+
+      // Get threshold
+      const { data: thresholdSetting } = await svc
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'sla_approaching_threshold')
+        .single();
+      const threshold = thresholdSetting ? parseInt(thresholdSetting.value, 10) : 75;
+
+      // Get policy info for all timers
+      const policyIds = [...new Set(timers.map((t) => t.sla_policy_id).filter(Boolean))];
+      const policyMap = new Map<string, { first_response_minutes: number; resolution_minutes: number }>();
+      if (policyIds.length > 0) {
+        const { data: policies } = await svc
+          .from('sla_policies')
+          .select('id, first_response_minutes, resolution_minutes')
+          .in('id', policyIds);
+        for (const p of policies ?? []) {
+          policyMap.set(p.id, p);
+        }
+      }
+
+      const timerMap = new Map(timers.map((t) => [t.ticket_id, t]));
+
+      for (const ticket of tickets) {
+        const timer = timerMap.get(ticket.id);
+        if (!timer || !timer.sla_policy_id) {
+          ticket.sla_status = 'no_sla';
+          ticket.sla_remaining_minutes = Infinity;
+          continue;
+        }
+
+        const policy = policyMap.get(timer.sla_policy_id);
+        if (!policy) {
+          ticket.sla_status = 'no_sla';
+          ticket.sla_remaining_minutes = Infinity;
+          continue;
+        }
+
+        // Calculate current elapsed (for running timers)
+        let elapsed = timer.is_paused
+          ? Math.max(timer.first_response_elapsed_minutes, timer.resolution_elapsed_minutes)
+          : calculateBusinessMinutesElapsed(new Date(timer.created_at), now, config);
+
+        // Determine worst SLA status
+        type SlaLevel = 'on_track' | 'approaching' | 'breached' | 'met';
+        let worstStatus: SlaLevel = 'met';
+        let minRemaining = Infinity;
+
+        const updateWorst = (newStatus: SlaLevel) => {
+          const rank: Record<SlaLevel, number> = { met: 0, on_track: 1, approaching: 2, breached: 3 };
+          if (rank[newStatus] > rank[worstStatus]) worstStatus = newStatus;
+        };
+
+        // Check first response
+        if (timer.first_response_met === null) {
+          const pct = calculateSlaPercentage(elapsed, policy.first_response_minutes);
+          const remaining = policy.first_response_minutes - elapsed;
+          if (remaining < minRemaining) minRemaining = remaining;
+
+          if (pct >= 100) updateWorst('breached');
+          else if (pct >= threshold) updateWorst('approaching');
+          else updateWorst('on_track');
+        } else if (!timer.first_response_met) {
+          updateWorst('breached');
+        }
+
+        // Check resolution
+        if (timer.resolution_met === null) {
+          const pct = calculateSlaPercentage(elapsed, policy.resolution_minutes);
+          const remaining = policy.resolution_minutes - elapsed;
+          if (remaining < minRemaining) minRemaining = remaining;
+
+          if (pct >= 100) updateWorst('breached');
+          else if (pct >= threshold) updateWorst('approaching');
+          else updateWorst('on_track');
+        } else if (!timer.resolution_met) {
+          updateWorst('breached');
+        }
+
+        ticket.sla_status = worstStatus;
+        ticket.sla_remaining_minutes = minRemaining;
+      }
+    } else {
+      for (const ticket of tickets) {
+        ticket.sla_status = 'no_sla';
+        ticket.sla_remaining_minutes = Infinity;
+      }
+    }
+
+    // Sort by SLA risk if requested
+    if (filters.sort === 'sla') {
+      const statusOrder: Record<string, number> = { breached: 0, approaching: 1, on_track: 2, met: 3, no_sla: 4 };
+      tickets.sort((a, b) => {
+        const aPri = statusOrder[a.sla_status ?? 'no_sla'] ?? 4;
+        const bPri = statusOrder[b.sla_status ?? 'no_sla'] ?? 4;
+        if (aPri !== bPri) return aPri - bPri;
+        return (a.sla_remaining_minutes ?? Infinity) - (b.sla_remaining_minutes ?? Infinity);
+      });
+    }
+  }
+
   return {
-    tickets: (data ?? []) as AgentTicketRow[],
+    tickets,
     total: count ?? 0,
     pageSize,
   };
@@ -207,8 +334,46 @@ export async function getAgentStats(agentId: string) {
     avgResponseTime: 'N/A',
     avgResolutionTime: 'N/A',
     avgCsatRating: 'N/A',
-    slaComplianceRate: 'N/A',
+    slaComplianceRate: await getSlaComplianceRate(agentId),
   };
+}
+
+async function getSlaComplianceRate(agentId: string): Promise<string> {
+  const supabase = await createServerClient();
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  // Get tickets assigned to this agent in the last 30 days that have SLA timers
+  const { data: agentTickets } = await supabase
+    .from('tickets')
+    .select('id')
+    .eq('assigned_agent_id', agentId)
+    .gte('created_at', thirtyDaysAgo);
+
+  if (!agentTickets || agentTickets.length === 0) return 'N/A';
+
+  const ticketIds = agentTickets.map((t) => t.id);
+  const { data: timers } = await supabase
+    .from('sla_timers')
+    .select('first_response_met, resolution_met')
+    .in('ticket_id', ticketIds);
+
+  if (!timers || timers.length === 0) return 'N/A';
+
+  let total = 0;
+  let met = 0;
+  for (const timer of timers) {
+    if (timer.first_response_met !== null) {
+      total++;
+      if (timer.first_response_met) met++;
+    }
+    if (timer.resolution_met !== null) {
+      total++;
+      if (timer.resolution_met) met++;
+    }
+  }
+
+  if (total === 0) return 'N/A';
+  return `${Math.round((met / total) * 100)}%`;
 }
 
 export async function getFilterOptions() {

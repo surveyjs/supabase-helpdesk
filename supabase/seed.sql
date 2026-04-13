@@ -364,4 +364,22 @@ BEGIN
     (_tid8, '00000000-0000-0000-0000-000000000303'),
     (_tid8, '00000000-0000-0000-0000-000000000304');
 
+  -- ============================================================
+  -- Phase 12 — SLA Policies
+  -- ============================================================
+
+  -- Override severity on 3 tickets for SLA visibility
+  UPDATE tickets SET severity = 'critical' WHERE id = _tid1;
+  UPDATE tickets SET severity = 'high' WHERE id = _tid3;
+  UPDATE tickets SET severity = 'critical' WHERE id = _tid5;
+
 END $$;
+
+-- SLA Policy (outside DO block — does not reference local variables)
+INSERT INTO sla_policies (id, name, first_response_minutes, resolution_minutes)
+VALUES ('00000000-0000-0000-0000-000000000401', 'Standard SLA', 240, 1440)
+ON CONFLICT DO NOTHING;
+
+-- Severity mapping: Critical and High → Standard SLA; Low and Medium unmapped
+UPDATE sla_severity_mapping SET sla_policy_id = '00000000-0000-0000-0000-000000000401' WHERE severity = 'critical';
+UPDATE sla_severity_mapping SET sla_policy_id = '00000000-0000-0000-0000-000000000401' WHERE severity = 'high';

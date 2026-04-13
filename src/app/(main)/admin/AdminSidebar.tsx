@@ -19,6 +19,7 @@ const SECTIONS = [
   { label: 'Duplicate Template', href: '/admin/duplicate-template' },
   { label: 'User Settings', href: '/admin/user-settings' },
   { label: 'CSAT Settings', href: '/admin/csat' },
+  { label: 'SLA Policies', href: '/admin/sla' },
   { label: 'Audit Log', href: '/admin/audit-log' },
 ];
 

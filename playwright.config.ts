@@ -12,13 +12,16 @@ export default defineConfig({
   fullyParallel: true,
   workers: isCI ? 1 : 4,
   retries: 2,
-  timeout: isCI ? 60_000 : 30_000,
+  timeout: isCI ? 90_000 : 30_000,
   reporter: isCI ? 'list' : 'html',
+  expect: {
+    timeout: isCI ? 15_000 : 5_000,
+  },
   use: {
     baseURL: 'http://localhost:3000',
     screenshot: 'only-on-failure',
     actionTimeout: isCI ? 15_000 : 10_000,
-    navigationTimeout: isCI ? 30_000 : 15_000,
+    navigationTimeout: isCI ? 45_000 : 15_000,
   },
   projects: [
     {

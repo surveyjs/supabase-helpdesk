@@ -22,7 +22,7 @@ test.describe('Team Tickets', () => {
     await page.goto('/tickets?view=team');
 
     // The heading should say Team Tickets
-    await expect(page.getByRole('heading', { name: 'Team Tickets' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'Team Tickets' })).toBeVisible();
 
     // Alice is on Alice's Team with Bob and Carol
     // Should see tickets from all team members with "by" display names
@@ -84,7 +84,7 @@ test.describe('Tag Display and Management', () => {
 
     // Tag should now appear
     const tagSection = page.getByTestId('ticket-tags');
-    await expect(tagSection.getByText(addedTagName)).toBeVisible({ timeout: 10000 });
+    await expect(tagSection.getByText(addedTagName)).toBeVisible();
   });
 
   test('agent can remove a tag from a ticket', async ({ page }) => {
@@ -92,7 +92,7 @@ test.describe('Tag Display and Management', () => {
     await page.goto(ticketUrl);
 
     const tagSection = page.getByTestId('ticket-tags');
-    await expect(tagSection).toBeVisible({ timeout: 10000 });
+    await expect(tagSection).toBeVisible();
     // Remove the first tag's × button
     const removeButtons = tagSection.getByRole('button', { name: /Remove tag/ });
     await expect(removeButtons.first()).toBeVisible({ timeout: 5000 });
@@ -104,13 +104,13 @@ test.describe('Tag Display and Management', () => {
 
     // Restore the tag for other tests
     const addTagForm = page.getByTestId('add-tag-form');
-    await expect(addTagForm).toBeVisible({ timeout: 10000 });
+    await expect(addTagForm).toBeVisible();
     if (firstTagName) {
       const options = await addTagForm.getByRole('combobox').locator('option').allTextContents();
       if (options.includes(firstTagName)) {
         await addTagForm.getByRole('combobox').selectOption({ label: firstTagName });
         await addTagForm.getByRole('button', { name: 'Add Tag' }).click();
-        await expect(page.getByTestId('ticket-tags').getByText(firstTagName)).toBeVisible({ timeout: 10000 });
+        await expect(page.getByTestId('ticket-tags').getByText(firstTagName)).toBeVisible();
       }
     }
   });
@@ -130,7 +130,7 @@ test.describe('Agent Dashboard Tag Filter', () => {
     await urgentTag.click();
 
     // URL should contain tags param
-    await expect(page).toHaveURL(/tags=/, { timeout: 10000 });
+    await expect(page).toHaveURL(/tags=/, );
 
     // Should show filtered results
     const resultText = await page.getByTestId('result-count').textContent();
@@ -145,7 +145,7 @@ test.describe('Admin Types Management', () => {
     await loginAs(page, 'alice@example.com');
     await page.goto('/admin/types');
     // Should be redirected away
-    await expect(page).not.toHaveURL('/admin/types', { timeout: 10000 });
+    await expect(page).not.toHaveURL('/admin/types', );
   });
 
   test('admin can access types page and see existing types', async ({ page }) => {
@@ -166,7 +166,7 @@ test.describe('Admin Types Management', () => {
     await page.locator('#new-type-name').fill('E2E Test Type');
     await page.getByRole('button', { name: 'Add Type' }).click();
 
-    await expect(page.getByText('E2E Test Type')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('E2E Test Type')).toBeVisible();
   });
 
   test('admin can delete a type', async ({ page }) => {
@@ -177,7 +177,7 @@ test.describe('Admin Types Management', () => {
     const row = page.locator('li').filter({ hasText: 'E2E Test Type' });
     await row.getByRole('button', { name: /Delete/ }).click();
 
-    await expect(page.getByText('E2E Test Type')).not.toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('E2E Test Type')).not.toBeVisible();
   });
 
   test('admin can set default type', async ({ page }) => {
@@ -189,7 +189,7 @@ test.describe('Admin Types Management', () => {
     const setDefaultBtn = issueRow.getByRole('button', { name: 'Set Default' });
     if (await setDefaultBtn.isVisible()) {
       await setDefaultBtn.click();
-      await expect(issueRow.getByText('(default)')).toBeVisible({ timeout: 10000 });
+      await expect(issueRow.getByText('(default)')).toBeVisible();
     }
 
     // Restore Question as default
@@ -198,7 +198,7 @@ test.describe('Admin Types Management', () => {
     const restoreBtn = questionRow.getByRole('button', { name: 'Set Default' });
     if (await restoreBtn.isVisible()) {
       await restoreBtn.click();
-      await expect(questionRow.getByText('(default)')).toBeVisible({ timeout: 10000 });
+      await expect(questionRow.getByText('(default)')).toBeVisible();
     }
   });
 });
@@ -217,18 +217,18 @@ test.describe('Admin Categories Management', () => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/categories');
 
-    await expect(page.getByRole('heading', { name: 'Manage Categories' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'Manage Categories' })).toBeVisible();
 
     await page.locator('#new-category-name').fill('E2E Test Category');
     await page.getByRole('button', { name: 'Add Category' }).click();
 
-    await expect(page.getByText('E2E Test Category')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('E2E Test Category')).toBeVisible();
 
     // Delete it
     const row = page.locator('li').filter({ hasText: 'E2E Test Category' });
     await row.getByRole('button', { name: /Delete/ }).click();
 
-    await expect(page.getByText('E2E Test Category')).not.toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('E2E Test Category')).not.toBeVisible();
   });
 });
 
@@ -247,19 +247,19 @@ test.describe('Admin Tags Management', () => {
   test('admin can create a tag with color and delete it', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/tags');
-    await expect(page.getByRole('heading', { name: 'Manage Tags' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'Manage Tags' })).toBeVisible();
 
     await page.locator('#new-tag-name').fill('e2e-test-tag');
     // Color input — just submit with default
     await page.getByRole('button', { name: 'Add Tag' }).click();
 
-    await expect(page.getByText('e2e-test-tag')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('e2e-test-tag')).toBeVisible();
 
     // Delete it
     const row = page.locator('li').filter({ hasText: 'e2e-test-tag' });
     await row.getByRole('button', { name: /Delete/ }).click();
 
-    await expect(page.getByText('e2e-test-tag')).not.toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('e2e-test-tag')).not.toBeVisible();
   });
 });
 
@@ -277,18 +277,18 @@ test.describe('Admin Teams Management', () => {
   test('admin can create a team', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/teams');
-    await expect(page.getByRole('heading', { name: /Teams/ })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: /Teams/ })).toBeVisible();
 
     await page.locator('#new-team-name').fill('E2E Test Team');
     await page.getByRole('button', { name: 'Create Team' }).click();
 
-    await expect(page.getByText('E2E Test Team')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('E2E Test Team')).toBeVisible();
   });
 
   test('admin can add member to team', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/teams');
-    await expect(page.getByRole('heading', { name: 'Teams' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'Teams' })).toBeVisible();
 
     // Find the E2E Test Team section and add Dave
     const teamSection = page.locator('div.bg-white').filter({ hasText: 'E2E Test Team' });
@@ -304,7 +304,7 @@ test.describe('Admin Teams Management', () => {
   test('admin cannot delete team with members', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/teams');
-    await expect(page.getByText('E2E Test Team')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('E2E Test Team')).toBeVisible();
 
     const teamSection = page.locator('div.bg-white').filter({ hasText: 'E2E Test Team' });
     await teamSection.getByRole('button', { name: /Delete E2E/ }).click();
@@ -321,21 +321,21 @@ test.describe('Admin Teams Management', () => {
 
     // Remove Dave
     await teamSection.getByRole('button', { name: /Remove/ }).click();
-    await expect(teamSection.getByText('Dave', { exact: true })).not.toBeVisible({ timeout: 10000 });
+    await expect(teamSection.getByText('Dave', { exact: true })).not.toBeVisible();
 
     // Delete the now-empty team
     await gotoAdmin(page, '/admin/teams');
     const updatedTeamSection = page.locator('div.bg-white').filter({ hasText: 'E2E Test Team' });
     await updatedTeamSection.getByRole('button', { name: /Delete E2E/ }).click();
 
-    await expect(page.getByText('E2E Test Team')).not.toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('E2E Test Team')).not.toBeVisible();
   });
 });
 
 test.describe('NavBar Setup Link', () => {
   test('admin sees Setup link in nav', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await expect(page.getByRole('link', { name: 'Setup' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('link', { name: 'Setup' })).toBeVisible();
   });
 
   test('non-admin does not see Setup link', async ({ page }) => {

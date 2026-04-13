@@ -8,7 +8,7 @@ import { loginAs, gotoAdmin } from '../helpers/auth';
 async function loginAsAdminAndGoToSla(page: Page) {
   await loginAs(page, 'admin@example.com');
   await gotoAdmin(page, '/admin/sla');
-  await expect(page.getByRole('heading', { name: 'SLA Policies' })).toBeVisible({ timeout: 10000 });
+  await expect(page.getByRole('heading', { name: 'SLA Policies' })).toBeVisible();
 }
 
 // ============================================================
@@ -139,7 +139,7 @@ test.describe('SLA on Agent Dashboard', () => {
   test('SLA status column visible on agent dashboard', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
-    await expect(page.getByRole('columnheader', { name: 'SLA' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('columnheader', { name: 'SLA' })).toBeVisible();
   });
 
   test('Sort by SLA risk option available', async ({ page }) => {
@@ -182,7 +182,7 @@ test.describe('Admin SLA Settings', () => {
     await form.getByRole('button', { name: 'Create Policy' }).click();
 
     // Verify it appears in the list (use locator scoped to policies section)
-    await expect(page.locator('[data-testid^="sla-policy-"]', { hasText: 'E2E Test SLA Policy' })).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('[data-testid^="sla-policy-"]', { hasText: 'E2E Test SLA Policy' })).toBeVisible();
   });
 
   test('admin can delete SLA policy', async ({ page }) => {
@@ -190,17 +190,17 @@ test.describe('Admin SLA Settings', () => {
 
     // Wait for policy to be visible
     const policyItem = page.locator('[data-testid^="sla-policy-"]', { hasText: 'E2E Test SLA Policy' });
-    await expect(policyItem).toBeVisible({ timeout: 10000 });
+    await expect(policyItem).toBeVisible();
 
     // Find the delete button and click it
     await policyItem.getByTestId('delete-sla-policy').click();
 
-    await expect(policyItem).not.toBeVisible({ timeout: 10000 });
+    await expect(policyItem).not.toBeVisible();
   });
 
   test('admin can configure severity mapping', async ({ page }) => {
     await loginAsAdminAndGoToSla(page);
-    await expect(page.getByTestId('severity-mapping-form')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('severity-mapping-form')).toBeVisible();
   });
 
   test('admin can configure business hours', async ({ page }) => {

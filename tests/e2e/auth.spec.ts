@@ -60,8 +60,8 @@ test.describe('Authentication', () => {
     await page.getByLabel('Confirm password').fill('Password123');
     await page.getByRole('button', { name: 'Sign up' }).click();
     // Auto-confirm is enabled in local dev (config.toml), so signup logs in immediately
-    await expect(page).toHaveURL('/', { timeout: 10000 });
-    await expect(page.getByText('Welcome, Test Signup')).toBeVisible({ timeout: 10000 });
+    await expect(page).toHaveURL('/', );
+    await expect(page.getByText('Welcome, Test Signup')).toBeVisible();
   });
 
   test('signup validation: password missing requirements → error', async ({ page }) => {
@@ -75,8 +75,8 @@ test.describe('Authentication', () => {
 
   test('login flow: correct credentials → redirects to /', async ({ page }) => {
     await loginAs(page, 'alice@example.com', 'Password123');
-    await expect(page).toHaveURL('/', { timeout: 10000 });
-    await expect(page.getByText('Welcome, Alice')).toBeVisible({ timeout: 10000 });
+    await expect(page).toHaveURL('/', );
+    await expect(page.getByText('Welcome, Alice')).toBeVisible();
   });
 
   test('login: wrong password → error message', async ({ page }) => {
@@ -106,9 +106,9 @@ test.describe('Authentication', () => {
 
   test('sign out: clears session, redirects to /login', async ({ page }) => {
     await loginAs(page, 'alice@example.com', 'Password123');
-    await expect(page).toHaveURL('/', { timeout: 10000 });
+    await expect(page).toHaveURL('/', );
     await page.getByRole('button', { name: 'Sign out' }).click();
-    await expect(page).toHaveURL(/\/login/, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/login/, );
   });
 
   test('forgot password: submit email → success message shown', async ({ page }) => {
@@ -125,22 +125,22 @@ test.describe('Authentication', () => {
 
   test('authenticated redirect: visiting /login redirects to /', async ({ page }) => {
     await loginAs(page, 'alice@example.com', 'Password123');
-    await expect(page).toHaveURL('/', { timeout: 10000 });
+    await expect(page).toHaveURL('/', );
     await expect(page.getByText('Welcome, Alice')).toBeVisible();
     await page.goto('/login');
-    await expect(page).toHaveURL('/', { timeout: 10000 });
+    await expect(page).toHaveURL('/', );
   });
 
   test('nav bar: shows display name + role badge when logged in as admin', async ({ page }) => {
     await loginAs(page, 'admin@example.com', 'Password123');
-    await expect(page).toHaveURL('/', { timeout: 10000 });
+    await expect(page).toHaveURL('/', );
     // Profile DB query may fail transiently under load; reload once if badge missing
     const adminBadge = page.getByText('Admin', { exact: true }).first();
     try {
       await expect(adminBadge).toBeVisible({ timeout: 5000 });
     } catch {
       await page.reload();
-      await expect(adminBadge).toBeVisible({ timeout: 10000 });
+      await expect(adminBadge).toBeVisible();
     }
   });
 
@@ -153,7 +153,7 @@ test.describe('Authentication', () => {
 
   test('nav bar dropdown: contains Profile and Notification Settings links', async ({ page }) => {
     await loginAs(page, 'alice@example.com', 'Password123');
-    await expect(page).toHaveURL('/', { timeout: 10000 });
+    await expect(page).toHaveURL('/', );
 
     // Click the details/summary dropdown
     const details = page.locator('details');
@@ -165,7 +165,7 @@ test.describe('Authentication', () => {
 
   test('sign out button: visible outside dropdown', async ({ page }) => {
     await loginAs(page, 'alice@example.com', 'Password123');
-    await expect(page).toHaveURL('/', { timeout: 10000 });
+    await expect(page).toHaveURL('/', );
 
     const signOutButton = page.getByRole('button', { name: 'Sign out' });
     await expect(signOutButton).toBeVisible();
@@ -211,7 +211,7 @@ test.describe('Authentication', () => {
     await page.goto(resetUrl!);
 
     // Should end up on /reset-password after the callback exchanges the code
-    await expect(page).toHaveURL(/\/reset-password/, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/reset-password/, );
 
     // Enter a new password
     await page.getByLabel('New password').fill('NewPassword123');
@@ -219,11 +219,11 @@ test.describe('Authentication', () => {
     await page.getByRole('button', { name: 'Reset password' }).click();
 
     // Should redirect to /login on success
-    await expect(page).toHaveURL(/\/login/, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/login/, );
 
     // Verify login with new password works
     await loginAs(page, testEmail, 'NewPassword123');
-    await expect(page).toHaveURL('/', { timeout: 10000 });
+    await expect(page).toHaveURL('/', );
 
     // Restore original password
     // (sign in is active, we can use the page context)

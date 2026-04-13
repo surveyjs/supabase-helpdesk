@@ -19,13 +19,13 @@ test.describe('Agent Dashboard', () => {
     await loginAs(page, 'alice@example.com');
     await page.goto('/agent');
     // Should be redirected away from /agent
-    await expect(page).not.toHaveURL('/agent', { timeout: 10000 });
+    await expect(page).not.toHaveURL('/agent', );
   });
 
   test('dashboard loads with all tickets', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
-    await expect(page.getByRole('heading', { name: 'Agent Dashboard' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'Agent Dashboard' })).toBeVisible();
     // Should show result count
     await expect(page.getByTestId('result-count')).toBeVisible();
     const resultText = await page.getByTestId('result-count').textContent();
@@ -35,14 +35,14 @@ test.describe('Agent Dashboard', () => {
   test('status filter works', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
-    await expect(page.getByRole('heading', { name: 'Agent Dashboard' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'Agent Dashboard' })).toBeVisible();
 
     // Filter by closed
     await page.getByLabel('Status').selectOption('closed');
     await page.getByRole('button', { name: 'Apply Filters' }).click();
 
     await expect(page).toHaveURL(/status=closed/);
-    await expect(page.getByTestId('result-count')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('result-count')).toBeVisible();
     const resultText = await page.getByTestId('result-count').textContent();
     expect(resultText).toMatch(/\d+ tickets? found/);
   });
@@ -127,37 +127,37 @@ test.describe('Agent Ticket Detail Controls', () => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(ticketUrl);
 
-    await expect(page.getByTestId('agent-controls')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('agent-controls')).toBeVisible();
 
     // Find and click "Mark Pending"
     const pendingBtn = page.getByRole('button', { name: 'Mark Pending' });
     if (await pendingBtn.isVisible()) {
       await pendingBtn.click();
-      await expect(page.getByTestId('agent-controls').getByText('Pending')).toBeVisible({ timeout: 10000 });
+      await expect(page.getByTestId('agent-controls').getByText('Pending')).toBeVisible();
     }
 
     // Re-open
     const reopenBtn = page.getByRole('button', { name: 'Mark Open' });
     if (await reopenBtn.isVisible()) {
       await reopenBtn.click();
-      await expect(page.getByTestId('agent-controls').getByText('Open')).toBeVisible({ timeout: 10000 });
+      await expect(page.getByTestId('agent-controls').getByText('Open')).toBeVisible();
     }
   });
 
   test('agent can change urgency/severity from detail page', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(ticketUrl);
-    await expect(page.getByTestId('agent-controls')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('agent-controls')).toBeVisible();
 
     // Change urgency
     await page.locator('#agent-urgency').selectOption('critical');
     await page.locator('#agent-urgency').locator('..').getByRole('button', { name: 'Set' }).click();
-    await expect(page.getByText('Urgency: Critical')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Urgency: Critical')).toBeVisible();
 
     // Change severity
     await page.locator('#agent-severity').selectOption('high');
     await page.locator('#agent-severity').locator('..').getByRole('button', { name: 'Set' }).click();
-    await expect(page.getByText('Severity: High')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Severity: High')).toBeVisible();
 
     // Restore
     await page.locator('#agent-urgency').selectOption('high');
@@ -192,11 +192,11 @@ test.describe('Agent Ticket Detail Controls', () => {
 
     // Wait for the button text to change
     const expectedText = btnText === 'Make Private' ? 'Make Public' : 'Make Private';
-    await expect(controls.getByRole('button', { name: expectedText })).toBeVisible({ timeout: 10000 });
+    await expect(controls.getByRole('button', { name: expectedText })).toBeVisible();
 
     // Toggle back
     await controls.getByRole('button', { name: expectedText }).click();
-    await expect(controls.getByRole('button', { name: btnText! })).toBeVisible({ timeout: 10000 });
+    await expect(controls.getByRole('button', { name: btnText! })).toBeVisible();
   });
 
   test('agent can assign/unassign from detail page', async ({ page }) => {
@@ -215,11 +215,11 @@ test.describe('Agent Ticket Detail Controls', () => {
 
     await page.goto(`/tickets/${unassigned.id}/${unassigned.slug}`);
     // Wait for page to load
-    await expect(page.getByRole('heading', { name: unassigned.title })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: unassigned.title })).toBeVisible();
 
     // "Assign to me" button should be visible
     const assignBtn = page.getByRole('button', { name: 'Assign to me' });
-    await expect(assignBtn).toBeVisible({ timeout: 10000 });
+    await expect(assignBtn).toBeVisible();
     await assignBtn.click();
 
     // Unassign button should now be visible (server action + revalidation)
@@ -250,7 +250,7 @@ test.describe('Agent Ticket Detail Controls', () => {
     const btn = page.getByRole('button', { name: 'Assign to me' });
     if (await btn.isVisible()) {
       await btn.click();
-      await expect(page.getByRole('main').getByText('Agent Smith', { exact: true })).toBeVisible({ timeout: 10000 });
+      await expect(page.getByRole('main').getByText('Agent Smith', { exact: true })).toBeVisible();
       // Cleanup: unassign
       await page.getByRole('button', { name: 'Unassign' }).click();
     }
@@ -264,7 +264,7 @@ test.describe('Agent Ticket Detail Controls', () => {
     const assignBtn = page.getByRole('button', { name: 'Assign to me' });
     if (await assignBtn.isVisible()) {
       await assignBtn.click();
-      await expect(page.getByRole('button', { name: 'Unassign' })).toBeVisible({ timeout: 10000 });
+      await expect(page.getByRole('button', { name: 'Unassign' })).toBeVisible();
     }
 
     // Select a different agent and reassign
@@ -274,7 +274,7 @@ test.describe('Agent Ticket Detail Controls', () => {
 
     // Verify agent changed in display
     await page.reload();
-    await expect(page.getByText('Agent Jones', { exact: true })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Agent Jones', { exact: true })).toBeVisible();
 
     // Restore original assignment
     const admin = createServiceRoleClient();
@@ -299,7 +299,7 @@ test.describe('Saved Views', () => {
     await page.getByRole('button', { name: 'Save Current View' }).click();
 
     // View should appear
-    await expect(page.getByText('Test E2E View')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Test E2E View')).toBeVisible();
 
     // Click to apply
     await page.getByRole('link', { name: 'Test E2E View' }).click();
@@ -333,11 +333,11 @@ test.describe('Agent Stats Panel', () => {
   test('shows correct assigned/resolved counts', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
-    await expect(page.getByTestId('result-count')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('result-count')).toBeVisible();
 
     // Expand stats
     await page.getByText('My Stats (Last 30 Days)').click();
-    await expect(page.getByTestId('agent-stats')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('agent-stats')).toBeVisible();
 
     // Assigned and resolved counts should be numbers
     const statsPanel = page.getByTestId('agent-stats');

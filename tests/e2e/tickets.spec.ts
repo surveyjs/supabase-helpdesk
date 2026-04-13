@@ -44,7 +44,7 @@ test.describe('Tickets', () => {
     await page.getByRole('button', { name: 'Create Ticket' }).click();
 
     // Should redirect to ticket detail
-    await expect(page).toHaveURL(/\/tickets\/\d+\/e2e-test-ticket/, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/tickets\/\d+\/e2e-test-ticket/, );
     ticketUrl = page.url();
     await expect(page.getByRole('heading', { name: 'E2E Test Ticket' })).toBeVisible();
 
@@ -90,7 +90,7 @@ test.describe('Tickets', () => {
     await page.locator('form').filter({ has: page.getByLabel('Reply body') }).getByRole('button', { name: 'Reply' }).click();
 
     // Verify reply appears
-    await expect(page.getByText('This is a test reply from E2E.')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('This is a test reply from E2E.')).toBeVisible();
   });
 
   test('search tickets by title → correct results', async ({ page }) => {
@@ -100,7 +100,7 @@ test.describe('Tickets', () => {
     await page.getByLabel('Search tickets').fill('E2E Test');
     await page.getByRole('button', { name: 'Search' }).click();
 
-    await expect(page.getByText('E2E Test Ticket')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('E2E Test Ticket')).toBeVisible();
   });
 
   test('filter by status → correct results', async ({ page }) => {
@@ -126,7 +126,7 @@ test.describe('Tickets', () => {
 
     // Navigate to wrong slug — should redirect
     await page.goto(`/tickets/${ticketId}/wrong-slug`);
-    await expect(page).toHaveURL(/\/tickets\/\d+\/e2e-test-ticket/, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/tickets\/\d+\/e2e-test-ticket/, );
   });
 
   test('empty state shown for user with no tickets (Eve)', async ({ page }) => {
@@ -141,11 +141,11 @@ test.describe('Tickets', () => {
     await loginAs(page, 'alice@example.com');
     await page.goto('/tickets/public');
 
-    await expect(page.getByRole('heading', { name: 'Public Tickets' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'Public Tickets' })).toBeVisible();
     // Public tickets should be visible
     // Verify at least one public ticket from seed data is shown
     const ticketLinks = page.locator('ul li a');
-    await expect(ticketLinks.first()).toBeVisible({ timeout: 10000 });
+    await expect(ticketLinks.first()).toBeVisible();
     const count = await ticketLinks.count();
     expect(count).toBeGreaterThan(0);
   });
@@ -197,8 +197,8 @@ test.describe('Tickets', () => {
     // The original post contains **Bold text** and `code`
     // Check for rendered markdown (bold tag and code tag)
     const prose = page.locator('.prose');
-    await expect(prose.locator('strong').first()).toBeVisible({ timeout: 10000 });
-    await expect(prose.locator('code').first()).toBeVisible({ timeout: 10000 });
+    await expect(prose.locator('strong').first()).toBeVisible();
+    await expect(prose.locator('code').first()).toBeVisible();
   });
 
   test('post with <script> tag does not execute (XSS protection)', async ({ page }) => {
@@ -245,7 +245,7 @@ test.describe('Tickets', () => {
 
     await loginAs(page, 'alice@example.com');
     await page.goto(`/tickets/${xssTicket!.id}/${xssTicket!.slug}`);
-    await expect(page.getByRole('heading', { name: 'XSS Test Ticket' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'XSS Test Ticket' })).toBeVisible();
 
     // Verify XSS did not execute
     const xssResult = await page.evaluate(() => (window as unknown as { __xss?: boolean }).__xss);

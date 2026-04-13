@@ -12,11 +12,11 @@ test.describe('Admin Setup layout', () => {
   test('admin can access Setup page and sees sidebar', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     // Wait for the nav to confirm admin role is recognised
-    await expect(page.getByRole('link', { name: 'Setup' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('link', { name: 'Setup' })).toBeVisible();
     await gotoAdmin(page, '/admin');
 
     // Should redirect to /admin/types
-    await expect(page).toHaveURL(/\/admin\/types/, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/admin\/types/, );
 
     // Sidebar should be visible with section links
     await expect(page.getByRole('link', { name: 'Ticket Types' })).toBeVisible();
@@ -31,7 +31,7 @@ test.describe('Admin Setup layout', () => {
   test('non-admin gets redirected from /admin', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
     await page.goto('/admin');
-    await expect(page).not.toHaveURL(/\/admin/, { timeout: 10000 });
+    await expect(page).not.toHaveURL(/\/admin/, );
   });
 });
 
@@ -53,7 +53,7 @@ test.describe('Agent management', () => {
 
   test('admin can promote a user to agent', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await expect(page.getByRole('link', { name: 'Setup' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('link', { name: 'Setup' })).toBeVisible();
     await gotoAdmin(page, '/admin/agents');
 
     // Search for dave by email
@@ -62,11 +62,11 @@ test.describe('Agent management', () => {
     await page.getByRole('button', { name: /search/i }).click();
 
     // Should show the user with a promote button
-    await expect(page.getByText('dave@example.com').first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('dave@example.com').first()).toBeVisible();
     await page.getByRole('button', { name: /promote to agent/i }).click();
 
     // Verify dave appears in agents list
-    await expect(page.getByText('dave@example.com').first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('dave@example.com').first()).toBeVisible();
   });
 
   test('admin can demote agent to user', async ({ page }) => {
@@ -82,7 +82,7 @@ test.describe('Agent management', () => {
     const daveRow = page.locator('tr', { hasText: 'dave@example.com' }).first();
     if (await daveRow.isVisible()) {
       await daveRow.getByRole('button', { name: /demote to user/i }).click();
-      await expect(daveRow).not.toBeVisible({ timeout: 10000 });
+      await expect(daveRow).not.toBeVisible();
     }
   });
 });
@@ -108,13 +108,13 @@ test.describe('Custom fields', () => {
     await page.getByLabel('Type', { exact: true }).selectOption('text');
     await page.getByRole('button', { name: /add field/i }).click();
 
-    await expect(page.getByText('E2E Text Field')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('E2E Text Field')).toBeVisible();
   });
 
   test('admin can create a dropdown custom field', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/custom-fields');
-    await expect(page.getByLabel('Name', { exact: true })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByLabel('Name', { exact: true })).toBeVisible();
 
     await page.getByLabel('Name', { exact: true }).fill('E2E Dropdown');
     await page.getByLabel('Type', { exact: true }).selectOption('dropdown');
@@ -125,19 +125,19 @@ test.describe('Custom fields', () => {
 
     await page.getByRole('button', { name: /add field/i }).click();
 
-    await expect(page.getByText('E2E Dropdown')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('E2E Dropdown')).toBeVisible();
   });
 
   test('admin can create a checkbox custom field', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/custom-fields');
-    await expect(page.getByLabel('Name', { exact: true })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByLabel('Name', { exact: true })).toBeVisible();
 
     await page.getByLabel('Name', { exact: true }).fill('E2E Checkbox');
     await page.getByLabel('Type', { exact: true }).selectOption('checkbox');
     await page.getByRole('button', { name: /add field/i }).click();
 
-    await expect(page.getByText('E2E Checkbox')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('E2E Checkbox')).toBeVisible();
   });
 
   test('custom fields appear on ticket creation form', async ({ page }) => {
@@ -145,7 +145,7 @@ test.describe('Custom fields', () => {
     await page.goto('/tickets/new');
 
     // Custom fields we created should be visible
-    await expect(page.getByText('E2E Text Field')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('E2E Text Field')).toBeVisible();
     await expect(page.getByText('E2E Dropdown')).toBeVisible();
     await expect(page.getByText('E2E Checkbox')).toBeVisible();
   });
@@ -183,7 +183,7 @@ test.describe('Privacy settings', () => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/privacy');
 
-    await expect(page.getByRole('heading', { name: /privacy/i })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: /privacy/i })).toBeVisible();
 
     // Save button should be present
     await expect(page.getByRole('button', { name: /save/i })).toBeVisible();
@@ -199,7 +199,7 @@ test.describe('Pagination settings', () => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/pagination');
 
-    await expect(page.getByRole('heading', { name: /pagination/i })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: /pagination/i })).toBeVisible();
 
     // Should have numeric inputs
     const inputs = page.locator('input[type="number"]');
@@ -219,7 +219,7 @@ test.describe('Rate limit settings', () => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/rate-limit');
 
-    await expect(page.getByRole('heading', { name: /rate limit/i })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: /rate limit/i })).toBeVisible();
 
     // Should have a numeric input
     const input = page.locator('input[type="number"]');
@@ -238,7 +238,7 @@ test.describe('Templates', () => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/templates');
 
-    await expect(page.getByRole('heading', { name: /templates/i })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: /templates/i })).toBeVisible();
 
     // Should show template event types
     await expect(page.getByText('new_post')).toBeVisible();
@@ -249,7 +249,7 @@ test.describe('Templates', () => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/templates');
 
-    await expect(page.getByRole('heading', { name: /templates/i })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: /templates/i })).toBeVisible();
 
     // Click the first "Edit Template" summary to expand
     const editLink = page.getByText('Edit Template').first();
@@ -268,14 +268,14 @@ test.describe('Templates', () => {
 
     // After save, the page reloads. Re-open to reset.
     const editLinkAfter = page.getByText('Edit Template').first();
-    await expect(editLinkAfter).toBeVisible({ timeout: 10000 });
+    await expect(editLinkAfter).toBeVisible();
     await editLinkAfter.click();
 
     const openDetailsAfter = page.locator('details[open]').first();
     const resetBtn = openDetailsAfter.getByRole('button', { name: /reset/i });
     if (await resetBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
       await resetBtn.click();
-      await expect(page.getByText('Edit Template').first()).toBeVisible({ timeout: 10000 });
+      await expect(page.getByText('Edit Template').first()).toBeVisible();
     }
   });
 });

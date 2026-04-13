@@ -18,14 +18,14 @@ test.describe('Realtime Notifications', () => {
 
   test('bell icon is visible for logged-in user', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
-    await expect(page.getByLabel('Notifications')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByLabel('Notifications')).toBeVisible();
   });
 
   test('clicking bell opens notification dropdown', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
     await page.getByLabel('Notifications').click();
     // Should have Mark all as read and View all links
-    await expect(page.getByText('Mark all as read')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Mark all as read')).toBeVisible();
     await expect(page.getByText('View all')).toBeVisible();
   });
 
@@ -39,7 +39,7 @@ test.describe('Realtime Notifications', () => {
 
     // Reload so the bell starts fresh
     await page.reload();
-    await expect(page.getByLabel('Notifications')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByLabel('Notifications')).toBeVisible();
 
     // Insert a notification via service role
     await admin.from('notifications').insert({
@@ -51,11 +51,11 @@ test.describe('Realtime Notifications', () => {
 
     // Reload so the server-rendered unread count picks up the new notification
     await page.reload();
-    await expect(page.getByLabel('Notifications')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByLabel('Notifications')).toBeVisible();
 
     // Badge (red circle) should now be visible
     const badge = page.getByLabel('Notifications').locator('span.bg-red-500');
-    await expect(badge).toBeVisible({ timeout: 10000 });
+    await expect(badge).toBeVisible();
 
     // Clean up only this test's notification
     await admin.from('notifications').delete().eq('recipient_id', aliceId).eq('message', 'Test notification for badge update');
@@ -79,7 +79,7 @@ test.describe('Realtime Notifications', () => {
     await page.getByLabel('Notifications').click();
 
     // Should show the notification message
-    await expect(page.getByText('Ticket #42 status changed to resolved')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Ticket #42 status changed to resolved')).toBeVisible();
 
     // Clean up
     await admin.from('notifications').delete().eq('recipient_id', aliceId).eq('message', 'Ticket #42 status changed to resolved');
@@ -123,7 +123,7 @@ test.describe('Notifications Page', () => {
   test('notifications page is accessible', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
     await page.goto('/notifications');
-    await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible();
   });
 
   test('notifications page shows all notifications', async ({ page }) => {
@@ -140,15 +140,15 @@ test.describe('Notifications Page', () => {
 
     // Navigate with cache-busting param to ensure fresh server render
     await page.goto(`/notifications?t=${Date.now()}`);
-    await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible();
 
     // If notifications aren't visible yet (stale server cache), reload once
     if (!await page.getByText('Page test notification 1').isVisible({ timeout: 3000 }).catch(() => false)) {
       await page.reload();
     }
 
-    await expect(page.getByText('Page test notification 1')).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText('Page test notification 2')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Page test notification 1')).toBeVisible();
+    await expect(page.getByText('Page test notification 2')).toBeVisible();
 
     // Clean up
     await admin.from('notifications').delete().eq('recipient_id', aliceId).in('message', ['Page test notification 1', 'Page test notification 2']);
@@ -157,7 +157,7 @@ test.describe('Notifications Page', () => {
   test('notifications page has mark all as read', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
     await page.goto('/notifications');
-    await expect(page.getByText('Mark all as read')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Mark all as read')).toBeVisible();
   });
 });
 
@@ -169,7 +169,7 @@ test.describe('Agent Dashboard Realtime', () => {
   test('agent dashboard page loads with realtime component', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
-    await expect(page.getByRole('heading', { name: 'Agent Dashboard' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'Agent Dashboard' })).toBeVisible();
   });
 });
 
@@ -190,6 +190,6 @@ test.describe('Ticket Detail Realtime', () => {
     await page.getByRole('button', { name: /submit|create/i }).click();
 
     // Should redirect to ticket detail
-    await expect(page.getByText('Realtime Test Ticket')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Realtime Test Ticket')).toBeVisible();
   });
 });

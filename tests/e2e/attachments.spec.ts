@@ -60,7 +60,7 @@ test.describe('File Attachments', () => {
   test('create test ticket for attachment tests', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
     await page.goto('/tickets/new');
-    await expect(page.getByLabel('Title')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByLabel('Title')).toBeVisible();
 
     await page.getByLabel('Title').fill('E2E Attachments Test Ticket');
     await page.getByLabel('Type').selectOption({ label: 'Issue' });
@@ -76,7 +76,7 @@ test.describe('File Attachments', () => {
     await page.goto(await resolveTicketUrl());
 
     const dropZone = page.locator('[data-testid="file-drop-zone"]');
-    await expect(dropZone.first()).toBeVisible({ timeout: 10000 });
+    await expect(dropZone.first()).toBeVisible();
   });
 
   test('upload a text file to a post', async ({ page }) => {
@@ -136,7 +136,7 @@ test.describe('File Attachments', () => {
 
     // There should be a download link for the text file
     const downloadLink = page.locator('[data-testid="attachment-download"]').first();
-    await expect(downloadLink).toBeVisible({ timeout: 10000 });
+    await expect(downloadLink).toBeVisible();
     const href = await downloadLink.getAttribute('href');
     expect(href).toBeTruthy();
   });
@@ -147,7 +147,7 @@ test.describe('File Attachments', () => {
 
     // Count attachments before deletion
     const deleteBtns = page.locator('[data-testid="delete-attachment-btn"]');
-    await expect(deleteBtns.first()).toBeVisible({ timeout: 10000 });
+    await expect(deleteBtns.first()).toBeVisible();
     const countBefore = await deleteBtns.count();
 
     // Click the first delete button
@@ -161,7 +161,7 @@ test.describe('File Attachments', () => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/file-settings');
 
-    await expect(page.getByRole('heading', { name: 'File Uploads' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'File Uploads' })).toBeVisible();
     await expect(page.getByLabel('Maximum file size (MB)')).toBeVisible();
     await expect(page.getByLabel('Maximum files per post')).toBeVisible();
   });
@@ -169,7 +169,7 @@ test.describe('File Attachments', () => {
   test('admin can update file settings', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/file-settings');
-    await expect(page.getByRole('heading', { name: 'File Uploads' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'File Uploads' })).toBeVisible();
 
     // Update max file size to 15
     const maxSizeInput = page.getByLabel('Maximum file size (MB)');
@@ -177,17 +177,17 @@ test.describe('File Attachments', () => {
 
     // Save and wait for confirmation
     await page.getByRole('button', { name: 'Save' }).click();
-    await expect(page.getByText(/saved|success/i)).toBeVisible({ timeout: 10000 }).catch(() => {});
+    await expect(page.getByText(/saved|success/i)).toBeVisible().catch(() => {});
 
     // Verify it was saved
     await gotoAdmin(page, '/admin/file-settings');
-    await expect(page.getByRole('heading', { name: 'File Uploads' })).toBeVisible({ timeout: 10000 });
-    await expect(maxSizeInput).toHaveValue('15', { timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'File Uploads' })).toBeVisible();
+    await expect(maxSizeInput).toHaveValue('15', );
 
     // Reset to 10
     await maxSizeInput.fill('10');
     await page.getByRole('button', { name: 'Save' }).click();
-    await expect(page.getByText(/saved|success/i)).toBeVisible({ timeout: 10000 }).catch(() => {});
+    await expect(page.getByText(/saved|success/i)).toBeVisible().catch(() => {});
   });
 
   test('admin can reset file types to defaults', async ({ page }) => {

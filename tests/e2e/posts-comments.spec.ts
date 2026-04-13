@@ -54,12 +54,12 @@ test.describe('Posts, Comments & Notes', () => {
       await page.reload();
       await page.getByLabel('Title').fill('E2E Posts Test Ticket');
     }
-    await expect(issueOption).toBeAttached({ timeout: 10000 });
+    await expect(issueOption).toBeAttached();
     await typeSelect.selectOption({ label: 'Issue' });
     await page.getByLabel(/Description/).fill('This is the original post body for E2E post tests.');
     await page.getByRole('button', { name: 'Create Ticket' }).click();
 
-    await expect(page).toHaveURL(/\/tickets\/\d+\/e2e-posts-test-ticket/, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/tickets\/\d+\/e2e-posts-test-ticket/, );
     ticketUrl = page.url();
   });
 
@@ -71,7 +71,7 @@ test.describe('Posts, Comments & Notes', () => {
     // Use the submit button inside the reply form (not the ReplyToggle button)
     await page.locator('form').filter({ has: page.getByLabel('Reply body') }).getByRole('button', { name: 'Reply' }).click();
 
-    await expect(page.getByText('A root reply to the ticket.')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('A root reply to the ticket.')).toBeVisible();
   });
 
   test('add a comment on a post → comment appears indented', async ({ page }) => {
@@ -88,7 +88,7 @@ test.describe('Posts, Comments & Notes', () => {
     await page.getByLabel('Comment body').fill('A threaded comment on the reply.');
     await page.getByRole('button', { name: 'Comment' }).click();
 
-    await expect(page.getByText('A threaded comment on the reply.')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('A threaded comment on the reply.')).toBeVisible();
     // The comment should be indented (inside ml-6 div)
     const comment = page.getByText('A threaded comment on the reply.');
     const parent = comment.locator('xpath=ancestor::div[contains(@class, "ml-6")]');
@@ -113,7 +113,7 @@ test.describe('Posts, Comments & Notes', () => {
     await page.getByLabel('Comment body').fill('A level-2 reply to the comment.');
     await page.getByRole('button', { name: 'Comment' }).click();
 
-    await expect(page.getByText('A level-2 reply to the comment.')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('A level-2 reply to the comment.')).toBeVisible();
   });
 
   test('level-2 comment has no Reply action', async ({ page }) => {
@@ -141,7 +141,7 @@ test.describe('Posts, Comments & Notes', () => {
     await page.getByLabel('Note body').fill('Internal agent note content.');
     await page.getByRole('button', { name: 'Add Note' }).click();
 
-    await expect(page.getByText('Internal agent note content.')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Internal agent note content.')).toBeVisible();
     await expect(page.getByText('(Internal note)')).toBeVisible();
   });
 
@@ -166,7 +166,7 @@ test.describe('Posts, Comments & Notes', () => {
     await textarea.fill('Edited root reply content.');
     await page.getByRole('button', { name: 'Save' }).first().click();
 
-    await expect(page.getByText('Edited root reply content.')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Edited root reply content.')).toBeVisible();
     await expect(page.getByText('(edited)')).toBeVisible();
   });
 
@@ -183,7 +183,7 @@ test.describe('Posts, Comments & Notes', () => {
     await page.getByRole('button', { name: 'Save' }).first().click();
 
     // Should redirect to new slug URL
-    await expect(page).toHaveURL(/e2e-posts-renamed-ticket/, { timeout: 10000 });
+    await expect(page).toHaveURL(/e2e-posts-renamed-ticket/, );
     await expect(page.getByRole('heading', { name: 'E2E Posts Renamed Ticket' })).toBeVisible();
 
     // Update ticketUrl for subsequent tests
@@ -208,7 +208,7 @@ test.describe('Posts, Comments & Notes', () => {
     const makePrivateBtn = page.getByRole('button', { name: 'Make Private' }).first();
     if (await makePrivateBtn.isVisible()) {
       await makePrivateBtn.click();
-      await expect(page.getByText('Private').first()).toBeVisible({ timeout: 10000 });
+      await expect(page.getByText('Private').first()).toBeVisible();
     }
   });
 
@@ -219,7 +219,7 @@ test.describe('Posts, Comments & Notes', () => {
 
     await page.getByLabel('Reply body').fill('Temporary post to be deleted.');
     await page.locator('form').filter({ has: page.getByLabel('Reply body') }).getByRole('button', { name: 'Reply' }).click();
-    await expect(page.getByText('Temporary post to be deleted.')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Temporary post to be deleted.')).toBeVisible();
 
     // Delete it – find the delete button in the same post container
     const tempPost = page.getByText('Temporary post to be deleted.');
@@ -235,7 +235,7 @@ test.describe('Posts, Comments & Notes', () => {
     // Always resolve from DB to handle serial retry where ticketUrl may be stale
     const url = await resolveTicketUrl();
     await page.goto(url);
-    await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 
     // There should be activity log entries from previous actions (title changed, privacy changed, etc.)
     // Wait for at least one activity entry to appear before asserting count
@@ -309,7 +309,7 @@ test.describe('Collapsible Timeline', () => {
 
     // Should see the "Show older posts" button
     const showOlderBtn = page.locator('[data-testid="show-older-posts"]');
-    await expect(showOlderBtn).toBeVisible({ timeout: 10000 });
+    await expect(showOlderBtn).toBeVisible();
 
     // Click to expand
     await showOlderBtn.click();

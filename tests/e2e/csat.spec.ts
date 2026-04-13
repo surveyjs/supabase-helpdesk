@@ -62,14 +62,14 @@ test.describe('CSAT Rating Page', () => {
 
   test('CSAT rating page renders with valid token', async ({ page }) => {
     await page.goto(`/csat/${validToken}`);
-    await expect(page.getByText('Rate Your Experience')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Rate Your Experience')).toBeVisible();
     await expect(page.getByText('E2E CSAT Test Ticket')).toBeVisible();
     await expect(page.getByTestId('csat-form')).toBeVisible();
   });
 
   test('invalid token shows error page', async ({ page }) => {
     await page.goto('/csat/invalidtoken123');
-    await expect(page.getByText('Invalid or Expired Link')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Invalid or Expired Link')).toBeVisible();
     await expect(page.getByRole('link', { name: 'Go to Login' })).toBeVisible();
   });
 
@@ -84,12 +84,12 @@ test.describe('CSAT Rating Page', () => {
     });
 
     await page.goto(`/csat/${expiredToken}`);
-    await expect(page.getByText('Invalid or Expired Link')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Invalid or Expired Link')).toBeVisible();
   });
 
   test('submit 3-star rating — stores correctly', async ({ page }) => {
     await page.goto(`/csat/${validToken}`);
-    await expect(page.getByTestId('csat-form')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('csat-form')).toBeVisible();
 
     // Click 3rd star
     await page.getByTestId('csat-star-3').click();
@@ -99,7 +99,7 @@ test.describe('CSAT Rating Page', () => {
     await page.getByTestId('csat-submit').click();
 
     // Should show success
-    await expect(page.getByTestId('csat-success')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('csat-success')).toBeVisible();
     await expect(page.getByText('Thank you for your feedback!')).toBeVisible();
   });
 
@@ -118,13 +118,13 @@ test.describe('CSAT Rating Page', () => {
     });
 
     await page.goto(`/csat/${newToken}`);
-    await expect(page.getByTestId('csat-form')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('csat-form')).toBeVisible();
 
     await page.getByTestId('csat-star-5').click();
     await page.getByTestId('csat-comment').fill('Excellent support!');
     await page.getByTestId('csat-submit').click();
 
-    await expect(page.getByTestId('csat-success')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('csat-success')).toBeVisible();
     await expect(page.getByTestId('csat-update-link')).toBeVisible();
   });
 
@@ -215,7 +215,7 @@ test.describe('CSAT on Ticket Detail', () => {
     await loginAs(page, 'alice@example.com');
     await page.goto(`/tickets/${ticketId}/${ticketSlug}`);
 
-    await expect(page.getByTestId('csat-section')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('csat-section')).toBeVisible();
     await expect(page.getByTestId('rate-ticket-link')).toBeVisible();
   });
 
@@ -224,7 +224,7 @@ test.describe('CSAT on Ticket Detail', () => {
     await page.goto(`/tickets/${ticketId}/${ticketSlug}`);
 
     await page.getByTestId('rate-ticket-link').click();
-    await expect(page).toHaveURL(/\/csat\/[0-9a-f]{64}/, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/csat\/[0-9a-f]{64}/, );
     await expect(page.getByText('Rate Your Experience')).toBeVisible();
   });
 
@@ -233,7 +233,7 @@ test.describe('CSAT on Ticket Detail', () => {
     await page.goto(`/tickets/${ticketId}/${ticketSlug}`);
 
     // Agent should see the ticket but not the rate link
-    await expect(page.getByRole('heading', { name: 'E2E CSAT Detail Ticket' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'E2E CSAT Detail Ticket' })).toBeVisible();
     await expect(page.getByTestId('rate-ticket-link')).not.toBeVisible();
   });
 
@@ -255,7 +255,7 @@ test.describe('CSAT on Ticket Detail', () => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(`/tickets/${ticketId}/${ticketSlug}`);
 
-    await expect(page.getByTestId('csat-rating-display')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('csat-rating-display')).toBeVisible();
     await expect(page.getByText('4/5')).toBeVisible();
   });
 
@@ -263,7 +263,7 @@ test.describe('CSAT on Ticket Detail', () => {
     await loginAs(page, 'alice@example.com');
     await page.goto(`/tickets/${ticketId}/${ticketSlug}`);
 
-    await expect(page.getByTestId('update-rating-link')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('update-rating-link')).toBeVisible();
   });
 });
 
@@ -283,10 +283,10 @@ test.describe('CSAT Admin Settings', () => {
 
   test('CSAT settings page loads for admin', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await expect(page.getByRole('link', { name: 'Setup' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('link', { name: 'Setup' })).toBeVisible();
     await gotoAdmin(page, '/admin/csat');
 
-    await expect(page.getByRole('heading', { name: 'CSAT Settings' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'CSAT Settings' })).toBeVisible();
     await expect(page.getByTestId('csat-enabled-toggle')).toBeVisible();
   });
 
@@ -298,7 +298,7 @@ test.describe('CSAT Admin Settings', () => {
     if (!emailConfig?.is_verified) {
       await loginAs(page, 'admin@example.com');
       await gotoAdmin(page, '/admin/csat');
-      await expect(page.getByTestId('csat-email-warning')).toBeVisible({ timeout: 10000 });
+      await expect(page.getByTestId('csat-email-warning')).toBeVisible();
     }
   });
 
@@ -311,7 +311,7 @@ test.describe('CSAT Admin Settings', () => {
     await page.getByTestId('csat-save-btn').click();
 
     // Verify saved
-    await expect(page.getByTestId('csat-save-btn')).toBeEnabled({ timeout: 10000 });
+    await expect(page.getByTestId('csat-save-btn')).toBeEnabled();
     const svc = createServiceRoleClient();
     const { data } = await svc.from('app_settings').select('value').eq('key', 'csat_survey_delay').single();
     expect(data!.value).toBe('4_hours');

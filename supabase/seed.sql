@@ -363,5 +363,20 @@ BEGIN
   INSERT INTO ticket_tags (ticket_id, tag_id) VALUES
     (_tid8, '00000000-0000-0000-0000-000000000303'),
     (_tid8, '00000000-0000-0000-0000-000000000304');
+  -- ============================================================
+  -- Phase 12 â€" SLA Seed Data
+  -- ============================================================
 
+  -- 1 SLA policy: Standard SLA (4h first response, 24h resolution)
+  INSERT INTO sla_policies (id, name, first_response_minutes, resolution_minutes) VALUES
+    ('00000000-0000-0000-0000-000000000401', 'Standard SLA', 240, 1440);
+
+  -- Severity mapping: Critical and High map to Standard SLA
+  UPDATE sla_severity_mapping SET sla_policy_id = '00000000-0000-0000-0000-000000000401' WHERE severity = 'critical';
+  UPDATE sla_severity_mapping SET sla_policy_id = '00000000-0000-0000-0000-000000000401' WHERE severity = 'high';
+
+  -- Override severity on 3 existing tickets
+  UPDATE tickets SET severity = 'critical' WHERE id = _tid1;
+  UPDATE tickets SET severity = 'high' WHERE id = _tid3;
+  UPDATE tickets SET severity = 'critical' WHERE id = _tid5;
 END $$;

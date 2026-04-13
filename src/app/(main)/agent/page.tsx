@@ -13,6 +13,48 @@ import { Badge } from '@/components/ui/Badge';
 import { Pagination } from '@/components/ui/Pagination';
 import { createSavedView, renameSavedView, deleteSavedView } from '@/lib/actions/saved-views';
 import { RealtimeDashboard } from '@/components/features/agent/RealtimeDashboard';
+import type { SlaStatus } from '@/lib/utils/sla';
+
+function SlaStatusDot({ slaStatus }: { slaStatus: SlaStatus | null }) {
+  if (!slaStatus) {
+    return <span className="text-xs text-gray-400">—</span>;
+  }
+
+  // Get the worst status between first response and resolution
+  const statuses = [slaStatus.firstResponse.status, slaStatus.resolution.status];
+  let worst: string = 'no_sla';
+  if (statuses.includes('breached')) worst = 'breached';
+  else if (statuses.includes('approaching')) worst = 'approaching';
+  else if (statuses.includes('on_track')) worst = 'on_track';
+  else if (statuses.includes('met')) worst = 'met';
+
+  const colors: Record<string, string> = {
+    breached: 'bg-red-500',
+    approaching: 'bg-yellow-500',
+    on_track: 'bg-green-500',
+    met: 'bg-green-500',
+    no_sla: 'bg-gray-300',
+  };
+
+  const labels: Record<string, string> = {
+    breached: 'SLA Breached',
+    approaching: 'SLA Approaching',
+    on_track: 'SLA On Track',
+    met: 'SLA Met',
+    no_sla: 'No SLA',
+  };
+
+  const frLabel = `First Response: ${slaStatus.firstResponse.status}`;
+  const resLabel = `Resolution: ${slaStatus.resolution.status}`;
+
+  return (
+    <span
+      className={`inline-block w-3 h-3 rounded-full ${colors[worst] ?? 'bg-gray-300'}`}
+      title={`${labels[worst] ?? 'Unknown'}\n${frLabel}\n${resLabel}`}
+      data-testid={`sla-dot-${worst}`}
+    />
+  );
+}
 
 function getContrastColor(hex: string): string {
   const c = hex.replace('#', '');
@@ -247,6 +289,7 @@ export default async function AgentDashboardPage({
             >
               <option value="">Last Modified</option>
               <option value="created">Created Date</option>
+              <option value="sla">SLA Risk</option>
             </select>
           </div>
 
@@ -423,6 +466,7 @@ export default async function AgentDashboardPage({
                 <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                 <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Urgency</th>
                 <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Severity</th>
+                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">SLA</th>
                 <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Posts</th>
                 <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Updated</th>
               </tr>
@@ -452,6 +496,9 @@ export default async function AgentDashboardPage({
                   </td>
                   <td className="px-4 py-3">
                     <Badge variant="priority" value={ticket.severity} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <SlaStatusDot slaStatus={ticket.sla_status ?? null} />
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600">
                     {ticket.post_count}

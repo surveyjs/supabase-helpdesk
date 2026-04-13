@@ -20,6 +20,8 @@ import {
   publishDraft,
 } from '@/lib/actions/tickets';
 import { getCsatRating, requestCsatToken } from '@/lib/actions/csat';
+import { getSlaStatusForTimer, type SlaStatus } from '@/lib/utils/sla';
+import { formatBusinessMinutes } from '@/lib/utils/business-hours';
 import {
   changeTicketStatus,
   assignAgent,
@@ -43,6 +45,71 @@ function getContrastColor(hex: string): string {
   const b = parseInt(c.substring(4, 6), 16) / 255;
   const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
   return luminance < 0.5 ? '#FFFFFF' : '#111827';
+}
+
+function SlaIndicatorDisplay({
+  label,
+  indicator,
+}: {
+  label: string;
+  indicator: { status: string; elapsedMinutes: number; targetMinutes: number; percentage: number; deadline: Date | null; completedAt: Date | null };
+}) {
+  const statusColors: Record<string, string> = {
+    on_track: 'bg-green-500',
+    approaching: 'bg-yellow-500',
+    breached: 'bg-red-500',
+    met: 'bg-green-500',
+    no_sla: 'bg-gray-300',
+  };
+
+  const statusLabels: Record<string, string> = {
+    on_track: 'On Track',
+    approaching: 'Approaching',
+    breached: 'Breached',
+    met: 'Met',
+    no_sla: 'No SLA',
+  };
+
+  const dotColor = statusColors[indicator.status] ?? 'bg-gray-300';
+  const statusLabel = statusLabels[indicator.status] ?? indicator.status;
+
+  if (indicator.status === 'met') {
+    return (
+      <div data-testid={`sla-${label.toLowerCase().replace(/\s+/g, '-')}`}>
+        <div className="flex items-center gap-2 mb-1">
+          <span className={`inline-block w-2.5 h-2.5 rounded-full ${dotColor}`} />
+          <span className="text-sm font-medium text-gray-700">{label}</span>
+        </div>
+        <p className="text-sm text-green-700">
+          ✓ {label} in {formatBusinessMinutes(indicator.elapsedMinutes)}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div data-testid={`sla-${label.toLowerCase().replace(/\s+/g, '-')}`}>
+      <div className="flex items-center gap-2 mb-1">
+        <span className={`inline-block w-2.5 h-2.5 rounded-full ${dotColor}`} data-testid={`sla-dot-${indicator.status}`} />
+        <span className="text-sm font-medium text-gray-700">{label}</span>
+        <span className={`text-xs font-medium ${
+          indicator.status === 'breached' ? 'text-red-600' :
+          indicator.status === 'approaching' ? 'text-yellow-600' :
+          'text-green-600'
+        }`}>
+          {statusLabel}
+        </span>
+      </div>
+      <p className="text-xs text-gray-500">
+        {formatBusinessMinutes(indicator.elapsedMinutes)} of {formatBusinessMinutes(indicator.targetMinutes)} elapsed ({indicator.percentage}%)
+      </p>
+      {indicator.deadline && (
+        <p className="text-xs text-gray-400">
+          Deadline: {indicator.deadline.toLocaleString()}
+        </p>
+      )}
+    </div>
+  );
 }
 
 export default async function TicketDetailPage({
@@ -534,6 +601,20 @@ export default async function TicketDetailPage({
 
   // Fetch CSAT rating
   const csatRating = await getCsatRating(ticket.id);
+
+  // Fetch SLA timer for agents
+  let slaStatus: SlaStatus | null = null;
+  if (isAgent) {
+    const { data: slaTimer } = await supabase
+      .from('sla_timers')
+      .select('*')
+      .eq('ticket_id', ticket.id)
+      .single();
+
+    if (slaTimer) {
+      slaStatus = await getSlaStatusForTimer(slaTimer);
+    }
+  }
   const isRegularUser = profile?.role === 'user';
   const canRate = isOwner && isRegularUser && ticket.status === 'closed';
 
@@ -629,6 +710,27 @@ export default async function TicketDetailPage({
             </dd>
           </div>
         </dl>
+
+        {/* SLA Indicators (agents only) */}
+        {isAgent && (
+          <div className="mt-4 border-t border-gray-200 pt-4" data-testid="sla-indicators">
+            <h3 className="text-sm font-medium text-gray-500 mb-2">SLA Status</h3>
+            {slaStatus ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <SlaIndicatorDisplay
+                  label="First Response"
+                  indicator={slaStatus.firstResponse}
+                />
+                <SlaIndicatorDisplay
+                  label="Resolution"
+                  indicator={slaStatus.resolution}
+                />
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400">No SLA</p>
+            )}
+          </div>
+        )}
 
         {/* CSAT Rating display */}
         {(csatRating || canRate) && (

@@ -5,6 +5,12 @@ import { redirect } from 'next/navigation';
 import { createServerClient } from '@/lib/supabase/server';
 import { notifyTicketRecipients, notifyAgent } from '@/lib/email/notify';
 import { scheduleCsatSurvey, cancelCsatSurvey } from '@/lib/actions/csat';
+import {
+  pauseSlaTimer,
+  resumeSlaTimer,
+  stopResolutionTimer,
+  recalculateSlaTargets,
+} from '@/lib/utils/sla';
 
 const VALID_PRIORITIES = ['low', 'medium', 'high', 'critical'];
 
@@ -70,8 +76,17 @@ export async function changeTicketStatus(formData: FormData): Promise<void> {
   // CSAT: schedule survey on close, cancel on re-open
   if (newStatus === 'closed') {
     scheduleCsatSurvey(ticketId).catch((err) => console.error('[csat]', err));
+    stopResolutionTimer(ticketId).catch((err) => console.error('[sla]', err));
   } else if (ticket.status === 'closed' && newStatus === 'open') {
     cancelCsatSurvey(ticketId).catch((err) => console.error('[csat]', err));
+    resumeSlaTimer(ticketId).catch((err) => console.error('[sla]', err));
+  }
+
+  // SLA: pause on pending, resume on open from pending
+  if (newStatus === 'pending') {
+    pauseSlaTimer(ticketId).catch((err) => console.error('[sla]', err));
+  } else if (ticket.status === 'pending' && newStatus === 'open') {
+    resumeSlaTimer(ticketId).catch((err) => console.error('[sla]', err));
   }
 }
 
@@ -366,6 +381,9 @@ export async function changeSeverity(formData: FormData): Promise<void> {
     user.id,
     user.id,
   ).catch((err) => console.error('[notify]', err));
+
+  // Recalculate SLA targets for new severity
+  recalculateSlaTargets(ticketId, newSeverity).catch((err) => console.error('[sla]', err));
 
   revalidatePath(`/tickets/${ticketId}/${ticket.slug}`);
   revalidatePath('/agent');

@@ -7,6 +7,7 @@ import { generateSlug } from '@/lib/utils/slug';
 import { validateTitle, validateBody } from '@/lib/utils/validation';
 import { notifyTicketRecipients, notifyAgent } from '@/lib/email/notify';
 import { cancelCsatSurvey } from '@/lib/actions/csat';
+import { initializeSlaTimer, stopFirstResponseTimer, resumeSlaTimer } from '@/lib/utils/sla';
 
 export type TicketActionState = {
   error?: string;
@@ -199,6 +200,9 @@ export async function createTicket(
     return { error: 'Failed to create ticket. Please try again.' };
   }
 
+  // Initialize SLA timer (severity defaults to 'medium')
+  initializeSlaTimer(ticket.id, 'medium').catch((err) => console.error('[sla]', err));
+
   // Auto-follow: insert ticket_followers row for creator
   await supabase
     .from('ticket_followers')
@@ -298,6 +302,19 @@ export async function replyToTicket(
   if (isAgent) {
     // Agent reply → notify ticket owner + followers (coalesced)
     notifyTicketRecipients(ticket.id, 'new_post', placeholders, user.id, user.id).catch((err) => console.error('[notify]', err));
+
+    // Check if this is the first agent reply — stop first response timer
+    const { count: agentPostCount } = await supabase
+      .from('posts')
+      .select('id', { count: 'exact', head: true })
+      .eq('ticket_id', ticket.id)
+      .eq('post_type', 'post')
+      .neq('author_id', ticket.creator_id)
+      .eq('is_original', false);
+
+    if (agentPostCount !== null && agentPostCount <= 1) {
+      stopFirstResponseTimer(ticket.id).catch((err) => console.error('[sla]', err));
+    }
   } else {
     // User reply → notify ticket owner + followers (non-agent, no coalescing)
     notifyTicketRecipients(ticket.id, 'new_post', placeholders, user.id).catch((err) => console.error('[notify]', err));
@@ -310,6 +327,8 @@ export async function replyToTicket(
     // If auto-reopened, also send auto_reopen notification
     if (autoReopened) {
       notifyTicketRecipients(ticket.id, 'auto_reopen', placeholders, user.id).catch((err) => console.error('[notify]', err));
+      // Resume SLA timer when ticket transitions from pending/closed → open
+      resumeSlaTimer(ticket.id).catch((err) => console.error('[sla]', err));
     }
   }
 

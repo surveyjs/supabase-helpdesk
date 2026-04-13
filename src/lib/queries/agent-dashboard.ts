@@ -1,4 +1,5 @@
 import { createServerClient } from '@/lib/supabase/server';
+import { getSlaStatusForTimer, type SlaStatus } from '@/lib/utils/sla';
 
 export type AgentTicketFilters = {
   status?: string;
@@ -33,6 +34,7 @@ export type AgentTicketRow = {
   type_name: string;
   category_name: string | null;
   post_count: number;
+  sla_status?: SlaStatus | null;
 };
 
 export async function getAgentDashboardPageSize(): Promise<number> {
@@ -163,7 +165,10 @@ export async function getAgentTickets(filters: AgentTicketFilters): Promise<{
   // Sort
   if (filters.sort === 'created') {
     query = query.order('created_at', { ascending: false });
+  } else if (filters.sort !== 'sla') {
+    query = query.order('updated_at', { ascending: false });
   } else {
+    // SLA sort — we'll sort client-side after fetching SLA data
     query = query.order('updated_at', { ascending: false });
   }
 
@@ -173,11 +178,82 @@ export async function getAgentTickets(filters: AgentTicketFilters): Promise<{
 
   const { data, count } = await query;
 
+  let tickets = (data ?? []) as AgentTicketRow[];
+
+  // Fetch SLA timers for all tickets
+  if (tickets.length > 0) {
+    const ticketIds = tickets.map((t) => t.id);
+    const { data: slaTimers } = await supabase
+      .from('sla_timers')
+      .select('*')
+      .in('ticket_id', ticketIds);
+
+    if (slaTimers && slaTimers.length > 0) {
+      const timerMap = new Map(slaTimers.map((t) => [t.ticket_id, t]));
+      const statusPromises = tickets.map(async (ticket) => {
+        const timer = timerMap.get(ticket.id);
+        if (timer) {
+          ticket.sla_status = await getSlaStatusForTimer(timer);
+        } else {
+          ticket.sla_status = null;
+        }
+        return ticket;
+      });
+      tickets = await Promise.all(statusPromises);
+    }
+
+    // Sort by SLA risk if requested
+    if (filters.sort === 'sla') {
+      const riskOrder: Record<string, number> = {
+        breached: 0,
+        approaching: 1,
+        on_track: 2,
+        met: 3,
+        no_sla: 4,
+      };
+
+      tickets.sort((a, b) => {
+        const aStatus = getWorstSlaStatus(a.sla_status);
+        const bStatus = getWorstSlaStatus(b.sla_status);
+        const aRisk = riskOrder[aStatus] ?? 4;
+        const bRisk = riskOrder[bStatus] ?? 4;
+        if (aRisk !== bRisk) return aRisk - bRisk;
+        // Within same group, sort by remaining time (least first)
+        const aRemaining = getMinRemainingMinutes(a.sla_status);
+        const bRemaining = getMinRemainingMinutes(b.sla_status);
+        return aRemaining - bRemaining;
+      });
+    }
+  }
+
   return {
-    tickets: (data ?? []) as AgentTicketRow[],
+    tickets,
     total: count ?? 0,
     pageSize,
   };
+}
+
+function getWorstSlaStatus(sla: SlaStatus | null | undefined): string {
+  if (!sla) return 'no_sla';
+  const statuses = [sla.firstResponse.status, sla.resolution.status];
+  if (statuses.includes('breached')) return 'breached';
+  if (statuses.includes('approaching')) return 'approaching';
+  if (statuses.includes('on_track')) return 'on_track';
+  if (statuses.includes('met')) return 'met';
+  return 'no_sla';
+}
+
+function getMinRemainingMinutes(sla: SlaStatus | null | undefined): number {
+  if (!sla) return Infinity;
+  const items = [sla.firstResponse, sla.resolution];
+  let min = Infinity;
+  for (const item of items) {
+    if (item.status === 'on_track' || item.status === 'approaching' || item.status === 'breached') {
+      const remaining = item.targetMinutes - item.elapsedMinutes;
+      if (remaining < min) min = remaining;
+    }
+  }
+  return min;
 }
 
 export async function getAgentStats(agentId: string) {
@@ -201,13 +277,47 @@ export async function getAgentStats(agentId: string) {
     .gte('created_at', thirtyDaysAgo)
     .contains('details', { to: 'closed' });
 
+  // SLA compliance: tickets assigned to this agent with completed SLA timers
+  let slaComplianceRate = 'N/A';
+  const { data: agentTickets } = await supabase
+    .from('tickets')
+    .select('id')
+    .eq('assigned_agent_id', agentId);
+
+  if (agentTickets && agentTickets.length > 0) {
+    const ticketIds = agentTickets.map((t) => t.id);
+    const { data: slaTimers } = await supabase
+      .from('sla_timers')
+      .select('first_response_met, resolution_met')
+      .in('ticket_id', ticketIds);
+
+    if (slaTimers && slaTimers.length > 0) {
+      // Count timers that have at least one completed metric
+      let metCount = 0;
+      let totalMetrics = 0;
+      for (const timer of slaTimers) {
+        if (timer.first_response_met !== null) {
+          totalMetrics++;
+          if (timer.first_response_met) metCount++;
+        }
+        if (timer.resolution_met !== null) {
+          totalMetrics++;
+          if (timer.resolution_met) metCount++;
+        }
+      }
+      if (totalMetrics > 0) {
+        slaComplianceRate = `${Math.round((metCount / totalMetrics) * 100)}%`;
+      }
+    }
+  }
+
   return {
     ticketsAssigned: assignedCount ?? 0,
     ticketsResolved: resolvedCount ?? 0,
     avgResponseTime: 'N/A',
     avgResolutionTime: 'N/A',
     avgCsatRating: 'N/A',
-    slaComplianceRate: 'N/A',
+    slaComplianceRate,
   };
 }
 

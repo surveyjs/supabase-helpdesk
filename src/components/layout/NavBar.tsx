@@ -3,6 +3,7 @@ import { getUser, getProfile } from '@/lib/supabase/auth';
 import { signOut } from '@/lib/actions/auth';
 import { getUnreadCount } from '@/lib/actions/notifications';
 import { NotificationBell } from '@/components/features/notifications/NotificationBell';
+import { createServerClient } from '@/lib/supabase/server';
 
 function RoleBadge({ role }: { role: string }) {
   if (role === 'admin') {
@@ -27,6 +28,15 @@ export default async function NavBar() {
   const profile = user ? await getProfile() : null;
   const unreadCount = user ? await getUnreadCount() : 0;
 
+  // Check KB visibility
+  const supabase = await createServerClient();
+  const { data: kbSetting } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'kb_visible')
+    .single();
+  const kbVisible = kbSetting?.value === 'true';
+
   const displayName = profile?.display_name || user?.email || '';
 
   return (
@@ -50,6 +60,16 @@ export default async function NavBar() {
           {profile && profile.role === 'admin' && (
             <Link href="/admin" className="text-sm text-gray-600 hover:text-gray-900">
               Setup
+            </Link>
+          )}
+          {kbVisible && (
+            <Link href="/help" className="text-sm text-gray-600 hover:text-gray-900">
+              Help Center
+            </Link>
+          )}
+          {profile && ['agent', 'admin'].includes(profile.role) && (
+            <Link href="/kb/manage" className="text-sm text-gray-600 hover:text-gray-900">
+              Manage Articles
             </Link>
           )}
         </div>

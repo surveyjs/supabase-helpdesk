@@ -1,7 +1,9 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useState, useEffect, useRef } from 'react';
 import { createTicket, type TicketActionState } from '@/lib/actions/tickets';
+import { getSuggestedArticles } from '@/lib/actions/kb';
+import { generateSlug } from '@/lib/utils/slug';
 
 const initialState: TicketActionState = {};
 
@@ -15,6 +17,12 @@ type CustomField = {
   default_value: string | null;
   options: string[] | null;
 };
+type SuggestedArticle = {
+  id: number;
+  title: string;
+  slug: string;
+  category: { id: string; name: string } | null;
+};
 
 export function TicketForm({
   ticketTypes,
@@ -22,19 +30,47 @@ export function TicketForm({
   customFields,
   defaultPrivate,
   showPrivacyControl,
+  initialTitle,
+  sourceArticleId,
 }: {
   ticketTypes: TicketType[];
   categories: Category[];
   customFields?: CustomField[];
   defaultPrivate: boolean;
   showPrivacyControl: boolean;
+  initialTitle?: string | null;
+  sourceArticleId?: number | null;
 }) {
   const [state, formAction, pending] = useActionState(createTicket, initialState);
+  const [suggestions, setSuggestions] = useState<SuggestedArticle[]>([]);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const defaultType = ticketTypes.find((t) => t.is_default)?.id ?? ticketTypes[0]?.id;
 
+  function handleTitleChange(value: string) {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (value.trim().length < 3) {
+      setSuggestions([]);
+      return;
+    }
+    debounceRef.current = setTimeout(async () => {
+      const results = await getSuggestedArticles(value);
+      setSuggestions(results);
+    }, 400);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
   return (
     <form action={formAction} className="space-y-6">
+      {sourceArticleId && (
+        <input type="hidden" name="source_article_id" value={sourceArticleId} />
+      )}
+
       {state.error && (
         <div
           role="alert"
@@ -54,10 +90,36 @@ export function TicketForm({
           type="text"
           required
           maxLength={300}
+          defaultValue={initialTitle ?? ''}
+          onChange={(e) => handleTitleChange(e.target.value)}
           className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
         />
         {state.fieldErrors?.title && (
           <p className="mt-1 text-sm text-red-600">{state.fieldErrors.title}</p>
+        )}
+        {/* Suggested KB articles */}
+        {suggestions.length > 0 && (
+          <div className="mt-2 bg-blue-50 border border-blue-200 rounded p-3">
+            <p className="text-xs text-blue-700 font-medium mb-1">Related articles that might help:</p>
+            <ul className="space-y-1">
+              {suggestions.map((a) => {
+                const catSlug = a.category ? generateSlug(a.category.name) : 'uncategorized';
+                return (
+                  <li key={a.id}>
+                    <a
+                      href={`/help/${a.id}/${catSlug}/${a.slug}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-blue-600 hover:text-blue-800"
+                    >
+                      {a.title}
+                      {a.category && <span className="text-xs text-blue-500 ml-1">({a.category.name})</span>}
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         )}
       </div>
 

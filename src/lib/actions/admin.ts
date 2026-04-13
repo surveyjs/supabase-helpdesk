@@ -1377,3 +1377,98 @@ export async function updateSlaThreshold(formData: FormData): Promise<void> {
 
   revalidatePath('/admin/sla');
 }
+
+// ============================================================
+// KB Categories (§19)
+// ============================================================
+
+export async function createKbCategory(formData: FormData): Promise<void> {
+  const { supabase, profile } = await requireAdminRole();
+
+  const name = (formData.get('name') as string)?.trim();
+  if (!name || name.length > 100) return;
+
+  // Determine next display_order
+  const { data: maxRow } = await supabase
+    .from('kb_categories')
+    .select('display_order')
+    .order('display_order', { ascending: false })
+    .limit(1)
+    .single();
+
+  const nextOrder = (maxRow?.display_order ?? 0) + 1;
+
+  const { data: created, error } = await supabase
+    .from('kb_categories')
+    .insert({ name, display_order: nextOrder })
+    .select('id')
+    .single();
+
+  if (error) return;
+
+  await logAudit(supabase, profile.id, 'create_kb_category', 'kb_category', created?.id, { name });
+  revalidatePath('/admin/kb-categories');
+}
+
+export async function renameKbCategory(formData: FormData): Promise<void> {
+  const { supabase, profile } = await requireAdminRole();
+
+  const categoryId = formData.get('category_id') as string;
+  const newName = (formData.get('name') as string)?.trim();
+  if (!categoryId || !newName || newName.length > 100) return;
+
+  const { error } = await supabase
+    .from('kb_categories')
+    .update({ name: newName })
+    .eq('id', categoryId);
+
+  if (error) return;
+
+  await logAudit(supabase, profile.id, 'rename_kb_category', 'kb_category', categoryId, { name: newName });
+  revalidatePath('/admin/kb-categories');
+}
+
+export async function reorderKbCategories(formData: FormData): Promise<void> {
+  const { supabase, profile } = await requireAdminRole();
+
+  const orderedIdsRaw = formData.get('ordered_ids') as string;
+  if (!orderedIdsRaw) return;
+
+  let orderedIds: string[];
+  try {
+    orderedIds = JSON.parse(orderedIdsRaw);
+  } catch {
+    return;
+  }
+
+  if (!Array.isArray(orderedIds) || orderedIds.length === 0) return;
+
+  for (let i = 0; i < orderedIds.length; i++) {
+    await supabase
+      .from('kb_categories')
+      .update({ display_order: i + 1 })
+      .eq('id', orderedIds[i]);
+  }
+
+  await logAudit(supabase, profile.id, 'reorder_kb_categories', 'kb_category', null, { orderedIds });
+  revalidatePath('/admin/kb-categories');
+}
+
+export async function deleteKbCategory(formData: FormData): Promise<void> {
+  const { supabase, profile } = await requireAdminRole();
+
+  const categoryId = formData.get('category_id') as string;
+  if (!categoryId) return;
+
+  const { data: existing } = await supabase.from('kb_categories').select('name').eq('id', categoryId).single();
+
+  const { error } = await supabase
+    .from('kb_categories')
+    .delete()
+    .eq('id', categoryId);
+
+  if (error) return;
+
+  await logAudit(supabase, profile.id, 'delete_kb_category', 'kb_category', categoryId, { name: existing?.name });
+  revalidatePath('/admin/kb-categories');
+}

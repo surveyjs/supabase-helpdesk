@@ -87,6 +87,7 @@ export default async function TicketDetailPage({
       id, title, slug, status, urgency, severity, is_private,
       created_at, updated_at, duplicate_of_id, merged_into_id,
       creator_id, assigned_agent_id, type_id, category_id, custom_fields,
+      source_article_id,
       type:ticket_types(id, name),
       category:categories(id, name),
       assigned_agent:profiles!tickets_assigned_agent_id_fkey(id, display_name),
@@ -581,6 +582,20 @@ export default async function TicketDetailPage({
   const typeName = ticketType?.name ?? 'Unknown';
   const categoryName = ticketCategory?.name ?? null;
 
+  // Fetch source article if present (for agents)
+  let sourceArticle: { id: number; title: string; slug: string; category_name: string | null } | null = null;
+  if (isAgent && ticket.source_article_id) {
+    const { data: art } = await supabase
+      .from('kb_articles')
+      .select('id, title, slug, category:kb_categories(name)')
+      .eq('id', ticket.source_article_id)
+      .single();
+    if (art) {
+      const artCat = Array.isArray(art.category) ? art.category[0] : art.category;
+      sourceArticle = { id: art.id, title: art.title, slug: art.slug, category_name: artCat?.name ?? null };
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center gap-4 mb-4">
@@ -667,6 +682,19 @@ export default async function TicketDetailPage({
               {new Date(ticket.updated_at).toLocaleDateString()}
             </dd>
           </div>
+          {sourceArticle && (
+            <div data-testid="source-article">
+              <dt className="text-gray-500">Created from article</dt>
+              <dd className="text-gray-900">
+                <Link
+                  href={`/help/${sourceArticle.id}/${sourceArticle.category_name ? generateSlug(sourceArticle.category_name) : 'uncategorized'}/${sourceArticle.slug}`}
+                  className="text-blue-600 hover:text-blue-800 text-sm"
+                >
+                  {sourceArticle.title}
+                </Link>
+              </dd>
+            </div>
+          )}
         </dl>
 
         {/* SLA Indicators (agents only) */}

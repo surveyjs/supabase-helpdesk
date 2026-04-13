@@ -20,6 +20,7 @@ const SECTIONS = [
   { label: 'User Settings', href: '/admin/user-settings' },
   { label: 'CSAT Settings', href: '/admin/csat' },
   { label: 'SLA Policies', href: '/admin/sla' },
+  { label: 'KB Categories', href: '/admin/kb-categories' },
   { label: 'Audit Log', href: '/admin/audit-log' },
 ];
 

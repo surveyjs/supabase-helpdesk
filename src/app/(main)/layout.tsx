@@ -1,5 +1,3 @@
-import { redirect } from 'next/navigation';
-import { getUser } from '@/lib/supabase/auth';
 import NavBar from '@/components/layout/NavBar';
 
 export default async function MainLayout({
@@ -7,9 +5,6 @@ export default async function MainLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const user = await getUser();
-  if (!user) redirect('/login');
-
   return (
     <>
       <NavBar />

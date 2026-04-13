@@ -43,6 +43,8 @@ export async function createTicket(
   const typeId = formData.get('type_id') as string;
   const categoryId = (formData.get('category_id') as string) || null;
   const privacyRaw = formData.get('is_private') === 'on';
+  const sourceArticleIdRaw = formData.get('source_article_id') as string;
+  const sourceArticleId = sourceArticleIdRaw ? parseInt(sourceArticleIdRaw, 10) : null;
 
   // Validate
   const fieldErrors: Record<string, string> = {};
@@ -172,6 +174,7 @@ export async function createTicket(
       creator_id: user.id,
       is_private: isPrivate,
       custom_fields: Object.keys(customFieldValues).length > 0 ? customFieldValues : {},
+      source_article_id: sourceArticleId && !isNaN(sourceArticleId) ? sourceArticleId : null,
     })
     .select('id, slug')
     .single();

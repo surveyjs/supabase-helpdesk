@@ -46,6 +46,31 @@ function getContrastColor(hex: string): string {
   return luminance < 0.5 ? '#FFFFFF' : '#111827';
 }
 
+const SLA_DOT_COLORS: Record<SlaIndicatorStatus, string> = {
+  on_track: 'bg-green-500',
+  approaching: 'bg-yellow-500',
+  breached: 'bg-red-500',
+  met: 'bg-green-500',
+  no_sla: 'bg-gray-300',
+};
+
+function SlaStatusDot({ status }: { status: SlaIndicatorStatus }) {
+  return (
+    <span
+      className={`inline-block w-2.5 h-2.5 rounded-full ${SLA_DOT_COLORS[status]}`}
+      title={status.replace('_', ' ')}
+      data-testid={`sla-dot-${status}`}
+    />
+  );
+}
+
+function formatMinutesAsHours(minutes: number): string {
+  if (minutes < 60) return `${minutes}m`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
 export default async function TicketDetailPage({
   params,
 }: {
@@ -555,30 +580,6 @@ export default async function TicketDetailPage({
   const assignedAgentName = assignedAgent?.display_name ?? null;
   const typeName = ticketType?.name ?? 'Unknown';
   const categoryName = ticketCategory?.name ?? null;
-
-  function SlaStatusDot({ status }: { status: SlaIndicatorStatus }) {
-    const colors: Record<SlaIndicatorStatus, string> = {
-      on_track: 'bg-green-500',
-      approaching: 'bg-yellow-500',
-      breached: 'bg-red-500',
-      met: 'bg-green-500',
-      no_sla: 'bg-gray-300',
-    };
-    return (
-      <span
-        className={`inline-block w-2.5 h-2.5 rounded-full ${colors[status]}`}
-        title={status.replace('_', ' ')}
-        data-testid={`sla-dot-${status}`}
-      />
-    );
-  }
-
-  function formatMinutesAsHours(minutes: number): string {
-    if (minutes < 60) return `${minutes}m`;
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
-    return m > 0 ? `${h}h ${m}m` : `${h}h`;
-  }
 
   return (
     <div>

@@ -184,7 +184,7 @@ export async function getAgentTickets(filters: AgentTicketFilters): Promise<{
 
   const { data, count } = await query;
 
-  let tickets = (data ?? []) as AgentTicketRow[];
+  const tickets = (data ?? []) as AgentTicketRow[];
 
   // Enrich tickets with SLA status
   if (tickets.length > 0) {
@@ -238,7 +238,7 @@ export async function getAgentTickets(filters: AgentTicketFilters): Promise<{
         }
 
         // Calculate current elapsed (for running timers)
-        let elapsed = timer.is_paused
+        const elapsed = timer.is_paused
           ? Math.max(timer.first_response_elapsed_minutes, timer.resolution_elapsed_minutes)
           : calculateBusinessMinutesElapsed(new Date(timer.created_at), now, config);
 

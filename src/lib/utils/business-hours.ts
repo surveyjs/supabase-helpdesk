@@ -138,9 +138,6 @@ export function calculateBusinessMinutesElapsed(
     if (schedule) {
       const dayStartMin = parseTimeToMinutes(schedule.start);
       const dayEndMin = parseTimeToMinutes(schedule.end);
-      const cursorTime = getTimeInTimezone(cursor, config.timezone);
-      const cursorMinutes = cursorTime.hours * 60 + cursorTime.minutes;
-
       // Calculate the start of this business day in UTC
       const dayStartUtc = getStartOfDayInTimezone(cursor, config.timezone);
       const businessStartUtc = new Date(dayStartUtc.getTime() + dayStartMin * 60000);
@@ -186,8 +183,6 @@ export function addBusinessMinutes(
     if (schedule) {
       const dayStartMin = parseTimeToMinutes(schedule.start);
       const dayEndMin = parseTimeToMinutes(schedule.end);
-      const dayBusinessMinutes = dayEndMin - dayStartMin;
-
       const dayStartUtc = getStartOfDayInTimezone(cursor, config.timezone);
       const businessStartUtc = new Date(dayStartUtc.getTime() + dayStartMin * 60000);
       const businessEndUtc = new Date(dayStartUtc.getTime() + dayEndMin * 60000);

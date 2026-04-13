@@ -189,8 +189,8 @@ test.describe('SLA Admin Settings', () => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/sla');
     await expect(page.locator('h1')).toBeVisible({ timeout: 10000 });
-    await expect(page.getByRole('heading', { name: 'Severity Mapping' })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Business Hours' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Severity Mapping' })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('heading', { name: 'Business Hours' })).toBeVisible({ timeout: 5000 });
   });
 
   test('admin can create a new SLA policy', async ({ page }) => {

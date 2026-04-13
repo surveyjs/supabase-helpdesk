@@ -64,7 +64,7 @@ test.describe('Help Center – Public', () => {
 
   test('article URL redirect on slug mismatch (307)', async ({ page }) => {
     // Use wrong slug — should redirect to correct URL
-    const response = await page.goto('/help/1/wrong-category/wrong-slug', { waitUntil: 'domcontentloaded' });
+    await page.goto('/help/1/wrong-category/wrong-slug', { waitUntil: 'domcontentloaded' });
     // After redirect, we should land on the correct article page
     await expect(page).toHaveURL(/\/help\/1\/getting-started\/how-to-create-a-ticket/, { timeout: 10000 });
     await expect(page.getByRole('heading', { name: 'How to create a ticket' })).toBeVisible();

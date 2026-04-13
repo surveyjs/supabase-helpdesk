@@ -314,7 +314,7 @@ describe('Knowledge Base', () => {
 
     it('regular user cannot update articles', async () => {
       const user = await clientForUser('kb-user@test.com');
-      const { data, error, count } = await user
+      const { data, error } = await user
         .from('kb_articles')
         .update({ title: 'Hacked title' })
         .eq('id', articleId1)

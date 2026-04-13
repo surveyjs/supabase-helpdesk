@@ -69,7 +69,12 @@ beforeAll(async () => {
   const { data: testTickets } = await svc.from('tickets').select('id').in('creator_id', testUserIds);
   if (testTickets && testTickets.length > 0) {
     const ticketIds = testTickets.map((t: { id: number }) => t.id);
-    await svc.from('sla_notifications_sent').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    // Scope sla_notifications_sent cleanup to test timers only
+    const { data: slaTimers } = await svc.from('sla_timers').select('id').in('ticket_id', ticketIds);
+    const timerIds = (slaTimers ?? []).map((t: { id: string }) => t.id);
+    if (timerIds.length > 0) {
+      await svc.from('sla_notifications_sent').delete().in('sla_timer_id', timerIds);
+    }
     await svc.from('sla_timers').delete().in('ticket_id', ticketIds);
     await svc.from('notifications').delete().in('ticket_id', ticketIds);
     await svc.from('notification_coalescing_queue').delete().in('ticket_id', ticketIds);
@@ -80,9 +85,13 @@ beforeAll(async () => {
     await svc.from('tickets').delete().in('id', ticketIds);
   }
 
-  // Clean up SLA policies we created (except seed data)
-  await svc.from('sla_severity_mapping').update({ sla_policy_id: null }).like('severity', '%');
-  await svc.from('sla_policies').delete().like('name', 'SlaTest%');
+  // Clean up SLA policies we created — only unlink test-created policies, not all mappings
+  const { data: testPolicies } = await svc.from('sla_policies').select('id').like('name', 'SlaTest%');
+  if (testPolicies && testPolicies.length > 0) {
+    const testPolicyIds = testPolicies.map((p: { id: string }) => p.id);
+    await svc.from('sla_severity_mapping').update({ sla_policy_id: null }).in('sla_policy_id', testPolicyIds);
+    await svc.from('sla_policies').delete().in('id', testPolicyIds);
+  }
 
   await svc.from('admin_audit_log').delete().in('admin_id', testUserIds);
   await svc.from('profiles').delete().in('id', testUserIds);
@@ -166,7 +175,12 @@ afterAll(async () => {
   const { data: testTickets } = await svc.from('tickets').select('id').in('creator_id', testUserIds);
   const ticketIds = testTickets?.map((t: { id: number }) => t.id) ?? [];
   if (ticketIds.length > 0) {
-    await svc.from('sla_notifications_sent').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    // Scope sla_notifications_sent cleanup to test timers only
+    const { data: slaTimers } = await svc.from('sla_timers').select('id').in('ticket_id', ticketIds);
+    const timerIds = (slaTimers ?? []).map((t: { id: string }) => t.id);
+    if (timerIds.length > 0) {
+      await svc.from('sla_notifications_sent').delete().in('sla_timer_id', timerIds);
+    }
     await svc.from('sla_timers').delete().in('ticket_id', ticketIds);
     await svc.from('notifications').delete().in('ticket_id', ticketIds);
     await svc.from('notification_coalescing_queue').delete().in('ticket_id', ticketIds);
@@ -176,7 +190,13 @@ afterAll(async () => {
     await svc.from('tickets').update({ duplicate_of_id: null, merged_into_id: null }).in('id', ticketIds);
     await svc.from('tickets').delete().in('id', ticketIds);
   }
-  await svc.from('sla_policies').delete().like('name', 'SlaTest%');
+  // Unlink test-created policies from severity mappings before deleting
+  const { data: testPolicies } = await svc.from('sla_policies').select('id').like('name', 'SlaTest%');
+  if (testPolicies && testPolicies.length > 0) {
+    const testPolicyIds = testPolicies.map((p: { id: string }) => p.id);
+    await svc.from('sla_severity_mapping').update({ sla_policy_id: null }).in('sla_policy_id', testPolicyIds);
+    await svc.from('sla_policies').delete().in('id', testPolicyIds);
+  }
   await svc.from('admin_audit_log').delete().in('admin_id', testUserIds);
   await svc.from('profiles').delete().in('id', testUserIds);
   for (const uid of testUserIds) {

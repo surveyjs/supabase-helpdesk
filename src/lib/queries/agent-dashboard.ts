@@ -1,5 +1,5 @@
 import { createServerClient } from '@/lib/supabase/server';
-import { getSlaStatusForTimer, type SlaStatus } from '@/lib/utils/sla';
+import { getSlaStatusForTimer, getBusinessHoursConfig, getApproachingThreshold, type SlaStatus } from '@/lib/utils/sla';
 
 export type AgentTicketFilters = {
   status?: string;
@@ -189,11 +189,25 @@ export async function getAgentTickets(filters: AgentTicketFilters): Promise<{
       .in('ticket_id', ticketIds);
 
     if (slaTimers && slaTimers.length > 0) {
+      // Pre-fetch config, threshold, and policies once to avoid N+1 queries
+      const [config, threshold] = await Promise.all([
+        getBusinessHoursConfig(),
+        getApproachingThreshold(),
+      ]);
+      const policyIds = [...new Set(slaTimers.map((t) => t.sla_policy_id).filter(Boolean))];
+      const { data: policies } = await supabase
+        .from('sla_policies')
+        .select('id, first_response_minutes, resolution_minutes')
+        .in('id', policyIds);
+      const policyMap = new Map(
+        (policies ?? []).map((p) => [p.id, p]),
+      );
+
       const timerMap = new Map(slaTimers.map((t) => [t.ticket_id, t]));
       const statusPromises = tickets.map(async (ticket) => {
         const timer = timerMap.get(ticket.id);
         if (timer) {
-          ticket.sla_status = await getSlaStatusForTimer(timer);
+          ticket.sla_status = await getSlaStatusForTimer(timer, { config, threshold, policyMap });
         } else {
           ticket.sla_status = null;
         }

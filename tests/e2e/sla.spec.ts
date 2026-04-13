@@ -46,7 +46,11 @@ test.describe('SLA Indicators', () => {
     // Clean up leftover ticket from prior runs
     const { data: oldTicket } = await svc.from('tickets').select('id').eq('slug', 'e2e-sla-ticket').single();
     if (oldTicket) {
-      await svc.from('sla_notifications_sent').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      const { data: oldTimers } = await svc.from('sla_timers').select('id').eq('ticket_id', oldTicket.id);
+      const oldTimerIds = (oldTimers ?? []).map((t: { id: string }) => t.id);
+      if (oldTimerIds.length > 0) {
+        await svc.from('sla_notifications_sent').delete().in('sla_timer_id', oldTimerIds);
+      }
       await svc.from('sla_timers').delete().eq('ticket_id', oldTicket.id);
       await svc.from('activity_log').delete().eq('ticket_id', oldTicket.id);
       await svc.from('posts').delete().eq('ticket_id', oldTicket.id);
@@ -111,11 +115,18 @@ test.describe('SLA Indicators', () => {
 
   test.afterAll(async () => {
     const svc = createServiceRoleClient();
-    await svc.from('sla_notifications_sent').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    // Scope cleanup to this test's timer only
+    const { data: timers } = await svc.from('sla_timers').select('id').eq('ticket_id', ticketId);
+    const timerIds = (timers ?? []).map((t: { id: string }) => t.id);
+    if (timerIds.length > 0) {
+      await svc.from('sla_notifications_sent').delete().in('sla_timer_id', timerIds);
+    }
     await svc.from('sla_timers').delete().eq('ticket_id', ticketId);
     await svc.from('activity_log').delete().eq('ticket_id', ticketId);
     await svc.from('posts').delete().eq('ticket_id', ticketId);
     await svc.from('tickets').delete().eq('id', ticketId);
+    // Restore severity mapping to seed state
+    await svc.from('sla_severity_mapping').update({ sla_policy_id: policyId }).eq('severity', 'critical');
   });
 
   test('SLA indicators appear on ticket detail for agents', async ({ page }) => {

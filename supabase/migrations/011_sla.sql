@@ -82,11 +82,11 @@ ALTER TABLE sla_timers ENABLE ROW LEVEL SECURITY;
 -- Agents and admins can see SLA timers
 CREATE POLICY sla_timers_select ON sla_timers
   FOR SELECT USING (is_agent());
--- System manages timers via service role
+-- System manages timers via service role only
 CREATE POLICY sla_timers_insert ON sla_timers
-  FOR INSERT WITH CHECK (true);
+  FOR INSERT TO service_role WITH CHECK (true);
 CREATE POLICY sla_timers_update ON sla_timers
-  FOR UPDATE USING (true);
+  FOR UPDATE TO service_role USING (true);
 
 -- --------------------------------------------------------
 -- SLA Notifications Sent (dedup tracking)
@@ -105,7 +105,7 @@ ALTER TABLE sla_notifications_sent ENABLE ROW LEVEL SECURITY;
 CREATE POLICY sla_notifications_sent_select ON sla_notifications_sent
   FOR SELECT USING (is_agent());
 CREATE POLICY sla_notifications_sent_insert ON sla_notifications_sent
-  FOR INSERT WITH CHECK (true);
+  FOR INSERT TO service_role WITH CHECK (true);
 
 -- --------------------------------------------------------
 -- Business Hours Settings
@@ -132,18 +132,33 @@ ON CONFLICT (event_type) DO NOTHING;
 -- --------------------------------------------------------
 
 DO $$
+DECLARE
+  base_url TEXT := current_setting('app.settings.base_url', true);
+  cron_secret TEXT := current_setting('app.settings.cron_secret', true);
 BEGIN
-  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+  IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+    RAISE NOTICE 'Skipping SLA cron job setup: pg_cron extension is not installed.';
+  ELSIF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_net') THEN
+    RAISE NOTICE 'Skipping SLA cron job setup: pg_net extension is not installed.';
+  ELSIF base_url IS NULL OR btrim(base_url) = '' THEN
+    RAISE NOTICE 'Skipping SLA cron job setup: app.settings.base_url is not set.';
+  ELSIF cron_secret IS NULL OR btrim(cron_secret) = '' THEN
+    RAISE NOTICE 'Skipping SLA cron job setup: app.settings.cron_secret is not set.';
+  ELSE
     PERFORM cron.schedule(
       'check-sla-timers',
       '*/5 * * * *',
-      $cron$
-      SELECT net.http_post(
-        url := current_setting('app.settings.base_url', true) || '/api/cron/sla',
-        headers := jsonb_build_object('Authorization', 'Bearer ' || current_setting('app.settings.cron_secret', true)),
-        body := '{}'
-      );
-      $cron$
+      format(
+        $cron$
+        SELECT net.http_post(
+          url := %L,
+          headers := jsonb_build_object('Authorization', %L),
+          body := '{}'::jsonb
+        );
+        $cron$,
+        base_url || '/api/cron/sla',
+        'Bearer ' || cron_secret
+      )
     );
   END IF;
 END $$;

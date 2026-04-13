@@ -26,7 +26,7 @@ export type SlaStatus = {
   resolution: SlaIndicator;
 };
 
-async function getBusinessHoursConfig(): Promise<BusinessHoursConfig> {
+export async function getBusinessHoursConfig(): Promise<BusinessHoursConfig> {
   const supabase = createServiceRoleClient();
   const { data } = await supabase
     .from('app_settings')
@@ -56,7 +56,7 @@ async function getBusinessHoursConfig(): Promise<BusinessHoursConfig> {
   };
 }
 
-async function getApproachingThreshold(): Promise<number> {
+export async function getApproachingThreshold(): Promise<number> {
   const supabase = createServiceRoleClient();
   const { data } = await supabase
     .from('app_settings')
@@ -193,8 +193,10 @@ export async function resumeSlaTimer(ticketId: number): Promise<void> {
     .from('sla_timers')
     .update({
       is_paused: false,
-      first_response_paused_at: null,
-      resolution_paused_at: null,
+      // Set paused_at to resume time (not null) so subsequent pause/stop computes
+      // elapsed from this point, avoiding double-counting from created_at.
+      first_response_paused_at: timer.first_response_met === null ? now.toISOString() : timer.first_response_paused_at,
+      resolution_paused_at: timer.resolution_met === null ? now.toISOString() : timer.resolution_paused_at,
       first_response_deadline: firstResponseDeadline?.toISOString() ?? timer.first_response_deadline,
       resolution_deadline: resolutionDeadline?.toISOString() ?? timer.resolution_deadline,
       updated_at: now.toISOString(),
@@ -399,6 +401,10 @@ export async function getSlaStatusForTimer(timer: {
   created_at: string;
   first_response_paused_at: string | null;
   resolution_paused_at: string | null;
+}, options?: {
+  config?: BusinessHoursConfig;
+  threshold?: number;
+  policyMap?: Map<string, { first_response_minutes: number; resolution_minutes: number }>;
 }): Promise<SlaStatus> {
   const noSla: SlaIndicator = {
     status: 'no_sla',
@@ -413,19 +419,27 @@ export async function getSlaStatusForTimer(timer: {
     return { firstResponse: noSla, resolution: noSla };
   }
 
-  const supabase = createServiceRoleClient();
-  const { data: policy } = await supabase
-    .from('sla_policies')
-    .select('first_response_minutes, resolution_minutes')
-    .eq('id', timer.sla_policy_id)
-    .single();
+  // Use pre-fetched policy from options if available, otherwise query
+  let policy: { first_response_minutes: number; resolution_minutes: number } | null = null;
+  if (options?.policyMap) {
+    policy = options.policyMap.get(timer.sla_policy_id) ?? null;
+  }
+  if (!policy) {
+    const supabase = createServiceRoleClient();
+    const { data } = await supabase
+      .from('sla_policies')
+      .select('first_response_minutes, resolution_minutes')
+      .eq('id', timer.sla_policy_id)
+      .single();
+    policy = data;
+  }
 
   if (!policy) {
     return { firstResponse: noSla, resolution: noSla };
   }
 
-  const config = await getBusinessHoursConfig();
-  const threshold = await getApproachingThreshold();
+  const config = options?.config ?? await getBusinessHoursConfig();
+  const threshold = options?.threshold ?? await getApproachingThreshold();
   const now = new Date();
 
   function computeIndicator(

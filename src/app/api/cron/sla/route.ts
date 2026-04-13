@@ -25,11 +25,11 @@ export async function POST(request: Request) {
     .eq('key', 'sla_business_hours')
     .single();
 
-  let config: BusinessHoursConfig;
+  let config: BusinessHoursConfig | null = null;
   try {
     config = bhSetting?.value ? JSON.parse(bhSetting.value) : null;
   } catch {
-    config = null as unknown as BusinessHoursConfig;
+    config = null;
   }
 
   if (!config) {

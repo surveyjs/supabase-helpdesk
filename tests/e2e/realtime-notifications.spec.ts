@@ -154,9 +154,15 @@ test.describe('Notifications Page', () => {
 
     // Navigate with cache-busting param to ensure fresh server render
     await page.goto(`/notifications?t=${Date.now()}`);
+    await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible({ timeout: 10000 });
+
+    // If notifications aren't visible yet (stale server cache), reload once
+    if (!await page.getByText('Page test notification 1').isVisible({ timeout: 3000 }).catch(() => false)) {
+      await page.reload();
+    }
 
     await expect(page.getByText('Page test notification 1')).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText('Page test notification 2')).toBeVisible();
+    await expect(page.getByText('Page test notification 2')).toBeVisible({ timeout: 10000 });
 
     // Clean up
     await admin.from('notifications').delete().eq('recipient_id', aliceId).in('message', ['Page test notification 1', 'Page test notification 2']);

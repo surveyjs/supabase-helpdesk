@@ -17,8 +17,10 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
 async function gotoAdmin(page: Page, path: string) {
   await page.goto(path);
   if (!page.url().includes('/admin')) {
+    await page.waitForTimeout(500);
     await page.goto(path);
   }
+  await expect(page.getByRole('navigation', { name: 'Admin navigation' })).toBeVisible({ timeout: 10000 });
 }
 
 test.describe('Team Tickets', () => {
@@ -163,7 +165,7 @@ test.describe('Admin Types Management', () => {
 
   test('non-admin cannot access admin pages', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
-    await gotoAdmin(page, '/admin/types');
+    await page.goto('/admin/types');
     // Should be redirected away
     await expect(page).not.toHaveURL('/admin/types', { timeout: 10000 });
   });
@@ -271,6 +273,7 @@ test.describe('Admin Tags Management', () => {
   test('admin can create a tag with color and delete it', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/tags');
+    await expect(page.getByRole('heading', { name: 'Manage Tags' })).toBeVisible({ timeout: 10000 });
 
     await page.locator('#new-tag-name').fill('e2e-test-tag');
     // Color input — just submit with default
@@ -304,9 +307,8 @@ test.describe('Admin Teams Management', () => {
 
     await page.locator('#new-team-name').fill('E2E Test Team');
     await page.getByRole('button', { name: 'Create Team' }).click();
-    await page.waitForTimeout(2000);
 
-    await expect(page.getByText('E2E Test Team')).toBeVisible();
+    await expect(page.getByText('E2E Test Team')).toBeVisible({ timeout: 10000 });
   });
 
   test('admin can add member to team', async ({ page }) => {

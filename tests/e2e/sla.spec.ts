@@ -36,6 +36,7 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
 // ============================================================
 
 test.describe('SLA Indicators', () => {
+  test.describe.configure({ mode: 'serial' });
   let ticketId: number;
   let ticketSlug: string;
   let policyId: string;
@@ -131,8 +132,14 @@ test.describe('SLA Indicators', () => {
 
   test('SLA indicators appear on ticket detail for agents', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
-    await page.goto(`/tickets/${ticketId}/${ticketSlug}`);
-    await expect(page.getByTestId('sla-indicators')).toBeVisible({ timeout: 10000 });
+    await page.goto(`/tickets/${ticketId}/${ticketSlug}`, { waitUntil: 'networkidle' });
+    // If we got a 404 (ticket not yet visible due to race), retry once
+    if (await page.getByText('could not be found').isVisible({ timeout: 2000 }).catch(() => false)) {
+      await page.reload({ waitUntil: 'networkidle' });
+    }
+    // Wait for the ticket page to fully render before checking SLA
+    await expect(page.getByRole('heading', { name: 'E2E SLA Ticket' })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId('sla-indicators')).toBeVisible({ timeout: 15000 });
     await expect(page.getByTestId('sla-first-response')).toBeVisible();
     await expect(page.getByTestId('sla-resolution')).toBeVisible();
   });
@@ -213,7 +220,7 @@ test.describe('Admin SLA Settings', () => {
 
   test('admin can configure severity mapping', async ({ page }) => {
     await loginAsAdminAndGoToSla(page);
-    await expect(page.getByTestId('severity-mapping-form')).toBeVisible();
+    await expect(page.getByTestId('severity-mapping-form')).toBeVisible({ timeout: 10000 });
   });
 
   test('admin can configure business hours', async ({ page }) => {

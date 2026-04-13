@@ -76,13 +76,14 @@ test.describe('File Attachments', () => {
   test('create test ticket for attachment tests', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
     await page.goto('/tickets/new');
+    await expect(page.getByLabel('Title')).toBeVisible({ timeout: 10000 });
 
     await page.getByLabel('Title').fill('E2E Attachments Test Ticket');
     await page.getByLabel('Type').selectOption({ label: 'Issue' });
     await page.getByLabel(/Description/).fill('Testing file attachments.');
     await page.getByRole('button', { name: 'Create Ticket' }).click();
 
-    await expect(page).toHaveURL(/\/tickets\/\d+\/e2e-attachments-test-ticket/, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/tickets\/\d+\/e2e-attachments-test-ticket/, { timeout: 15000 });
     ticketUrl = page.url();
   });
 

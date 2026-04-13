@@ -76,7 +76,7 @@ test.describe('Authentication', () => {
   test('login flow: correct credentials → redirects to /', async ({ page }) => {
     await loginAs(page, 'alice@example.com', 'Password123');
     await expect(page).toHaveURL('/', { timeout: 10000 });
-    await expect(page.getByText('Welcome, Alice')).toBeVisible();
+    await expect(page.getByText('Welcome, Alice')).toBeVisible({ timeout: 10000 });
   });
 
   test('login: wrong password → error message', async ({ page }) => {

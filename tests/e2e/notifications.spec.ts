@@ -16,8 +16,10 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
 async function gotoAdmin(page: Page, path: string) {
   await page.goto(path);
   if (!page.url().includes('/admin')) {
+    await page.waitForTimeout(500);
     await page.goto(path);
   }
+  await expect(page.getByRole('navigation', { name: 'Admin navigation' })).toBeVisible({ timeout: 10000 });
 }
 
 // ============================================================

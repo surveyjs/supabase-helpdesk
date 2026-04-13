@@ -106,15 +106,21 @@ INSERT INTO notification_templates (event_type, subject, body) VALUES
   ('sla_breached_resolution', 'SLA Breached: Resolution overdue on ticket #{{ticketId}}', 'The resolution SLA target for ticket "{{ticketTitle}}" has been breached. Target was {{targetTime}} business hours; {{elapsedTime}} has elapsed.')
 ON CONFLICT (event_type) DO NOTHING;
 
--- SLA Monitoring Cron Job
-SELECT cron.schedule(
-  'check-sla-timers',
-  '*/5 * * * *',
-  $$
-  SELECT net.http_post(
-    url := current_setting('app.settings.base_url', true) || '/api/cron/sla',
-    headers := jsonb_build_object('Authorization', 'Bearer ' || current_setting('app.settings.cron_secret', true)),
-    body := '{}'
-  );
-  $$
-);
+-- SLA Monitoring Cron Job (only if pg_cron is available)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+    PERFORM cron.schedule(
+      'check-sla-timers',
+      '*/5 * * * *',
+      $cron$
+      SELECT net.http_post(
+        url := current_setting('app.settings.base_url', true) || '/api/cron/sla',
+        headers := jsonb_build_object('Authorization', 'Bearer ' || current_setting('app.settings.cron_secret', true)),
+        body := '{}'
+      );
+      $cron$
+    );
+  END IF;
+END
+$$;

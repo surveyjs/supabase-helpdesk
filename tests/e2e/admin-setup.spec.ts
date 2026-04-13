@@ -1,28 +1,6 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { createServiceRoleClient } from '../helpers/supabase';
-
-/**
- * Helper: log in via the login form.
- */
-async function loginAs(page: Page, email: string, password = 'Password123') {
-  await page.goto('/login');
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Log in' }).click();
-  await expect(page).toHaveURL('/', { timeout: 10000 });
-  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 10000 });
-}
-
-/** Navigate to an admin page, retrying if requireAdmin() redirect race occurs. */
-async function gotoAdmin(page: Page, path: string) {
-  await page.goto(path);
-  if (!page.url().includes('/admin')) {
-    await page.waitForTimeout(500);
-    await page.goto(path);
-  }
-  // Wait for the admin sidebar nav to confirm the page loaded
-  await expect(page.getByRole('navigation', { name: 'Admin navigation' })).toBeVisible({ timeout: 10000 });
-}
+import { loginAs, gotoAdmin } from '../helpers/auth';
 
 // ============================================================
 // ADMIN LAYOUT & SIDEBAR

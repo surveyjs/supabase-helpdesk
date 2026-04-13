@@ -1,26 +1,7 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { createServiceRoleClient } from '../helpers/supabase';
+import { loginAs, gotoAdmin } from '../helpers/auth';
 import crypto from 'crypto';
-
-/**
- * Helper: log in via the login form.
- */
-async function loginAs(page: Page, email: string, password = 'Password123') {
-  await page.goto('/login');
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Log in' }).click();
-  await expect(page).toHaveURL('/', { timeout: 10000 });
-  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 10000 });
-}
-
-/** Navigate to an admin page. */
-async function gotoAdmin(page: Page, path: string) {
-  await page.goto(path);
-  if (!page.url().includes('/admin')) {
-    await page.goto(path);
-  }
-}
 
 // ============================================================
 // CSAT Rating Page

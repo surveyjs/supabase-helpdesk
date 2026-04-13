@@ -1,34 +1,14 @@
 import { test, expect, Page } from '@playwright/test';
 import { createServiceRoleClient } from '../helpers/supabase';
+import { loginAs, gotoAdmin } from '../helpers/auth';
 
 /**
  * Helper: log in as admin and navigate to admin SLA page.
  */
 async function loginAsAdminAndGoToSla(page: Page) {
   await loginAs(page, 'admin@example.com');
-  await page.goto('/admin/sla');
-  // If admin page didn't load (possible session issue), retry login
-  const heading = page.getByRole('heading', { name: 'SLA Policies' });
-  try {
-    await expect(heading).toBeVisible({ timeout: 5000 });
-  } catch {
-    // Retry: sign out and log back in
-    await page.goto('/login');
-    await page.getByLabel('Email').fill('admin@example.com');
-    await page.getByLabel('Password').fill('Password123');
-    await page.getByRole('button', { name: 'Log in' }).click();
-    await expect(page).toHaveURL('/', { timeout: 10000 });
-    await page.goto('/admin/sla');
-    await expect(heading).toBeVisible({ timeout: 10000 });
-  }
-}
-async function loginAs(page: Page, email: string, password = 'Password123') {
-  await page.goto('/login');
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Log in' }).click();
-  await expect(page).toHaveURL('/', { timeout: 10000 });
-  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 10000 });
+  await gotoAdmin(page, '/admin/sla');
+  await expect(page.getByRole('heading', { name: 'SLA Policies' })).toBeVisible({ timeout: 10000 });
 }
 
 // ============================================================

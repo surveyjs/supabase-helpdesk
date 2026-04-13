@@ -1,23 +1,12 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { createClient } from '@supabase/supabase-js';
+import { loginAs } from '../helpers/auth';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'http://127.0.0.1:54321';
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 function svc() {
   return createClient(supabaseUrl, serviceRoleKey);
-}
-
-/**
- * Helper: log in via the login form.
- */
-async function loginAs(page: Page, email: string, password = 'Password123') {
-  await page.goto('/login');
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Log in' }).click();
-  await expect(page).toHaveURL('/', { timeout: 10000 });
-  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 10000 });
 }
 
 // ============================================================

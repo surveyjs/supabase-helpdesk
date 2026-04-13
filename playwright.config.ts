@@ -8,15 +8,25 @@ export default defineConfig({
   globalSetup: './tests/e2e/global-setup.ts',
   globalTeardown: './tests/e2e/global-teardown.ts',
   fullyParallel: true,
-  workers: 4,
-  retries: process.env.CI ? 2 : 2,
-  reporter: 'html',
+  workers: process.env.CI ? 2 : 4,
+  retries: 2,
+  reporter: process.env.CI ? 'list' : 'html',
   use: {
     baseURL: 'http://localhost:3000',
     screenshot: 'only-on-failure',
+    actionTimeout: 10000,
+    navigationTimeout: 15000,
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    {
+      name: 'setup',
+      testMatch: /auth\.setup\.ts/,
+    },
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+      dependencies: ['setup'],
+    },
   ],
   webServer: {
     command: 'npm run build && npm run start',

@@ -131,13 +131,13 @@ test.describe('Custom fields', () => {
     await page.getByLabel('Type', { exact: true }).selectOption('text');
     await page.getByRole('button', { name: /add field/i }).click();
 
-    await page.waitForTimeout(2000);
-    await expect(page.getByText('E2E Text Field')).toBeVisible();
+    await expect(page.getByText('E2E Text Field')).toBeVisible({ timeout: 10000 });
   });
 
   test('admin can create a dropdown custom field', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/custom-fields');
+    await expect(page.getByLabel('Name', { exact: true })).toBeVisible({ timeout: 10000 });
 
     await page.getByLabel('Name', { exact: true }).fill('E2E Dropdown');
     await page.getByLabel('Type', { exact: true }).selectOption('dropdown');
@@ -148,8 +148,7 @@ test.describe('Custom fields', () => {
 
     await page.getByRole('button', { name: /add field/i }).click();
 
-    await page.waitForTimeout(2000);
-    await expect(page.getByText('E2E Dropdown')).toBeVisible();
+    await expect(page.getByText('E2E Dropdown')).toBeVisible({ timeout: 10000 });
   });
 
   test('admin can create a checkbox custom field', async ({ page }) => {
@@ -161,8 +160,7 @@ test.describe('Custom fields', () => {
     await page.getByLabel('Type', { exact: true }).selectOption('checkbox');
     await page.getByRole('button', { name: /add field/i }).click();
 
-    await page.waitForTimeout(2000);
-    await expect(page.getByText('E2E Checkbox')).toBeVisible();
+    await expect(page.getByText('E2E Checkbox')).toBeVisible({ timeout: 10000 });
   });
 
   test('custom fields appear on ticket creation form', async ({ page }) => {

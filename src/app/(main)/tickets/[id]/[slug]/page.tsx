@@ -19,6 +19,7 @@ import {
   togglePostPrivacy,
   publishDraft,
 } from '@/lib/actions/tickets';
+import { getCsatRating, requestCsatToken } from '@/lib/actions/csat';
 import {
   changeTicketStatus,
   assignAgent,
@@ -531,6 +532,11 @@ export default async function TicketDetailPage({
   const ticketCustomFields = (ticket.custom_fields ?? {}) as Record<string, unknown>;
   const isOwner = ticket.creator_id === user.id;
 
+  // Fetch CSAT rating
+  const csatRating = await getCsatRating(ticket.id);
+  const isRegularUser = profile?.role === 'user';
+  const canRate = isOwner && isRegularUser && ticket.status === 'closed';
+
   const creatorName = creator?.display_name ?? `User #${ticket.creator_id}`;
   const assignedAgentName = assignedAgent?.display_name ?? null;
   const typeName = ticketType?.name ?? 'Unknown';
@@ -623,6 +629,57 @@ export default async function TicketDetailPage({
             </dd>
           </div>
         </dl>
+
+        {/* CSAT Rating display */}
+        {(csatRating || canRate) && (
+          <div className="mt-4 border-t border-gray-200 pt-4" data-testid="csat-section">
+            <h3 className="text-sm font-medium text-gray-500 mb-2">Customer Satisfaction</h3>
+            {csatRating ? (
+              <div>
+                <div className="flex items-center gap-2 mb-1" data-testid="csat-rating-display">
+                  <span className="text-lg">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <span key={star} className={star <= csatRating.rating ? 'text-yellow-400' : 'text-gray-300'}>
+                        ★
+                      </span>
+                    ))}
+                  </span>
+                  <span className="text-sm text-gray-700 font-medium">{csatRating.rating}/5</span>
+                </div>
+                {csatRating.comment && (
+                  <details className="text-sm text-gray-600 mb-1">
+                    <summary className="cursor-pointer text-blue-600 hover:text-blue-800">Show comment</summary>
+                    <p className="mt-1 pl-2 border-l-2 border-gray-200">{csatRating.comment}</p>
+                  </details>
+                )}
+                <p className="text-xs text-gray-400">
+                  Submitted {new Date(csatRating.submitted_at).toLocaleDateString()}
+                </p>
+                {isOwner && isRegularUser && (
+                  <form action={async () => { 'use server'; await requestCsatToken(ticket.id); }}>
+                    <button
+                      type="submit"
+                      className="mt-2 text-sm text-blue-600 hover:text-blue-800 font-medium"
+                      data-testid="update-rating-link"
+                    >
+                      Update rating
+                    </button>
+                  </form>
+                )}
+              </div>
+            ) : canRate ? (
+              <form action={async () => { 'use server'; await requestCsatToken(ticket.id); }}>
+                <button
+                  type="submit"
+                  className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                  data-testid="rate-ticket-link"
+                >
+                  Rate this ticket
+                </button>
+              </form>
+            ) : null}
+          </div>
+        )}
 
         {/* Tags display */}
         {ticketTags.length > 0 && (

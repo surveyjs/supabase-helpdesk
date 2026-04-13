@@ -908,6 +908,38 @@ export async function updateUserSettings(formData: FormData): Promise<void> {
 }
 
 // ============================================================
+// CSAT Settings (§16.19)
+// ============================================================
+
+const VALID_CSAT_DELAYS = ['immediately', '1_hour', '4_hours', '24_hours'];
+
+export async function updateCsatSettings(formData: FormData): Promise<void> {
+  const { supabase, profile: adminProfile } = await requireAdminRole();
+
+  const enabled = formData.get('csat_enabled') === 'true';
+  const delay = formData.get('csat_survey_delay') as string;
+
+  if (!VALID_CSAT_DELAYS.includes(delay)) return;
+
+  await supabase
+    .from('app_settings')
+    .update({ value: enabled ? 'true' : 'false' })
+    .eq('key', 'csat_enabled');
+
+  await supabase
+    .from('app_settings')
+    .update({ value: delay })
+    .eq('key', 'csat_survey_delay');
+
+  await logAudit(supabase, adminProfile.id, 'update_csat_settings', 'app_settings', null, {
+    csat_enabled: enabled,
+    csat_survey_delay: delay,
+  });
+
+  revalidatePath('/admin/csat');
+}
+
+// ============================================================
 // Custom Field Value on Tickets
 // ============================================================
 

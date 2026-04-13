@@ -6,6 +6,7 @@ import { createServerClient } from '@/lib/supabase/server';
 import { generateSlug } from '@/lib/utils/slug';
 import { validateTitle, validateBody } from '@/lib/utils/validation';
 import { notifyTicketRecipients, notifyAgent } from '@/lib/email/notify';
+import { cancelCsatSurvey } from '@/lib/actions/csat';
 
 export type TicketActionState = {
   error?: string;
@@ -273,6 +274,10 @@ export async function replyToTicket(
 
     if (!statusError) {
       autoReopened = true;
+      // Cancel pending CSAT survey if ticket is reopened from closed
+      if (ticket.status === 'closed') {
+        cancelCsatSurvey(ticket.id).catch((err) => console.error('[csat]', err));
+      }
       // Log status change
       await supabase.from('activity_log').insert({
         ticket_id: ticket.id,
@@ -404,6 +409,10 @@ export async function addComment(
       .eq('id', ticket.id);
 
     if (!statusError) {
+      // Cancel pending CSAT survey if ticket is reopened from closed
+      if (ticket.status === 'closed') {
+        cancelCsatSurvey(ticket.id).catch((err) => console.error('[csat]', err));
+      }
       await supabase.from('activity_log').insert({
         ticket_id: ticket.id,
         actor_id: user.id,

@@ -17,6 +17,8 @@ export type SlaTimer = {
   resolution_elapsed_minutes: number;
   first_response_paused_at: string | null;
   resolution_paused_at: string | null;
+  first_response_last_resumed_at: string | null;
+  resolution_last_resumed_at: string | null;
   first_response_met: boolean | null;
   resolution_met: boolean | null;
   first_response_at: string | null;
@@ -25,6 +27,25 @@ export type SlaTimer = {
   created_at: string;
   updated_at: string;
 };
+
+/**
+ * Calculate live elapsed minutes for a single SLA dimension.
+ * Uses stored elapsed + business minutes since the last resume point.
+ */
+function computeLiveElapsed(
+  storedElapsed: number,
+  lastResumedAt: string | null,
+  createdAt: string,
+  isPaused: boolean,
+  met: boolean | null,
+  now: Date,
+  config: import('@/lib/utils/business-hours').BusinessHoursConfig,
+): number {
+  // Already completed or paused — stored value is correct
+  if (met !== null || isPaused) return storedElapsed;
+  const ref = new Date(lastResumedAt ?? createdAt);
+  return storedElapsed + calculateBusinessMinutesElapsed(ref, now, config);
+}
 
 export type SlaIndicatorStatus = 'on_track' | 'approaching' | 'breached' | 'met' | 'no_sla';
 
@@ -76,6 +97,8 @@ export async function initializeSlaTimer(ticketId: number, severity: string): Pr
       resolution_deadline: resolutionDeadline.toISOString(),
       first_response_elapsed_minutes: 0,
       resolution_elapsed_minutes: 0,
+      first_response_last_resumed_at: now.toISOString(),
+      resolution_last_resumed_at: now.toISOString(),
       is_paused: false,
     },
     { onConflict: 'ticket_id' },
@@ -102,16 +125,12 @@ export async function pauseSlaTimer(ticketId: number): Promise<void> {
 
   if (timer.first_response_met === null) {
     // Timer is running — calculate from the last resume point or creation
-    const startRef = timer.first_response_paused_at
-      ? new Date(timer.first_response_paused_at)
-      : new Date(timer.created_at);
+    const startRef = new Date(timer.first_response_last_resumed_at ?? timer.created_at);
     firstResponseElapsed += calculateBusinessMinutesElapsed(startRef, now, config);
   }
 
   if (timer.resolution_met === null) {
-    const startRef = timer.resolution_paused_at
-      ? new Date(timer.resolution_paused_at)
-      : new Date(timer.created_at);
+    const startRef = new Date(timer.resolution_last_resumed_at ?? timer.created_at);
     resolutionElapsed += calculateBusinessMinutesElapsed(startRef, now, config);
   }
 
@@ -123,6 +142,8 @@ export async function pauseSlaTimer(ticketId: number): Promise<void> {
       resolution_elapsed_minutes: resolutionElapsed,
       first_response_paused_at: now.toISOString(),
       resolution_paused_at: now.toISOString(),
+      first_response_last_resumed_at: null,
+      resolution_last_resumed_at: null,
       first_response_deadline: null,
       resolution_deadline: null,
       updated_at: now.toISOString(),
@@ -157,6 +178,8 @@ export async function resumeSlaTimer(ticketId: number): Promise<void> {
     is_paused: false,
     first_response_paused_at: null,
     resolution_paused_at: null,
+    first_response_last_resumed_at: now.toISOString(),
+    resolution_last_resumed_at: now.toISOString(),
     updated_at: now.toISOString(),
   };
 
@@ -196,11 +219,15 @@ export async function stopFirstResponseTimer(ticketId: number): Promise<void> {
   const config = await getBusinessHoursConfig();
   const now = new Date();
 
-  let elapsed = timer.first_response_elapsed_minutes;
-  if (!timer.is_paused) {
-    const startRef = new Date(timer.created_at);
-    elapsed = calculateBusinessMinutesElapsed(startRef, now, config);
-  }
+  const elapsed = computeLiveElapsed(
+    timer.first_response_elapsed_minutes,
+    timer.first_response_last_resumed_at,
+    timer.created_at,
+    timer.is_paused,
+    null, // we already checked met === null above
+    now,
+    config,
+  );
 
   const targetMinutes = policy?.first_response_minutes ?? 0;
   const met = elapsed <= targetMinutes;
@@ -236,11 +263,15 @@ export async function stopResolutionTimer(ticketId: number): Promise<void> {
   const config = await getBusinessHoursConfig();
   const now = new Date();
 
-  let elapsed = timer.resolution_elapsed_minutes;
-  if (!timer.is_paused) {
-    const startRef = new Date(timer.created_at);
-    elapsed = calculateBusinessMinutesElapsed(startRef, now, config);
-  }
+  const elapsed = computeLiveElapsed(
+    timer.resolution_elapsed_minutes,
+    timer.resolution_last_resumed_at,
+    timer.created_at,
+    timer.is_paused,
+    null, // we already checked met === null above
+    now,
+    config,
+  );
 
   const targetMinutes = policy?.resolution_minutes ?? 0;
   const met = elapsed <= targetMinutes;
@@ -302,6 +333,8 @@ export async function recalculateSlaTargets(ticketId: number, newSeverity: strin
       sla_policy_id: policy.id,
       first_response_deadline: firstResponseDeadline.toISOString(),
       resolution_deadline: resolutionDeadline.toISOString(),
+      first_response_last_resumed_at: now.toISOString(),
+      resolution_last_resumed_at: now.toISOString(),
     });
     return;
   }
@@ -318,20 +351,30 @@ export async function recalculateSlaTargets(ticketId: number, newSeverity: strin
 
   if (!timer.is_paused) {
     if (timer.first_response_met === null) {
-      currentFrElapsed = calculateBusinessMinutesElapsed(
-        new Date(timer.created_at),
+      currentFrElapsed = computeLiveElapsed(
+        timer.first_response_elapsed_minutes,
+        timer.first_response_last_resumed_at,
+        timer.created_at,
+        false,
+        null,
         now,
         config,
       );
       updates.first_response_elapsed_minutes = currentFrElapsed;
+      updates.first_response_last_resumed_at = now.toISOString();
     }
     if (timer.resolution_met === null) {
-      currentResElapsed = calculateBusinessMinutesElapsed(
-        new Date(timer.created_at),
+      currentResElapsed = computeLiveElapsed(
+        timer.resolution_elapsed_minutes,
+        timer.resolution_last_resumed_at,
+        timer.created_at,
+        false,
+        null,
         now,
         config,
       );
       updates.resolution_elapsed_minutes = currentResElapsed;
+      updates.resolution_last_resumed_at = now.toISOString();
     }
   }
 
@@ -376,7 +419,7 @@ export async function getSlaStatus(
     deadline: string | null,
     met: boolean | null,
     completedAt: string | null,
-    pausedAt: string | null,
+    lastResumedAt: string | null,
     isPaused: boolean,
     timerCreatedAt: string,
   ): SlaIndicator {
@@ -393,14 +436,15 @@ export async function getSlaStatus(
     }
 
     // Calculate live elapsed for running timers
-    let liveElapsed = elapsed;
-    if (!isPaused) {
-      liveElapsed = calculateBusinessMinutesElapsed(
-        new Date(timerCreatedAt),
-        now,
-        bhConfig,
-      );
-    }
+    const liveElapsed = computeLiveElapsed(
+      elapsed,
+      lastResumedAt,
+      timerCreatedAt,
+      isPaused,
+      met,
+      now,
+      bhConfig,
+    );
 
     const pct = calculateSlaPercentage(liveElapsed, targetMinutes);
 
@@ -444,7 +488,7 @@ export async function getSlaStatus(
       timer.first_response_deadline,
       timer.first_response_met,
       timer.first_response_at,
-      timer.first_response_paused_at,
+      timer.first_response_last_resumed_at,
       timer.is_paused,
       timer.created_at,
     ),
@@ -454,7 +498,7 @@ export async function getSlaStatus(
       timer.resolution_deadline,
       timer.resolution_met,
       timer.resolved_at,
-      timer.resolution_paused_at,
+      timer.resolution_last_resumed_at,
       timer.is_paused,
       timer.created_at,
     ),

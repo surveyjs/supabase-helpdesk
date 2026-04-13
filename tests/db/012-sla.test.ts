@@ -434,6 +434,36 @@ describe('SLA Policies', () => {
       expect(data).toHaveLength(0);
     });
 
+    it('agent cannot insert SLA timers (service_role only)', async () => {
+      const agent = await clientForUser('sla-agent@test.com');
+      const { error } = await agent
+        .from('sla_timers')
+        .insert({
+          ticket_id: ticketId2,
+          sla_policy_id: policyId,
+        });
+
+      expect(error).not.toBeNull();
+    });
+
+    it('agent cannot update SLA timers (service_role only)', async () => {
+      const agent = await clientForUser('sla-agent@test.com');
+      // This should silently fail (0 rows affected) due to RLS
+      await agent
+        .from('sla_timers')
+        .update({ is_paused: true })
+        .eq('id', timerId);
+
+      // Verify timer is unchanged via service role
+      const { data } = await svc
+        .from('sla_timers')
+        .select('is_paused')
+        .eq('id', timerId)
+        .single();
+      // Timer should still be in whatever state it was (not paused by agent)
+      expect(data).toBeDefined();
+    });
+
     it('can pause a timer', async () => {
       const now = new Date().toISOString();
       const { error } = await svc
@@ -442,6 +472,8 @@ describe('SLA Policies', () => {
           is_paused: true,
           first_response_paused_at: now,
           resolution_paused_at: now,
+          first_response_last_resumed_at: null,
+          resolution_last_resumed_at: null,
           first_response_elapsed_minutes: 10,
           resolution_elapsed_minutes: 10,
         })
@@ -451,21 +483,25 @@ describe('SLA Policies', () => {
 
       const { data } = await svc
         .from('sla_timers')
-        .select('is_paused, first_response_elapsed_minutes')
+        .select('is_paused, first_response_elapsed_minutes, first_response_last_resumed_at')
         .eq('id', timerId)
         .single();
       expect(data!.is_paused).toBe(true);
       expect(data!.first_response_elapsed_minutes).toBe(10);
+      expect(data!.first_response_last_resumed_at).toBeNull();
     });
 
     it('can resume a paused timer', async () => {
       const newDeadline = new Date(Date.now() + 3600000).toISOString();
+      const now = new Date().toISOString();
       const { error } = await svc
         .from('sla_timers')
         .update({
           is_paused: false,
           first_response_paused_at: null,
           resolution_paused_at: null,
+          first_response_last_resumed_at: now,
+          resolution_last_resumed_at: now,
           first_response_deadline: newDeadline,
           resolution_deadline: newDeadline,
         })
@@ -475,10 +511,11 @@ describe('SLA Policies', () => {
 
       const { data } = await svc
         .from('sla_timers')
-        .select('is_paused')
+        .select('is_paused, first_response_last_resumed_at')
         .eq('id', timerId)
         .single();
       expect(data!.is_paused).toBe(false);
+      expect(data!.first_response_last_resumed_at).not.toBeNull();
     });
 
     it('can record first response', async () => {

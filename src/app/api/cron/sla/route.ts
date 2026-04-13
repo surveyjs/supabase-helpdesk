@@ -47,29 +47,41 @@ export async function POST(request: Request) {
   const now = new Date();
   let processed = 0;
 
+  // Prefetch all policies into a map to avoid N+1 queries
+  const policyIds = [...new Set(timers.map((t) => t.sla_policy_id).filter(Boolean))];
+  const policyMap = new Map<string, { first_response_minutes: number; resolution_minutes: number }>();
+  if (policyIds.length > 0) {
+    const { data: policies } = await supabase
+      .from('sla_policies')
+      .select('id, first_response_minutes, resolution_minutes')
+      .in('id', policyIds);
+    for (const p of policies ?? []) {
+      policyMap.set(p.id, p);
+    }
+  }
+
   for (const timer of timers) {
     const ticket = Array.isArray(timer.tickets) ? timer.tickets[0] : timer.tickets;
     if (!ticket) continue;
 
-    // Get the policy
     if (!timer.sla_policy_id) continue;
-    const { data: policy } = await supabase
-      .from('sla_policies')
-      .select('first_response_minutes, resolution_minutes')
-      .eq('id', timer.sla_policy_id)
-      .single();
+    const policy = policyMap.get(timer.sla_policy_id);
     if (!policy) continue;
 
-    const elapsed = calculateBusinessMinutesElapsed(
-      new Date(timer.created_at),
-      now,
-      config,
-    );
+    // Compute live elapsed using stored elapsed + business minutes since last resume
+    const frElapsed = timer.first_response_met === null
+      ? timer.first_response_elapsed_minutes + calculateBusinessMinutesElapsed(
+          new Date(timer.first_response_last_resumed_at ?? timer.created_at), now, config)
+      : timer.first_response_elapsed_minutes;
+    const resElapsed = timer.resolution_met === null
+      ? timer.resolution_elapsed_minutes + calculateBusinessMinutesElapsed(
+          new Date(timer.resolution_last_resumed_at ?? timer.created_at), now, config)
+      : timer.resolution_elapsed_minutes;
 
     // Check first response
     if (timer.first_response_met === null) {
-      const frPct = calculateSlaPercentage(elapsed, policy.first_response_minutes);
-      const frElapsedHours = (elapsed / 60).toFixed(1);
+      const frPct = calculateSlaPercentage(frElapsed, policy.first_response_minutes);
+      const frElapsedHours = (frElapsed / 60).toFixed(1);
       const frTargetHours = (policy.first_response_minutes / 60).toFixed(1);
 
       if (frPct >= 100) {
@@ -93,8 +105,8 @@ export async function POST(request: Request) {
 
     // Check resolution
     if (timer.resolution_met === null) {
-      const resPct = calculateSlaPercentage(elapsed, policy.resolution_minutes);
-      const resElapsedHours = (elapsed / 60).toFixed(1);
+      const resPct = calculateSlaPercentage(resElapsed, policy.resolution_minutes);
+      const resElapsedHours = (resElapsed / 60).toFixed(1);
       const resTargetHours = (policy.resolution_minutes / 60).toFixed(1);
 
       if (resPct >= 100) {
@@ -131,21 +143,17 @@ async function sendSlaNotification(
   percentage: number,
   adminIds: string[],
 ) {
-  // Check if already sent (dedup)
-  const { data: existing } = await supabase
-    .from('sla_notifications_sent')
-    .select('id')
-    .eq('sla_timer_id', timerId)
-    .eq('notification_type', notificationType)
-    .single();
-
-  if (existing) return;
-
-  // Record that we sent this notification
-  await supabase.from('sla_notifications_sent').insert({
+  // Atomic dedup: insert first, treat unique-constraint violation as "already sent"
+  const { error: insertError } = await supabase.from('sla_notifications_sent').insert({
     sla_timer_id: timerId,
     notification_type: notificationType,
   });
+
+  if (insertError) {
+    // 23505 = unique_violation — another worker already sent this notification
+    if (insertError.code === '23505') return;
+    throw insertError;
+  }
 
   const placeholders = {
     ticketId: String(ticket.id),

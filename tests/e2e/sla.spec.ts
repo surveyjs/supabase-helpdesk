@@ -30,6 +30,7 @@ test.describe('SLA Indicators on Ticket Detail', () => {
 
   let ticketId: number;
   let ticketSlug: string;
+  let createdTestPolicy = false;
 
   test.beforeAll(async () => {
     const svc = createServiceRoleClient();
@@ -64,6 +65,7 @@ test.describe('SLA Indicators on Ticket Detail', () => {
         .select('id')
         .single();
       policyId = newPolicy!.id;
+      createdTestPolicy = true;
     }
 
     // Create a ticket with an SLA timer
@@ -104,6 +106,9 @@ test.describe('SLA Indicators on Ticket Detail', () => {
     await svc.from('posts').delete().eq('ticket_id', ticketId);
     await svc.from('ticket_followers').delete().eq('ticket_id', ticketId);
     await svc.from('tickets').delete().eq('id', ticketId);
+    if (createdTestPolicy) {
+      await svc.from('sla_policies').delete().eq('name', 'E2E SLA Test Policy');
+    }
   });
 
   test('agent sees SLA indicators on ticket detail page', async ({ page }) => {

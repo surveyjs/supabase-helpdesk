@@ -50,6 +50,8 @@ CREATE TABLE sla_timers (
   resolution_elapsed_minutes INTEGER NOT NULL DEFAULT 0,
   first_response_paused_at TIMESTAMPTZ,
   resolution_paused_at TIMESTAMPTZ,
+  first_response_last_resumed_at TIMESTAMPTZ,
+  resolution_last_resumed_at TIMESTAMPTZ,
   first_response_met BOOLEAN,
   resolution_met BOOLEAN,
   first_response_at TIMESTAMPTZ,
@@ -72,9 +74,12 @@ ALTER TABLE sla_timers ENABLE ROW LEVEL SECURITY;
 CREATE POLICY sla_timers_select ON sla_timers
   FOR SELECT USING (is_agent());
 CREATE POLICY sla_timers_insert ON sla_timers
-  FOR INSERT WITH CHECK (true);
+  FOR INSERT WITH CHECK (auth.role() = 'service_role');
 CREATE POLICY sla_timers_update ON sla_timers
-  FOR UPDATE USING (true);
+  FOR UPDATE USING (auth.role() = 'service_role')
+  WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY sla_timers_delete ON sla_timers
+  FOR DELETE USING (auth.role() = 'service_role');
 
 -- SLA Notifications Sent (dedup tracking)
 CREATE TABLE sla_notifications_sent (
@@ -90,7 +95,7 @@ ALTER TABLE sla_notifications_sent ENABLE ROW LEVEL SECURITY;
 CREATE POLICY sla_notifications_sent_select ON sla_notifications_sent
   FOR SELECT USING (is_agent());
 CREATE POLICY sla_notifications_sent_insert ON sla_notifications_sent
-  FOR INSERT WITH CHECK (true);
+  FOR INSERT WITH CHECK (auth.role() = 'service_role');
 
 -- Business Hours Settings
 INSERT INTO app_settings (key, value) VALUES

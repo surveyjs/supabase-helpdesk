@@ -458,14 +458,38 @@ export default async function AgentDashboardPage({
                   <td className="px-4 py-3" data-testid={`sla-cell-${ticket.id}`}>
                     {ticket.sla_status && ticket.sla_status !== 'no_sla' ? (
                       <span
-                        className={`inline-block w-2.5 h-2.5 rounded-full ${
-                          ticket.sla_status === 'breached' ? 'bg-red-500' :
-                          ticket.sla_status === 'approaching' ? 'bg-yellow-500' :
-                          ticket.sla_status === 'met' ? 'bg-green-500' :
-                          'bg-green-500'
+                        className="inline-flex items-center"
+                        aria-label={`SLA: ${
+                          ticket.sla_status === 'breached' ? 'Breached' :
+                          ticket.sla_status === 'approaching' ? 'Approaching' :
+                          ticket.sla_status === 'met' ? 'On track' :
+                          ticket.sla_status.replace('_', ' ')
                         }`}
-                        title={`SLA: ${ticket.sla_status.replace('_', ' ')}`}
-                      />
+                        title={`SLA: ${
+                          ticket.sla_status === 'breached' ? 'Breached' :
+                          ticket.sla_status === 'approaching' ? 'Approaching' :
+                          ticket.sla_status === 'met' ? 'On track' :
+                          ticket.sla_status.replace('_', ' ')
+                        }`}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={`inline-block w-2.5 h-2.5 rounded-full ${
+                            ticket.sla_status === 'breached' ? 'bg-red-500' :
+                            ticket.sla_status === 'approaching' ? 'bg-yellow-500' :
+                            ticket.sla_status === 'met' ? 'bg-green-500' :
+                            'bg-green-500'
+                          }`}
+                        />
+                        <span className="sr-only">
+                          SLA: {
+                            ticket.sla_status === 'breached' ? 'Breached' :
+                            ticket.sla_status === 'approaching' ? 'Approaching' :
+                            ticket.sla_status === 'met' ? 'On track' :
+                            ticket.sla_status.replace('_', ' ')
+                          }
+                        </span>
+                      </span>
                     ) : (
                       <span className="text-xs text-gray-400">—</span>
                     )}

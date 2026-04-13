@@ -174,13 +174,15 @@ export async function getAgentTickets(filters: AgentTicketFilters): Promise<{
   } else if (filters.sort !== 'sla') {
     query = query.order('updated_at', { ascending: false });
   } else {
-    // For SLA sort, we'll sort client-side after enriching with SLA data
+    // For SLA sort, we apply server-side ordering then sort again after enrichment
     query = query.order('updated_at', { ascending: false });
   }
 
-  // Pagination
+  // Pagination — for SLA sort, fetch all matching tickets so we can sort globally
   const from = (currentPage - 1) * pageSize;
-  query = query.range(from, from + pageSize - 1);
+  if (filters.sort !== 'sla') {
+    query = query.range(from, from + pageSize - 1);
+  }
 
   const { data, count } = await query;
 
@@ -192,7 +194,7 @@ export async function getAgentTickets(filters: AgentTicketFilters): Promise<{
     const svc = createServiceRoleClient();
     const { data: timers } = await svc
       .from('sla_timers')
-      .select('ticket_id, sla_policy_id, first_response_met, resolution_met, first_response_elapsed_minutes, resolution_elapsed_minutes, is_paused, created_at')
+      .select('ticket_id, sla_policy_id, first_response_met, resolution_met, first_response_elapsed_minutes, resolution_elapsed_minutes, first_response_last_resumed_at, resolution_last_resumed_at, is_paused, created_at')
       .in('ticket_id', ticketIds);
 
     if (timers && timers.length > 0) {
@@ -237,10 +239,19 @@ export async function getAgentTickets(filters: AgentTicketFilters): Promise<{
           continue;
         }
 
-        // Calculate current elapsed (for running timers)
-        const elapsed = timer.is_paused
-          ? Math.max(timer.first_response_elapsed_minutes, timer.resolution_elapsed_minutes)
-          : calculateBusinessMinutesElapsed(new Date(timer.created_at), now, config);
+        // Calculate current elapsed using stored + incremental since last resume
+        let frElapsed = timer.first_response_elapsed_minutes;
+        let resElapsed = timer.resolution_elapsed_minutes;
+        if (!timer.is_paused) {
+          if (timer.first_response_met === null) {
+            const ref = new Date(timer.first_response_last_resumed_at ?? timer.created_at);
+            frElapsed += calculateBusinessMinutesElapsed(ref, now, config);
+          }
+          if (timer.resolution_met === null) {
+            const ref = new Date(timer.resolution_last_resumed_at ?? timer.created_at);
+            resElapsed += calculateBusinessMinutesElapsed(ref, now, config);
+          }
+        }
 
         // Determine worst SLA status
         type SlaLevel = 'on_track' | 'approaching' | 'breached' | 'met';
@@ -254,8 +265,8 @@ export async function getAgentTickets(filters: AgentTicketFilters): Promise<{
 
         // Check first response
         if (timer.first_response_met === null) {
-          const pct = calculateSlaPercentage(elapsed, policy.first_response_minutes);
-          const remaining = policy.first_response_minutes - elapsed;
+          const pct = calculateSlaPercentage(frElapsed, policy.first_response_minutes);
+          const remaining = policy.first_response_minutes - frElapsed;
           if (remaining < minRemaining) minRemaining = remaining;
 
           if (pct >= 100) updateWorst('breached');
@@ -267,8 +278,8 @@ export async function getAgentTickets(filters: AgentTicketFilters): Promise<{
 
         // Check resolution
         if (timer.resolution_met === null) {
-          const pct = calculateSlaPercentage(elapsed, policy.resolution_minutes);
-          const remaining = policy.resolution_minutes - elapsed;
+          const pct = calculateSlaPercentage(resElapsed, policy.resolution_minutes);
+          const remaining = policy.resolution_minutes - resElapsed;
           if (remaining < minRemaining) minRemaining = remaining;
 
           if (pct >= 100) updateWorst('breached');
@@ -288,7 +299,7 @@ export async function getAgentTickets(filters: AgentTicketFilters): Promise<{
       }
     }
 
-    // Sort by SLA risk if requested
+    // Sort by SLA risk if requested, then paginate
     if (filters.sort === 'sla') {
       const statusOrder: Record<string, number> = { breached: 0, approaching: 1, on_track: 2, met: 3, no_sla: 4 };
       tickets.sort((a, b) => {
@@ -300,8 +311,13 @@ export async function getAgentTickets(filters: AgentTicketFilters): Promise<{
     }
   }
 
+  // For SLA sort, slice the globally-sorted array to the current page
+  const finalTickets = filters.sort === 'sla'
+    ? tickets.slice(from, from + pageSize)
+    : tickets;
+
   return {
-    tickets,
+    tickets: finalTickets,
     total: count ?? 0,
     pageSize,
   };

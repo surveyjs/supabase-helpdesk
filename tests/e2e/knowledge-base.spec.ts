@@ -126,7 +126,9 @@ test.describe('Article Feedback', () => {
 
   test('unauthenticated visitors cannot vote', async ({ page }) => {
     await page.goto('/help/1/getting-started/how-to-create-a-ticket');
-    await expect(page.getByText('Log in to vote')).toBeVisible({ timeout: 10000 });
+    // Wait for the article page to fully render before checking feedback section
+    await expect(page.getByText('Was this helpful?')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('Log in to vote')).toBeVisible();
   });
 
   test('authenticated user can vote thumbs up', async ({ page }) => {
@@ -186,23 +188,30 @@ test.describe('Ticket creation from article', () => {
     await loginAs(page, 'alice@example.com');
     await page.goto('/tickets/new?from_article=1');
 
-    // Title should be pre-filled
+    // Title should be pre-filled (also confirms page has loaded and hydrated)
     await expect(page.getByLabel('Title')).toHaveValue('Question about: How to create a ticket', { timeout: 10000 });
 
-    // Select a type
-    await page.getByLabel('Type').selectOption({ index: 1 });
+    // Wait for the type dropdown to be ready before selecting
+    const typeSelect = page.getByLabel('Type');
+    await expect(typeSelect).toBeVisible({ timeout: 10000 });
+    await typeSelect.selectOption({ label: 'Issue' });
+
     await page.getByLabel(/Description/).fill('I followed the article but still have a question.');
-    await page.getByRole('button', { name: 'Create Ticket' }).click();
+
+    // Wait for the button to be enabled before clicking
+    const submitBtn = page.getByRole('button', { name: 'Create Ticket' });
+    await expect(submitBtn).toBeEnabled({ timeout: 5000 });
+    await submitBtn.click();
 
     // Should redirect to ticket detail
-    await expect(page).toHaveURL(/\/tickets\/\d+\//, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/tickets\/\d+\//, { timeout: 15000 });
 
     // Extract ticketId from URL for cleanup
     const match = page.url().match(/\/tickets\/(\d+)\//);
     if (match) ticketIdFromArticle = parseInt(match[1], 10);
 
     // Verify the ticket was created
-    await expect(page.getByText('Question about: How to create a ticket')).toBeVisible();
+    await expect(page.getByText('Question about: How to create a ticket')).toBeVisible({ timeout: 10000 });
   });
 
   test('source article shows on ticket detail for agents', async ({ page }) => {

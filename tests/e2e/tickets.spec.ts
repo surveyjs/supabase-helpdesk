@@ -96,12 +96,15 @@ test.describe('Tickets', () => {
     await loginAs(page, 'alice@example.com');
     await page.goto(await resolveTicketUrl());
 
+    // Wait for the reply form to be ready
+    await expect(page.getByLabel('Reply body')).toBeVisible({ timeout: 10000 });
+
     // Fill reply
     await page.getByLabel('Reply body').fill('This is a test reply from E2E.');
     await page.locator('form').filter({ has: page.getByLabel('Reply body') }).getByRole('button', { name: 'Reply' }).click();
 
     // Verify reply appears
-    await expect(page.getByText('This is a test reply from E2E.')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('This is a test reply from E2E.')).toBeVisible({ timeout: 15000 });
   });
 
   test('search tickets by title → correct results', async ({ page }) => {

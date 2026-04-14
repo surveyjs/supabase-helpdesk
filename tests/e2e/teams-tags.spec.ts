@@ -346,17 +346,19 @@ test.describe('Admin Teams Management', () => {
 
     const teamSection = page.locator('div.bg-white').filter({ hasText: 'E2E Test Team' });
 
-    // Remove Dave
+    // Remove Dave — wait for the member to disappear
     await teamSection.getByRole('button', { name: /Remove/ }).click();
-    await page.waitForTimeout(2000);
+    await expect(
+      page.locator('div.bg-white').filter({ hasText: 'E2E Test Team' }).getByText('Dave', { exact: true })
+    ).not.toBeVisible({ timeout: 10000 });
 
     // Delete the now-empty team
     await gotoAdmin(page, '/admin/teams');
+    await expect(page.getByText('E2E Test Team')).toBeVisible({ timeout: 10000 });
     const updatedTeamSection = page.locator('div.bg-white').filter({ hasText: 'E2E Test Team' });
     await updatedTeamSection.getByRole('button', { name: /Delete E2E/ }).click();
-    await page.waitForTimeout(2000);
 
-    await expect(page.getByText('E2E Test Team')).not.toBeVisible();
+    await expect(page.getByText('E2E Test Team')).not.toBeVisible({ timeout: 10000 });
   });
 });
 

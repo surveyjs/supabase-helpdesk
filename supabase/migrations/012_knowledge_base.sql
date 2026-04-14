@@ -135,6 +135,11 @@ INSERT INTO app_settings (key, value) VALUES
   ('kb_visible', 'false')
 ON CONFLICT (key) DO NOTHING;
 
+-- Allow anonymous users to read the kb_visible setting (public help center)
+CREATE POLICY app_settings_kb_visible_anon ON app_settings
+  FOR SELECT TO anon
+  USING (key = 'kb_visible');
+
 -- Add FK from tickets.source_article_id to kb_articles
 ALTER TABLE tickets
   ADD CONSTRAINT tickets_source_article_id_fkey

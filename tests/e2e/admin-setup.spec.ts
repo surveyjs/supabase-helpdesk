@@ -39,7 +39,7 @@ test.describe('Admin Setup layout', () => {
 
     // Sidebar should be visible with section links
     await expect(page.getByRole('link', { name: 'Ticket Types' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Categories' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Categories', exact: true })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Tags' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Teams' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Agents & Admins' })).toBeVisible();

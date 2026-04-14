@@ -127,6 +127,16 @@ afterAll(async () => {
   }
   await svc.from('kb_categories').delete().neq('id', '00000000-0000-0000-0000-000000000000');
 
+  // Restore seed categories so E2E tests can find them
+  await svc.from('kb_categories').upsert([
+    { id: '00000000-0000-0000-0000-000000000501', name: 'Getting Started', display_order: 1 },
+    { id: '00000000-0000-0000-0000-000000000502', name: 'Troubleshooting', display_order: 2 },
+  ], { onConflict: 'id' });
+
+  // Restore seed article category references (ON DELETE SET NULL nullified them)
+  await svc.from('kb_articles').update({ category_id: '00000000-0000-0000-0000-000000000501' }).in('id', [1, 2]);
+  await svc.from('kb_articles').update({ category_id: '00000000-0000-0000-0000-000000000502' }).eq('id', 3);
+
   const { data: testTickets } = await svc.from('tickets').select('id').in('creator_id', testUserIds);
   if (testTickets && testTickets.length > 0) {
     const ticketIds = testTickets.map((t: { id: number }) => t.id);

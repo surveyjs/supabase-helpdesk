@@ -100,10 +100,9 @@ export default async function KbManagePage({
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
-              checked={kbVisible}
+              defaultChecked={kbVisible}
               disabled={!isAdmin}
-              onChange={() => {}} // Controlled by form submit
-              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 pointer-events-none"
             />
             Knowledge base visible to public
           </label>

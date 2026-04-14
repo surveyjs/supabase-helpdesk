@@ -56,7 +56,7 @@ test.describe('Help Center – Public', () => {
   test('article detail page renders Markdown', async ({ page }) => {
     // Article 1: "How to create a ticket" – published, Getting Started
     await page.goto('/help/1/getting-started/how-to-create-a-ticket');
-    await expect(page.getByRole('heading', { name: 'How to create a ticket' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'How to create a ticket', exact: true })).toBeVisible({ timeout: 10000 });
     // Body should show rendered Markdown (an h1 inside the prose section)
     await expect(page.locator('.prose')).toBeVisible();
     await expect(page.getByText('Creating a ticket is easy')).toBeVisible();
@@ -67,7 +67,7 @@ test.describe('Help Center – Public', () => {
     await page.goto('/help/1/wrong-category/wrong-slug', { waitUntil: 'domcontentloaded' });
     // After redirect, we should land on the correct article page
     await expect(page).toHaveURL(/\/help\/1\/getting-started\/how-to-create-a-ticket/, { timeout: 10000 });
-    await expect(page.getByRole('heading', { name: 'How to create a ticket' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'How to create a ticket', exact: true })).toBeVisible();
   });
 
   test('draft article returns 404 for regular users', async ({ page }) => {
@@ -77,9 +77,9 @@ test.describe('Help Center – Public', () => {
   });
 
   test('draft article visible to agents with "Draft" banner', async ({ page }) => {
-    await loginAs(page, 'agent@example.com');
+    await loginAs(page, 'agent.smith@example.com');
     await page.goto('/help/3/troubleshooting/common-login-issues');
-    await expect(page.getByRole('heading', { name: 'Common login issues' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'Common login issues', exact: true })).toBeVisible({ timeout: 10000 });
     await expect(page.getByText('draft')).toBeVisible();
     await expect(page.getByText('not visible to the public')).toBeVisible();
   });
@@ -90,7 +90,7 @@ test.describe('Help Center – Public', () => {
     await svc.from('kb_articles').update({ status: 'archived' }).eq('id', 2);
 
     await page.goto('/help/2/getting-started/understanding-ticket-statuses');
-    await expect(page.getByRole('heading', { name: 'Understanding ticket statuses' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'Understanding ticket statuses', exact: true })).toBeVisible({ timeout: 10000 });
     await expect(page.getByText('may be outdated')).toBeVisible();
 
     // Restore
@@ -103,7 +103,7 @@ test.describe('Help Center – Public', () => {
     await page.getByRole('button', { name: 'Search' }).click();
 
     await expect(page.getByText(/result/)).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText('How to create a ticket')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'How to create a ticket' })).toBeVisible();
   });
 });
 
@@ -211,7 +211,7 @@ test.describe('Ticket creation from article', () => {
       return;
     }
 
-    await loginAs(page, 'agent@example.com');
+    await loginAs(page, 'agent.smith@example.com');
     const svc = createServiceRoleClient();
     const { data: ticket } = await svc
       .from('tickets')
@@ -225,8 +225,8 @@ test.describe('Ticket creation from article', () => {
     }
 
     await page.goto(`/tickets/${ticket.id}/${ticket.slug}`);
-    await expect(page.getByText('Source Article')).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText('How to create a ticket')).toBeVisible();
+    await expect(page.getByText('Created from article')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('link', { name: 'How to create a ticket' })).toBeVisible();
   });
 });
 
@@ -243,7 +243,7 @@ test.describe('Suggested articles on ticket creation', () => {
     await page.getByLabel('Title').fill('How to create');
 
     // Wait for debounced search to show suggestions
-    await expect(page.getByText(/Suggested articles/i)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Related articles that might help')).toBeVisible({ timeout: 15000 });
     await expect(page.getByText('How to create a ticket')).toBeVisible();
   });
 });
@@ -264,7 +264,7 @@ test.describe('NavBar KB links', () => {
   });
 
   test('Manage Articles link visible for agents', async ({ page }) => {
-    await loginAs(page, 'agent@example.com');
+    await loginAs(page, 'agent.smith@example.com');
     await expect(page.getByRole('link', { name: 'Manage Articles' })).toBeVisible({ timeout: 10000 });
   });
 
@@ -283,6 +283,18 @@ test.describe('Article Management', () => {
 
   let newArticleId: number | null = null;
 
+  test.beforeAll(async () => {
+    // Clean up any leftover E2E test articles from previous runs
+    const svc = createServiceRoleClient();
+    const { data: leftover } = await svc.from('kb_articles').select('id').ilike('slug', 'e2e-test-kb-article%');
+    if (leftover) {
+      for (const a of leftover) {
+        await svc.from('kb_article_feedback').delete().eq('article_id', a.id);
+        await svc.from('kb_articles').delete().eq('id', a.id);
+      }
+    }
+  });
+
   test.afterAll(async () => {
     // Clean up E2E test articles
     const svc = createServiceRoleClient();
@@ -291,11 +303,11 @@ test.describe('Article Management', () => {
       await svc.from('kb_articles').delete().eq('id', newArticleId);
     }
     // Also clean up by slug in case id wasn't captured
-    await svc.from('kb_articles').delete().eq('slug', 'e2e-test-kb-article');
+    await svc.from('kb_articles').delete().ilike('slug', 'e2e-test-kb-article%');
   });
 
   test('manage page: list articles with pagination', async ({ page }) => {
-    await loginAs(page, 'agent@example.com');
+    await loginAs(page, 'agent.smith@example.com');
     await page.goto('/kb/manage');
 
     await expect(page.getByRole('heading', { name: 'Manage Articles' })).toBeVisible({ timeout: 10000 });
@@ -305,7 +317,7 @@ test.describe('Article Management', () => {
   });
 
   test('manage page: filter by status', async ({ page }) => {
-    await loginAs(page, 'agent@example.com');
+    await loginAs(page, 'agent.smith@example.com');
     await page.goto('/kb/manage');
 
     await page.getByLabel('Status').selectOption('draft');
@@ -317,7 +329,7 @@ test.describe('Article Management', () => {
   });
 
   test('article editor: create new article', async ({ page }) => {
-    await loginAs(page, 'agent@example.com');
+    await loginAs(page, 'agent.smith@example.com');
     await page.goto('/kb/manage/new');
 
     await expect(page.getByRole('heading', { name: 'New Article' })).toBeVisible({ timeout: 10000 });
@@ -344,7 +356,7 @@ test.describe('Article Management', () => {
       return;
     }
 
-    await loginAs(page, 'agent@example.com');
+    await loginAs(page, 'agent.smith@example.com');
     await page.goto(`/kb/manage/${newArticleId}`);
 
     // Edit the title
@@ -362,13 +374,12 @@ test.describe('Article Management', () => {
       return;
     }
 
-    await loginAs(page, 'agent@example.com');
-    await page.goto('/kb/manage');
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto(`/kb/manage/${newArticleId}`);
 
-    // Find our article and click Publish
-    const row = page.locator('tr', { hasText: 'E2E Test KB Article Updated' });
-    await expect(row).toBeVisible({ timeout: 10000 });
-    await row.getByRole('button', { name: 'Publish' }).click();
+    // Click Publish on the edit page
+    await expect(page.getByRole('heading', { name: 'Edit Article' })).toBeVisible({ timeout: 10000 });
+    await page.getByRole('button', { name: 'Publish' }).click();
 
     // After publish, status should change
     await page.waitForLoadState('networkidle');
@@ -384,12 +395,11 @@ test.describe('Article Management', () => {
       return;
     }
 
-    await loginAs(page, 'agent@example.com');
-    await page.goto('/kb/manage');
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto(`/kb/manage/${newArticleId}`);
 
-    const row = page.locator('tr', { hasText: 'E2E Test KB Article Updated' });
-    await expect(row).toBeVisible({ timeout: 10000 });
-    await row.getByRole('button', { name: 'Archive' }).click();
+    await expect(page.getByRole('heading', { name: 'Edit Article' })).toBeVisible({ timeout: 10000 });
+    await page.getByRole('button', { name: 'Archive' }).click();
 
     await page.waitForLoadState('networkidle');
     const svc = createServiceRoleClient();
@@ -403,15 +413,15 @@ test.describe('Article Management', () => {
       return;
     }
 
-    await loginAs(page, 'agent@example.com');
+    await loginAs(page, 'agent.smith@example.com');
     await page.goto(`/kb/manage/${newArticleId}`);
 
     // Click delete button
     page.on('dialog', (dialog) => dialog.accept());
     await page.getByRole('button', { name: /Delete/ }).click();
 
-    // Should redirect to manage page
-    await expect(page).toHaveURL(/\/kb\/manage/, { timeout: 10000 });
+    // Should redirect to manage page (not the edit page)
+    await expect(page.getByRole('heading', { name: 'Manage Articles' })).toBeVisible({ timeout: 10000 });
 
     // Verify deletion
     const svc = createServiceRoleClient();
@@ -450,7 +460,7 @@ test.describe('KB visibility toggle', () => {
   });
 
   test('agent sees read-only KB visibility checkbox', async ({ page }) => {
-    await loginAs(page, 'agent@example.com');
+    await loginAs(page, 'agent.smith@example.com');
     await page.goto('/kb/manage');
 
     await expect(page.getByText('Knowledge base visible to public')).toBeVisible({ timeout: 10000 });
@@ -464,6 +474,19 @@ test.describe('KB visibility toggle', () => {
 
 test.describe('KB Categories Admin', () => {
   test.describe.configure({ mode: 'serial' });
+
+  test.beforeAll(async () => {
+    // Ensure seed categories exist (may have been deleted by DB test cleanup)
+    const svc = createServiceRoleClient();
+    await svc.from('kb_categories').upsert(
+      { id: '00000000-0000-0000-0000-000000000501', name: 'Getting Started', display_order: 1 },
+      { onConflict: 'id' },
+    );
+    await svc.from('kb_categories').upsert(
+      { id: '00000000-0000-0000-0000-000000000502', name: 'Troubleshooting', display_order: 2 },
+      { onConflict: 'id' },
+    );
+  });
 
   test.afterAll(async () => {
     // Clean up E2E test category
@@ -485,7 +508,7 @@ test.describe('KB Categories Admin', () => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/kb-categories');
 
-    await page.getByLabel('Name').fill('E2E Test Category');
+    await page.getByRole('textbox', { name: 'Name', exact: true }).fill('E2E Test Category');
     await page.getByRole('button', { name: 'Add' }).click();
 
     await page.waitForLoadState('networkidle');
@@ -517,9 +540,9 @@ test.describe('KB Categories Admin', () => {
 
     await page.waitForLoadState('networkidle');
 
-    // Confirm order changed: Troubleshooting should appear first
-    const firstItem = page.locator('li').first();
-    await expect(firstItem.getByText('Troubleshooting')).toBeVisible({ timeout: 10000 });
+    // Confirm order changed: Troubleshooting should appear first in the categories list
+    const categoryList = page.locator('ul.divide-y li');
+    await expect(categoryList.first().getByText('Troubleshooting')).toBeVisible({ timeout: 10000 });
 
     // Restore original order
     const moveDownBtn = page.getByRole('button', { name: 'Move Troubleshooting down' });

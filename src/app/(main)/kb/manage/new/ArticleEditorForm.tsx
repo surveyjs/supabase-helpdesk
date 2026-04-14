@@ -108,7 +108,7 @@ export function ArticleEditorForm({
 
       <div>
         <div className="flex items-center gap-2 mb-1">
-          <label className="block text-sm font-medium text-gray-700">
+          <label htmlFor="body" className="block text-sm font-medium text-gray-700">
             Body <span className="text-red-500">*</span>
           </label>
           <div className="flex gap-1 ml-auto">

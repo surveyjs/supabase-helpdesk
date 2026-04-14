@@ -10,6 +10,7 @@ import {
   type AgentTicketFilters,
 } from '@/lib/queries/agent-dashboard';
 import { Badge } from '@/components/ui/Badge';
+import { DisplayName } from '@/components/features/users/DisplayName';
 import { Pagination } from '@/components/ui/Pagination';
 import { createSavedView, renameSavedView, deleteSavedView } from '@/lib/actions/saved-views';
 import { RealtimeDashboard } from '@/components/features/agent/RealtimeDashboard';
@@ -444,7 +445,11 @@ export default async function AgentDashboardPage({
                     )}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-700">
-                    {ticket.creator_display_name ?? `User`}
+                    <DisplayName
+                      userId={ticket.creator_id}
+                      displayName={ticket.creator_display_name ?? 'User'}
+                      isCurrentUserAgent={true}
+                    />
                   </td>
                   <td className="px-4 py-3">
                     <Badge variant="status" value={ticket.status} />

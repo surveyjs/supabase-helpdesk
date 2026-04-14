@@ -333,11 +333,12 @@ test.describe('Admin Teams Management', () => {
     await expect(page.getByText('E2E Test Team')).toBeVisible({ timeout: 10000 });
 
     const teamSection = page.locator('div.bg-white').filter({ hasText: 'E2E Test Team' });
+    const responsePromise = page.waitForResponse(resp => resp.request().method() === 'POST');
     await teamSection.getByRole('button', { name: /Delete E2E/ }).click();
-    await page.waitForTimeout(2000);
+    await responsePromise;
 
-    // Team should still be there
-    await expect(page.getByText('E2E Test Team')).toBeVisible();
+    // Team should still be there (server action silently refuses to delete team with members)
+    await expect(page.getByText('E2E Test Team')).toBeVisible({ timeout: 10000 });
   });
 
   test('admin can remove member and delete empty team', async ({ page }) => {

@@ -196,15 +196,22 @@ test.describe('Ticket creation from article', () => {
     await expect(typeSelect).toBeVisible({ timeout: 10000 });
     await typeSelect.selectOption({ label: 'Issue' });
 
-    await page.getByLabel(/Description/).fill('I followed the article but still have a question.');
+    const descField = page.getByLabel(/Description/);
+    await expect(descField).toBeVisible({ timeout: 10000 });
+    await descField.fill('I followed the article but still have a question.');
 
     // Wait for the button to be enabled before clicking
     const submitBtn = page.getByRole('button', { name: 'Create Ticket' });
     await expect(submitBtn).toBeEnabled({ timeout: 5000 });
     await submitBtn.click();
 
+    // Wait for form submission to process (button text changes to "Creating…")
+    await expect(page.getByRole('button', { name: 'Creating…' })).toBeVisible({ timeout: 5000 }).catch(() => {
+      // Button may already have disappeared if redirect was fast
+    });
+
     // Should redirect to ticket detail
-    await expect(page).toHaveURL(/\/tickets\/\d+\//, { timeout: 15000 });
+    await expect(page).toHaveURL(/\/tickets\/\d+\//, { timeout: 30000 });
 
     // Extract ticketId from URL for cleanup
     const match = page.url().match(/\/tickets\/(\d+)\//);

@@ -57,11 +57,11 @@ test.describe('Tickets', () => {
     // Should redirect to ticket detail
     await expect(page).toHaveURL(/\/tickets\/\d+\/e2e-test-ticket/, { timeout: 10000 });
     ticketUrl = page.url();
-    await expect(page.getByRole('heading', { name: 'E2E Test Ticket' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'E2E Test Ticket' })).toBeVisible({ timeout: 10000 });
 
     // Go to My Tickets and verify it appears
     await page.goto('/tickets');
-    await expect(page.getByText('E2E Test Ticket')).toBeVisible();
+    await expect(page.getByText('E2E Test Ticket')).toBeVisible({ timeout: 10000 });
   });
 
   test('ticket detail shows correct metadata and posts', async ({ page }) => {

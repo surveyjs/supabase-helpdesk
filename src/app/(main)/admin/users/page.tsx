@@ -44,7 +44,10 @@ export default async function UsersPage({
   }
 
   if (searchQuery) {
-    query = query.or(`display_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`);
+    const sanitized = searchQuery.replace(/[,()]/g, '');
+    if (sanitized) {
+      query = query.or(`display_name.ilike.%${sanitized}%,email.ilike.%${sanitized}%`);
+    }
   }
 
   const { data: users, count } = await query;

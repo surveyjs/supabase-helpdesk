@@ -37,14 +37,14 @@ async function requireAgentRole() {
 }
 
 async function logAudit(
-  supabase: Awaited<ReturnType<typeof createServerClient>>,
   adminId: string,
   action: string,
   targetType: string,
   targetId?: string | null,
   details?: Record<string, unknown>,
 ) {
-  await supabase.from('admin_audit_log').insert({
+  const svc = createServiceRoleClient();
+  await svc.from('admin_audit_log').insert({
     admin_id: adminId,
     action,
     target_type: targetType,
@@ -248,7 +248,7 @@ export async function createUserNote(
     return { error: 'Failed to create note.' };
   }
 
-  await logAudit(supabase, profile.id, 'create_user_note', 'user_note', targetUserId, {
+  await logAudit(profile.id, 'create_user_note', 'user_note', targetUserId, {
     body_length: body.length,
   });
 
@@ -264,6 +264,7 @@ export async function updateUserNote(
   const { supabase, profile } = await requireAgentRole();
 
   const noteId = formData.get('note_id') as string;
+  const targetUserId = formData.get('target_user_id') as string;
   const body = (formData.get('body') as string)?.trim();
 
   if (!noteId) {
@@ -273,21 +274,29 @@ export async function updateUserNote(
     return { error: 'Note body must be 1–10,000 characters.' };
   }
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('user_notes')
     .update({ body, edited_at: new Date().toISOString() })
-    .eq('id', noteId);
+    .eq('id', noteId)
+    .select('id')
+    .maybeSingle();
 
   if (error) {
     return { error: 'Failed to update note.' };
   }
 
-  await logAudit(supabase, profile.id, 'update_user_note', 'user_note', noteId, {
+  if (!data) {
+    return { error: 'Note not found or you do not have permission to edit it.' };
+  }
+
+  await logAudit(profile.id, 'update_user_note', 'user_note', noteId, {
     body_length: body.length,
   });
 
+  if (targetUserId) {
+    revalidatePath(`/agent/users/${targetUserId}`);
+  }
   revalidatePath('/admin/users');
-  revalidatePath('/agent/users');
   return { success: 'Note updated.' };
 }
 
@@ -305,11 +314,10 @@ export async function deleteUserNote(formData: FormData): Promise<void> {
 
   if (error) return;
 
-  await logAudit(supabase, profile.id, 'delete_user_note', 'user_note', noteId, {});
+  await logAudit(profile.id, 'delete_user_note', 'user_note', noteId, {});
 
   if (targetUserId) {
     revalidatePath(`/agent/users/${targetUserId}`);
   }
   revalidatePath('/admin/users');
-  revalidatePath('/agent/users');
 }

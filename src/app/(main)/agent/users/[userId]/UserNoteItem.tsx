@@ -28,11 +28,14 @@ export function UserNoteItem({
   createdAt: string;
   editedAt: string | null;
 }) {
-  const [editing, setEditing] = useState(false);
+  const [editRequested, setEditRequested] = useState(false);
   const [editState, editAction, editPending] = useActionState(updateUserNote, initialState);
   const isOwnNote = authorId === currentUserId;
   const canEdit = isOwnNote;
   const canDelete = isOwnNote || isAdmin;
+
+  // Derive editing state: requested by user, but auto-close on success
+  const editing = editRequested && !editState.success;
 
   function formatTime(dateStr: string) {
     return new Date(dateStr).toLocaleDateString(undefined, {
@@ -58,7 +61,7 @@ export function UserNoteItem({
           {canEdit && !editing && (
             <button
               type="button"
-              onClick={() => setEditing(true)}
+              onClick={() => setEditRequested(true)}
               className="text-xs text-blue-600 hover:text-blue-800"
               data-testid="edit-note-btn"
             >
@@ -82,13 +85,9 @@ export function UserNoteItem({
       </div>
 
       {editing ? (
-        <form
-          action={(formData) => {
-            editAction(formData);
-            setEditing(false);
-          }}
-        >
+        <form action={editAction}>
           <input type="hidden" name="note_id" value={noteId} />
+          <input type="hidden" name="target_user_id" value={targetUserId} />
           <textarea
             name="body"
             defaultValue={rawBody}
@@ -112,7 +111,7 @@ export function UserNoteItem({
             </button>
             <button
               type="button"
-              onClick={() => setEditing(false)}
+              onClick={() => setEditRequested(false)}
               className="px-3 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300"
             >
               Cancel

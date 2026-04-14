@@ -54,15 +54,19 @@ test.describe('Posts, Comments & Notes', () => {
     await loginAs(page, 'alice@example.com');
     await page.goto('/tickets/new');
 
-    await page.getByLabel('Title').fill('E2E Posts Test Ticket');
-    // Wait for the Type dropdown options to load; reload once if server failed to fetch types
+    // Wait for the form to fully render before interacting
+    await expect(page.getByRole('button', { name: 'Create Ticket' })).toBeVisible({ timeout: 10000 });
+
     const typeSelect = page.getByLabel('Type');
     const issueOption = typeSelect.locator('option').filter({ hasText: 'Issue' });
+    // Types are server-rendered; if server query failed, reload once
     if (await issueOption.count() === 0) {
       await page.reload();
-      await page.getByLabel('Title').fill('E2E Posts Test Ticket');
+      await expect(page.getByRole('button', { name: 'Create Ticket' })).toBeVisible({ timeout: 10000 });
     }
     await expect(issueOption).toBeAttached({ timeout: 10000 });
+
+    await page.getByLabel('Title').fill('E2E Posts Test Ticket');
     await typeSelect.selectOption({ label: 'Issue' });
     await page.getByLabel(/Description/).fill('This is the original post body for E2E post tests.');
     await page.getByRole('button', { name: 'Create Ticket' }).click();

@@ -133,6 +133,10 @@ export async function deleteCannedResponse(formData: FormData): Promise<void> {
   revalidatePath('/canned-responses');
 }
 
+function sanitizeForPostgrest(value: string): string {
+  return value.replace(/[,()."\\]/g, '');
+}
+
 export async function searchCannedResponses(query?: string) {
   const { supabase } = await requireAgentRole();
 
@@ -142,8 +146,11 @@ export async function searchCannedResponses(query?: string) {
     .order('updated_at', { ascending: false });
 
   if (query && query.trim()) {
-    const term = `%${query.trim()}%`;
-    q = q.or(`title.ilike.${term},body.ilike.${term}`);
+    const sanitized = sanitizeForPostgrest(query.trim());
+    if (sanitized) {
+      const term = `%${sanitized}%`;
+      q = q.or(`title.ilike.${term},body.ilike.${term}`);
+    }
   }
 
   const { data } = await q.limit(50);

@@ -38,8 +38,11 @@ export default async function CannedResponsesPage({
 
   // Search filter
   if (q && q.trim()) {
-    const term = `%${q.trim()}%`;
-    query = query.or(`title.ilike.${term},body.ilike.${term}`);
+    const sanitized = q.trim().replace(/[,()."\\]/g, '');
+    if (sanitized) {
+      const term = `%${sanitized}%`;
+      query = query.or(`title.ilike.${term},body.ilike.${term}`);
+    }
   }
 
   // Visibility filter

@@ -888,9 +888,11 @@ export async function followTicket(formData: FormData): Promise<void> {
   // Ticket owner auto-follows, cannot toggle
   if (ticket.creator_id === user.id) return;
 
-  await supabase
+  const { error } = await supabase
     .from('ticket_followers')
     .upsert({ ticket_id: ticketId, user_id: user.id }, { onConflict: 'ticket_id,user_id' });
+
+  if (error) return;
 
   revalidatePath(`/tickets/${ticketId}/${ticket.slug}`);
 }
@@ -914,11 +916,13 @@ export async function unfollowTicket(formData: FormData): Promise<void> {
   // Ticket owner cannot unfollow
   if (ticket.creator_id === user.id) return;
 
-  await supabase
+  const { error } = await supabase
     .from('ticket_followers')
     .delete()
     .eq('ticket_id', ticketId)
     .eq('user_id', user.id);
+
+  if (error) return;
 
   revalidatePath(`/tickets/${ticketId}/${ticket.slug}`);
 }

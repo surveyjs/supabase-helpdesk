@@ -432,7 +432,8 @@ test.describe('Article Management', () => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(`/kb/manage/${newArticleId}`);
 
-    // Click delete button
+    // Wait for page to fully load before clicking delete
+    await expect(page.getByRole('heading', { name: 'Edit Article' })).toBeVisible({ timeout: 10000 });
     page.on('dialog', (dialog) => dialog.accept());
     await page.getByRole('button', { name: /Delete/ }).click();
 
@@ -574,7 +575,6 @@ test.describe('KB Categories Admin', () => {
     const deleteBtn = page.getByRole('button', { name: 'Delete E2E Renamed Category' });
     await deleteBtn.click();
 
-    await page.waitForLoadState('networkidle');
-    await expect(page.getByText('E2E Renamed Category')).not.toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('E2E Renamed Category')).not.toBeVisible({ timeout: 10000 });
   });
 });

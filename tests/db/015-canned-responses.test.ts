@@ -64,6 +64,13 @@ beforeAll(async () => {
 afterAll(async () => {
   // Clean up canned responses created during tests
   await svc.from('canned_responses').delete().in('author_id', [ADMIN_ID, AGENT_ID, AGENT2_ID]);
+
+  await Promise.all([
+    svc.auth.admin.deleteUser(ADMIN_ID).catch(() => {}),
+    svc.auth.admin.deleteUser(AGENT_ID).catch(() => {}),
+    svc.auth.admin.deleteUser(AGENT2_ID).catch(() => {}),
+    svc.auth.admin.deleteUser(USER_ID).catch(() => {}),
+  ]);
 });
 
 describe('Canned Responses', () => {

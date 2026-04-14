@@ -150,6 +150,8 @@ test.describe('Admin Default Notification Preferences', () => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/user-settings');
 
+    // Wait for server-rendered heading first, then client component
+    await expect(page.getByRole('heading', { name: 'User Settings' })).toBeVisible({ timeout: 10000 });
     await expect(page.getByText('Default Notification Preferences')).toBeVisible({ timeout: 10000 });
     await expect(page.getByText('New Reply')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Save Defaults' })).toBeVisible();

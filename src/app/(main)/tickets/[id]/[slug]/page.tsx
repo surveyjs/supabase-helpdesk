@@ -128,7 +128,7 @@ export default async function TicketDetailPage({
   // Fetch posts (include notes/drafts/comments for agents)
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role')
+    .select('role, is_blocked')
     .eq('id', user.id)
     .single();
 
@@ -636,12 +636,7 @@ export default async function TicketDetailPage({
 
   const isFollowing = !!followRow;
   const isTicketOwner = ticket.creator_id === user.id;
-  const isBlocked = !!(await supabase
-    .from('profiles')
-    .select('is_blocked')
-    .eq('id', user.id)
-    .single()
-    .then(r => r.data?.is_blocked));
+  const isBlocked = !!profile?.is_blocked;
 
   let followers: { user_id: string; display_name: string; created_at: string }[] = [];
   if (isAgent) {

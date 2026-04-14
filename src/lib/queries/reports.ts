@@ -1,4 +1,5 @@
 import { createServiceRoleClient } from '@/lib/supabase/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 export type TimeRange = { start: Date; end: Date };
 export type ReportFilters = {
@@ -64,8 +65,9 @@ export async function getTicketVolumeData(
   groupBy: 'day' | 'week' | 'month',
   filters?: ReportFilters,
   agentScope?: string,
+  client?: SupabaseClient,
 ): Promise<TicketVolumeRow[]> {
-  const supabase = createServiceRoleClient();
+  const supabase = client ?? createServiceRoleClient();
   const q = applyFilters(supabase.from('tickets').select('created_at, status'), timeRange, filters, agentScope);
   const { data: tickets } = await q;
   if (!tickets || tickets.length === 0) return [];
@@ -108,8 +110,9 @@ export async function getResolutionMetrics(
   timeRange: TimeRange,
   filters?: ReportFilters,
   agentScope?: string,
+  client?: SupabaseClient,
 ): Promise<ResolutionMetrics> {
-  const supabase = createServiceRoleClient();
+  const supabase = client ?? createServiceRoleClient();
 
   // Get tickets with SLA timers joined
   const q = applyFilters(
@@ -177,8 +180,9 @@ export async function getResolutionMetrics(
 export async function getAgentPerformanceData(
   timeRange: TimeRange,
   agentId?: string,
+  client?: SupabaseClient,
 ): Promise<AgentPerformanceRow[]> {
-  const supabase = createServiceRoleClient();
+  const supabase = client ?? createServiceRoleClient();
 
   // Get tickets in range with assigned agents
   let q = supabase
@@ -251,8 +255,9 @@ export async function getAgentPerformanceData(
 export async function getCsatSummaryData(
   timeRange: TimeRange,
   agentScope?: string,
+  client?: SupabaseClient,
 ): Promise<CsatSummaryData> {
-  const supabase = createServiceRoleClient();
+  const supabase = client ?? createServiceRoleClient();
 
   let q = supabase
     .from('csat_ratings')
@@ -303,8 +308,9 @@ export async function getCsatSummaryData(
 export async function getSlaComplianceData(
   timeRange: TimeRange,
   agentScope?: string,
+  client?: SupabaseClient,
 ): Promise<SlaComplianceData> {
-  const supabase = createServiceRoleClient();
+  const supabase = client ?? createServiceRoleClient();
 
   let q = supabase
     .from('sla_timers')
@@ -386,8 +392,9 @@ export async function getSlaComplianceData(
 
 export async function getBacklogData(
   agentScope?: string,
+  client?: SupabaseClient,
 ): Promise<BacklogData> {
-  const supabase = createServiceRoleClient();
+  const supabase = client ?? createServiceRoleClient();
 
   let q = supabase
     .from('tickets')

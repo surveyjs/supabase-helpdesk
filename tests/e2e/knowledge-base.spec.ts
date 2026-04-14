@@ -187,10 +187,8 @@ test.describe('Ticket creation from article', () => {
   test('creating ticket from article stores source_article_id', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
     await page.goto('/tickets/new?from_article=1');
-    // Wait for JS to fully load and hydrate so useActionState is connected
-    await page.waitForLoadState('networkidle');
 
-    // Title should be pre-filled
+    // Title should be pre-filled (also confirms page has loaded and hydrated)
     await expect(page.getByLabel('Title')).toHaveValue('Question about: How to create a ticket', { timeout: 10000 });
 
     // Wait for the type dropdown to be ready before selecting

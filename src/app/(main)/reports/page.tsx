@@ -82,12 +82,12 @@ export default async function ReportsPage({ searchParams }: Props) {
     slaData,
     backlogData,
   ] = await Promise.all([
-    getTicketVolumeData(timeRange, groupBy, filters, agentScope),
-    getResolutionMetrics(timeRange, filters, agentScope),
-    getAgentPerformanceData(timeRange, agentScope),
-    getCsatSummaryData(timeRange, agentScope),
-    getSlaComplianceData(timeRange, agentScope),
-    getBacklogData(agentScope),
+    getTicketVolumeData(timeRange, groupBy, filters, agentScope, svc),
+    getResolutionMetrics(timeRange, filters, agentScope, svc),
+    getAgentPerformanceData(timeRange, agentScope, svc),
+    getCsatSummaryData(timeRange, agentScope, svc),
+    getSlaComplianceData(timeRange, agentScope, svc),
+    getBacklogData(agentScope, svc),
   ]);
 
   return (

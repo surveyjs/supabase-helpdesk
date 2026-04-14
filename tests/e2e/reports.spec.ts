@@ -39,71 +39,76 @@ test.describe('Reports Access Control', () => {
 // ============================================================
 
 test.describe('Reports Page - Admin View', () => {
-  test.beforeEach(async ({ page }) => {
+  test('all report sections render correctly', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await page.goto('/reports');
     await expect(page.getByRole('heading', { name: 'Reports' })).toBeVisible({ timeout: 10000 });
-  });
 
-  test('report controls are visible', async ({ page }) => {
+    // Report controls
     await expect(page.getByTestId('report-controls')).toBeVisible();
-  });
 
-  test('ticket volume chart renders', async ({ page }) => {
+    // Ticket volume chart
     await expect(page.getByTestId('ticket-volume-chart')).toBeVisible();
-  });
 
-  test('resolution metrics panel renders', async ({ page }) => {
-    const panel = page.getByTestId('resolution-metrics');
-    await expect(panel).toBeVisible();
-    await expect(panel.locator('div').filter({ hasText: /^Avg First Response$/ })).toBeVisible();
-    await expect(panel.locator('div').filter({ hasText: /^Avg Resolution$/ })).toBeVisible();
-    await expect(panel.locator('div').filter({ hasText: /^Median Resolution$/ })).toBeVisible();
-  });
+    // Resolution metrics panel
+    const resPanel = page.getByTestId('resolution-metrics');
+    await expect(resPanel).toBeVisible();
+    await expect(resPanel.locator('div').filter({ hasText: /^Avg First Response$/ })).toBeVisible();
+    await expect(resPanel.locator('div').filter({ hasText: /^Avg Resolution$/ })).toBeVisible();
+    await expect(resPanel.locator('div').filter({ hasText: /^Median Resolution$/ })).toBeVisible();
 
-  test('agent performance table renders with all agents', async ({ page }) => {
+    // Agent performance table
     const table = page.getByTestId('agent-performance-table');
     await expect(table).toBeVisible();
-    // Admin should see column headers
     await expect(table.getByRole('columnheader', { name: 'Agent' })).toBeVisible();
     await expect(table.getByRole('columnheader', { name: 'Assigned' })).toBeVisible();
     await expect(table.getByRole('columnheader', { name: 'Resolved' })).toBeVisible();
-  });
 
-  test('CSAT summary chart renders', async ({ page }) => {
+    // CSAT summary chart
     await expect(page.getByTestId('csat-summary-chart')).toBeVisible();
-  });
 
-  test('SLA compliance panel renders', async ({ page }) => {
-    const panel = page.getByTestId('sla-compliance-panel');
-    await expect(panel).toBeVisible();
-    await expect(panel.locator('div').filter({ hasText: /^First Response$/ })).toBeVisible();
-    await expect(panel.locator('div').filter({ hasText: /^Resolution$/ })).toBeVisible();
-  });
+    // SLA compliance panel
+    const slaPanel = page.getByTestId('sla-compliance-panel');
+    await expect(slaPanel).toBeVisible();
+    await expect(slaPanel.locator('div').filter({ hasText: /^First Response$/ })).toBeVisible();
+    await expect(slaPanel.locator('div').filter({ hasText: /^Resolution$/ })).toBeVisible();
 
-  test('backlog overview renders', async ({ page }) => {
+    // Backlog overview
     await expect(page.getByTestId('backlog-overview')).toBeVisible();
     await expect(page.getByText('Open Tickets')).toBeVisible();
     await expect(page.getByText('Pending Tickets')).toBeVisible();
     await expect(page.getByText('Unassigned Tickets')).toBeVisible();
-  });
 
-  test('time range selector changes displayed data', async ({ page }) => {
-    // Click "Last 7 days" preset
-    await page.getByRole('button', { name: 'Last 7 days' }).click();
-    // URL should update with start and end params
-    await expect(page).toHaveURL(/start=/, { timeout: 10000 });
-    await expect(page).toHaveURL(/end=/);
-  });
-
-  test('admin sees filter dropdowns', async ({ page }) => {
+    // Admin filter dropdowns
     await expect(page.getByLabel('Status')).toBeVisible();
     await expect(page.getByLabel('Severity')).toBeVisible();
     await expect(page.getByLabel('Type')).toBeVisible();
     await expect(page.getByLabel('Category')).toBeVisible();
   });
 
+  test('time range selector and URL-based filters', async ({ page }) => {
+    await loginAs(page, 'admin@example.com');
+    await page.goto('/reports');
+    await expect(page.getByRole('heading', { name: 'Reports' })).toBeVisible({ timeout: 10000 });
+
+    // Click "Last 7 days" preset
+    await page.getByRole('button', { name: 'Last 7 days' }).click();
+    // URL should update with start and end params
+    await expect(page).toHaveURL(/start=/, { timeout: 10000 });
+    await expect(page).toHaveURL(/end=/);
+
+    // URL-based filters persist across page loads
+    await page.goto('/reports?start=2025-01-01&end=2025-12-31&groupBy=month&severity=high');
+    await expect(page.getByRole('heading', { name: 'Reports' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByLabel('Severity')).toHaveValue('high');
+    await expect(page.getByLabel('Group by')).toHaveValue('month');
+  });
+
   test('CSV export triggers download', async ({ page }) => {
+    await loginAs(page, 'admin@example.com');
+    await page.goto('/reports');
+    await expect(page.getByRole('heading', { name: 'Reports' })).toBeVisible({ timeout: 10000 });
+
     // Click last 30 days to ensure data range
     await page.getByRole('button', { name: 'Last 30 days' }).click();
     await expect(page).toHaveURL(/start=/, { timeout: 10000 });
@@ -112,15 +117,6 @@ test.describe('Reports Page - Admin View', () => {
     await page.getByRole('button', { name: 'ticket volume' }).click();
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toBe('ticket_volume_report.csv');
-  });
-
-  test('URL-based filters persist across page loads', async ({ page }) => {
-    const url = '/reports?start=2025-01-01&end=2025-12-31&groupBy=month&severity=high';
-    await page.goto(url);
-    await expect(page.getByRole('heading', { name: 'Reports' })).toBeVisible({ timeout: 10000 });
-    // Verify the severity dropdown has "high" selected
-    await expect(page.getByLabel('Severity')).toHaveValue('high');
-    await expect(page.getByLabel('Group by')).toHaveValue('month');
   });
 });
 
@@ -148,17 +144,22 @@ test.describe('Reports Page - Agent View', () => {
 // ============================================================
 
 test.describe('NavBar Reports Link', () => {
-  test('reports link visible for agent', async ({ page }) => {
+  test('reports link visibility by role', async ({ page }) => {
+    // Agent sees the link
     await loginAs(page, 'agent.smith@example.com');
     await expect(page.getByRole('link', { name: 'Reports' })).toBeVisible();
-  });
 
-  test('reports link visible for admin', async ({ page }) => {
+    // Sign out and log in as admin
+    await page.getByRole('button', { name: 'Sign out' }).click();
+    await expect(page).toHaveURL('/login', { timeout: 10000 });
+
     await loginAs(page, 'admin@example.com');
     await expect(page.getByRole('link', { name: 'Reports' })).toBeVisible();
-  });
 
-  test('reports link not visible for regular user', async ({ page }) => {
+    // Sign out and log in as regular user
+    await page.getByRole('button', { name: 'Sign out' }).click();
+    await expect(page).toHaveURL('/login', { timeout: 10000 });
+
     await loginAs(page, 'alice@example.com');
     await expect(page.getByRole('link', { name: 'Reports' })).not.toBeVisible();
   });

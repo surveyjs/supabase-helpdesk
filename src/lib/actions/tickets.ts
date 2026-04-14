@@ -857,3 +857,90 @@ export async function publishDraft(formData: FormData): Promise<void> {
     revalidatePath(`/tickets/${ticket.id}/${ticket.slug}`);
   }
 }
+
+// ============================================================
+// Follow / Unfollow
+// ============================================================
+
+export async function followTicket(formData: FormData): Promise<void> {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id, is_blocked')
+    .eq('id', user.id)
+    .single();
+  if (!profile || profile.is_blocked) return;
+
+  const ticketId = Number(formData.get('ticket_id'));
+  if (!ticketId) return;
+
+  // Verify ticket exists and user can access it (RLS handles visibility)
+  const { data: ticket } = await supabase
+    .from('tickets')
+    .select('id, slug, creator_id')
+    .eq('id', ticketId)
+    .single();
+  if (!ticket) return;
+
+  // Ticket owner auto-follows, cannot toggle
+  if (ticket.creator_id === user.id) return;
+
+  const { error } = await supabase
+    .from('ticket_followers')
+    .upsert({ ticket_id: ticketId, user_id: user.id }, { onConflict: 'ticket_id,user_id' });
+
+  if (error) return;
+
+  revalidatePath(`/tickets/${ticketId}/${ticket.slug}`);
+}
+
+export async function unfollowTicket(formData: FormData): Promise<void> {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+
+  const ticketId = Number(formData.get('ticket_id'));
+  if (!ticketId) return;
+
+  // Verify ticket exists
+  const { data: ticket } = await supabase
+    .from('tickets')
+    .select('id, slug, creator_id')
+    .eq('id', ticketId)
+    .single();
+  if (!ticket) return;
+
+  // Ticket owner cannot unfollow
+  if (ticket.creator_id === user.id) return;
+
+  const { error } = await supabase
+    .from('ticket_followers')
+    .delete()
+    .eq('ticket_id', ticketId)
+    .eq('user_id', user.id);
+
+  if (error) return;
+
+  revalidatePath(`/tickets/${ticketId}/${ticket.slug}`);
+}
+
+export async function getFollowers(ticketId: number) {
+  const supabase = await createServerClient();
+
+  const { data } = await supabase
+    .from('ticket_followers')
+    .select('user_id, created_at, profile:profiles!ticket_followers_user_id_fkey(id, display_name)')
+    .eq('ticket_id', ticketId);
+
+  return (data ?? []).map((f) => {
+    const profile = Array.isArray(f.profile) ? f.profile[0] : f.profile;
+    return {
+      user_id: f.user_id,
+      display_name: profile?.display_name ?? 'Unknown',
+      created_at: f.created_at,
+    };
+  });
+}

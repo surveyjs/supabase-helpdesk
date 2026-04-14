@@ -77,6 +77,11 @@ export default async function NavBar() {
               Reports
             </Link>
           )}
+          {profile && ['agent', 'admin'].includes(profile.role) && (
+            <Link href="/canned-responses" className="text-sm text-gray-600 hover:text-gray-900">
+              Canned Responses
+            </Link>
+          )}
         </div>
 
         {/* Right side */}

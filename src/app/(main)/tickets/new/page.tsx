@@ -2,8 +2,13 @@ import { createServerClient } from '@/lib/supabase/server';
 import { requireAuth } from '@/lib/supabase/auth';
 import { TicketForm } from '@/components/features/tickets/TicketForm';
 
-export default async function NewTicketPage() {
+export default async function NewTicketPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ from_article?: string }>;
+}) {
   await requireAuth();
+  const { from_article } = await searchParams;
   const supabase = await createServerClient();
 
   // Fetch ticket types
@@ -40,6 +45,22 @@ export default async function NewTicketPage() {
   const defaultPrivate = defaultPrivacySetting?.value !== 'false';
   const showPrivacyControl = privacyControlSetting?.value !== 'false';
 
+  // If from_article param, fetch article for prefill
+  let fromArticleTitle: string | null = null;
+  let fromArticleId: number | null = null;
+  const parsedArticleId = from_article ? parseInt(from_article, 10) : NaN;
+  if (!isNaN(parsedArticleId) && parsedArticleId > 0) {
+    const { data: article } = await supabase
+      .from('kb_articles')
+      .select('id, title')
+      .eq('id', parsedArticleId)
+      .single();
+    if (article) {
+      fromArticleId = article.id;
+      fromArticleTitle = `Question about: ${article.title}`;
+    }
+  }
+
   return (
     <div>
       <h1 className="text-2xl font-semibold text-gray-900 mb-6">Create Ticket</h1>
@@ -50,6 +71,8 @@ export default async function NewTicketPage() {
           customFields={customFields ?? []}
           defaultPrivate={defaultPrivate}
           showPrivacyControl={showPrivacyControl}
+          initialTitle={fromArticleTitle}
+          sourceArticleId={fromArticleId}
         />
       </div>
     </div>

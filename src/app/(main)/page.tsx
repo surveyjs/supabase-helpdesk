@@ -1,6 +1,7 @@
-import { getProfile } from '@/lib/supabase/auth';
+import { getProfile, requireAuth } from '@/lib/supabase/auth';
 
 export default async function HomePage() {
+  await requireAuth();
   const profile = await getProfile();
   const displayName = profile?.display_name || 'there';
 

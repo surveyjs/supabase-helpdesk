@@ -383,3 +383,34 @@ ON CONFLICT DO NOTHING;
 -- Severity mapping: Critical and High → Standard SLA; Low and Medium unmapped
 UPDATE sla_severity_mapping SET sla_policy_id = '00000000-0000-0000-0000-000000000401' WHERE severity = 'critical';
 UPDATE sla_severity_mapping SET sla_policy_id = '00000000-0000-0000-0000-000000000401' WHERE severity = 'high';
+
+-- ============================================================
+-- Phase 13 — Knowledge Base: Categories & Articles
+-- ============================================================
+
+-- KB Categories (2)
+INSERT INTO kb_categories (id, name, display_order) VALUES
+  ('00000000-0000-0000-0000-000000000501', 'Getting Started', 1),
+  ('00000000-0000-0000-0000-000000000502', 'Troubleshooting', 2);
+
+-- KB Articles (3)
+-- Article 1: "How to create a ticket" — Getting Started, published, author: Agent Smith
+INSERT INTO kb_articles (id, title, slug, body, status, category_id, author_id) VALUES
+  (1, 'How to create a ticket', 'how-to-create-a-ticket',
+   E'# How to Create a Ticket\n\nCreating a ticket is easy! Follow these steps:\n\n1. Click **My Tickets** in the navigation bar\n2. Click the **Create Ticket** button\n3. Fill in the **Title** with a short summary of your issue\n4. Select the appropriate **Type** and **Urgency**\n5. Describe your issue in the **Description** field (Markdown supported)\n6. Click **Create Ticket**\n\n## Tips\n\n- Be as specific as possible in your description\n- Include any error messages you see\n- Attach screenshots if they help explain the issue\n\nOnce submitted, an agent will review your ticket and respond as soon as possible.',
+   'published', '00000000-0000-0000-0000-000000000501', '00000000-0000-0000-0000-000000000012');
+
+-- Article 2: "Understanding ticket statuses" — Getting Started, published, author: Agent Smith
+INSERT INTO kb_articles (id, title, slug, body, status, category_id, author_id) VALUES
+  (2, 'Understanding ticket statuses', 'understanding-ticket-statuses',
+   E'# Understanding Ticket Statuses\n\nEvery ticket in the system has a status that indicates its current state:\n\n| Status | Meaning |\n|--------|----------|\n| **Open** | The ticket has been created and is awaiting agent review |\n| **In Progress** | An agent is actively working on the ticket |\n| **Pending** | The agent is waiting for more information from you |\n| **Resolved** | The issue has been addressed |\n| **Closed** | The ticket is complete and no further action is needed |\n\n## What to Do\n\n- If your ticket is **Pending**, check for agent replies and respond\n- If **Resolved** but the issue persists, reply to reopen it\n- **Closed** tickets can no longer be replied to (unless an agent reopens)\n\nNeed further help? Create a ticket!',
+   'published', '00000000-0000-0000-0000-000000000501', '00000000-0000-0000-0000-000000000012');
+
+-- Article 3: "Common login issues" — Troubleshooting, draft, author: Admin
+INSERT INTO kb_articles (id, title, slug, body, status, category_id, author_id) VALUES
+  (3, 'Common login issues', 'common-login-issues',
+   E'# Common Login Issues\n\nIf you are having trouble logging in, try the following:\n\n## Forgot Password\n\n1. Click **Forgot Password** on the login page\n2. Enter your email address\n3. Check your inbox for a reset link\n4. Follow the link to set a new password\n\n## Account Not Found\n\nIf you receive an "account not found" error:\n- Make sure you are using the correct email address\n- Check if you signed up with a different email\n- Contact support if the issue persists\n\n## Browser Issues\n\n- Clear your browser cache and cookies\n- Try a different browser or incognito mode\n- Ensure JavaScript is enabled',
+   'draft', '00000000-0000-0000-0000-000000000502', '00000000-0000-0000-0000-000000000011');
+
+-- Reset sequence for kb_articles id
+SELECT setval('kb_articles_id_seq', 3);

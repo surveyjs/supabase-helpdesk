@@ -19,6 +19,9 @@ import {
   deletePost,
   togglePostPrivacy,
   publishDraft,
+  followTicket,
+  unfollowTicket,
+  getFollowers,
 } from '@/lib/actions/tickets';
 import { getCsatRating, requestCsatToken } from '@/lib/actions/csat';
 import { getSlaStatus, type SlaTimer, type SlaIndicatorStatus } from '@/lib/utils/sla';
@@ -623,6 +626,28 @@ export default async function TicketDetailPage({
     }
   }
 
+  // Fetch follow status and followers list
+  const { data: followRow } = await supabase
+    .from('ticket_followers')
+    .select('user_id')
+    .eq('ticket_id', ticket.id)
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  const isFollowing = !!followRow;
+  const isTicketOwner = ticket.creator_id === user.id;
+  const isBlocked = !!(await supabase
+    .from('profiles')
+    .select('is_blocked')
+    .eq('id', user.id)
+    .single()
+    .then(r => r.data?.is_blocked));
+
+  let followers: { user_id: string; display_name: string; created_at: string }[] = [];
+  if (isAgent) {
+    followers = await getFollowers(ticket.id);
+  }
+
   return (
     <div>
       <div className="flex items-center gap-4 mb-4">
@@ -884,6 +909,55 @@ export default async function TicketDetailPage({
             </button>
           </form>
         )}
+
+        {/* Follow/Unfollow */}
+        <div className="mt-4 border-t border-gray-200 pt-4" data-testid="follow-section">
+          <div className="flex items-center gap-3">
+            {isTicketOwner ? (
+              <span className="text-xs text-gray-400">Following (owner)</span>
+            ) : !isBlocked ? (
+              isFollowing ? (
+                <form action={unfollowTicket}>
+                  <input type="hidden" name="ticket_id" value={ticket.id} />
+                  <button
+                    type="submit"
+                    className="px-3 py-1 text-xs rounded bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    data-testid="unfollow-btn"
+                  >
+                    Unfollow
+                  </button>
+                </form>
+              ) : (
+                <form action={followTicket}>
+                  <input type="hidden" name="ticket_id" value={ticket.id} />
+                  <button
+                    type="submit"
+                    className="px-3 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200"
+                    data-testid="follow-btn"
+                  >
+                    Follow
+                  </button>
+                </form>
+              )
+            ) : null}
+          </div>
+
+          {/* Followers list (agents only) */}
+          {isAgent && followers.length > 0 && (
+            <details className="mt-2" data-testid="followers-list">
+              <summary className="text-xs text-gray-500 cursor-pointer">
+                {followers.length} follower{followers.length !== 1 ? 's' : ''}
+              </summary>
+              <ul className="mt-1 space-y-0.5">
+                {followers.map((f) => (
+                  <li key={f.user_id} className="text-xs text-gray-600">
+                    {f.display_name}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+        </div>
 
         {/* Custom fields display */}
         {customFieldDefs && customFieldDefs.length > 0 && (
@@ -1191,7 +1265,7 @@ export default async function TicketDetailPage({
       {canReply && (
         <div className="bg-white rounded-lg border border-gray-200 p-6 mb-4">
           <h2 className="text-lg font-medium text-gray-900 mb-4">Reply</h2>
-          <ReplyForm ticketId={ticket.id} />
+          <ReplyForm ticketId={ticket.id} isAgent={isAgent} />
         </div>
       )}
 

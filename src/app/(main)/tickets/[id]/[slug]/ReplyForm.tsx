@@ -1,16 +1,39 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useRef } from 'react';
 import { replyToTicket, type TicketActionState } from '@/lib/actions/tickets';
+import { CannedResponsePicker } from '@/components/features/canned-responses/CannedResponsePicker';
 
 const initialState: TicketActionState = {};
 
 export function ReplyForm({
   ticketId,
+  isAgent = false,
 }: {
   ticketId: number;
+  isAgent?: boolean;
 }) {
   const [state, formAction, pending] = useActionState(replyToTicket, initialState);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  function handleInsertCanned(body: string) {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const current = ta.value;
+    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLTextAreaElement.prototype, 'value',
+    )?.set;
+    if (nativeInputValueSetter) {
+      nativeInputValueSetter.call(ta, current.slice(0, start) + body + current.slice(end));
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+    } else {
+      ta.value = current.slice(0, start) + body + current.slice(end);
+    }
+    ta.focus();
+    ta.selectionStart = ta.selectionEnd = start + body.length;
+  }
 
   return (
     <form action={formAction} className="space-y-4">
@@ -23,7 +46,11 @@ export function ReplyForm({
           {state.error}
         </div>
       )}
+      {isAgent && (
+        <CannedResponsePicker onInsert={handleInsertCanned} />
+      )}
       <textarea
+        ref={textareaRef}
         name="body"
         required
         rows={4}

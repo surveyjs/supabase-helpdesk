@@ -14,6 +14,9 @@ import { DisplayName } from '@/components/features/users/DisplayName';
 import { Pagination } from '@/components/ui/Pagination';
 import { createSavedView, renameSavedView, deleteSavedView } from '@/lib/actions/saved-views';
 import { RealtimeDashboard } from '@/components/features/agent/RealtimeDashboard';
+import { BulkSelectProvider } from '@/components/features/bulk-actions/BulkSelectProvider';
+import { TicketCheckbox, SelectAllCheckbox } from '@/components/features/bulk-actions/TicketCheckbox';
+import { BulkActionToolbar } from '@/components/features/bulk-actions/BulkActionToolbar';
 
 function getContrastColor(hex: string): string {
   const c = hex.replace('#', '');
@@ -416,10 +419,19 @@ export default async function AgentDashboardPage({
           No tickets match your filters.
         </div>
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <BulkSelectProvider>
+          <BulkActionToolbar
+            agents={filterOptions.agents}
+            tags={filterOptions.tags}
+            isAdmin={profile.role === 'admin'}
+          />
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
+                <th scope="col" className="px-2 py-3 text-center">
+                  <SelectAllCheckbox ticketIds={tickets.map((t) => t.id)} />
+                </th>
                 <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Title</th>
                 <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Submitter</th>
                 <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
@@ -433,6 +445,9 @@ export default async function AgentDashboardPage({
             <tbody className="divide-y divide-gray-200">
               {tickets.map((ticket) => (
                 <tr key={ticket.id} className="hover:bg-gray-50">
+                  <td className="px-2 py-3 text-center">
+                    <TicketCheckbox ticketId={ticket.id} />
+                  </td>
                   <td className="px-4 py-3">
                     <Link
                       href={`/tickets/${ticket.id}/${ticket.slug}`}
@@ -510,6 +525,7 @@ export default async function AgentDashboardPage({
             </tbody>
           </table>
         </div>
+        </BulkSelectProvider>
       )}
 
       <Pagination

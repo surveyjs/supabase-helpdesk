@@ -40,6 +40,10 @@ import {
   removeTagFromTicket,
 } from '@/lib/actions/agent';
 import { updateCustomFieldValue } from '@/lib/actions/admin';
+import { removeDuplicateLink } from '@/lib/actions/duplicate';
+import { MarkAsDuplicateForm } from './MarkAsDuplicateForm';
+import { MergeTicketForm } from './MergeTicketForm';
+import { DeleteTicketButton } from './DeleteTicketButton';
 
 function getContrastColor(hex: string): string {
   const c = hex.replace('#', '');
@@ -316,6 +320,14 @@ export default async function TicketDetailPage({
         return `${actorName} published a draft`;
       case 'marked_duplicate':
         return `${actorName} marked as duplicate`;
+      case 'marked_duplicate':
+        return `${actorName} marked as duplicate of #${d?.original_ticket_id ?? '?'}`;
+      case 'duplicate_removed':
+        return `${actorName} removed duplicate link (was #${d?.previous_original_id ?? '?'})`;
+      case 'merged_from':
+        return `${actorName} merged ticket #${d?.source_ticket_id ?? '?'} into this ticket`;
+      case 'merged_into':
+        return `${actorName} merged this ticket into #${d?.target_ticket_id ?? '?'}`;
       case 'merged':
         return `${actorName} merged ticket`;
       case 'file_uploaded':
@@ -673,6 +685,32 @@ export default async function TicketDetailPage({
             #{ticket.duplicate_of_id}
           </Link>
           .
+          {isAgent && (
+            <form action={removeDuplicateLink} className="inline ml-2">
+              <input type="hidden" name="ticket_id" value={ticket.id} />
+              <button
+                type="submit"
+                className="text-xs text-red-600 hover:text-red-800 underline"
+                data-testid="remove-duplicate-link-btn"
+              >
+                Remove duplicate link
+              </button>
+            </form>
+          )}
+        </div>
+      )}
+
+      {/* Merge banner */}
+      {ticket.merged_into_id && (
+        <div className="mb-4 p-4 rounded bg-blue-50 border border-blue-200 text-blue-800 text-sm" data-testid="merge-banner">
+          This ticket has been merged into{' '}
+          <Link
+            href={`/tickets/${ticket.merged_into_id}/redirect`}
+            className="text-blue-600 hover:text-blue-800 font-medium"
+          >
+            #{ticket.merged_into_id}
+          </Link>
+          . All posts have been moved. Please continue the conversation there.
         </div>
       )}
 
@@ -1011,8 +1049,8 @@ export default async function TicketDetailPage({
         )}
       </div>
 
-      {/* Agent controls */}
-      {isAgent && (
+      {/* Agent controls (hidden on merged tickets) */}
+      {isAgent && !ticket.merged_into_id && (
         <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6" data-testid="agent-controls">
           <h2 className="text-sm font-semibold text-gray-700 mb-4 uppercase tracking-wider">Agent Controls</h2>
 
@@ -1200,6 +1238,30 @@ export default async function TicketDetailPage({
                 </button>
               </form>
             </div>
+
+            {/* Mark as Duplicate */}
+            {!ticket.merged_into_id && !ticket.duplicate_of_id && (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Duplicate</label>
+                <MarkAsDuplicateForm ticketId={ticket.id} />
+              </div>
+            )}
+
+            {/* Merge */}
+            {!ticket.merged_into_id && !ticket.duplicate_of_id && (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Merge</label>
+                <MergeTicketForm ticketId={ticket.id} />
+              </div>
+            )}
+
+            {/* Delete (admin only) */}
+            {profile?.role === 'admin' && (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Delete</label>
+                <DeleteTicketButton ticketId={ticket.id} isClosed={ticket.status === 'closed'} />
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1256,16 +1318,16 @@ export default async function TicketDetailPage({
         {renderTimelineItems(visibleItems)}
       </div>
 
-      {/* Reply form */}
-      {canReply && (
+      {/* Reply form (hidden on merged tickets) */}
+      {canReply && !ticket.merged_into_id && (
         <div className="bg-white rounded-lg border border-gray-200 p-6 mb-4">
           <h2 className="text-lg font-medium text-gray-900 mb-4">Reply</h2>
           <ReplyForm ticketId={ticket.id} isAgent={isAgent} />
         </div>
       )}
 
-      {/* Note form (agents only) */}
-      {isAgent && (
+      {/* Note form (agents only, hidden on merged tickets) */}
+      {isAgent && !ticket.merged_into_id && (
         <div className="mb-6">
           <NoteForm ticketId={ticket.id} />
         </div>

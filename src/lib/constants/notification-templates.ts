@@ -55,6 +55,10 @@ export const DEFAULT_TEMPLATES: Record<string, { subject: string; body: string }
     subject: 'Updates on your ticket',
     body: 'There have been updates to your ticket "{{ticketTitle}}":\n\n{{changeList}}',
   },
+  bulk_action_summary: {
+    subject: '{{actionType}} applied to {{ticketCount}} tickets',
+    body: 'Agent {{actorName}} performed a bulk action: {{actionType}} on {{ticketCount}} ticket(s).\n\nAffected tickets:\n{{ticketList}}',
+  },
 };
 
 /** Available placeholders per event type */
@@ -72,6 +76,7 @@ export const TEMPLATE_PLACEHOLDERS: Record<string, string[]> = {
   severity_changed: ['ticketTitle', 'ticketId', 'oldSeverity', 'newSeverity'],
   privacy_changed: ['ticketTitle', 'ticketId'],
   consolidated_update: ['ticketTitle', 'ticketId', 'ticketUrl', 'changeList', 'agentName', 'ownerName'],
+  bulk_action_summary: ['actionType', 'ticketCount', 'actorName', 'ticketList'],
 };
 
 /** Human-readable label for event types */
@@ -89,4 +94,5 @@ export const TEMPLATE_LABELS: Record<string, string> = {
   severity_changed: 'Severity Changed',
   privacy_changed: 'Privacy Changed',
   consolidated_update: 'Consolidated Update',
+  bulk_action_summary: 'Bulk Action Summary',
 };

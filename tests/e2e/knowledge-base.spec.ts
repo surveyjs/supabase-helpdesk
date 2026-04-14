@@ -255,8 +255,12 @@ test.describe('Suggested articles on ticket creation', () => {
     await loginAs(page, 'alice@example.com');
     await page.goto('/tickets/new');
 
-    // Type in title field to trigger article suggestions
-    await page.getByLabel('Title').fill('How to create');
+    // Wait for the form to be interactive
+    const titleInput = page.getByLabel('Title');
+    await expect(titleInput).toBeVisible({ timeout: 10000 });
+
+    // Type character-by-character to reliably trigger onChange + debounce
+    await titleInput.pressSequentially('How to create', { delay: 50 });
 
     // Wait for debounced search to show suggestions
     await expect(page.getByText('Related articles that might help')).toBeVisible({ timeout: 15000 });

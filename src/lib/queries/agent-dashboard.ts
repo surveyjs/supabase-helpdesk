@@ -31,6 +31,7 @@ export type AgentTicketRow = {
   is_private: boolean;
   created_at: string;
   updated_at: string;
+  creator_id: string;
   creator_display_name: string | null;
   creator_email: string;
   creator_team_name: string | null;
@@ -99,7 +100,7 @@ export async function getAgentTickets(filters: AgentTicketFilters): Promise<{
   let query = supabase
     .from('agent_tickets')
     .select(
-      'id, title, slug, status, urgency, severity, is_private, created_at, updated_at, creator_display_name, creator_email, creator_team_name, agent_display_name, assigned_agent_id, type_name, category_name, post_count',
+      'id, title, slug, status, urgency, severity, is_private, created_at, updated_at, creator_id, creator_display_name, creator_email, creator_team_name, agent_display_name, assigned_agent_id, type_name, category_name, post_count',
       { count: 'exact' },
     );
 

@@ -5,6 +5,7 @@ import { requireAuth } from '@/lib/supabase/auth';
 import { generateSlug } from '@/lib/utils/slug';
 import { renderMarkdown } from '@/lib/utils/markdown';
 import { Badge } from '@/components/ui/Badge';
+import { DisplayName } from '@/components/features/users/DisplayName';
 import { ReplyForm } from './ReplyForm';
 import { EditablePost } from './EditablePost';
 import { EditableTitle } from './EditableTitle';
@@ -371,7 +372,11 @@ export default async function TicketDetailPage({
         <div className={`rounded-lg border p-4 ${bgClass}`}>
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm font-medium text-gray-900">
-              {authorName}
+              <DisplayName
+                userId={author?.id ?? ticket!.creator_id}
+                displayName={authorName}
+                isCurrentUserAgent={isAgent}
+              />
               {isOriginal && (
                 <span className="ml-2 text-xs text-gray-500">(Original post)</span>
               )}
@@ -596,6 +601,28 @@ export default async function TicketDetailPage({
     }
   }
 
+  // Fetch user notes for the ticket creator (agents only)
+  let creatorNoteCount = 0;
+  let creatorNotes: { id: string; body: string; created_at: string; edited_at: string | null; author: { display_name: string | null } | null }[] = [];
+  if (isAgent) {
+    const { count } = await supabase
+      .from('user_notes')
+      .select('id', { count: 'exact', head: true })
+      .eq('target_user_id', ticket.creator_id);
+    creatorNoteCount = count ?? 0;
+    if (creatorNoteCount > 0) {
+      const { data: noteRows } = await supabase
+        .from('user_notes')
+        .select('id, body, created_at, edited_at, author:profiles!user_notes_author_id_fkey(display_name)')
+        .eq('target_user_id', ticket.creator_id)
+        .order('created_at', { ascending: false });
+      creatorNotes = (noteRows ?? []).map((n) => ({
+        ...n,
+        author: Array.isArray(n.author) ? n.author[0] : n.author,
+      }));
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center gap-4 mb-4">
@@ -658,7 +685,11 @@ export default async function TicketDetailPage({
           <div>
             <dt className="text-gray-500">Created by</dt>
             <dd className="text-gray-900">
-              {creatorName}
+              <DisplayName
+                userId={ticket.creator_id}
+                displayName={creatorName}
+                isCurrentUserAgent={isAgent}
+              />
               {teamName && (
                 <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
                   {teamName}
@@ -1102,6 +1133,42 @@ export default async function TicketDetailPage({
             </div>
           </div>
         </div>
+      )}
+
+      {/* User Notes tab (agents only, when creator has notes) */}
+      {isAgent && creatorNoteCount > 0 && (
+        <details className="bg-white rounded-lg border border-gray-200 p-6 mb-6" data-testid="user-notes-tab">
+          <summary className="cursor-pointer text-sm font-semibold text-gray-700 uppercase tracking-wider">
+            User Notes
+            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+              {creatorNoteCount}
+            </span>
+          </summary>
+          <div className="mt-4">
+            <Link
+              href={`/agent/users/${ticket.creator_id}`}
+              className="text-sm text-blue-600 hover:text-blue-800 mb-3 inline-block"
+            >
+              Open profile →
+            </Link>
+            <div className="space-y-3">
+              {creatorNotes.map((note) => (
+                <div key={note.id} className="border border-gray-200 rounded p-3 text-sm">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-medium text-gray-900">
+                      {note.author?.display_name ?? 'Unknown'}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      {new Date(note.created_at).toLocaleDateString()}
+                      {note.edited_at && ' (edited)'}
+                    </span>
+                  </div>
+                  <p className="text-gray-700 whitespace-pre-wrap">{note.body}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </details>
       )}
 
       {/* Posts timeline */}

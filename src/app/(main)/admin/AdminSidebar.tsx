@@ -21,6 +21,7 @@ const SECTIONS = [
   { label: 'CSAT Settings', href: '/admin/csat' },
   { label: 'SLA Policies', href: '/admin/sla' },
   { label: 'KB Categories', href: '/admin/kb-categories' },
+  { label: 'User Management', href: '/admin/users' },
   { label: 'Audit Log', href: '/admin/audit-log' },
 ];
 

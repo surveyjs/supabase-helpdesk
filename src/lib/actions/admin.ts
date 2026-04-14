@@ -1472,3 +1472,118 @@ export async function deleteKbCategory(formData: FormData): Promise<void> {
   await logAudit(supabase, profile.id, 'delete_kb_category', 'kb_category', categoryId, { name: existing?.name });
   revalidatePath('/admin/kb-categories');
 }
+
+// ============================================================
+// User Management (§22.1–22.4)
+// ============================================================
+
+export async function blockUser(formData: FormData): Promise<void> {
+  const { supabase, profile: adminProfile } = await requireAdminRole();
+
+  const userId = formData.get('user_id') as string;
+  if (!userId) return;
+
+  const serviceClient = createServiceRoleClient();
+
+  const { data: target } = await serviceClient
+    .from('profiles')
+    .select('id, email, is_blocked')
+    .eq('id', userId)
+    .single();
+  if (!target) return;
+
+  const { error } = await serviceClient
+    .from('profiles')
+    .update({ is_blocked: true })
+    .eq('id', userId);
+
+  if (error) return;
+
+  await logAudit(supabase, adminProfile.id, 'block_user', 'user', userId, { email: target.email });
+  revalidatePath('/admin/users');
+}
+
+export async function unblockUser(formData: FormData): Promise<void> {
+  const { supabase, profile: adminProfile } = await requireAdminRole();
+
+  const userId = formData.get('user_id') as string;
+  if (!userId) return;
+
+  const serviceClient = createServiceRoleClient();
+
+  const { data: target } = await serviceClient
+    .from('profiles')
+    .select('id, email')
+    .eq('id', userId)
+    .single();
+  if (!target) return;
+
+  const { error } = await serviceClient
+    .from('profiles')
+    .update({ is_blocked: false })
+    .eq('id', userId);
+
+  if (error) return;
+
+  await logAudit(supabase, adminProfile.id, 'unblock_user', 'user', userId, { email: target.email });
+  revalidatePath('/admin/users');
+}
+
+export async function adminDeleteUser(formData: FormData): Promise<void> {
+  const { supabase, profile: adminProfile } = await requireAdminRole();
+
+  const userId = formData.get('user_id') as string;
+  if (!userId) return;
+
+  const serviceClient = createServiceRoleClient();
+
+  const { data: target } = await serviceClient
+    .from('profiles')
+    .select('id, email, role, display_name')
+    .eq('id', userId)
+    .single();
+  if (!target) return;
+
+  // Cannot delete agents/admins (must demote first)
+  if (target.role === 'agent' || target.role === 'admin') return;
+
+  const idSuffix = userId.slice(0, 8);
+
+  // Anonymize profile
+  await serviceClient
+    .from('profiles')
+    .update({
+      display_name: `Deleted User #${idSuffix}`,
+      email: `deleted-${userId}@deleted.local`,
+    })
+    .eq('id', userId);
+
+  // Remove notification preferences
+  await serviceClient
+    .from('notification_preferences')
+    .delete()
+    .eq('user_id', userId);
+
+  // Remove team membership
+  await serviceClient
+    .from('profiles')
+    .update({ team_id: null })
+    .eq('id', userId);
+
+  // Remove ticket follows
+  await serviceClient
+    .from('ticket_follows')
+    .delete()
+    .eq('user_id', userId);
+
+  // Log to audit log
+  await logAudit(supabase, adminProfile.id, 'admin_delete_user', 'user', userId, {
+    email: target.email,
+    display_name: target.display_name,
+  });
+
+  // Delete auth user (invalidates their session)
+  await serviceClient.auth.admin.deleteUser(userId);
+
+  revalidatePath('/admin/users');
+}

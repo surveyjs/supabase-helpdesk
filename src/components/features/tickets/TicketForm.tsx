@@ -44,6 +44,7 @@ export function TicketForm({
   const [state, formAction, pending] = useActionState(createTicket, initialState);
   const [suggestions, setSuggestions] = useState<SuggestedArticle[]>([]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestQueryRef = useRef<string>('');
 
   const defaultType = ticketTypes.find((t) => t.is_default)?.id ?? ticketTypes[0]?.id;
 
@@ -51,11 +52,21 @@ export function TicketForm({
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (value.trim().length < 3) {
       setSuggestions([]);
+      latestQueryRef.current = '';
       return;
     }
+    const query = value.trim();
+    latestQueryRef.current = query;
     debounceRef.current = setTimeout(async () => {
-      const results = await getSuggestedArticles(value);
-      setSuggestions(results);
+      try {
+        const results = await getSuggestedArticles(query);
+        // Only update if this is still the latest query
+        if (latestQueryRef.current === query) {
+          setSuggestions(results);
+        }
+      } catch {
+        // Ignore errors from stale requests
+      }
     }, 400);
   }
 

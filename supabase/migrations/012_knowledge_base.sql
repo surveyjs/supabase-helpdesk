@@ -62,18 +62,22 @@ CREATE TRIGGER trg_kb_article_search_vector
 
 ALTER TABLE kb_articles ENABLE ROW LEVEL SECURITY;
 
--- Published articles: everyone can read
+-- Published/archived articles: public only when kb_visible is enabled
 -- Draft articles: agents only
--- Archived articles: everyone can read (accessible via direct URL)
 CREATE POLICY kb_articles_select ON kb_articles
   FOR SELECT USING (
-    status IN ('published', 'archived')
-    OR is_agent()
+    is_agent()
+    OR (
+      status IN ('published', 'archived')
+      AND EXISTS (
+        SELECT 1 FROM app_settings WHERE key = 'kb_visible' AND value = 'true'
+      )
+    )
   );
 
 -- Agents can create/edit articles
 CREATE POLICY kb_articles_insert ON kb_articles
-  FOR INSERT WITH CHECK (is_agent());
+  FOR INSERT WITH CHECK (is_agent() AND author_id = auth.uid());
 CREATE POLICY kb_articles_update ON kb_articles
   FOR UPDATE USING (is_agent());
 CREATE POLICY kb_articles_delete ON kb_articles
@@ -95,7 +99,8 @@ CREATE POLICY kb_article_feedback_select ON kb_article_feedback
 CREATE POLICY kb_article_feedback_insert ON kb_article_feedback
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY kb_article_feedback_update ON kb_article_feedback
-  FOR UPDATE USING (auth.uid() = user_id);
+  FOR UPDATE USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
 CREATE POLICY kb_article_feedback_delete ON kb_article_feedback
   FOR DELETE USING (auth.uid() = user_id);
 

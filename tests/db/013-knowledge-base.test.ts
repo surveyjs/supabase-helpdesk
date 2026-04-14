@@ -113,6 +113,9 @@ beforeAll(async () => {
   // Ensure a ticket type exists for ticket tests
   const { data: existingType } = await svc.from('ticket_types').select('id').limit(1).single();
   defaultTypeId = existingType!.id;
+
+  // Enable KB visibility so regular users can read published/archived articles
+  await svc.from('app_settings').update({ value: 'true' }).eq('key', 'kb_visible');
 }, 30_000);
 
 afterAll(async () => {

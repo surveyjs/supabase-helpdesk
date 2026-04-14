@@ -48,11 +48,12 @@ export default async function NewTicketPage({
   // If from_article param, fetch article for prefill
   let fromArticleTitle: string | null = null;
   let fromArticleId: number | null = null;
-  if (from_article) {
+  const parsedArticleId = from_article ? parseInt(from_article, 10) : NaN;
+  if (!isNaN(parsedArticleId) && parsedArticleId > 0) {
     const { data: article } = await supabase
       .from('kb_articles')
       .select('id, title')
-      .eq('id', from_article)
+      .eq('id', parsedArticleId)
       .single();
     if (article) {
       fromArticleId = article.id;

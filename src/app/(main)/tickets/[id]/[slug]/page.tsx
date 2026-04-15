@@ -44,6 +44,9 @@ import { removeDuplicateLink } from '@/lib/actions/duplicate';
 import { MarkAsDuplicateForm } from './MarkAsDuplicateForm';
 import { MergeTicketForm } from './MergeTicketForm';
 import { DeleteTicketButton } from './DeleteTicketButton';
+import { SuggestReplyButton } from './SuggestReplyButton';
+import { AiTicketSummary } from './AiTicketSummary';
+import { GenerateKbArticleButton } from './GenerateKbArticleButton';
 
 function getContrastColor(hex: string): string {
   const c = hex.replace('#', '');
@@ -165,9 +168,18 @@ export default async function TicketDetailPage({
       'allowed_file_types',
       'max_file_size_mb',
       'max_files_per_post',
+      'ai_suggested_reply_enabled',
+      'ai_ticket_summary_enabled',
+      'ai_ticket_summary_min_posts',
+      'ai_generate_kb_article_enabled',
     ]);
 
   const settingsMap = new Map(allSettings?.map((s) => [s.key, s.value]) ?? []);
+
+  const aiSuggestedReplyEnabled = settingsMap.get('ai_suggested_reply_enabled') === 'true';
+  const aiTicketSummaryEnabled = settingsMap.get('ai_ticket_summary_enabled') === 'true';
+  const aiTicketSummaryMinPosts = parseInt(settingsMap.get('ai_ticket_summary_min_posts') ?? '10', 10) || 10;
+  const aiGenerateKbArticleEnabled = settingsMap.get('ai_generate_kb_article_enabled') === 'true';
 
   const visiblePostsThreshold = parseInt(settingsMap.get('visible_posts_threshold') ?? '10', 10) || 10;
   const visibleCommentsThreshold = parseInt(settingsMap.get('visible_comments_threshold') ?? '3', 10) || 3;
@@ -1262,6 +1274,14 @@ export default async function TicketDetailPage({
                 <DeleteTicketButton ticketId={ticket.id} isClosed={ticket.status === 'closed'} />
               </div>
             )}
+
+            {/* Generate KB Article (agents, closed tickets only) */}
+            {ticket.status === 'closed' && aiGenerateKbArticleEnabled && (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">KB Article</label>
+                <GenerateKbArticleButton ticketId={ticket.id} />
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1302,6 +1322,11 @@ export default async function TicketDetailPage({
         </details>
       )}
 
+      {/* AI Summary panel (agents only) */}
+      {isAgent && aiTicketSummaryEnabled && allPosts.length >= aiTicketSummaryMinPosts && (
+        <AiTicketSummary ticketId={ticket.id} />
+      )}
+
       {/* Posts timeline */}
       <div className="space-y-4 mb-6">
         {/* Original post always first */}
@@ -1321,7 +1346,12 @@ export default async function TicketDetailPage({
       {/* Reply form (hidden on merged tickets) */}
       {canReply && !ticket.merged_into_id && (
         <div className="bg-white rounded-lg border border-gray-200 p-6 mb-4">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Reply</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-medium text-gray-900">Reply</h2>
+            {isAgent && aiSuggestedReplyEnabled && (
+              <SuggestReplyButton ticketId={ticket.id} />
+            )}
+          </div>
           <ReplyForm ticketId={ticket.id} isAgent={isAgent} />
         </div>
       )}

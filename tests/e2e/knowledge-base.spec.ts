@@ -5,6 +5,9 @@ import { createServiceRoleClient } from '../helpers/supabase';
  * Helper: log in via the login form.
  */
 async function loginAs(page: Page, email: string, password = 'Password123') {
+  const svc = createServiceRoleClient();
+  await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
+
   await page.goto('/login');
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
@@ -45,7 +48,7 @@ test.describe('Help Center – Public', () => {
     const svc = createServiceRoleClient();
     await svc.from('app_settings').update({ value: 'false' }).eq('key', 'kb_visible');
 
-    await page.goto('/help');
+    await page.goto('/help', { waitUntil: 'networkidle' });
     // Should 404
     await expect(page.getByText('404')).toBeVisible({ timeout: 10000 });
 
@@ -125,7 +128,14 @@ test.describe('Article Feedback', () => {
   });
 
   test('unauthenticated visitors cannot vote', async ({ page }) => {
-    await page.goto('/help/1/getting-started/how-to-create-a-ticket');
+    // Retry navigation in case parallel test momentarily disables kb_visible
+    await page.goto('/help/1/getting-started/how-to-create-a-ticket', { waitUntil: 'networkidle' });
+    if (!await page.getByText('Was this helpful?').isVisible({ timeout: 5000 }).catch(() => false)) {
+      // Parallel kb_visible toggle may have caused a 404 — retry
+      const svc = createServiceRoleClient();
+      await svc.from('app_settings').update({ value: 'true' }).eq('key', 'kb_visible');
+      await page.goto('/help/1/getting-started/how-to-create-a-ticket', { waitUntil: 'networkidle' });
+    }
     // Wait for the article page to fully render before checking feedback section
     await expect(page.getByText('Was this helpful?')).toBeVisible({ timeout: 15000 });
     await expect(page.getByText('Log in to vote')).toBeVisible();

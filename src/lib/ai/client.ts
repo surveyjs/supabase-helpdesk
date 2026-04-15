@@ -1,0 +1,306 @@
+'use server';
+
+import { createServerClient, createServiceRoleClient } from '@/lib/supabase/server';
+
+// ============================================================
+// Types
+// ============================================================
+
+interface AiConfig {
+  provider: 'openai' | 'anthropic' | 'custom';
+  apiKey: string;
+  model: string;
+  endpointUrl?: string;
+  timeout: number;
+}
+
+interface AiResponse {
+  content: string;
+  tokensUsed: number;
+}
+
+// ============================================================
+// Configuration
+// ============================================================
+
+export async function getAiConfig(): Promise<AiConfig | null> {
+  const supabase = await createServerClient();
+
+  const { data: settings } = await supabase
+    .from('app_settings')
+    .select('key, value')
+    .in('key', ['ai_provider', 'ai_model', 'ai_request_timeout', 'ai_custom_endpoint_url']);
+
+  const map = new Map(settings?.map((s) => [s.key, s.value]) ?? []);
+  const provider = map.get('ai_provider') as AiConfig['provider'] | '';
+  if (!provider || !['openai', 'anthropic', 'custom'].includes(provider)) return null;
+
+  const model = map.get('ai_model') ?? '';
+  if (!model) return null;
+
+  // Read API key from Supabase Vault
+  const serviceClient = createServiceRoleClient();
+  const { data: secrets } = await serviceClient
+    .rpc('get_ai_api_key');
+
+  let apiKey = '';
+  if (secrets) {
+    apiKey = typeof secrets === 'string' ? secrets : '';
+  }
+
+  // Fallback: query vault.decrypted_secrets directly
+  if (!apiKey) {
+    const { data: vaultRows } = await serviceClient
+      .from('vault.decrypted_secrets' as string)
+      .select('decrypted_secret')
+      .eq('name', 'ai_api_key')
+      .limit(1);
+
+    if (vaultRows && vaultRows.length > 0) {
+      apiKey = (vaultRows[0] as Record<string, string>).decrypted_secret ?? '';
+    }
+  }
+
+  if (!apiKey) return null;
+
+  const timeout = parseInt(map.get('ai_request_timeout') ?? '60', 10) || 60;
+  const endpointUrl = map.get('ai_custom_endpoint_url') || undefined;
+
+  return {
+    provider: provider as AiConfig['provider'],
+    apiKey,
+    model,
+    endpointUrl,
+    timeout,
+  };
+}
+
+// ============================================================
+// Core AI Call
+// ============================================================
+
+export async function callAi(
+  systemPrompt: string,
+  userPrompt: string,
+  configOverride?: Partial<AiConfig>,
+): Promise<AiResponse> {
+  const baseConfig = await getAiConfig();
+  if (!baseConfig) throw new Error('AI is not configured');
+
+  const config = { ...baseConfig, ...configOverride };
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), config.timeout * 1000);
+
+  try {
+    let url: string;
+    let headers: Record<string, string>;
+    let body: string;
+
+    switch (config.provider) {
+      case 'openai': {
+        url = 'https://api.openai.com/v1/chat/completions';
+        headers = {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${config.apiKey}`,
+        };
+        body = JSON.stringify({
+          model: config.model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0.3,
+        });
+        break;
+      }
+      case 'anthropic': {
+        url = 'https://api.anthropic.com/v1/messages';
+        headers = {
+          'Content-Type': 'application/json',
+          'x-api-key': config.apiKey,
+          'anthropic-version': '2023-06-01',
+        };
+        body = JSON.stringify({
+          model: config.model,
+          max_tokens: 4096,
+          system: systemPrompt,
+          messages: [
+            { role: 'user', content: userPrompt },
+          ],
+        });
+        break;
+      }
+      case 'custom': {
+        url = config.endpointUrl ?? '';
+        if (!url) throw new Error('Custom endpoint URL is required');
+        headers = {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${config.apiKey}`,
+        };
+        body = JSON.stringify({
+          model: config.model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0.3,
+        });
+        break;
+      }
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body,
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
+      throw new Error(`AI API error (${response.status}): ${errorText}`);
+    }
+
+    const data = await response.json();
+
+    // Parse response based on provider
+    let content = '';
+    let tokensUsed = 0;
+
+    if (config.provider === 'anthropic') {
+      content = data.content?.[0]?.text ?? '';
+      tokensUsed = (data.usage?.input_tokens ?? 0) + (data.usage?.output_tokens ?? 0);
+    } else {
+      // OpenAI and custom (OpenAI-compatible)
+      content = data.choices?.[0]?.message?.content ?? '';
+      tokensUsed = data.usage?.total_tokens ?? 0;
+    }
+
+    return { content, tokensUsed };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Call AI expecting free text (not JSON). Used for suggested reply and ticket summary.
+ */
+export async function callAiText(
+  systemPrompt: string,
+  userPrompt: string,
+  configOverride?: Partial<AiConfig>,
+): Promise<AiResponse> {
+  const baseConfig = await getAiConfig();
+  if (!baseConfig) throw new Error('AI is not configured');
+
+  const config = { ...baseConfig, ...configOverride };
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), config.timeout * 1000);
+
+  try {
+    let url: string;
+    let headers: Record<string, string>;
+    let body: string;
+
+    switch (config.provider) {
+      case 'openai': {
+        url = 'https://api.openai.com/v1/chat/completions';
+        headers = {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${config.apiKey}`,
+        };
+        body = JSON.stringify({
+          model: config.model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          temperature: 0.5,
+        });
+        break;
+      }
+      case 'anthropic': {
+        url = 'https://api.anthropic.com/v1/messages';
+        headers = {
+          'Content-Type': 'application/json',
+          'x-api-key': config.apiKey,
+          'anthropic-version': '2023-06-01',
+        };
+        body = JSON.stringify({
+          model: config.model,
+          max_tokens: 4096,
+          system: systemPrompt,
+          messages: [
+            { role: 'user', content: userPrompt },
+          ],
+        });
+        break;
+      }
+      case 'custom': {
+        url = config.endpointUrl ?? '';
+        if (!url) throw new Error('Custom endpoint URL is required');
+        headers = {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${config.apiKey}`,
+        };
+        body = JSON.stringify({
+          model: config.model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          temperature: 0.5,
+        });
+        break;
+      }
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body,
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => 'Unknown error');
+      throw new Error(`AI API error (${response.status}): ${errorText}`);
+    }
+
+    const data = await response.json();
+
+    let content = '';
+    let tokensUsed = 0;
+
+    if (config.provider === 'anthropic') {
+      content = data.content?.[0]?.text ?? '';
+      tokensUsed = (data.usage?.input_tokens ?? 0) + (data.usage?.output_tokens ?? 0);
+    } else {
+      content = data.choices?.[0]?.message?.content ?? '';
+      tokensUsed = data.usage?.total_tokens ?? 0;
+    }
+
+    return { content, tokensUsed };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+// ============================================================
+// Usage Logging
+// ============================================================
+
+export async function logAiUsage(
+  agentId: string | null,
+  feature: string,
+  tokensUsed: number,
+): Promise<void> {
+  const serviceClient = createServiceRoleClient();
+  await serviceClient.from('ai_usage_log').insert({
+    agent_id: agentId,
+    feature,
+    tokens_used: tokensUsed,
+  });
+}

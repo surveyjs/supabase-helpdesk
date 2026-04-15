@@ -23,6 +23,7 @@ const SECTIONS = [
   { label: 'SLA Policies', href: '/admin/sla' },
   { label: 'KB Categories', href: '/admin/kb-categories' },
   { label: 'User Management', href: '/admin/users' },
+  { label: 'AI Configuration', href: '/admin/ai' },
   { label: 'Audit Log', href: '/admin/audit-log' },
 ];
 

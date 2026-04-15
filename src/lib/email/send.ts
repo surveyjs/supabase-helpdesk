@@ -2,13 +2,44 @@ import nodemailer from 'nodemailer';
 import { createServiceRoleClient } from '@/lib/supabase/server';
 
 /**
+ * Fetch inbound email settings for Reply-To header support.
+ * Uses a short-lived in-memory cache to avoid repeated app_settings queries
+ * on high-volume email send paths (e.g. notification cron batches).
+ */
+const INBOUND_SETTINGS_TTL_MS = 60_000;
+let _inboundSettingsCache: { value: { enabled: boolean; replyToAddress: string }; expiresAt: number } | null = null;
+
+async function getInboundEmailSettings(): Promise<{ enabled: boolean; replyToAddress: string }> {
+  if (_inboundSettingsCache && _inboundSettingsCache.expiresAt > Date.now()) {
+    return _inboundSettingsCache.value;
+  }
+
+  const supabase = createServiceRoleClient();
+  const [enabledRes, addressRes] = await Promise.all([
+    supabase.from('app_settings').select('value').eq('key', 'inbound_email_enabled').single(),
+    supabase.from('app_settings').select('value').eq('key', 'inbound_email_reply_to_address').single(),
+  ]);
+  const value = {
+    enabled: enabledRes.data?.value === 'true',
+    replyToAddress: addressRes.data?.value ?? '',
+  };
+  _inboundSettingsCache = { value, expiresAt: Date.now() + INBOUND_SETTINGS_TTL_MS };
+  return value;
+}
+
+/**
  * Send an email using the SMTP configuration stored in the email_config table.
  * If SMTP is not configured or not verified, logs a warning and returns false.
+ *
+ * When inbound email is enabled and a reply-to address is configured,
+ * sets the Reply-To header so recipients can reply directly.
+ * If a ticketId is provided, includes [Ticket #ID] in the subject for thread matching.
  */
 export async function sendEmail(
   to: string,
   subject: string,
   htmlBody: string,
+  options?: { ticketId?: number },
 ): Promise<boolean> {
   try {
     const supabase = createServiceRoleClient();
@@ -47,12 +78,28 @@ export async function sendEmail(
     // Strip CR/LF to prevent email header injection
     const safeSubject = subject.replace(/[\r\n]/g, ' ');
 
-    await transporter.sendMail({
+    // Build mail options
+    const mailOptions: nodemailer.SendMailOptions = {
       from: `"${config.sender_name}" <${config.sender_email}>`,
       to,
       subject: safeSubject,
       html: htmlBody,
-    });
+    };
+
+    // Add Reply-To header and [Ticket #ID] prefix when inbound email is enabled
+    try {
+      const inbound = await getInboundEmailSettings();
+      if (inbound.enabled && inbound.replyToAddress) {
+        mailOptions.replyTo = inbound.replyToAddress;
+        if (options?.ticketId && !safeSubject.includes(`[Ticket #${options.ticketId}]`)) {
+          mailOptions.subject = `[Ticket #${options.ticketId}] ${safeSubject}`;
+        }
+      }
+    } catch {
+      // Non-critical: continue sending without Reply-To
+    }
+
+    await transporter.sendMail(mailOptions);
 
     return true;
   } catch (err) {

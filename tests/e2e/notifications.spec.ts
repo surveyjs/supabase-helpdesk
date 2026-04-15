@@ -90,7 +90,7 @@ test.describe('Admin Email Configuration', () => {
   test('admin can see email sidebar link', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin');
-    await expect(page.getByRole('link', { name: 'Email' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('link', { name: 'Email', exact: true })).toBeVisible({ timeout: 10000 });
   });
 
   test('admin can change coalescing delay', async ({ page }) => {

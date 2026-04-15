@@ -121,7 +121,7 @@ export async function POST(request: Request) {
         // Single event: use standard template
         const evt = events[0];
         const { subject, html } = await renderTemplate(evt.event_type, evt.placeholders);
-        sent = await sendEmail(recipient.email, subject, html);
+        sent = await sendEmail(recipient.email, subject, html, { ticketId: entry.ticket_id });
       } else {
         // Multiple events: use consolidated update template
         // Build changeList from events
@@ -144,7 +144,7 @@ export async function POST(request: Request) {
         };
 
         const { subject, html } = await renderTemplate('consolidated_update', placeholders);
-        sent = await sendEmail(recipient.email, subject, html);
+        sent = await sendEmail(recipient.email, subject, html, { ticketId: entry.ticket_id });
       }
 
       if (sent) {

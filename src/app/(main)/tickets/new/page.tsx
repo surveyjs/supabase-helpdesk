@@ -55,12 +55,6 @@ export default async function NewTicketPage({
   const aiAutoCategEnabled = aiMap.get('ai_auto_categorize_enabled') === 'true';
   const aiDuplicateEnabled = aiMap.get('ai_duplicate_detection_enabled') === 'true';
 
-  // Fetch tags (for AI auto-categorization display)
-  const { data: allTags } = await supabase
-    .from('tags')
-    .select('id, name, color')
-    .order('name');
-
   // If from_article param, fetch article for prefill
   let fromArticleTitle: string | null = null;
   let fromArticleId: number | null = null;
@@ -89,7 +83,6 @@ export default async function NewTicketPage({
           showPrivacyControl={showPrivacyControl}
           initialTitle={fromArticleTitle}
           sourceArticleId={fromArticleId}
-          allTags={allTags ?? []}
           aiAutoCategEnabled={aiAutoCategEnabled}
           aiDuplicateEnabled={aiDuplicateEnabled}
         />

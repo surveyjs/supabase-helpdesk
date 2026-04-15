@@ -33,7 +33,7 @@ export function AiConfigForm({ settings, usage }: Props) {
 
   const [provider, setProvider] = useState(settings.ai_provider || '');
 
-  const hasApiKey = !!settings.ai_provider; // Proxy: if provider is set, key was likely saved
+  const hasApiKey = settings.ai_api_key_present === 'true';
 
   async function handleTestConnection() {
     setTesting(true);

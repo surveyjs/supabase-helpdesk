@@ -2,6 +2,9 @@ import { test, expect, Page } from '@playwright/test';
 import { createServiceRoleClient } from '../helpers/supabase';
 
 async function loginAs(page: Page, email: string, password = 'Password123') {
+  const svc = createServiceRoleClient();
+  await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
+
   await page.goto('/login');
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);

@@ -9,7 +9,6 @@ import Link from 'next/link';
 
 const initialState: TicketActionState = {};
 
-type Tag = { id: string; name: string; color: string };
 type TicketType = { id: string; name: string; is_default: boolean };
 type Category = { id: string; name: string };
 type CustomField = {
@@ -35,7 +34,6 @@ export function TicketForm({
   showPrivacyControl,
   initialTitle,
   sourceArticleId,
-  allTags: _allTags,
   aiAutoCategEnabled,
   aiDuplicateEnabled,
 }: {
@@ -46,7 +44,6 @@ export function TicketForm({
   showPrivacyControl: boolean;
   initialTitle?: string | null;
   sourceArticleId?: number | null;
-  allTags?: Tag[];
   aiAutoCategEnabled?: boolean;
   aiDuplicateEnabled?: boolean;
 }) {
@@ -137,7 +134,9 @@ export function TicketForm({
 
   function applyAiSuggestions(result: AutoCategorizeResult) {
     setAiSuggestions(result);
-    setAiCategorized(true);
+
+    const hasSuggestions = !!(result.suggestedTypeId || result.suggestedUrgency || result.suggestedCategoryId);
+    setAiCategorized(hasSuggestions);
 
     // Pre-fill only unmodified fields
     if (result.suggestedTypeId && !userModifiedFields.has('type_id')) {

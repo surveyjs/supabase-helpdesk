@@ -2,6 +2,9 @@
 -- Phase 19 — AI Features
 -- ============================================================
 
+-- Enable Vault extension (for encrypted API key storage)
+CREATE EXTENSION IF NOT EXISTS supabase_vault;
+
 -- AI configuration stored in app_settings
 INSERT INTO app_settings (key, value) VALUES
   ('ai_provider', ''),
@@ -20,6 +23,55 @@ INSERT INTO app_settings (key, value) VALUES
   ('ai_generate_kb_article_enabled', 'false')
 ON CONFLICT (key) DO NOTHING;
 
+-- ============================================================
+-- Vault RPC functions for AI API key management
+-- ============================================================
+
+-- Store AI API key in Vault (admin only)
+CREATE OR REPLACE FUNCTION store_ai_api_key(key_value TEXT)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  -- Delete any existing AI API key
+  DELETE FROM vault.secrets WHERE name = 'ai_api_key';
+  -- Insert new secret
+  PERFORM vault.create_secret(key_value, 'ai_api_key', 'AI provider API key');
+END;
+$$;
+
+-- Retrieve AI API key from Vault (returns decrypted value)
+CREATE OR REPLACE FUNCTION get_ai_api_key()
+RETURNS TEXT
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  result TEXT;
+BEGIN
+  SELECT decrypted_secret INTO result
+  FROM vault.decrypted_secrets
+  WHERE name = 'ai_api_key'
+  LIMIT 1;
+  RETURN result;
+END;
+$$;
+
+-- Delete AI API key from Vault
+CREATE OR REPLACE FUNCTION delete_ai_api_key()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  DELETE FROM vault.secrets WHERE name = 'ai_api_key';
+END;
+$$;
+
 -- AI usage tracking (for monthly usage counter)
 CREATE TABLE ai_usage_log (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -28,7 +80,7 @@ CREATE TABLE ai_usage_log (
     'auto_categorize', 'duplicate_detection',
     'suggested_reply', 'ticket_summary', 'generate_kb_article'
   )),
-  tokens_used INTEGER DEFAULT 0,
+  tokens_used INTEGER DEFAULT 0 CHECK (tokens_used >= 0),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -44,7 +96,10 @@ CREATE POLICY ai_usage_log_select ON ai_usage_log
 CREATE TABLE ai_rate_limit_log (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   agent_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  feature TEXT NOT NULL DEFAULT 'suggested_reply',
+  feature TEXT NOT NULL DEFAULT 'suggested_reply' CHECK (feature IN (
+    'suggested_reply', 'auto_categorize', 'duplicate_detection',
+    'ticket_summary', 'generate_kb_article'
+  )),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

@@ -5,6 +5,10 @@ import { createServiceRoleClient } from '../helpers/supabase';
  * Helper: log in via the login form.
  */
 async function loginAs(page: Page, email: string, password = 'Password123') {
+  // Clear any login lockouts from prior runs
+  const svc = createServiceRoleClient();
+  await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
+
   await page.goto('/login');
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);

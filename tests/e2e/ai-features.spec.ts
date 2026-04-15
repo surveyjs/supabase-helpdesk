@@ -233,15 +233,14 @@ test.describe('Ticket detail AI features', () => {
     await svc.from('app_settings').update({ value: 'false' }).eq('key', 'ai_suggested_reply_enabled');
 
     await loginAs(page, 'agent.smith@example.com');
-    await page.goto('/agent');
+    await page.goto('/agent', { waitUntil: 'networkidle' });
 
     const firstTicket = page.locator('a[href*="/tickets/"]').first();
-    if (await firstTicket.isVisible()) {
-      await firstTicket.click();
-      await page.waitForTimeout(2000);
+    await expect(firstTicket).toBeVisible({ timeout: 10000 });
+    await firstTicket.click();
+    await page.waitForLoadState('networkidle');
 
-      await expect(page.getByTestId('suggest-reply-btn')).not.toBeVisible();
-    }
+    await expect(page.getByTestId('suggest-reply-btn')).not.toBeVisible();
   });
 });
 

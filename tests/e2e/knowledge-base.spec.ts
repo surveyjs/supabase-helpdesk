@@ -125,7 +125,7 @@ test.describe('Article Feedback', () => {
   });
 
   test('unauthenticated visitors cannot vote', async ({ page }) => {
-    await page.goto('/help/1/getting-started/how-to-create-a-ticket');
+    await page.goto('/help/1/getting-started/how-to-create-a-ticket', { waitUntil: 'networkidle' });
     // Wait for the article page to fully render before checking feedback section
     await expect(page.getByText('Was this helpful?')).toBeVisible({ timeout: 15000 });
     await expect(page.getByText('Log in to vote')).toBeVisible();

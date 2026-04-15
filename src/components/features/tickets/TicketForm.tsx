@@ -3,10 +3,13 @@
 import { useActionState, useState, useEffect, useRef } from 'react';
 import { createTicket, type TicketActionState } from '@/lib/actions/tickets';
 import { getSuggestedArticles } from '@/lib/actions/kb';
+import { autoCategorizeTicket, detectDuplicateTickets, type AutoCategorizeResult, type DuplicateTicket } from '@/lib/actions/ai';
 import { generateSlug } from '@/lib/utils/slug';
+import Link from 'next/link';
 
 const initialState: TicketActionState = {};
 
+type Tag = { id: string; name: string; color: string };
 type TicketType = { id: string; name: string; is_default: boolean };
 type Category = { id: string; name: string };
 type CustomField = {
@@ -32,6 +35,9 @@ export function TicketForm({
   showPrivacyControl,
   initialTitle,
   sourceArticleId,
+  allTags: _allTags,
+  aiAutoCategEnabled,
+  aiDuplicateEnabled,
 }: {
   ticketTypes: TicketType[];
   categories: Category[];
@@ -40,11 +46,25 @@ export function TicketForm({
   showPrivacyControl: boolean;
   initialTitle?: string | null;
   sourceArticleId?: number | null;
+  allTags?: Tag[];
+  aiAutoCategEnabled?: boolean;
+  aiDuplicateEnabled?: boolean;
 }) {
   const [state, formAction, pending] = useActionState(createTicket, initialState);
   const [suggestions, setSuggestions] = useState<SuggestedArticle[]>([]);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestQueryRef = useRef<string>('');
+
+  // AI auto-categorization state
+  const [aiSuggestions, setAiSuggestions] = useState<AutoCategorizeResult>({});
+  const [aiCategorizePending, setAiCategorizePending] = useState(false);
+  const [aiCategorized, setAiCategorized] = useState(false);
+  const [userModifiedFields, setUserModifiedFields] = useState<Set<string>>(new Set());
+
+  // AI duplicate detection state
+  const [duplicateTickets, setDuplicateTickets] = useState<DuplicateTicket[]>([]);
+  const dupDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestDupQueryRef = useRef<string>('');
 
   const defaultType = ticketTypes.find((t) => t.is_default)?.id ?? ticketTypes[0]?.id;
 
@@ -60,7 +80,6 @@ export function TicketForm({
     debounceRef.current = setTimeout(async () => {
       try {
         const results = await getSuggestedArticles(query);
-        // Only update if this is still the latest query
         if (latestQueryRef.current === query) {
           setSuggestions(results);
         }
@@ -68,11 +87,104 @@ export function TicketForm({
         // Ignore errors from stale requests
       }
     }, 400);
+
+    // AI duplicate detection (debounced)
+    if (aiDuplicateEnabled) {
+      if (dupDebounceRef.current) clearTimeout(dupDebounceRef.current);
+      if (value.trim().length < 5) {
+        setDuplicateTickets([]);
+        latestDupQueryRef.current = '';
+        return;
+      }
+      const dupQuery = value.trim();
+      latestDupQueryRef.current = dupQuery;
+      dupDebounceRef.current = setTimeout(async () => {
+        try {
+          const fd = new FormData();
+          fd.set('title', dupQuery);
+          const results = await detectDuplicateTickets(fd);
+          if (latestDupQueryRef.current === dupQuery) {
+            setDuplicateTickets(results);
+          }
+        } catch {
+          // Silently ignore
+        }
+      }, 600);
+    }
+  }
+
+  // AI auto-categorization on body blur
+  async function handleBodyBlur(e: React.FocusEvent<HTMLTextAreaElement>) {
+    if (!aiAutoCategEnabled || aiCategorized) return;
+    const body = e.target.value.trim();
+    const titleEl = document.getElementById('title') as HTMLInputElement | null;
+    const title = titleEl?.value.trim() ?? '';
+    if (!title || !body) return;
+
+    setAiCategorizePending(true);
+    try {
+      const fd = new FormData();
+      fd.set('title', title);
+      fd.set('body', body);
+      const result = await autoCategorizeTicket(fd);
+      applyAiSuggestions(result);
+    } catch {
+      // Silently ignore
+    } finally {
+      setAiCategorizePending(false);
+    }
+  }
+
+  function applyAiSuggestions(result: AutoCategorizeResult) {
+    setAiSuggestions(result);
+    setAiCategorized(true);
+
+    // Pre-fill only unmodified fields
+    if (result.suggestedTypeId && !userModifiedFields.has('type_id')) {
+      const typeEl = document.getElementById('type_id') as HTMLSelectElement | null;
+      if (typeEl) typeEl.value = result.suggestedTypeId;
+    }
+    if (result.suggestedUrgency && !userModifiedFields.has('urgency')) {
+      const urgEl = document.getElementById('urgency') as HTMLSelectElement | null;
+      if (urgEl) urgEl.value = result.suggestedUrgency;
+    }
+    if (result.suggestedCategoryId && !userModifiedFields.has('category_id')) {
+      const catEl = document.getElementById('category_id') as HTMLSelectElement | null;
+      if (catEl) catEl.value = result.suggestedCategoryId;
+    }
+  }
+
+  async function handleReSuggest() {
+    const titleEl = document.getElementById('title') as HTMLInputElement | null;
+    const bodyEl = document.getElementById('body') as HTMLTextAreaElement | null;
+    const title = titleEl?.value.trim() ?? '';
+    const body = bodyEl?.value.trim() ?? '';
+    if (!title || !body) return;
+
+    setAiCategorizePending(true);
+    try {
+      const fd = new FormData();
+      fd.set('title', title);
+      fd.set('body', body);
+      const result = await autoCategorizeTicket(fd);
+      // Reset user modifications to allow re-suggestion
+      setUserModifiedFields(new Set());
+      applyAiSuggestions(result);
+    } catch {
+      // Silently ignore
+    } finally {
+      setAiCategorizePending(false);
+    }
+  }
+
+  function markFieldModified(fieldName: string) {
+    setUserModifiedFields((prev) => new Set(prev).add(fieldName));
   }
 
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (dupDebounceRef.current) clearTimeout(dupDebounceRef.current);
     };
   }, []);
 
@@ -132,17 +244,42 @@ export function TicketForm({
             </ul>
           </div>
         )}
+        {/* AI: Similar open tickets */}
+        {duplicateTickets.length > 0 && (
+          <div className="mt-2 bg-yellow-50 border border-yellow-200 rounded p-3" data-testid="similar-tickets">
+            <p className="text-xs text-yellow-700 font-medium mb-1">Similar open tickets:</p>
+            <ul className="space-y-1">
+              {duplicateTickets.map((t) => (
+                <li key={t.id} className="flex items-center gap-2">
+                  <Link
+                    href={`/tickets/${t.id}/redirect`}
+                    target="_blank"
+                    className="text-sm text-yellow-700 hover:text-yellow-900"
+                  >
+                    #{t.id}: {t.title}
+                  </Link>
+                  <span className="text-xs bg-yellow-100 text-yellow-600 px-1.5 py-0.5 rounded">{t.status}</span>
+                  <span className="text-xs text-yellow-500">{new Date(t.created_at).toLocaleDateString()}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label htmlFor="type_id" className="block text-sm font-medium text-gray-700 mb-1">
             Type
+            {aiSuggestions.suggestedTypeId && !userModifiedFields.has('type_id') && (
+              <span className="ml-2 text-xs text-purple-600" data-testid="ai-suggested-type">AI suggested</span>
+            )}
           </label>
           <select
             id="type_id"
             name="type_id"
             defaultValue={defaultType}
+            onChange={() => markFieldModified('type_id')}
             className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
           >
             {ticketTypes.map((t) => (
@@ -159,11 +296,15 @@ export function TicketForm({
         <div>
           <label htmlFor="urgency" className="block text-sm font-medium text-gray-700 mb-1">
             Urgency
+            {aiSuggestions.suggestedUrgency && !userModifiedFields.has('urgency') && (
+              <span className="ml-2 text-xs text-purple-600" data-testid="ai-suggested-urgency">AI suggested</span>
+            )}
           </label>
           <select
             id="urgency"
             name="urgency"
             defaultValue="medium"
+            onChange={() => markFieldModified('urgency')}
             className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
           >
             <option value="low">Low</option>
@@ -181,11 +322,15 @@ export function TicketForm({
         <div>
           <label htmlFor="category_id" className="block text-sm font-medium text-gray-700 mb-1">
             Category
+            {aiSuggestions.suggestedCategoryId && !userModifiedFields.has('category_id') && (
+              <span className="ml-2 text-xs text-purple-600" data-testid="ai-suggested-category">AI suggested</span>
+            )}
           </label>
           <select
             id="category_id"
             name="category_id"
             defaultValue=""
+            onChange={() => markFieldModified('category_id')}
             className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
           >
             <option value="">None</option>
@@ -208,11 +353,29 @@ export function TicketForm({
           required
           rows={8}
           maxLength={50000}
+          onBlur={handleBodyBlur}
           className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-y"
           placeholder="Describe your issue in detail (Markdown supported)"
         />
         {state.fieldErrors?.body && (
           <p className="mt-1 text-sm text-red-600">{state.fieldErrors.body}</p>
+        )}
+        {/* AI auto-categorization status */}
+        {aiCategorizePending && (
+          <p className="mt-1 text-xs text-purple-500" data-testid="ai-categorize-pending">Analyzing ticket…</p>
+        )}
+        {aiCategorized && !aiCategorizePending && (
+          <div className="mt-1 flex items-center gap-2">
+            <span className="text-xs text-purple-600">AI suggestions applied</span>
+            <button
+              type="button"
+              onClick={handleReSuggest}
+              className="text-xs text-purple-600 hover:text-purple-800 underline"
+              data-testid="re-suggest-btn"
+            >
+              Re-suggest
+            </button>
+          </div>
         )}
       </div>
 

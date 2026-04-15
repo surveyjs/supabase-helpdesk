@@ -45,6 +45,22 @@ export default async function NewTicketPage({
   const defaultPrivate = defaultPrivacySetting?.value !== 'false';
   const showPrivacyControl = privacyControlSetting?.value !== 'false';
 
+  // Fetch AI feature settings
+  const { data: aiSettings } = await supabase
+    .from('app_settings')
+    .select('key, value')
+    .in('key', ['ai_auto_categorize_enabled', 'ai_duplicate_detection_enabled']);
+
+  const aiMap = new Map(aiSettings?.map((s) => [s.key, s.value]) ?? []);
+  const aiAutoCategEnabled = aiMap.get('ai_auto_categorize_enabled') === 'true';
+  const aiDuplicateEnabled = aiMap.get('ai_duplicate_detection_enabled') === 'true';
+
+  // Fetch tags (for AI auto-categorization display)
+  const { data: allTags } = await supabase
+    .from('tags')
+    .select('id, name, color')
+    .order('name');
+
   // If from_article param, fetch article for prefill
   let fromArticleTitle: string | null = null;
   let fromArticleId: number | null = null;
@@ -73,6 +89,9 @@ export default async function NewTicketPage({
           showPrivacyControl={showPrivacyControl}
           initialTitle={fromArticleTitle}
           sourceArticleId={fromArticleId}
+          allTags={allTags ?? []}
+          aiAutoCategEnabled={aiAutoCategEnabled}
+          aiDuplicateEnabled={aiDuplicateEnabled}
         />
       </div>
     </div>

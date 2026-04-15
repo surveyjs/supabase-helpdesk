@@ -474,15 +474,21 @@ test.describe('Reply by Email', () => {
 
     expect(response.status()).toBe(200);
 
-    // Wait briefly for async processing to complete
-    await new Promise((r) => setTimeout(r, 2000));
-
-    // Verify ticket was reopened
-    const { data: updated } = await svc
-      .from('tickets')
-      .select('status')
-      .eq('id', ticket.id)
-      .single();
+    // Poll for status change (webhook processing may take a moment)
+    let updated: { status: string } | null = null;
+    for (let i = 0; i < 10; i++) {
+      await new Promise((r) => setTimeout(r, 1000));
+      const { data } = await svc
+        .from('tickets')
+        .select('status')
+        .eq('id', ticket.id)
+        .single();
+      if (data?.status === 'open') {
+        updated = data;
+        break;
+      }
+      updated = data;
+    }
 
     expect(updated!.status).toBe('open');
 

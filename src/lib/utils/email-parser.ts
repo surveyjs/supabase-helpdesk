@@ -14,7 +14,8 @@
 export function stripEmailSignature(body: string): string {
   if (!body) return '';
 
-  const lines = body.split('\n');
+  // Normalize CRLF to LF so signature delimiters match reliably
+  const lines = body.split(/\r?\n/);
   let cutIndex = lines.length;
 
   for (let i = 0; i < lines.length; i++) {
@@ -56,7 +57,7 @@ export function stripEmailSignature(body: string): string {
 
   // Strip quoted reply blocks (lines starting with ">")
   result = result
-    .split('\n')
+    .split(/\r?\n/)
     .filter((line) => !line.startsWith('>'))
     .join('\n');
 

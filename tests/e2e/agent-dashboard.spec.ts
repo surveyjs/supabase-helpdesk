@@ -231,14 +231,18 @@ test.describe('Agent Ticket Detail Controls', () => {
     await expect(assignBtn).toBeVisible({ timeout: 10000 });
     await assignBtn.click();
 
-    // Unassign button should now be visible (server action + revalidation)
+    // Wait for "Assign to me" to disappear (server action + revalidation complete)
+    await expect(assignBtn).toBeHidden({ timeout: 15000 });
+
+    // Unassign button should now be visible
     const unassignBtn = page.getByRole('button', { name: 'Unassign' });
     await expect(unassignBtn).toBeVisible({ timeout: 15000 });
 
     // Unassign
     await unassignBtn.click();
 
-    // Assign to me should be back
+    // Wait for "Unassign" to disappear before checking "Assign to me" reappears
+    await expect(unassignBtn).toBeHidden({ timeout: 15000 });
     await expect(page.getByRole('button', { name: 'Assign to me' })).toBeVisible({ timeout: 15000 });
   });
 

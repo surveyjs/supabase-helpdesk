@@ -1617,11 +1617,19 @@ export async function updateInboundEmailSettings(
     inbound_email_reply_to_address: replyToAddress,
   };
 
+  const failedKeys: string[] = [];
   for (const [key, value] of Object.entries(settings)) {
-    await supabase
+    const { error: updateError } = await supabase
       .from('app_settings')
       .update({ value })
       .eq('key', key);
+    if (updateError) {
+      failedKeys.push(key);
+    }
+  }
+
+  if (failedKeys.length > 0) {
+    return { message: `Error: Failed to save settings (${failedKeys.join(', ')}).` };
   }
 
   await logAudit(supabase, adminProfile.id, 'update_inbound_email_settings', 'app_settings', null, settings);

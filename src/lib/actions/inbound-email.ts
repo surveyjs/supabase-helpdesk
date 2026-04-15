@@ -108,12 +108,13 @@ async function sendAutoReply(
 
   try {
     const { subject, html } = await renderTemplate(templateEventType, placeholders);
-    await sendEmail(recipientEmail, subject, html);
+    const sent = await sendEmail(recipientEmail, subject, html);
+    if (!sent) return;
+
+    await logAutoReply(recipientEmail, replyType);
   } catch (err) {
     console.error('[inbound-email] Failed to send auto-reply:', err);
   }
-
-  await logAutoReply(recipientEmail, replyType);
 }
 
 // ============================================================
@@ -183,12 +184,6 @@ async function handleInboundAttachments(
       continue;
     }
 
-    // Check file size
-    if (att.size > maxSizeBytes) {
-      excluded.push({ filename: att.filename, reason: `exceeds ${maxSizeMb}MB limit` });
-      continue;
-    }
-
     // MIME type validation
     const expectedMimes = EXTENSION_MIME_MAP[ext];
     if (expectedMimes && !expectedMimes.includes(att.contentType) && att.contentType !== 'application/octet-stream') {
@@ -197,8 +192,13 @@ async function handleInboundAttachments(
     }
 
     try {
-      // Decode base64 content
+      // Decode base64 content and validate actual size
       const decoded = Buffer.from(att.content, 'base64');
+
+      if (decoded.length > maxSizeBytes) {
+        excluded.push({ filename: att.filename, reason: `exceeds ${maxSizeMb}MB limit` });
+        continue;
+      }
       let fileBuffer: Uint8Array = new Uint8Array(decoded);
 
       // SVG sanitization
@@ -413,9 +413,8 @@ async function processAsReply(
     return { success: true }; // Discard silently
   }
 
-  // Check if sender has permission (creator, assigned agent, or follower)
+  // Check if sender has permission (creator, assigned agent, follower, or teammate)
   const isCreator = ticket.creator_id === sender.id;
-  const _isAssigned = ticket.assigned_agent_id === sender.id;
 
   if (!isCreator && !isAgent) {
     // Check if user is a follower
@@ -426,15 +425,35 @@ async function processAsReply(
       .eq('user_id', sender.id);
 
     if (!followerCount || followerCount === 0) {
-      // Check if ticket is public and user can access
-      const { data: ticketAccess } = await supabase
-        .from('tickets')
-        .select('is_private')
-        .eq('id', ticketId)
+      // Check if sender is a teammate of the ticket creator (mirrors is_teammate RLS)
+      const { data: senderProfile } = await supabase
+        .from('profiles')
+        .select('team_id')
+        .eq('id', sender.id)
         .single();
 
-      if (ticketAccess?.is_private) {
-        return { success: true }; // No access, discard silently
+      const { data: creatorProfile } = await supabase
+        .from('profiles')
+        .select('team_id')
+        .eq('id', ticket.creator_id)
+        .single();
+
+      const isTeammate =
+        senderProfile?.team_id != null &&
+        creatorProfile?.team_id != null &&
+        senderProfile.team_id === creatorProfile.team_id;
+
+      if (!isTeammate) {
+        // Check if ticket is public and user can access
+        const { data: ticketAccess } = await supabase
+          .from('tickets')
+          .select('is_private')
+          .eq('id', ticketId)
+          .single();
+
+        if (ticketAccess?.is_private) {
+          return { success: true }; // No access, discard silently
+        }
       }
     }
   }

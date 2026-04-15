@@ -3,17 +3,28 @@ import { createServiceRoleClient } from '@/lib/supabase/server';
 
 /**
  * Fetch inbound email settings for Reply-To header support.
+ * Uses a short-lived in-memory cache to avoid repeated app_settings queries
+ * on high-volume email send paths (e.g. notification cron batches).
  */
+const INBOUND_SETTINGS_TTL_MS = 60_000;
+let _inboundSettingsCache: { value: { enabled: boolean; replyToAddress: string }; expiresAt: number } | null = null;
+
 async function getInboundEmailSettings(): Promise<{ enabled: boolean; replyToAddress: string }> {
+  if (_inboundSettingsCache && _inboundSettingsCache.expiresAt > Date.now()) {
+    return _inboundSettingsCache.value;
+  }
+
   const supabase = createServiceRoleClient();
   const [enabledRes, addressRes] = await Promise.all([
     supabase.from('app_settings').select('value').eq('key', 'inbound_email_enabled').single(),
     supabase.from('app_settings').select('value').eq('key', 'inbound_email_reply_to_address').single(),
   ]);
-  return {
+  const value = {
     enabled: enabledRes.data?.value === 'true',
     replyToAddress: addressRes.data?.value ?? '',
   };
+  _inboundSettingsCache = { value, expiresAt: Date.now() + INBOUND_SETTINGS_TTL_MS };
+  return value;
 }
 
 /**

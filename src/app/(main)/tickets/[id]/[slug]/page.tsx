@@ -319,9 +319,9 @@ export default async function TicketDetailPage({
       case 'draft_published':
         return `${actorName} published a draft`;
       case 'marked_duplicate':
-        return `${actorName} marked as duplicate`;
-      case 'marked_duplicate':
-        return `${actorName} marked as duplicate of #${d?.original_ticket_id ?? '?'}`;
+        return d?.original_ticket_id != null
+          ? `${actorName} marked as duplicate of #${d.original_ticket_id}`
+          : `${actorName} marked as duplicate`;
       case 'duplicate_removed':
         return `${actorName} removed duplicate link (was #${d?.previous_original_id ?? '?'})`;
       case 'merged_from':

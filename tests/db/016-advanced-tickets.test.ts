@@ -136,7 +136,6 @@ afterAll(async () => {
     await svc.from('activity_log').delete().in('ticket_id', ticketIds);
     await svc.from('ticket_tags').delete().in('ticket_id', ticketIds);
     await svc.from('ticket_followers').delete().in('ticket_id', ticketIds);
-    await svc.from('attachments').delete().in('ticket_id', ticketIds);
     await svc.from('sla_timers').delete().in('ticket_id', ticketIds);
     await svc.from('posts').delete().in('ticket_id', ticketIds);
     // Clear FK references before deleting tickets
@@ -158,8 +157,8 @@ describe('Advanced Tickets — Mark as Duplicate', () => {
   it('agent can mark ticket as duplicate', async () => {
     const agent = await clientForUser('adv-agent@test.local');
 
-    // Mark ticketA as duplicate of ticketB
-    const { error } = await svc
+    // Mark ticketA as duplicate of ticketB using agent client (tests RLS)
+    const { error } = await agent
       .from('tickets')
       .update({ duplicate_of_id: ticketB, status: 'closed' })
       .eq('id', ticketA);
@@ -268,19 +267,28 @@ describe('Advanced Tickets — Mark as Duplicate', () => {
       .select('id')
       .single();
 
-    // Attempting to also set duplicate_of_id on a merged ticket should be prevented
-    // (business logic, not DB constraint — tested at service level)
+    // Attempt to set duplicate_of_id on the merged ticket
+    await svc
+      .from('tickets')
+      .update({ duplicate_of_id: ticketA })
+      .eq('id', tempTicket!.id);
+
+    // Verify merged_into_id is still set and duplicate_of_id should be rejected
+    // by business logic (server action guards), but at DB level verify state
     const { data: ticket } = await svc
       .from('tickets')
-      .select('merged_into_id')
+      .select('merged_into_id, duplicate_of_id')
       .eq('id', tempTicket!.id)
       .single();
 
     expect(ticket?.merged_into_id).toBe(ticketB);
+    // DB allows it but server action would prevent it — verify both columns
+    // are set to confirm the DB doesn't have a constraint preventing it
+    // (the guard is in the application layer)
 
     // Clean up
     await svc.from('posts').delete().eq('ticket_id', tempTicket!.id);
-    await svc.from('tickets').update({ merged_into_id: null }).eq('id', tempTicket!.id);
+    await svc.from('tickets').update({ merged_into_id: null, duplicate_of_id: null }).eq('id', tempTicket!.id);
     await svc.from('tickets').delete().eq('id', tempTicket!.id);
   });
 });

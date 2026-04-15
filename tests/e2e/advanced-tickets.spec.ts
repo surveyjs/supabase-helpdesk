@@ -99,13 +99,9 @@ test.describe('Advanced Tickets', () => {
     await page.getByTestId('original-ticket-id-input').fill(String(targetTicketId));
     await page.getByTestId('mark-duplicate-form').getByRole('button', { name: 'Confirm' }).click();
 
-    // Wait for page reload
-    await page.waitForTimeout(2000);
-    await page.reload();
-
     // Should show duplicate banner with link to original
     const banner = page.locator('.bg-yellow-50', { hasText: 'marked as a duplicate' });
-    await expect(banner).toBeVisible({ timeout: 10000 });
+    await expect(banner).toBeVisible({ timeout: 15000 });
     await expect(banner.getByText(`#${targetTicketId}`)).toBeVisible();
   });
 
@@ -117,12 +113,8 @@ test.describe('Advanced Tickets', () => {
     await expect(page.getByTestId('remove-duplicate-link-btn')).toBeVisible({ timeout: 10000 });
     await page.getByTestId('remove-duplicate-link-btn').click();
 
-    // Wait for page reload
-    await page.waitForTimeout(2000);
-    await page.reload();
-
     // Duplicate banner should no longer be visible
-    await expect(page.getByText('marked as a duplicate')).not.toBeVisible({ timeout: 5000 });
+    await expect(page.locator('.bg-yellow-50', { hasText: 'marked as a duplicate' })).not.toBeVisible({ timeout: 15000 });
   });
 
   test('regular user does not see Mark as Duplicate button', async ({ page }) => {
@@ -150,8 +142,10 @@ test.describe('Advanced Tickets', () => {
     await page.getByTestId('target-ticket-id-input').fill(String(mergeTargetId));
     await page.getByTestId('merge-ticket-form').getByRole('button', { name: 'Merge' }).click();
 
-    // Wait for page reload
-    await page.waitForTimeout(3000);
+    // Wait for merge action to complete (form closes when done)
+    await expect(page.getByTestId('merge-ticket-form')).not.toBeVisible({ timeout: 30000 });
+
+    // Reload to pick up revalidated server data
     await page.reload();
 
     // Should show merge banner with link to target

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { createServerClient } from '@/lib/supabase/server';
+import { createServerClient, createServiceRoleClient } from '@/lib/supabase/server';
 import { cancelCsatSurvey } from '@/lib/actions/csat';
 import { stopResolutionTimer, recalculateSlaTargets } from '@/lib/utils/sla';
 
@@ -57,33 +57,39 @@ export async function mergeTickets(formData: FormData): Promise<void> {
   if (source.duplicate_of_id) return; // Must remove duplicate link first
   if (target.merged_into_id) return; // Cannot merge into a stub
 
+  // Use service role for cross-table data migration (some tables lack UPDATE RLS policies)
+  const svc = createServiceRoleClient();
+
   // Move posts — update is_original on source's original post
-  await supabase
+  const { error: e1 } = await svc
     .from('posts')
     .update({ is_original: false })
     .eq('ticket_id', sourceTicketId)
     .eq('is_original', true);
 
+  if (e1) throw new Error(`Merge failed (is_original): ${e1.message}`);
+
   // Move all posts
-  await supabase
+  const { error: e2 } = await svc
     .from('posts')
     .update({ ticket_id: targetTicketId })
     .eq('ticket_id', sourceTicketId);
 
-  // Move attachments
-  await supabase
-    .from('attachments')
-    .update({ ticket_id: targetTicketId })
-    .eq('ticket_id', sourceTicketId);
+  if (e2) throw new Error(`Merge failed (move posts): ${e2.message}`);
+
+  // Attachments are linked to posts (via post_id), not tickets.
+  // Moving posts above implicitly moves their attachments.
 
   // Move activity log entries
-  await supabase
+  const { error: e4 } = await svc
     .from('activity_log')
     .update({ ticket_id: targetTicketId })
     .eq('ticket_id', sourceTicketId);
 
+  if (e4) throw new Error(`Merge failed (move activity_log): ${e4.message}`);
+
   // Consolidate followers
-  const { data: sourceFollowers } = await supabase
+  const { data: sourceFollowers } = await svc
     .from('ticket_followers')
     .select('user_id')
     .eq('ticket_id', sourceTicketId);
@@ -91,7 +97,7 @@ export async function mergeTickets(formData: FormData): Promise<void> {
   if (sourceFollowers && sourceFollowers.length > 0) {
     // Try to insert each follower for the target (ignore conflicts)
     for (const f of sourceFollowers) {
-      await supabase
+      await svc
         .from('ticket_followers')
         .upsert(
           { ticket_id: targetTicketId, user_id: f.user_id },
@@ -101,7 +107,7 @@ export async function mergeTickets(formData: FormData): Promise<void> {
   }
 
   // Source owner becomes follower of target
-  await supabase
+  await svc
     .from('ticket_followers')
     .upsert(
       { ticket_id: targetTicketId, user_id: source.creator_id },
@@ -109,20 +115,20 @@ export async function mergeTickets(formData: FormData): Promise<void> {
     );
 
   // Delete source followers
-  await supabase
+  await svc
     .from('ticket_followers')
     .delete()
     .eq('ticket_id', sourceTicketId);
 
   // Combine tags
-  const { data: sourceTags } = await supabase
+  const { data: sourceTags } = await svc
     .from('ticket_tags')
     .select('tag_id')
     .eq('ticket_id', sourceTicketId);
 
   if (sourceTags && sourceTags.length > 0) {
     for (const t of sourceTags) {
-      await supabase
+      await svc
         .from('ticket_tags')
         .upsert(
           { ticket_id: targetTicketId, tag_id: t.tag_id },
@@ -130,7 +136,7 @@ export async function mergeTickets(formData: FormData): Promise<void> {
         );
     }
     // Delete source tags
-    await supabase
+    await svc
       .from('ticket_tags')
       .delete()
       .eq('ticket_id', sourceTicketId);
@@ -140,13 +146,13 @@ export async function mergeTickets(formData: FormData): Promise<void> {
   const sourceSev = SEVERITY_ORDER[source.severity] ?? 2;
   const targetSev = SEVERITY_ORDER[target.severity] ?? 2;
   if (sourceSev > targetSev) {
-    await supabase
+    await svc
       .from('tickets')
       .update({ severity: source.severity })
       .eq('id', targetTicketId);
 
     // Log severity change on target
-    await supabase.from('activity_log').insert({
+    await svc.from('activity_log').insert({
       ticket_id: targetTicketId,
       actor_id: user.id,
       action: 'severity_changed',
@@ -166,13 +172,15 @@ export async function mergeTickets(formData: FormData): Promise<void> {
   stopResolutionTimer(sourceTicketId).catch((err) => console.error('[sla]', err));
 
   // Close and mark source as merged
-  await supabase
+  const { error: mergeErr } = await svc
     .from('tickets')
     .update({ merged_into_id: targetTicketId, status: 'closed' })
     .eq('id', sourceTicketId);
 
+  if (mergeErr) throw new Error(`Merge failed (close source): ${mergeErr.message}`);
+
   // Fetch merge post template and insert on source ticket
-  const { data: tpl } = await supabase
+  const { data: tpl } = await svc
     .from('notification_templates')
     .select('body')
     .eq('event_type', 'merge_post')
@@ -181,7 +189,7 @@ export async function mergeTickets(formData: FormData): Promise<void> {
   const templateBody = tpl?.body ?? `This ticket has been merged into [#${targetTicketId}](/tickets/${targetTicketId}).`;
   const renderedBody = templateBody.replace(/\{\{ticketId\}\}/g, String(targetTicketId));
 
-  await supabase.from('posts').insert({
+  await svc.from('posts').insert({
     ticket_id: sourceTicketId,
     author_id: user.id,
     body: renderedBody,
@@ -189,14 +197,14 @@ export async function mergeTickets(formData: FormData): Promise<void> {
   });
 
   // Activity log entries
-  await supabase.from('activity_log').insert({
+  await svc.from('activity_log').insert({
     ticket_id: targetTicketId,
     actor_id: user.id,
     action: 'merged_from',
     details: { source_ticket_id: sourceTicketId },
   });
 
-  await supabase.from('activity_log').insert({
+  await svc.from('activity_log').insert({
     ticket_id: sourceTicketId,
     actor_id: user.id,
     action: 'merged_into',

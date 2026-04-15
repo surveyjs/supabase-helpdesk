@@ -56,29 +56,25 @@ async function sendBulkNotification(
 ): Promise<void> {
   const svc = createServiceRoleClient();
 
-  // Collect unique recipients across all affected tickets
+  // Collect unique recipients across all affected tickets in bulk
   const recipientSet = new Set<string>();
 
-  for (const ticketId of ticketIds) {
-    // Ticket owner
-    const { data: ticket } = await svc
-      .from('tickets')
-      .select('creator_id')
-      .eq('id', ticketId)
-      .single();
-    if (ticket && ticket.creator_id !== actorId) {
-      recipientSet.add(ticket.creator_id);
-    }
+  const [{ data: tickets }, { data: followers }] = await Promise.all([
+    svc.from('tickets').select('id, creator_id').in('id', ticketIds),
+    svc.from('ticket_followers').select('ticket_id, user_id').in('ticket_id', ticketIds),
+  ]);
 
-    // Followers
-    const { data: followers } = await svc
-      .from('ticket_followers')
-      .select('user_id')
-      .eq('ticket_id', ticketId);
-    if (followers) {
-      for (const f of followers) {
-        if (f.user_id !== actorId) recipientSet.add(f.user_id);
+  if (tickets) {
+    for (const ticket of tickets) {
+      if (ticket.creator_id !== actorId) {
+        recipientSet.add(ticket.creator_id);
       }
+    }
+  }
+
+  if (followers) {
+    for (const f of followers) {
+      if (f.user_id !== actorId) recipientSet.add(f.user_id);
     }
   }
 
@@ -87,12 +83,15 @@ async function sendBulkNotification(
 
   // One in-app notification per recipient
   for (const recipientId of recipientSet) {
-    await svc.from('notifications').insert({
+    const { error } = await svc.from('notifications').insert({
       recipient_id: recipientId,
       event_type: 'bulk_action_summary',
-      ticket_id: ticketIds[0],
+      ticket_id: null,
       message,
     });
+    if (error) {
+      console.error('[bulk-notify:insert]', { recipientId, actionType, error });
+    }
   }
 }
 
@@ -380,9 +379,6 @@ export async function bulkDelete(formData: FormData): Promise<void> {
   const ticketIds = parseTicketIds(formData);
   if (ticketIds.length === 0) return;
 
-  const deleted: number[] = [];
-  const skipped: { id: number; reason: string }[] = [];
-
   for (const ticketId of ticketIds) {
     const { data: ticket } = await supabase
       .from('tickets')
@@ -390,15 +386,8 @@ export async function bulkDelete(formData: FormData): Promise<void> {
       .eq('id', ticketId)
       .single();
 
-    if (!ticket) {
-      skipped.push({ id: ticketId, reason: 'not found' });
-      continue;
-    }
-
-    if (ticket.status === 'closed') {
-      skipped.push({ id: ticketId, reason: 'closed ticket' });
-      continue;
-    }
+    if (!ticket) continue;
+    if (ticket.status === 'closed') continue;
 
     // Check duplicate dependents
     const { data: duplicates } = await supabase
@@ -406,10 +395,7 @@ export async function bulkDelete(formData: FormData): Promise<void> {
       .select('id')
       .eq('duplicate_of_id', ticketId);
 
-    if (duplicates && duplicates.length > 0) {
-      skipped.push({ id: ticketId, reason: 'has duplicates pointing to it' });
-      continue;
-    }
+    if (duplicates && duplicates.length > 0) continue;
 
     // Check merge dependents
     const { data: mergeStubs } = await supabase
@@ -417,20 +403,14 @@ export async function bulkDelete(formData: FormData): Promise<void> {
       .select('id')
       .eq('merged_into_id', ticketId);
 
-    if (mergeStubs && mergeStubs.length > 0) {
-      skipped.push({ id: ticketId, reason: 'is merge target' });
-      continue;
-    }
+    if (mergeStubs && mergeStubs.length > 0) continue;
 
     const { error } = await supabase
       .from('tickets')
       .delete()
       .eq('id', ticketId);
 
-    if (error) {
-      skipped.push({ id: ticketId, reason: 'delete failed' });
-      continue;
-    }
+    if (error) continue;
 
     await supabase.from('admin_audit_log').insert({
       admin_id: user.id,
@@ -439,8 +419,6 @@ export async function bulkDelete(formData: FormData): Promise<void> {
       target_id: String(ticketId),
       details: { ticket_title: ticket.title },
     });
-
-    deleted.push(ticketId);
   }
 
   revalidatePath('/agent');

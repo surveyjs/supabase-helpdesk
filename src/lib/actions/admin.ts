@@ -1587,3 +1587,45 @@ export async function adminDeleteUser(formData: FormData): Promise<void> {
 
   revalidatePath('/admin/users');
 }
+
+// ============================================================
+// Inbound Email Settings (§15.1–15.6)
+// ============================================================
+
+export async function updateInboundEmailSettings(
+  formData: FormData,
+): Promise<{ message?: string }> {
+  const { supabase, profile: adminProfile } = await requireAdminRole();
+
+  const enabled = formData.get('inbound_email_enabled') === 'on';
+  const replyToAddress = (formData.get('reply_to_address') as string)?.trim() ?? '';
+
+  // Validate reply-to address when inbound is enabled
+  if (enabled && replyToAddress) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(replyToAddress)) {
+      return { message: 'Error: Reply-to address must be a valid email.' };
+    }
+  }
+
+  if (enabled && !replyToAddress) {
+    return { message: 'Error: Reply-to address is required when inbound email is enabled.' };
+  }
+
+  const settings: Record<string, string> = {
+    inbound_email_enabled: enabled ? 'true' : 'false',
+    inbound_email_reply_to_address: replyToAddress,
+  };
+
+  for (const [key, value] of Object.entries(settings)) {
+    await supabase
+      .from('app_settings')
+      .update({ value })
+      .eq('key', key);
+  }
+
+  await logAudit(supabase, adminProfile.id, 'update_inbound_email_settings', 'app_settings', null, settings);
+
+  revalidatePath('/admin/inbound-email');
+  return { message: 'Inbound email settings saved.' };
+}

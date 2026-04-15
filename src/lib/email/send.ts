@@ -2,13 +2,33 @@ import nodemailer from 'nodemailer';
 import { createServiceRoleClient } from '@/lib/supabase/server';
 
 /**
+ * Fetch inbound email settings for Reply-To header support.
+ */
+async function getInboundEmailSettings(): Promise<{ enabled: boolean; replyToAddress: string }> {
+  const supabase = createServiceRoleClient();
+  const [enabledRes, addressRes] = await Promise.all([
+    supabase.from('app_settings').select('value').eq('key', 'inbound_email_enabled').single(),
+    supabase.from('app_settings').select('value').eq('key', 'inbound_email_reply_to_address').single(),
+  ]);
+  return {
+    enabled: enabledRes.data?.value === 'true',
+    replyToAddress: addressRes.data?.value ?? '',
+  };
+}
+
+/**
  * Send an email using the SMTP configuration stored in the email_config table.
  * If SMTP is not configured or not verified, logs a warning and returns false.
+ *
+ * When inbound email is enabled and a reply-to address is configured,
+ * sets the Reply-To header so recipients can reply directly.
+ * If a ticketId is provided, includes [Ticket #ID] in the subject for thread matching.
  */
 export async function sendEmail(
   to: string,
   subject: string,
   htmlBody: string,
+  options?: { ticketId?: number },
 ): Promise<boolean> {
   try {
     const supabase = createServiceRoleClient();
@@ -47,12 +67,28 @@ export async function sendEmail(
     // Strip CR/LF to prevent email header injection
     const safeSubject = subject.replace(/[\r\n]/g, ' ');
 
-    await transporter.sendMail({
+    // Build mail options
+    const mailOptions: nodemailer.SendMailOptions = {
       from: `"${config.sender_name}" <${config.sender_email}>`,
       to,
       subject: safeSubject,
       html: htmlBody,
-    });
+    };
+
+    // Add Reply-To header and [Ticket #ID] prefix when inbound email is enabled
+    try {
+      const inbound = await getInboundEmailSettings();
+      if (inbound.enabled && inbound.replyToAddress) {
+        mailOptions.replyTo = inbound.replyToAddress;
+        if (options?.ticketId && !safeSubject.includes(`[Ticket #${options.ticketId}]`)) {
+          mailOptions.subject = `[Ticket #${options.ticketId}] ${safeSubject}`;
+        }
+      }
+    } catch {
+      // Non-critical: continue sending without Reply-To
+    }
+
+    await transporter.sendMail(mailOptions);
 
     return true;
   } catch (err) {

@@ -245,7 +245,7 @@ export async function notifyUser(
 
   // Send immediately
   const { subject, html } = await renderTemplate(eventType, placeholders);
-  await sendEmail(recipient.email, subject, html);
+  await sendEmail(recipient.email, subject, html, { ticketId });
 }
 
 /**
@@ -282,7 +282,7 @@ export async function notifyAgent(
 
   // Send immediately
   const { subject, html } = await renderTemplate(eventType, placeholders);
-  await sendEmail(agent.email, subject, html);
+  await sendEmail(agent.email, subject, html, { ticketId });
 }
 
 /**

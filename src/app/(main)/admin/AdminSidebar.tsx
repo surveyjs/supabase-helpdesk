@@ -15,6 +15,7 @@ const SECTIONS = [
   { label: 'Rate Limit', href: '/admin/rate-limit' },
   { label: 'File Uploads', href: '/admin/file-settings' },
   { label: 'Email', href: '/admin/email' },
+  { label: 'Inbound Email', href: '/admin/inbound-email' },
   { label: 'Templates', href: '/admin/templates' },
   { label: 'Duplicate Template', href: '/admin/duplicate-template' },
   { label: 'User Settings', href: '/admin/user-settings' },

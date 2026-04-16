@@ -8,6 +8,7 @@ export type ReportFilters = {
   type?: string;
   category?: string;
   agentId?: string;
+  tier?: string;
 };
 
 export type TicketVolumeRow = { period: string; count: number; status?: string };
@@ -46,7 +47,7 @@ export type BacklogData = {
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function applyFilters(q: any, timeRange: TimeRange, filters?: ReportFilters, agentScope?: string) {
+function applyFilters(q: any, timeRange: TimeRange, filters?: ReportFilters, agentScope?: string, tierCreatorIds?: string[]) {
   let result = q
     .gte('created_at', timeRange.start.toISOString())
     .lte('created_at', timeRange.end.toISOString());
@@ -55,7 +56,22 @@ function applyFilters(q: any, timeRange: TimeRange, filters?: ReportFilters, age
   if (filters?.type) result = result.eq('type_id', filters.type);
   if (filters?.category) result = result.eq('category_id', filters.category);
   if (agentScope) result = result.eq('assigned_agent_id', agentScope);
+  if (tierCreatorIds) result = result.in('creator_id', tierCreatorIds);
   return result;
+}
+
+async function getTierCreatorIds(filters?: ReportFilters, client?: SupabaseClient): Promise<string[] | undefined> {
+  if (!filters?.tier) return undefined;
+  const supabase = client ?? createServiceRoleClient();
+  if (filters.tier === 'none') {
+    const { data } = await supabase.from('profiles').select('id').is('tier_id', null);
+    return (data ?? []).map((p) => p.id);
+  }
+  // Find tier by key then find users with that tier
+  const { data: tier } = await supabase.from('subscription_tiers').select('id').eq('key', filters.tier).single();
+  if (!tier) return [];
+  const { data } = await supabase.from('profiles').select('id').eq('tier_id', tier.id);
+  return (data ?? []).map((p) => p.id);
 }
 
 // ---- Ticket Volume ----
@@ -68,7 +84,9 @@ export async function getTicketVolumeData(
   client?: SupabaseClient,
 ): Promise<TicketVolumeRow[]> {
   const supabase = client ?? createServiceRoleClient();
-  const q = applyFilters(supabase.from('tickets').select('created_at, status'), timeRange, filters, agentScope);
+  const tierCreatorIds = await getTierCreatorIds(filters, supabase);
+  if (tierCreatorIds && tierCreatorIds.length === 0) return [];
+  const q = applyFilters(supabase.from('tickets').select('created_at, status'), timeRange, filters, agentScope, tierCreatorIds);
   const { data: tickets } = await q;
   if (!tickets || tickets.length === 0) return [];
 
@@ -115,12 +133,14 @@ export async function getResolutionMetrics(
   const supabase = client ?? createServiceRoleClient();
 
   // Get tickets with SLA timers joined
+  const tierCreatorIds = await getTierCreatorIds(filters, supabase);
+  if (tierCreatorIds && tierCreatorIds.length === 0) return { avgFirstResponse: 0, avgResolution: 0, medianResolution: 0, bySeverity: {} };
   const q = applyFilters(
     supabase
       .from('tickets')
       .select('id, severity, created_at, sla_timers(first_response_at, resolved_at)')
       .not('sla_timers', 'is', null),
-    timeRange, filters, agentScope,
+    timeRange, filters, agentScope, tierCreatorIds,
   );
   const { data: tickets } = await q;
 
@@ -256,8 +276,22 @@ export async function getCsatSummaryData(
   timeRange: TimeRange,
   agentScope?: string,
   client?: SupabaseClient,
+  filters?: ReportFilters,
 ): Promise<CsatSummaryData> {
   const supabase = client ?? createServiceRoleClient();
+
+  // If tier filter, pre-filter by creator IDs
+  const tierCreatorIds = await getTierCreatorIds(filters, supabase);
+  let tierTicketIds: number[] | null = null;
+  if (tierCreatorIds) {
+    if (tierCreatorIds.length === 0) return { average: 0, distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, trend: [] };
+    const { data: tierTickets } = await supabase
+      .from('tickets')
+      .select('id')
+      .in('creator_id', tierCreatorIds);
+    tierTicketIds = (tierTickets ?? []).map((t) => t.id);
+    if (tierTicketIds.length === 0) return { average: 0, distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, trend: [] };
+  }
 
   let q = supabase
     .from('csat_ratings')
@@ -275,6 +309,11 @@ export async function getCsatSummaryData(
     const ids = (agentTickets || []).map((t) => t.id);
     if (ids.length === 0) return { average: 0, distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, trend: [] };
     q = q.in('ticket_id', ids);
+  }
+
+  // Filter by tier
+  if (tierTicketIds) {
+    q = q.in('ticket_id', tierTicketIds);
   }
 
   const { data: ratings } = await q;

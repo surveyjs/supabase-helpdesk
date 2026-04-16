@@ -61,16 +61,20 @@ export default async function ReportsPage({ searchParams }: Props) {
     severity: typeof params.severity === 'string' ? params.severity : undefined,
     type: typeof params.type === 'string' ? params.type : undefined,
     category: typeof params.category === 'string' ? params.category : undefined,
+    tier: typeof params.tier === 'string' ? params.tier : undefined,
   };
 
   // Fetch filter options for admin
   let types: { id: string; name: string }[] = [];
   let categories: { id: string; name: string }[] = [];
+  let tiers: { key: string; display_name: string }[] = [];
   if (isAdmin) {
     const { data: t } = await svc.from('ticket_types').select('id, name').order('name');
     types = t || [];
     const { data: c } = await svc.from('ticket_categories').select('id, name').order('name');
     categories = c || [];
+    const { data: tr } = await svc.from('subscription_tiers').select('key, display_name').order('sort_order');
+    tiers = tr || [];
   }
 
   // Fetch all report data in parallel
@@ -85,7 +89,7 @@ export default async function ReportsPage({ searchParams }: Props) {
     getTicketVolumeData(timeRange, groupBy, filters, agentScope, svc),
     getResolutionMetrics(timeRange, filters, agentScope, svc),
     getAgentPerformanceData(timeRange, agentScope, svc),
-    getCsatSummaryData(timeRange, agentScope, svc),
+    getCsatSummaryData(timeRange, agentScope, svc, filters),
     getSlaComplianceData(timeRange, agentScope, svc),
     getBacklogData(agentScope, svc),
   ]);
@@ -94,7 +98,7 @@ export default async function ReportsPage({ searchParams }: Props) {
     <div>
       <h1 className="text-2xl font-semibold text-gray-900 mb-6">Reports</h1>
 
-      <ReportControls isAdmin={isAdmin} types={types} categories={categories} />
+      <ReportControls isAdmin={isAdmin} types={types} categories={categories} tiers={tiers} />
 
       <div className="space-y-8">
         <section className="bg-white border border-gray-200 rounded-lg p-6">

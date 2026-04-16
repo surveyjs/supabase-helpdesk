@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { createServerClient } from '@/lib/supabase/server';
 import { requireAdmin } from '@/lib/supabase/auth';
 import { blockUser, unblockUser, adminDeleteUser } from '@/lib/actions/admin';
+import { assignTier } from '@/lib/actions/tiers';
 
 export default async function UsersPage({
   searchParams,
@@ -27,7 +28,7 @@ export default async function UsersPage({
   // Build query
   let query = supabase
     .from('profiles')
-    .select('id, display_name, email, role, team_id, is_blocked, created_at, team:teams(name)', { count: 'exact' })
+    .select('id, display_name, email, role, team_id, is_blocked, created_at, tier_id, tier_expires_at, team:teams(name), tier:subscription_tiers(key, display_name)', { count: 'exact' })
     .order('created_at', { ascending: false })
     .range(offset, offset + pageSize - 1);
 
@@ -52,6 +53,12 @@ export default async function UsersPage({
 
   const { data: users, count } = await query;
   const totalPages = Math.ceil((count ?? 0) / pageSize);
+
+  // Fetch available tiers for assignment
+  const { data: allTiers } = await supabase
+    .from('subscription_tiers')
+    .select('id, key, display_name')
+    .order('sort_order');
 
   function buildUrl(overrides: Record<string, string>) {
     const p = new URLSearchParams();
@@ -154,6 +161,7 @@ export default async function UsersPage({
               <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
               <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
               <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Team</th>
+              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Tier</th>
               <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
               <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
               <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -162,12 +170,14 @@ export default async function UsersPage({
           <tbody className="divide-y divide-gray-200">
             {(!users || users.length === 0) ? (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
+                <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
                   No users found.
                 </td>
               </tr>
             ) : users.map((user) => {
               const team = Array.isArray(user.team) ? user.team[0] : user.team;
+              const tierObj = Array.isArray(user.tier) ? user.tier[0] : user.tier;
+              const tierExpired = user.tier_expires_at && new Date(user.tier_expires_at) < new Date();
               const status = getUserStatus(user);
               const isAgentOrAdmin = user.role === 'agent' || user.role === 'admin';
               return (
@@ -183,6 +193,35 @@ export default async function UsersPage({
                   <td className="px-4 py-3 text-gray-600">{user.email}</td>
                   <td className="px-4 py-3 capitalize text-gray-600">{user.role}</td>
                   <td className="px-4 py-3 text-gray-600">{team?.name ?? '—'}</td>
+                  <td className="px-4 py-3 text-gray-600" data-testid={`user-tier-${user.id}`}>
+                    {tierObj ? (
+                      <span className={tierExpired ? 'text-gray-400 line-through' : ''}>
+                        {tierObj.display_name}
+                      </span>
+                    ) : '—'}
+                    {allTiers && allTiers.length > 0 && (
+                      <details className="mt-1">
+                        <summary className="text-xs text-blue-600 cursor-pointer">Change</summary>
+                        <form action={assignTier} className="mt-1 flex flex-col gap-1">
+                          <input type="hidden" name="user_id" value={user.id} />
+                          <select name="tier_id" defaultValue={user.tier_id ?? 'none'} className="rounded border border-gray-300 px-1 py-0.5 text-xs">
+                            <option value="none">None</option>
+                            {allTiers.map((t) => (
+                              <option key={t.id} value={t.id}>{t.display_name}</option>
+                            ))}
+                          </select>
+                          <input
+                            name="expires_at"
+                            type="datetime-local"
+                            defaultValue={user.tier_expires_at ? new Date(user.tier_expires_at).toISOString().slice(0, 16) : ''}
+                            className="rounded border border-gray-300 px-1 py-0.5 text-xs"
+                            aria-label="Tier expiration"
+                          />
+                          <button type="submit" className="px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200">Save</button>
+                        </form>
+                      </details>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusBadgeClass[status]}`}>
                       {status}

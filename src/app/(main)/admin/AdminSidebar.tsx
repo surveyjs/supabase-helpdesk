@@ -24,6 +24,7 @@ const SECTIONS = [
   { label: 'KB Categories', href: '/admin/kb-categories' },
   { label: 'User Management', href: '/admin/users' },
   { label: 'AI Configuration', href: '/admin/ai' },
+  { label: 'Subscription Tiers', href: '/admin/tiers' },
   { label: 'Audit Log', href: '/admin/audit-log' },
 ];
 

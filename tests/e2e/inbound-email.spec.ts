@@ -12,8 +12,23 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Log in' }).click();
-  await expect(page).toHaveURL('/', { timeout: 10000 });
-  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 10000 });
+
+  // Retry once on transient auth failure (rate-limit / timing)
+  try {
+    await expect(page).toHaveURL('/', { timeout: 10000 });
+  } catch {
+    // Only retry if we're actually on the login page (not already logged in)
+    if (page.url().includes('/login')) {
+      await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
+      await page.goto('/login');
+      await page.getByLabel('Email').fill(email);
+      await page.getByLabel('Password').fill(password);
+      await page.getByRole('button', { name: 'Log in' }).click();
+      await expect(page).toHaveURL('/', { timeout: 15000 });
+    }
+  }
+
+  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 15000 });
 }
 
 /** Navigate to an admin page, retrying once if requireAdmin() redirect race occurs. */
@@ -69,7 +84,8 @@ test.describe('Inbound Email Admin Configuration', () => {
 
     // Reload and verify persisted
     await page.reload();
-    await expect(page.getByLabel(/Enable inbound email/i)).toBeChecked();
+    await expect(page.getByRole('heading', { name: 'Inbound Email' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByLabel(/Enable inbound email/i)).toBeChecked({ timeout: 10000 });
   });
 
   test('set reply-to address with validation', async ({ page }) => {
@@ -377,12 +393,17 @@ test.describe('New Ticket Creation by Email', () => {
 
     expect(response.status()).toBe(200);
 
-    // Verify ticket was created
-    const { data: ticket } = await svc
-      .from('tickets')
-      .select('id, title, status, urgency, creator_id')
-      .eq('title', uniqueSubject)
-      .single();
+    // Verify ticket was created (poll briefly — triggers may need a moment)
+    let ticket: { id: number; title: string; status: string; urgency: string; creator_id: string } | null = null;
+    for (let i = 0; i < 10; i++) {
+      const { data } = await svc
+        .from('tickets')
+        .select('id, title, status, urgency, creator_id')
+        .eq('title', uniqueSubject)
+        .single();
+      if (data) { ticket = data; break; }
+      await new Promise(r => setTimeout(r, 500));
+    }
 
     expect(ticket).toBeTruthy();
     expect(ticket!.title).toBe(uniqueSubject);
@@ -479,8 +500,8 @@ test.describe('Reply by Email', () => {
 
     // Poll for status change (webhook processing may take a moment)
     let updated: { status: string } | null = null;
-    for (let i = 0; i < 10; i++) {
-      await new Promise((r) => setTimeout(r, 1000));
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 500));
       const { data } = await svc
         .from('tickets')
         .select('status')

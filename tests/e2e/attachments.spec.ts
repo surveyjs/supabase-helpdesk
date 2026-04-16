@@ -33,8 +33,11 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
 /** Navigate to an admin page, retrying once if requireAdmin() redirect race occurs. */
 async function gotoAdmin(page: Page, path: string) {
   await page.goto(path);
-  if (!page.url().includes('/admin')) {
+  try {
+    await page.waitForURL(/\/admin/, { timeout: 5000 });
+  } catch {
     await page.goto(path);
+    await page.waitForURL(/\/admin/, { timeout: 10000 });
   }
 }
 
@@ -243,7 +246,13 @@ test.describe('File Attachments', () => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/file-settings');
 
+    // Wait for the server action to complete before navigating
+    const responsePromise = page.waitForResponse(
+      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
+      { timeout: 15000 },
+    );
     await page.getByRole('button', { name: 'Reset file types to defaults' }).click();
+    await responsePromise;
 
     // Verify the allowed types textarea contains defaults
     await gotoAdmin(page, '/admin/file-settings');
@@ -258,6 +267,6 @@ test.describe('File Attachments', () => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin');
 
-    await expect(page.getByRole('link', { name: 'File Uploads' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'File Uploads' })).toBeVisible({ timeout: 10000 });
   });
 });

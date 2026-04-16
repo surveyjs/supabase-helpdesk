@@ -25,6 +25,7 @@ const SECTIONS = [
   { label: 'User Management', href: '/admin/users' },
   { label: 'AI Configuration', href: '/admin/ai' },
   { label: 'Subscription Tiers', href: '/admin/tiers' },
+  { label: 'Authentication', href: '/admin/auth' },
   { label: 'Audit Log', href: '/admin/audit-log' },
 ];
 

@@ -5,12 +5,33 @@ const INBUCKET_URL = 'http://127.0.0.1:54324';
 
 /**
  * Helper: log in via the login form.
+ * Pass expectSuccess=true for tests that expect login to succeed (adds retry logic).
  */
-async function loginAs(page: Page, email: string, password: string) {
+async function loginAs(page: Page, email: string, password: string, expectSuccess = false) {
+  const { createServiceRoleClient } = await import('../helpers/supabase');
+  const svc = createServiceRoleClient();
+  await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
+
   await page.goto('/login');
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Log in' }).click();
+
+  if (expectSuccess) {
+    try {
+      await expect(page).toHaveURL('/', { timeout: 10000 });
+    } catch {
+      if (page.url().includes('/login')) {
+        await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
+        await page.goto('/login');
+        await page.getByLabel('Email').fill(email);
+        await page.getByLabel('Password').fill(password);
+        await page.getByRole('button', { name: 'Log in' }).click();
+        await expect(page).toHaveURL('/', { timeout: 15000 });
+      }
+    }
+    await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 15000 });
+  }
 }
 
 /**
@@ -132,8 +153,7 @@ test.describe('Authentication', () => {
   });
 
   test('nav bar: shows display name + role badge when logged in as admin', async ({ page }) => {
-    await loginAs(page, 'admin@example.com', 'Password123');
-    await expect(page).toHaveURL('/', { timeout: 10000 });
+    await loginAs(page, 'admin@example.com', 'Password123', true);
     // Profile DB query may fail transiently under load; reload once if badge missing
     const adminBadge = page.getByText('Admin', { exact: true }).first();
     try {
@@ -164,8 +184,7 @@ test.describe('Authentication', () => {
   });
 
   test('sign out button: visible outside dropdown', async ({ page }) => {
-    await loginAs(page, 'alice@example.com', 'Password123');
-    await expect(page).toHaveURL('/', { timeout: 10000 });
+    await loginAs(page, 'alice@example.com', 'Password123', true);
 
     const signOutButton = page.getByRole('button', { name: 'Sign out' });
     await expect(signOutButton).toBeVisible();

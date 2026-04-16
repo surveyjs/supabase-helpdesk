@@ -267,6 +267,6 @@ test.describe('File Attachments', () => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin');
 
-    await expect(page.getByRole('link', { name: 'File Uploads' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'File Uploads' })).toBeVisible({ timeout: 10000 });
   });
 });

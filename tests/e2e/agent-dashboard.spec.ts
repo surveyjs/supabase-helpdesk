@@ -161,13 +161,23 @@ test.describe('Agent Ticket Detail Controls', () => {
     // Find and click "Mark Pending"
     const pendingBtn = page.getByRole('button', { name: 'Mark Pending' });
     await expect(pendingBtn).toBeVisible({ timeout: 10000 });
+    const pendingResp = page.waitForResponse(
+      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
+      { timeout: 15000 },
+    );
     await pendingBtn.click();
+    await pendingResp;
     await expect(page.getByTestId('agent-controls').getByText('Pending')).toBeVisible({ timeout: 10000 });
 
     // Re-open
     const reopenBtn = page.getByRole('button', { name: 'Mark Open' });
     await expect(reopenBtn).toBeVisible({ timeout: 10000 });
+    const openResp = page.waitForResponse(
+      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
+      { timeout: 15000 },
+    );
     await reopenBtn.click();
+    await openResp;
     await expect(page.getByTestId('agent-controls').getByText('Open')).toBeVisible({ timeout: 10000 });
   });
 
@@ -240,6 +250,9 @@ test.describe('Agent Ticket Detail Controls', () => {
 
     if (!unassigned) return; // skip if no unassigned tickets
 
+    // Ensure ticket is truly unassigned (cleanup from prior test runs)
+    await admin.from('tickets').update({ assigned_agent_id: null }).eq('id', unassigned.id);
+
     await page.goto(`/tickets/${unassigned.id}/${unassigned.slug}`);
     // Wait for page to load
     await expect(page.getByRole('heading', { name: unassigned.title })).toBeVisible({ timeout: 10000 });
@@ -277,16 +290,29 @@ test.describe('Agent Ticket Detail Controls', () => {
 
     if (!tickets || tickets.length === 0) return;
 
+    // Ensure ticket is truly unassigned (cleanup from prior test runs)
+    await admin.from('tickets').update({ assigned_agent_id: null }).eq('id', tickets[0].id);
+
     await page.goto(`/tickets/${tickets[0].id}/${tickets[0].slug}`);
     const btn = page.getByRole('button', { name: 'Assign to me' });
     await expect(btn).toBeVisible({ timeout: 10000 });
+    const assignResp = page.waitForResponse(
+      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
+      { timeout: 15000 },
+    );
     await btn.click();
+    await assignResp;
     await expect(btn).toBeHidden({ timeout: 15000 });
     await expect(page.getByRole('main').getByText('Agent Smith', { exact: true })).toBeVisible({ timeout: 10000 });
     // Cleanup: unassign
     const unassignBtn = page.getByRole('button', { name: 'Unassign' });
     await expect(unassignBtn).toBeVisible({ timeout: 10000 });
+    const unassignResp = page.waitForResponse(
+      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
+      { timeout: 15000 },
+    );
     await unassignBtn.click();
+    await unassignResp;
     await expect(unassignBtn).toBeHidden({ timeout: 15000 });
   });
 

@@ -201,31 +201,35 @@ export async function updateSocialProvider(formData: FormData): Promise<{ error?
   const tenantId = (formData.get('tenant_id') as string ?? '').trim();
   const instanceUrl = (formData.get('instance_url') as string ?? '').trim();
 
-  // Validate: if enabling, client_id and client_secret are required
-  if (enabled && !clientId && !clientSecret) {
-    // Check if credentials already exist in vault
-    const svc = createServiceRoleClient();
-    const { data: hasId } = await svc.rpc('has_oauth_secret', { secret_name: `auth_${provider}_client_id` });
-    if (!hasId) {
+  const svc = createServiceRoleClient();
+
+  // Validate: if enabling, both client_id and client_secret must exist
+  // either in the submitted form or already stored in Vault.
+  if (enabled) {
+    const hasClientId = !!clientId || !!(await svc.rpc('has_oauth_secret', { secret_name: `auth_${provider}_client_id` })).data;
+    const hasClientSecret = !!clientSecret || !!(await svc.rpc('has_oauth_secret', { secret_name: `auth_${provider}_client_secret` })).data;
+
+    if (!hasClientId || !hasClientSecret) {
       return { error: 'Client ID and Client Secret are required when enabling a provider.' };
     }
   }
 
   // Store credentials in Vault if provided
-  const svc = createServiceRoleClient();
   if (clientId) {
-    await svc.rpc('store_oauth_secret', {
+    const { error: idErr } = await svc.rpc('store_oauth_secret', {
       secret_name: `auth_${provider}_client_id`,
       secret_value: clientId,
       secret_description: `${provider} OAuth client ID`,
     });
+    if (idErr) return { error: `Failed to store Client ID: ${idErr.message}` };
   }
   if (clientSecret) {
-    await svc.rpc('store_oauth_secret', {
+    const { error: secretErr } = await svc.rpc('store_oauth_secret', {
       secret_name: `auth_${provider}_client_secret`,
       secret_value: clientSecret,
       secret_description: `${provider} OAuth client secret`,
     });
+    if (secretErr) return { error: `Failed to store Client Secret: ${secretErr.message}` };
   }
 
   // Update settings
@@ -279,18 +283,20 @@ export async function updateExternalProvider(formData: FormData): Promise<{ erro
   // Store credentials in Vault if provided
   const svc = createServiceRoleClient();
   if (clientId) {
-    await svc.rpc('store_oauth_secret', {
+    const { error: idErr } = await svc.rpc('store_oauth_secret', {
       secret_name: 'auth_external_client_id',
       secret_value: clientId,
       secret_description: 'External OIDC client ID',
     });
+    if (idErr) return { error: `Failed to store Client ID: ${idErr.message}` };
   }
   if (clientSecret) {
-    await svc.rpc('store_oauth_secret', {
+    const { error: secretErr } = await svc.rpc('store_oauth_secret', {
       secret_name: 'auth_external_client_secret',
       secret_value: clientSecret,
       secret_description: 'External OIDC client secret',
     });
+    if (secretErr) return { error: `Failed to store Client Secret: ${secretErr.message}` };
   }
 
   // Update settings

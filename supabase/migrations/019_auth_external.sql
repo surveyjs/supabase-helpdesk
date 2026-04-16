@@ -80,3 +80,13 @@ BEGIN
   RETURN found;
 END;
 $$;
+
+-- Restrict Vault helper functions to service_role only
+REVOKE EXECUTE ON FUNCTION store_oauth_secret(TEXT, TEXT, TEXT) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION get_oauth_secret(TEXT) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION delete_oauth_secret(TEXT) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION has_oauth_secret(TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION store_oauth_secret(TEXT, TEXT, TEXT) TO service_role;
+GRANT EXECUTE ON FUNCTION get_oauth_secret(TEXT) TO service_role;
+GRANT EXECUTE ON FUNCTION delete_oauth_secret(TEXT) TO service_role;
+GRANT EXECUTE ON FUNCTION has_oauth_secret(TEXT) TO service_role;

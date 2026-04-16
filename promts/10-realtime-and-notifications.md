@@ -258,5 +258,7 @@ Update `src/components/layout/NavBar.tsx`:
 - [ ] Agent dashboard updates in real-time (new tickets, status changes)
 - [ ] Notification cleanup: old read notifications cleaned up
 - [ ] Real-time only for authenticated users (no subscriptions for visitors)
+- [ ] `npm run typecheck` passes with no errors
+- [ ] `npm run lint` passes with no errors
 - [ ] `npm run test:db` passes in-app notification tests
 - [ ] `npm run test:e2e` passes realtime/notification e2e tests

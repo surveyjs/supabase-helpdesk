@@ -241,5 +241,7 @@ Extend `supabase/seed.sql` (created in Phase 2) to add:
 - [ ] Public tickets browsable separately
 - [ ] Rate limit blocks excessive creation
 - [ ] Markdown renders safely (XSS protection)
+- [ ] `npm run typecheck` passes with no errors
+- [ ] `npm run lint` passes with no errors
 - [ ] `npm run test:db` passes ticket tests
 - [ ] `npm run test:e2e` passes ticket e2e tests

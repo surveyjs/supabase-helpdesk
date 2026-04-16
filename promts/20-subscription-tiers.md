@@ -531,5 +531,7 @@ Update `src/app/(main)/tickets/[id]/[slug]/page.tsx`:
 - [ ] External API: logged in admin audit log with actor "API"
 - [ ] Shared secret stored in Supabase Vault, shown masked with Copy/Regenerate
 - [ ] Deleting a tier revokes assignments immediately
+- [ ] `npm run typecheck` passes with no errors
+- [ ] `npm run lint` passes with no errors
 - [ ] `npm run test:db` passes subscription-tiers tests
 - [ ] `npm run test:e2e` passes subscription-tiers tests

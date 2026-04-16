@@ -354,5 +354,7 @@ Reorder sidebar to have a logical flow:
 - [ ] Admin default preferences apply to new users
 - [ ] Template customization works with placeholders
 - [ ] Audit log captures email config and template changes
+- [ ] `npm run typecheck` passes with no errors
+- [ ] `npm run lint` passes with no errors
 - [ ] `npm run test:db` passes notification tests
 - [ ] `npm run test:e2e` passes notification e2e tests

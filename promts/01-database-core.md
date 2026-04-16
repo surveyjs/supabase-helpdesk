@@ -610,6 +610,8 @@ Use the test helper from `tests/helpers/supabase.ts` to create authenticated cli
 - [ ] All tables created with correct columns and constraints
 - [ ] All helper functions return correct results
 - [ ] RLS policies enforce access rules correctly
+- [ ] `npm run typecheck` passes with no errors
+- [ ] `npm run lint` passes with no errors
 - [ ] `npm run test:db` passes all database tests
 - [ ] `agent_tickets` VIEW returns correct joined data
 - [ ] Content-length CHECK constraints reject oversized inputs

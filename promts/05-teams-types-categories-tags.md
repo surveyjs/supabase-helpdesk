@@ -212,5 +212,7 @@ Update `src/components/layout/NavBar.tsx`:
 - [ ] Admin can manage teams (CRUD + member management)
 - [ ] Non-admin redirected from admin pages
 - [ ] Deleting in-use types/categories shows error
+- [ ] `npm run typecheck` passes with no errors
+- [ ] `npm run lint` passes with no errors
 - [ ] `npm run test:db` passes teams/tags tests
 - [ ] `npm run test:e2e` passes teams/tags e2e tests

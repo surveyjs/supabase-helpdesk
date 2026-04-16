@@ -488,5 +488,7 @@ These should integrate into the existing admin notification templates management
 - [ ] Agent dashboard: checkboxes, "Select all", bulk action toolbar
 - [ ] Admin template sections: duplicate, merge post, merge banner, bulk summary editable
 - [ ] Activity log entries for all operations (duplicate, merge, bulk)
+- [ ] `npm run typecheck` passes with no errors
+- [ ] `npm run lint` passes with no errors
 - [ ] `npm run test:db` passes advanced-tickets tests
 - [ ] `npm run test:e2e` passes advanced-tickets e2e tests

@@ -309,5 +309,7 @@ Implement progressive disclosure for long tickets:
 - [ ] Collapsible timeline works for long tickets
 - [ ] Activity log entries display inline in the timeline
 - [ ] Markdown renders correctly (tables, code blocks, links)
+- [ ] `npm run typecheck` passes with no errors
+- [ ] `npm run lint` passes with no errors
 - [ ] `npm run test:db` passes post/comment tests
 - [ ] `npm run test:e2e` passes post/comment e2e tests

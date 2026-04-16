@@ -349,5 +349,7 @@ Update `src/lib/email/send.ts`:
 - [ ] Outbound emails include `Reply-To` header and `[Ticket #ID]` in subject when inbound is enabled
 - [ ] AI features (auto-categorization, duplicate detection) NOT applied to email-created tickets
 - [ ] Webhook endpoint returns 200 OK for all outcomes
+- [ ] `npm run typecheck` passes with no errors
+- [ ] `npm run lint` passes with no errors
 - [ ] `npm run test:db` passes inbound-email tests
 - [ ] `npm run test:e2e` passes inbound-email tests

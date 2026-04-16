@@ -380,5 +380,7 @@ Update `src/components/layout/NavBar.tsx`:
 - [ ] User settings (display name uniqueness) toggle works
 - [ ] Audit log captures all admin actions
 - [ ] Audit log filters work (action type, admin, date range)
+- [ ] `npm run typecheck` passes with no errors
+- [ ] `npm run lint` passes with no errors
 - [ ] `npm run test:db` passes admin tests
 - [ ] `npm run test:e2e` passes admin setup e2e tests

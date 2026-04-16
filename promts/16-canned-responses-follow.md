@@ -279,5 +279,7 @@ Extend `supabase/seed.sql` per `docs/seed-data.md`:
 - [ ] Custom field changes logged in activity_log
 - [ ] NavBar: "Canned Responses" link visible to agents
 - [ ] Seed data: 2 canned responses, custom field values on 3 tickets
+- [ ] `npm run typecheck` passes with no errors
+- [ ] `npm run lint` passes with no errors
 - [ ] `npm run test:db` passes canned responses/follow tests
 - [ ] `npm run test:e2e` passes canned responses/follow e2e tests

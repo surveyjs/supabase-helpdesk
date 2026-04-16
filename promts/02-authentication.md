@@ -200,5 +200,7 @@ Create migration **`supabase/migrations/002_auth.sql`**:
 - [ ] Unauthenticated users are redirected to `/login`
 - [ ] NavBar shows user info when logged in
 - [ ] Seed data creates all test users with correct roles
+- [ ] `npm run typecheck` passes with no errors
+- [ ] `npm run lint` passes with no errors
 - [ ] `npm run test:db` passes auth-related tests
 - [ ] `npm run test:e2e` passes auth e2e tests

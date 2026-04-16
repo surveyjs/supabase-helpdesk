@@ -318,4 +318,6 @@ Update `playwright.config.ts` to include Firefox and WebKit projects for the cro
 - [ ] Server-side validation returns descriptive error messages
 - [ ] axe-core audit passes WCAG 2.1 AA on all key pages
 - [ ] Cross-browser smoke tests pass on Chromium, Firefox, WebKit
+- [ ] `npm run typecheck` passes with no errors
+- [ ] `npm run lint` passes with no errors
 - [ ] `npm run test:e2e` passes polish and accessibility tests

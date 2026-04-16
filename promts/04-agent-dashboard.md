@@ -235,5 +235,7 @@ The following features extend the agent dashboard and are NOT part of this phase
 - [ ] Saved views: create, apply, rename, delete all work
 - [ ] Stats panel shows correct assigned/resolved counts for last 30 days
 - [ ] Stats panel CSAT and SLA metrics show "N/A"
+- [ ] `npm run typecheck` passes with no errors
+- [ ] `npm run lint` passes with no errors
 - [ ] `npm run test:db` passes agent tests
 - [ ] `npm run test:e2e` passes agent dashboard tests

@@ -405,5 +405,7 @@ Extend `supabase/seed.sql` per `docs/seed-data.md`:
 - [ ] NavBar: "Help Center" link conditional on visibility, "Manage Articles" for agents
 - [ ] KB visibility checkbox: editable by admin, read-only for agents
 - [ ] Seed data: 2 categories, 3 articles
+- [ ] `npm run typecheck` passes with no errors
+- [ ] `npm run lint` passes with no errors
 - [ ] `npm run test:db` passes KB tests
 - [ ] `npm run test:e2e` passes KB e2e tests

@@ -335,5 +335,7 @@ Update the Admin Setup sidebar navigation (created in Phase 7) to include the "C
 - [ ] CSAT toggle disabled when email not configured
 - [ ] Activity log records CSAT submission
 - [ ] Assigned agent notified on rating submission
+- [ ] `npm run typecheck` passes with no errors
+- [ ] `npm run lint` passes with no errors
 - [ ] `npm run test:db` passes CSAT tests
 - [ ] `npm run test:e2e` passes CSAT e2e tests

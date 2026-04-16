@@ -237,5 +237,7 @@ Add a new section to the admin sidebar:
 - [ ] Post deletion cascades to attachments (DB + Storage)
 - [ ] Admin file settings page works (types, size, count)
 - [ ] Activity log records uploads and deletions
+- [ ] `npm run typecheck` passes with no errors
+- [ ] `npm run lint` passes with no errors
 - [ ] `npm run test:db` passes attachment tests
 - [ ] `npm run test:e2e` passes attachment e2e tests

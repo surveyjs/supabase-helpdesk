@@ -282,5 +282,7 @@ Update the agent dashboard and ticket detail pages (§22.3):
 - [ ] Block indicator badge visible on dashboard and ticket detail
 - [ ] Admin can delete user accounts (with anonymization)
 - [ ] All changes logged to admin audit log
+- [ ] `npm run typecheck` passes with no errors
+- [ ] `npm run lint` passes with no errors
 - [ ] `npm run test:db` passes user profile tests
 - [ ] `npm run test:e2e` passes user profile e2e tests

@@ -186,4 +186,6 @@ Update `src/components/layout/NavBar.tsx`:
 - [ ] CSV export generates valid CSV and triggers download
 - [ ] URL state preserved (time range, filters)
 - [ ] NavBar: "Reports" link visible to agents/admins only
+- [ ] `npm run typecheck` passes with no errors
+- [ ] `npm run lint` passes with no errors
 - [ ] `npm run test:e2e` passes reports e2e tests

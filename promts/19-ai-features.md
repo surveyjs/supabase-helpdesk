@@ -449,5 +449,7 @@ Add a new sidebar section to the admin setup page:
 - [ ] Usage counter: shows monthly API calls and token usage by feature
 - [ ] All AI failures handled gracefully (empty suggestions, error messages)
 - [ ] Timeout configured and enforced per feature
+- [ ] `npm run typecheck` passes with no errors
+- [ ] `npm run lint` passes with no errors
 - [ ] `npm run test:db` passes AI feature tests
 - [ ] `npm run test:e2e` passes AI feature tests

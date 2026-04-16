@@ -394,5 +394,7 @@ Extend `supabase/seed.sql` per `docs/seed-data.md`:
 - [ ] No duplicate notifications (dedup table)
 - [ ] Agent stats panel includes SLA compliance rate
 - [ ] Seed data: 1 policy, severity mappings, 3 tickets with overridden severity
+- [ ] `npm run typecheck` passes with no errors
+- [ ] `npm run lint` passes with no errors
 - [ ] `npm run test:db` passes SLA tests
 - [ ] `npm run test:e2e` passes SLA e2e tests

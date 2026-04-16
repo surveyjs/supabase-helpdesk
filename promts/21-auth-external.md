@@ -284,5 +284,7 @@ All changes recorded in admin audit log.
 - [ ] Auto-redirect does not affect public pages
 - [ ] Mode switching confirms with admin
 - [ ] All auth changes recorded in admin audit log
+- [ ] `npm run typecheck` passes with no errors
+- [ ] `npm run lint` passes with no errors
 - [ ] `npm run test:db` passes auth-external tests
 - [ ] `npm run test:e2e` passes auth-external tests

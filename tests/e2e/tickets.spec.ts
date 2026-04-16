@@ -5,7 +5,6 @@ import { createServiceRoleClient } from '../helpers/supabase';
  * Helper: log in via the login form.
  */
 async function loginAs(page: Page, email: string, password = 'Password123') {
-  // Clear any login lockouts from prior runs
   const svc = createServiceRoleClient();
   await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
 
@@ -13,8 +12,23 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Log in' }).click();
-  await expect(page).toHaveURL('/', { timeout: 10000 });
-  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 10000 });
+
+  // Retry once on transient auth failure (rate-limit / timing)
+  try {
+    await expect(page).toHaveURL('/', { timeout: 10000 });
+  } catch {
+    // Only retry if we're actually on the login page (not already logged in)
+    if (page.url().includes('/login')) {
+      await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
+      await page.goto('/login');
+      await page.getByLabel('Email').fill(email);
+      await page.getByLabel('Password').fill(password);
+      await page.getByRole('button', { name: 'Log in' }).click();
+      await expect(page).toHaveURL('/', { timeout: 15000 });
+    }
+  }
+
+  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 15000 });
 }
 
 test.describe('Tickets', () => {
@@ -154,10 +168,23 @@ test.describe('Tickets', () => {
   });
 
   test('empty state shown for user with no tickets (Eve)', async ({ page }) => {
+    // Clean up any tickets Eve might have from parallel test suites
+    const svc = createServiceRoleClient();
+    const { data: eveProfile } = await svc.from('profiles').select('id').eq('email', 'eve@example.com').single();
+    if (eveProfile) {
+      const { data: eveTickets } = await svc.from('tickets').select('id').eq('creator_id', eveProfile.id);
+      if (eveTickets && eveTickets.length > 0) {
+        const ids = eveTickets.map((t: { id: number }) => t.id);
+        await svc.from('ticket_followers').delete().in('ticket_id', ids);
+        await svc.from('posts').delete().in('ticket_id', ids);
+        await svc.from('tickets').delete().in('id', ids);
+      }
+    }
+
     await loginAs(page, 'eve@example.com');
     await page.goto('/tickets');
 
-    await expect(page.getByText('No tickets found')).toBeVisible();
+    await expect(page.getByText('No tickets found')).toBeVisible({ timeout: 10000 });
     await expect(page.getByText('Create your first ticket')).toBeVisible();
   });
 

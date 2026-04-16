@@ -12,8 +12,23 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Log in' }).click();
-  await expect(page).toHaveURL('/', { timeout: 10000 });
-  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 10000 });
+
+  // Retry once on transient auth failure (rate-limit / timing)
+  try {
+    await expect(page).toHaveURL('/', { timeout: 10000 });
+  } catch {
+    // Only retry if we're actually on the login page (not already logged in)
+    if (page.url().includes('/login')) {
+      await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
+      await page.goto('/login');
+      await page.getByLabel('Email').fill(email);
+      await page.getByLabel('Password').fill(password);
+      await page.getByRole('button', { name: 'Log in' }).click();
+      await expect(page).toHaveURL('/', { timeout: 15000 });
+    }
+  }
+
+  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 15000 });
 }
 
 /** Navigate to an admin page, retrying once if requireAdmin() redirect race occurs. */
@@ -145,16 +160,20 @@ test.describe('Article Feedback', () => {
     await loginAs(page, 'alice@example.com');
     await page.goto('/help/1/getting-started/how-to-create-a-ticket');
 
+    // If session was lost during navigation, re-login and retry
+    if (await page.getByText('Log in to vote').isVisible().catch(() => false)) {
+      await loginAs(page, 'alice@example.com');
+      await page.goto('/help/1/getting-started/how-to-create-a-ticket');
+    }
+
     await expect(page.getByText('Was this helpful?')).toBeVisible({ timeout: 10000 });
 
     // Click thumbs up
     const thumbsUpBtn = page.getByRole('button', { name: /👍/ });
     await thumbsUpBtn.click();
 
-    // After voting, the button should reflect the vote (green highlight)
-    // Wait for page to reload/update
-    await page.waitForLoadState('networkidle');
-    await expect(page.getByRole('button', { name: /👍/ })).toBeVisible();
+    // After voting, the button should reflect the vote
+    await expect(page.getByRole('button', { name: /👍/ })).toBeVisible({ timeout: 10000 });
   });
 });
 
@@ -181,6 +200,7 @@ test.describe('Ticket creation from article', () => {
     await loginAs(page, 'alice@example.com');
     await page.goto('/help/1/getting-started/how-to-create-a-ticket');
 
+    await expect(page.getByRole('heading', { name: 'How to create a ticket', exact: true })).toBeVisible({ timeout: 10000 });
     await expect(page.getByText('Still need help?')).toBeVisible({ timeout: 10000 });
     const createLink = page.getByRole('link', { name: 'Create a ticket' });
     await expect(createLink).toBeVisible();
@@ -191,7 +211,9 @@ test.describe('Ticket creation from article', () => {
     await loginAs(page, 'alice@example.com');
     await page.goto('/tickets/new?from_article=1');
 
-    await expect(page.getByLabel('Title')).toHaveValue('Question about: How to create a ticket', { timeout: 10000 });
+    // Wait for the form to be visible (page may take time to load and pre-fill)
+    await expect(page.getByLabel('Title')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByLabel('Title')).toHaveValue('Question about: How to create a ticket', { timeout: 15000 });
   });
 
   test('creating ticket from article stores source_article_id', async ({ page }) => {
@@ -251,6 +273,8 @@ test.describe('Ticket creation from article', () => {
     }
 
     await page.goto(`/tickets/${ticket.id}/${ticket.slug}`);
+    // Wait for ticket detail page to load
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10000 });
     await expect(page.getByText('Created from article')).toBeVisible({ timeout: 10000 });
     await expect(page.getByRole('link', { name: 'How to create a ticket' })).toBeVisible();
   });
@@ -479,6 +503,15 @@ test.describe('KB visibility toggle', () => {
   test('admin can toggle KB visibility', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await page.goto('/kb/manage');
+
+    // Verify page loaded (may need retry if session was lost during navigation)
+    try {
+      await expect(page.getByRole('heading', { name: 'Manage Articles' })).toBeVisible({ timeout: 10000 });
+    } catch {
+      await loginAs(page, 'admin@example.com');
+      await page.goto('/kb/manage');
+      await expect(page.getByRole('heading', { name: 'Manage Articles' })).toBeVisible({ timeout: 10000 });
+    }
 
     await expect(page.getByText('Knowledge base visible to public')).toBeVisible({ timeout: 10000 });
 

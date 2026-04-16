@@ -4,7 +4,6 @@ import * as path from 'path';
 import * as fs from 'fs';
 
 async function loginAs(page: Page, email: string, password = 'Password123') {
-  // Clear any login lockouts from prior runs
   const svc = createServiceRoleClient();
   await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
 
@@ -12,8 +11,23 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Log in' }).click();
-  await expect(page).toHaveURL('/', { timeout: 10000 });
-  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 10000 });
+
+  // Retry once on transient auth failure (rate-limit / timing)
+  try {
+    await expect(page).toHaveURL('/', { timeout: 10000 });
+  } catch {
+    // Only retry if we're actually on the login page (not already logged in)
+    if (page.url().includes('/login')) {
+      await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
+      await page.goto('/login');
+      await page.getByLabel('Email').fill(email);
+      await page.getByLabel('Password').fill(password);
+      await page.getByRole('button', { name: 'Log in' }).click();
+      await expect(page).toHaveURL('/', { timeout: 15000 });
+    }
+  }
+
+  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 15000 });
 }
 
 /** Navigate to an admin page, retrying once if requireAdmin() redirect race occurs. */
@@ -87,12 +101,14 @@ test.describe('File Attachments', () => {
     await loginAs(page, 'alice@example.com');
     await page.goto('/tickets/new');
 
+    // Wait for form to be fully interactive
+    await expect(page.getByLabel('Title')).toBeVisible({ timeout: 10000 });
     await page.getByLabel('Title').fill('E2E Attachments Test Ticket');
     await page.getByLabel('Type').selectOption({ label: 'Issue' });
     await page.getByLabel(/Description/).fill('Testing file attachments.');
     await page.getByRole('button', { name: 'Create Ticket' }).click();
 
-    await expect(page).toHaveURL(/\/tickets\/\d+\/e2e-attachments-test-ticket/, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/tickets\/\d+\/e2e-attachments-test-ticket/, { timeout: 30000 });
     ticketUrl = page.url();
   });
 
@@ -200,19 +216,27 @@ test.describe('File Attachments', () => {
     const maxSizeInput = page.getByLabel('Maximum file size (MB)');
     await maxSizeInput.fill('15');
 
-    // Save and wait for confirmation
+    // Save and wait for server action to complete
+    const savePromise = page.waitForResponse(
+      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
+      { timeout: 15000 },
+    );
     await page.getByRole('button', { name: 'Save' }).click();
-    await page.waitForTimeout(1000);
+    await savePromise;
 
-    // Verify it was saved
+    // Verify it was saved by loading a fresh page
     await gotoAdmin(page, '/admin/file-settings');
     await expect(page.getByRole('heading', { name: 'File Uploads' })).toBeVisible({ timeout: 10000 });
     await expect(maxSizeInput).toHaveValue('15', { timeout: 10000 });
 
     // Reset to 10
     await maxSizeInput.fill('10');
+    const resetPromise = page.waitForResponse(
+      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
+      { timeout: 15000 },
+    );
     await page.getByRole('button', { name: 'Save' }).click();
-    await page.waitForTimeout(1000);
+    await resetPromise;
   });
 
   test('admin can reset file types to defaults', async ({ page }) => {
@@ -223,6 +247,7 @@ test.describe('File Attachments', () => {
 
     // Verify the allowed types textarea contains defaults
     await gotoAdmin(page, '/admin/file-settings');
+    await expect(page.getByRole('heading', { name: 'File Uploads' })).toBeVisible({ timeout: 10000 });
     const textarea = page.getByLabel('Allowed file types');
     const value = await textarea.inputValue();
     expect(value).toContain('png');

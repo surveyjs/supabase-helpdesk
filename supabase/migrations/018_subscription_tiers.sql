@@ -200,3 +200,28 @@ BEGIN
   DELETE FROM vault.secrets WHERE name = 'tier_api_secret';
 END;
 $$;
+
+-- Restrict vault RPCs to service_role only (called from server-side code)
+REVOKE EXECUTE ON FUNCTION store_tier_api_secret(TEXT) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION get_tier_api_secret() FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION delete_tier_api_secret() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION store_tier_api_secret(TEXT) TO service_role;
+GRANT EXECUTE ON FUNCTION get_tier_api_secret() TO service_role;
+GRANT EXECUTE ON FUNCTION delete_tier_api_secret() TO service_role;
+
+-- ============================================================
+-- Harden profiles_update RLS to prevent tier self-assignment
+-- ============================================================
+DROP POLICY IF EXISTS profiles_update ON profiles;
+
+CREATE POLICY profiles_update ON profiles
+  FOR UPDATE TO authenticated
+  USING (id = auth.uid())
+  WITH CHECK (
+    id = auth.uid()
+    AND role = (SELECT role FROM profiles WHERE id = auth.uid())
+    AND is_blocked = (SELECT is_blocked FROM profiles WHERE id = auth.uid())
+    AND email = (SELECT email FROM profiles WHERE id = auth.uid())
+    AND tier_id IS NOT DISTINCT FROM (SELECT tier_id FROM profiles WHERE id = auth.uid())
+    AND tier_expires_at IS NOT DISTINCT FROM (SELECT tier_expires_at FROM profiles WHERE id = auth.uid())
+  );

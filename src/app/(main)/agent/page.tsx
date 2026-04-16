@@ -489,7 +489,6 @@ export default async function AgentDashboardPage({
                     {ticket.creator_tier_active && ticket.creator_tier_key && (
                       <span className="ml-1">
                         <TierBadge
-                          tierKey={ticket.creator_tier_key}
                           displayName={ticket.creator_tier_display_name ?? ''}
                           color={ticket.creator_tier_color ?? 'gray'}
                           icon={ticket.creator_tier_icon}

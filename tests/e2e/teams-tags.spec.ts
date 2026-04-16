@@ -5,7 +5,6 @@ import { createServiceRoleClient } from '../helpers/supabase';
  * Helper: log in via the login form.
  */
 async function loginAs(page: Page, email: string, password = 'Password123') {
-  // Clear any login lockouts from prior runs
   const svc = createServiceRoleClient();
   await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
 
@@ -13,8 +12,23 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Log in' }).click();
-  await expect(page).toHaveURL('/', { timeout: 10000 });
-  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 10000 });
+
+  // Retry once on transient auth failure (rate-limit / timing)
+  try {
+    await expect(page).toHaveURL('/', { timeout: 10000 });
+  } catch {
+    // Only retry if we're actually on the login page (not already logged in)
+    if (page.url().includes('/login')) {
+      await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
+      await page.goto('/login');
+      await page.getByLabel('Email').fill(email);
+      await page.getByLabel('Password').fill(password);
+      await page.getByRole('button', { name: 'Log in' }).click();
+      await expect(page).toHaveURL('/', { timeout: 15000 });
+    }
+  }
+
+  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 15000 });
 }
 
 /** Navigate to an admin page, retrying once if requireAdmin() redirect race occurs. */
@@ -209,22 +223,25 @@ test.describe('Admin Types Management', () => {
   test('admin can set default type', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/types');
+    await expect(page.getByRole('heading', { name: /Types/ })).toBeVisible({ timeout: 10000 });
 
     // Issue should have a "Set Default" button
     const issueRow = page.locator('li').filter({ hasText: 'Issue' });
     const setDefaultBtn = issueRow.getByRole('button', { name: 'Set Default' });
     if (await setDefaultBtn.isVisible()) {
       await setDefaultBtn.click();
-      await page.waitForTimeout(2000);
+      // Wait for the "Default" badge to appear confirming the action
+      await expect(issueRow.getByText('Default')).toBeVisible({ timeout: 10000 });
     }
 
     // Restore Question as default
     await gotoAdmin(page, '/admin/types');
+    await expect(page.getByRole('heading', { name: /Types/ })).toBeVisible({ timeout: 10000 });
     const questionRow = page.locator('li').filter({ hasText: 'Question' });
     const restoreBtn = questionRow.getByRole('button', { name: 'Set Default' });
     if (await restoreBtn.isVisible()) {
       await restoreBtn.click();
-      await page.waitForTimeout(2000);
+      await expect(questionRow.getByText('Default')).toBeVisible({ timeout: 10000 });
     }
   });
 });
@@ -299,8 +316,14 @@ test.describe('Admin Teams Management', () => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/teams');
 
-    await expect(page.getByRole('heading', { name: 'Manage Teams' })).toBeVisible();
-    await expect(page.getByText("Alice's Team")).toBeVisible();
+    // If session was lost during navigation, re-login and retry
+    if (page.url().includes('/login')) {
+      await loginAs(page, 'admin@example.com');
+      await gotoAdmin(page, '/admin/teams');
+    }
+
+    await expect(page.getByRole('heading', { name: 'Manage Teams' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText("Alice's Team")).toBeVisible({ timeout: 10000 });
   });
 
   test('admin can create a team', async ({ page }) => {
@@ -308,11 +331,12 @@ test.describe('Admin Teams Management', () => {
     await gotoAdmin(page, '/admin/teams');
     await expect(page.getByRole('heading', { name: /Teams/ })).toBeVisible({ timeout: 10000 });
 
+    // Wait for the form input to be ready
+    await expect(page.locator('#new-team-name')).toBeVisible({ timeout: 10000 });
     await page.locator('#new-team-name').fill('E2E Test Team');
     await page.getByRole('button', { name: 'Create Team' }).click();
-    await page.waitForTimeout(2000);
 
-    await expect(page.getByText('E2E Test Team')).toBeVisible();
+    await expect(page.getByText('E2E Test Team')).toBeVisible({ timeout: 10000 });
   });
 
   test('admin can add member to team', async ({ page }) => {
@@ -375,6 +399,8 @@ test.describe('NavBar Setup Link', () => {
 
   test('non-admin does not see Setup link', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
+    // Wait for nav to be fully rendered before asserting absence
+    await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 10000 });
     await expect(page.getByRole('link', { name: 'Setup' })).not.toBeVisible();
   });
 

@@ -3,6 +3,19 @@ import { requireAdmin } from '@/lib/supabase/auth';
 import { createTier, updateTier, deleteTier, reorderTiers, saveTierApiSecret, deleteTierApiSecret, getTierApiSecretStatus } from '@/lib/actions/tiers';
 import { TierApiSecretCard } from './TierApiSecretCard';
 
+const COLOR_DOT_MAP: Record<string, string> = {
+  gray: 'bg-gray-400',
+  blue: 'bg-blue-400',
+  purple: 'bg-purple-400',
+  green: 'bg-green-400',
+  red: 'bg-red-400',
+  yellow: 'bg-yellow-400',
+  orange: 'bg-orange-400',
+  pink: 'bg-pink-400',
+  indigo: 'bg-indigo-400',
+  teal: 'bg-teal-400',
+};
+
 export default async function TiersPage() {
   await requireAdmin();
   const supabase = await createServerClient();
@@ -189,7 +202,7 @@ export default async function TiersPage() {
                   <td className="px-4 py-3 font-mono text-xs text-gray-700">{tier.key}</td>
                   <td className="px-4 py-3 text-gray-900">{tier.icon && `${tier.icon} `}{tier.display_name}</td>
                   <td className="px-4 py-3">
-                    <span className={`inline-block w-4 h-4 rounded-full bg-${tier.color}-400`} title={tier.color} />
+                    <span className={`inline-block w-4 h-4 rounded-full ${COLOR_DOT_MAP[tier.color] ?? COLOR_DOT_MAP.gray}`} title={tier.color} />
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-600">{caps}</td>
                   <td className="px-4 py-3 text-xs text-gray-600">{limits}</td>

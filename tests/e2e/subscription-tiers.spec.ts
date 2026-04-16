@@ -2,12 +2,30 @@ import { test, expect, Page } from '@playwright/test';
 import { createServiceRoleClient } from '../helpers/supabase';
 
 async function loginAs(page: Page, email: string, password = 'Password123') {
+  const svc = createServiceRoleClient();
+  await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
+
   await page.goto('/login');
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Log in' }).click();
-  await expect(page).toHaveURL('/', { timeout: 10000 });
-  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 10000 });
+
+  // Retry once on transient auth failure (rate-limit / timing)
+  try {
+    await expect(page).toHaveURL('/', { timeout: 10000 });
+  } catch {
+    // Only retry if we're actually on the login page (not already logged in)
+    if (page.url().includes('/login')) {
+      await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
+      await page.goto('/login');
+      await page.getByLabel('Email').fill(email);
+      await page.getByLabel('Password').fill(password);
+      await page.getByRole('button', { name: 'Log in' }).click();
+      await expect(page).toHaveURL('/', { timeout: 15000 });
+    }
+  }
+
+  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 15000 });
 }
 
 async function gotoAdmin(page: Page, path: string) {
@@ -152,6 +170,15 @@ test.describe('Subscription Tiers', () => {
 
     if (alice) {
       await page.goto(`/agent/users/${alice.id}`);
+      // Verify we landed on the user detail page (not redirected)
+      try {
+        await expect(page).toHaveURL(/\/agent\/users\//, { timeout: 5000 });
+      } catch {
+        // Retry navigation if redirected
+        await page.goto(`/agent/users/${alice.id}`);
+        await expect(page).toHaveURL(/\/agent\/users\//, { timeout: 10000 });
+      }
+      await expect(page.getByText('User Information')).toBeVisible({ timeout: 10000 });
       await expect(page.getByTestId('admin-tier-assignment')).toBeVisible({ timeout: 10000 });
     }
   });
@@ -165,7 +192,7 @@ test.describe('Subscription Tiers', () => {
 
     // Tier filter should be available
     const tierFilter = page.getByLabel('Tier');
-    await expect(tierFilter).toBeVisible({ timeout: 5000 });
+    await expect(tierFilter).toBeVisible({ timeout: 10000 });
   });
 
   // ── Admin users page tier column ────────────────

@@ -16,7 +16,6 @@ export function TierBadge({
   color,
   icon,
 }: {
-  tierKey: string;
   displayName: string;
   color: string;
   icon?: string | null;

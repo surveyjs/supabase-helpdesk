@@ -62,13 +62,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Audit log with actor "API"
+    // Audit log — find an admin to attribute the API action to
+    const { data: adminActor } = await serviceClient
+      .from('profiles')
+      .select('id')
+      .eq('role', 'admin')
+      .limit(1)
+      .single();
+
     await serviceClient.from('admin_audit_log').insert({
-      admin_id: userProfile.id,
+      admin_id: adminActor?.id ?? userProfile.id,
       action: 'tier_removed',
       target_type: 'profile',
       target_id: userProfile.id,
-      details: { actor: 'API', email },
+      details: { source: 'external_api', target_email: email },
     });
 
     return NextResponse.json({ success: true, userId: userProfile.id, tierKey: 'none' });
@@ -107,13 +114,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Audit log with actor "API"
+  // Audit log — find an admin to attribute the API action to
+  const { data: adminActor } = await serviceClient
+    .from('profiles')
+    .select('id')
+    .eq('role', 'admin')
+    .limit(1)
+    .single();
+
   await serviceClient.from('admin_audit_log').insert({
-    admin_id: userProfile.id,
+    admin_id: adminActor?.id ?? userProfile.id,
     action: 'tier_assigned',
     target_type: 'profile',
     target_id: userProfile.id,
-    details: { actor: 'API', email, tier_key: tier.key, expires_at: parsedExpires },
+    details: { source: 'external_api', target_email: email, tier_key: tier.key, expires_at: parsedExpires },
   });
 
   return NextResponse.json({ success: true, userId: userProfile.id, tierKey: tier.key });

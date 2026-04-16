@@ -231,9 +231,13 @@ export async function assignTier(formData: FormData): Promise<void> {
 
   if (!userId) return;
 
+  // Use service-role client for profile updates (RLS prevents admins from
+  // updating other users' tier_id/tier_expires_at via user-scoped client)
+  const svc = createServiceRoleClient();
+
   if (!tierId || tierId === 'none') {
     // Remove tier
-    const { error } = await supabase
+    const { error } = await svc
       .from('profiles')
       .update({ tier_id: null, tier_expires_at: null })
       .eq('id', userId);
@@ -251,7 +255,7 @@ export async function assignTier(formData: FormData): Promise<void> {
 
     if (!tier) return;
 
-    const { error } = await supabase
+    const { error } = await svc
       .from('profiles')
       .update({
         tier_id: tierId,

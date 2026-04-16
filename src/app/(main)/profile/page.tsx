@@ -44,6 +44,10 @@ export default async function ProfilePage() {
     .single();
   const isExternalAuth = authModeSetting?.value === 'external';
 
+  // Check if user authenticated via social OAuth provider (hide password change)
+  const isSocialAuth = user.app_metadata?.provider && user.app_metadata.provider !== 'email';
+  const showPasswordForm = !isExternalAuth && !isSocialAuth;
+
   const isAgentOrAdmin = profile.role === 'agent' || profile.role === 'admin';
 
   return (
@@ -86,8 +90,8 @@ export default async function ProfilePage() {
         />
       </div>
 
-      {/* Change password (only in built-in auth mode) */}
-      {!isExternalAuth && (
+      {/* Change password (only in built-in auth mode for email users) */}
+      {showPasswordForm && (
         <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Change Password</h2>
           <ChangePasswordForm />

@@ -30,8 +30,11 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
 
 async function gotoAdmin(page: Page, path: string) {
   await page.goto(path);
-  if (!page.url().includes('/admin')) {
+  try {
+    await page.waitForURL(/\/admin/, { timeout: 5000 });
+  } catch {
     await page.goto(path);
+    await page.waitForURL(/\/admin/, { timeout: 10000 });
   }
 }
 
@@ -172,11 +175,11 @@ test.describe('Subscription Tiers', () => {
       await page.goto(`/agent/users/${alice.id}`);
       // Verify we landed on the user detail page (not redirected)
       try {
-        await expect(page).toHaveURL(/\/agent\/users\//, { timeout: 5000 });
+        await page.waitForURL(/\/agent\/users\//, { timeout: 5000 });
       } catch {
         // Retry navigation if redirected
         await page.goto(`/agent/users/${alice.id}`);
-        await expect(page).toHaveURL(/\/agent\/users\//, { timeout: 10000 });
+        await page.waitForURL(/\/agent\/users\//, { timeout: 10000 });
       }
       await expect(page.getByText('User Information')).toBeVisible({ timeout: 10000 });
       await expect(page.getByTestId('admin-tier-assignment')).toBeVisible({ timeout: 10000 });

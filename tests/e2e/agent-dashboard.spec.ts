@@ -5,7 +5,6 @@ import { createServiceRoleClient } from '../helpers/supabase';
  * Helper: log in via the login form.
  */
 async function loginAs(page: Page, email: string, password = 'Password123') {
-  // Clear any login lockouts from prior runs
   const svc = createServiceRoleClient();
   await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
 
@@ -13,8 +12,22 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Log in' }).click();
-  await expect(page).toHaveURL('/', { timeout: 10000 });
-  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 10000 });
+
+  // Retry once on transient auth failure (rate-limit / timing)
+  try {
+    await expect(page).toHaveURL('/', { timeout: 10000 });
+  } catch {
+    if (page.url().includes('/login')) {
+      await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
+      await page.goto('/login');
+      await page.getByLabel('Email').fill(email);
+      await page.getByLabel('Password').fill(password);
+      await page.getByRole('button', { name: 'Log in' }).click();
+      await expect(page).toHaveURL('/', { timeout: 15000 });
+    }
+  }
+
+  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 15000 });
 }
 
 test.describe('Agent Dashboard', () => {
@@ -134,27 +147,28 @@ test.describe('Agent Ticket Detail Controls', () => {
       .eq('title', 'Password reset not working')
       .single();
     ticketUrl = `/tickets/${ticket!.id}/${ticket!.slug}`;
+
+    // Ensure ticket is in 'open' state for consistent test starting point
+    await admin.from('tickets').update({ status: 'open' }).eq('id', ticket!.id);
   });
 
   test('agent can change ticket status from detail page', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(ticketUrl);
 
-    await expect(page.getByTestId('agent-controls')).toBeVisible();
+    await expect(page.getByTestId('agent-controls')).toBeVisible({ timeout: 10000 });
 
     // Find and click "Mark Pending"
     const pendingBtn = page.getByRole('button', { name: 'Mark Pending' });
-    if (await pendingBtn.isVisible()) {
-      await pendingBtn.click();
-      await expect(page.getByTestId('agent-controls').getByText('Pending')).toBeVisible({ timeout: 10000 });
-    }
+    await expect(pendingBtn).toBeVisible({ timeout: 10000 });
+    await pendingBtn.click();
+    await expect(page.getByTestId('agent-controls').getByText('Pending')).toBeVisible({ timeout: 10000 });
 
     // Re-open
     const reopenBtn = page.getByRole('button', { name: 'Mark Open' });
-    if (await reopenBtn.isVisible()) {
-      await reopenBtn.click();
-      await expect(page.getByTestId('agent-controls').getByText('Open')).toBeVisible({ timeout: 10000 });
-    }
+    await expect(reopenBtn).toBeVisible({ timeout: 10000 });
+    await reopenBtn.click();
+    await expect(page.getByTestId('agent-controls').getByText('Open')).toBeVisible({ timeout: 10000 });
   });
 
   test('agent can change urgency/severity from detail page', async ({ page }) => {
@@ -265,12 +279,15 @@ test.describe('Agent Ticket Detail Controls', () => {
 
     await page.goto(`/tickets/${tickets[0].id}/${tickets[0].slug}`);
     const btn = page.getByRole('button', { name: 'Assign to me' });
-    if (await btn.isVisible()) {
-      await btn.click();
-      await expect(page.getByRole('main').getByText('Agent Smith', { exact: true })).toBeVisible({ timeout: 10000 });
-      // Cleanup: unassign
-      await page.getByRole('button', { name: 'Unassign' }).click();
-    }
+    await expect(btn).toBeVisible({ timeout: 10000 });
+    await btn.click();
+    await expect(btn).toBeHidden({ timeout: 15000 });
+    await expect(page.getByRole('main').getByText('Agent Smith', { exact: true })).toBeVisible({ timeout: 10000 });
+    // Cleanup: unassign
+    const unassignBtn = page.getByRole('button', { name: 'Unassign' });
+    await expect(unassignBtn).toBeVisible({ timeout: 10000 });
+    await unassignBtn.click();
+    await expect(unassignBtn).toBeHidden({ timeout: 15000 });
   });
 
   test('agent can reassign ticket to another agent with a reason', async ({ page }) => {

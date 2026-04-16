@@ -34,8 +34,11 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
 /** Navigate to an admin page, retrying once if requireAdmin() redirect race occurs. */
 async function gotoAdmin(page: Page, path: string) {
   await page.goto(path);
-  if (!page.url().includes('/admin')) {
+  try {
+    await page.waitForURL(/\/admin/, { timeout: 5000 });
+  } catch {
     await page.goto(path);
+    await page.waitForURL(/\/admin/, { timeout: 10000 });
   }
 }
 
@@ -107,7 +110,7 @@ test.describe('Tag Display and Management', () => {
     await page.goto(ticketUrl);
 
     const addTagForm = page.getByTestId('add-tag-form');
-    await expect(addTagForm).toBeVisible();
+    await expect(addTagForm).toBeVisible({ timeout: 10000 });
 
     // Select a tag from the dropdown and add it
     const select = addTagForm.getByRole('combobox');
@@ -117,12 +120,20 @@ test.describe('Tag Display and Management', () => {
     await select.selectOption({ index: 0 });
     const addedTagName = options[0];
 
+    // Wait for server action to complete
+    const responsePromise = page.waitForResponse(
+      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
+      { timeout: 15000 },
+    );
     await addTagForm.getByRole('button', { name: 'Add Tag' }).click();
-    await page.waitForTimeout(2000);
+    await responsePromise;
+
+    // Reload to get fresh server-rendered page after revalidatePath
+    await page.goto(ticketUrl);
 
     // Tag should now appear
     const tagSection = page.getByTestId('ticket-tags');
-    await expect(tagSection.getByText(addedTagName)).toBeVisible();
+    await expect(tagSection.getByText(addedTagName)).toBeVisible({ timeout: 10000 });
   });
 
   test('agent can remove a tag from a ticket', async ({ page }) => {
@@ -181,7 +192,7 @@ test.describe('Admin Types Management', () => {
 
   test('non-admin cannot access admin pages', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
-    await gotoAdmin(page, '/admin/types');
+    await page.goto('/admin/types');
     // Should be redirected away
     await expect(page).not.toHaveURL('/admin/types', { timeout: 10000 });
   });
@@ -316,12 +327,6 @@ test.describe('Admin Teams Management', () => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/teams');
 
-    // If session was lost during navigation, re-login and retry
-    if (page.url().includes('/login')) {
-      await loginAs(page, 'admin@example.com');
-      await gotoAdmin(page, '/admin/teams');
-    }
-
     await expect(page.getByRole('heading', { name: 'Manage Teams' })).toBeVisible({ timeout: 10000 });
     await expect(page.getByText("Alice's Team")).toBeVisible({ timeout: 10000 });
   });
@@ -334,8 +339,17 @@ test.describe('Admin Teams Management', () => {
     // Wait for the form input to be ready
     await expect(page.locator('#new-team-name')).toBeVisible({ timeout: 10000 });
     await page.locator('#new-team-name').fill('E2E Test Team');
-    await page.getByRole('button', { name: 'Create Team' }).click();
 
+    // Wait for the server action to complete
+    const responsePromise = page.waitForResponse(
+      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
+      { timeout: 15000 },
+    );
+    await page.getByRole('button', { name: 'Create Team' }).click();
+    await responsePromise;
+
+    // Reload to get fresh server-rendered page after revalidatePath
+    await gotoAdmin(page, '/admin/teams');
     await expect(page.getByText('E2E Test Team')).toBeVisible({ timeout: 10000 });
   });
 

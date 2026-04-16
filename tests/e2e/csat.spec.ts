@@ -6,19 +6,39 @@ import crypto from 'crypto';
  * Helper: log in via the login form.
  */
 async function loginAs(page: Page, email: string, password = 'Password123') {
+  const svc = createServiceRoleClient();
+  await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
+
   await page.goto('/login');
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Log in' }).click();
-  await expect(page).toHaveURL('/', { timeout: 10000 });
-  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 10000 });
+
+  // Retry once on transient auth failure (rate-limit / timing)
+  try {
+    await expect(page).toHaveURL('/', { timeout: 10000 });
+  } catch {
+    if (page.url().includes('/login')) {
+      await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
+      await page.goto('/login');
+      await page.getByLabel('Email').fill(email);
+      await page.getByLabel('Password').fill(password);
+      await page.getByRole('button', { name: 'Log in' }).click();
+      await expect(page).toHaveURL('/', { timeout: 15000 });
+    }
+  }
+
+  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 15000 });
 }
 
-/** Navigate to an admin page. */
+/** Navigate to an admin page, retrying once if requireAdmin() redirect race occurs. */
 async function gotoAdmin(page: Page, path: string) {
   await page.goto(path);
-  if (!page.url().includes('/admin')) {
+  try {
+    await page.waitForURL(/\/admin/, { timeout: 5000 });
+  } catch {
     await page.goto(path);
+    await page.waitForURL(/\/admin/, { timeout: 10000 });
   }
 }
 

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
+import { createServiceRoleClient } from '@/lib/supabase/server';
 
 // Allowlist of valid internal redirect paths for the auth callback
-const ALLOWED_NEXT_PATHS = ['/', '/reset-password'];
+const ALLOWED_NEXT_PATHS = ['/', '/reset-password', '/tickets'];
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
@@ -20,9 +21,39 @@ export async function GET(request: NextRequest) {
 
   if (code) {
     const supabase = await createServerClient();
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
-    if (!error) {
+    if (!error && data.user) {
+      // For OAuth users signing in for the first time: update display name from token claims
+      const user = data.user;
+      const provider = user.app_metadata?.provider;
+
+      if (provider && provider !== 'email') {
+        const displayName =
+          user.user_metadata?.full_name ||
+          user.user_metadata?.name ||
+          user.user_metadata?.preferred_username ||
+          user.user_metadata?.user_name ||
+          '';
+
+        if (displayName) {
+          const svc = createServiceRoleClient();
+          // Only set display name if profile has empty display_name
+          const { data: profile } = await svc
+            .from('profiles')
+            .select('display_name')
+            .eq('id', user.id)
+            .single();
+
+          if (profile && (!profile.display_name || profile.display_name === user.email?.split('@')[0])) {
+            await svc
+              .from('profiles')
+              .update({ display_name: displayName })
+              .eq('id', user.id);
+          }
+        }
+      }
+
       const redirectUrl = request.nextUrl.clone();
       redirectUrl.pathname = next;
       redirectUrl.searchParams.delete('code');

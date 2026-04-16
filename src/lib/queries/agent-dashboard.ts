@@ -17,6 +17,7 @@ export type AgentTicketFilters = {
   agent?: string;
   team?: string;
   tags?: string;
+  tier?: string;
   sort?: string;
   page?: string;
 };
@@ -35,6 +36,11 @@ export type AgentTicketRow = {
   creator_display_name: string | null;
   creator_email: string;
   creator_team_name: string | null;
+  creator_tier_key: string | null;
+  creator_tier_display_name: string | null;
+  creator_tier_color: string | null;
+  creator_tier_icon: string | null;
+  creator_tier_active: boolean | null;
   agent_display_name: string | null;
   assigned_agent_id: string | null;
   type_name: string;
@@ -100,7 +106,7 @@ export async function getAgentTickets(filters: AgentTicketFilters): Promise<{
   let query = supabase
     .from('agent_tickets')
     .select(
-      'id, title, slug, status, urgency, severity, is_private, created_at, updated_at, creator_id, creator_display_name, creator_email, creator_team_name, agent_display_name, assigned_agent_id, type_name, category_name, post_count',
+      'id, title, slug, status, urgency, severity, is_private, created_at, updated_at, creator_id, creator_display_name, creator_email, creator_team_name, creator_tier_key, creator_tier_display_name, creator_tier_color, creator_tier_icon, creator_tier_active, agent_display_name, assigned_agent_id, type_name, category_name, post_count',
       { count: 'exact' },
     );
 
@@ -151,6 +157,13 @@ export async function getAgentTickets(filters: AgentTicketFilters): Promise<{
     query = query.is('creator_team_id', null);
   } else if (filters.team && filters.team !== 'all' && filters.team !== '') {
     query = query.eq('creator_team_id', filters.team);
+  }
+
+  // Tier filter
+  if (filters.tier === 'none') {
+    query = query.is('creator_tier_key', null);
+  } else if (filters.tier && filters.tier !== 'all' && filters.tier !== '') {
+    query = query.eq('creator_tier_key', filters.tier);
   }
 
   // Tag filter (OR logic: any of the selected tags)
@@ -413,6 +426,7 @@ export async function getFilterOptions() {
   ]);
 
   const { data: tags } = await supabase.from('tags').select('id, name, color').order('name');
+  const { data: tiers } = await supabase.from('subscription_tiers').select('key, display_name').order('sort_order');
 
   return {
     categories: categories ?? [],
@@ -420,6 +434,7 @@ export async function getFilterOptions() {
     agents: agents ?? [],
     teams: teams ?? [],
     tags: tags ?? [],
+    tiers: tiers ?? [],
   };
 }
 

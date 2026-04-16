@@ -87,7 +87,28 @@ export async function createTicket(
       .eq('key', 'ticket_creation_rate_limit')
       .single();
 
-    const rateLimit = rateLimitSetting ? parseInt(rateLimitSetting.value, 10) : 10;
+    let rateLimit = rateLimitSetting ? parseInt(rateLimitSetting.value, 10) : 10;
+
+    // Check tier override for rate limit
+    const { data: tierProfile } = await supabase
+      .from('profiles')
+      .select('tier_id, tier_expires_at')
+      .eq('id', user.id)
+      .single();
+
+    if (tierProfile?.tier_id) {
+      const tierActive = !tierProfile.tier_expires_at || new Date(tierProfile.tier_expires_at) > new Date();
+      if (tierActive) {
+        const { data: tier } = await supabase
+          .from('subscription_tiers')
+          .select('limit_ticket_rate')
+          .eq('id', tierProfile.tier_id)
+          .single();
+        if (tier?.limit_ticket_rate != null) {
+          rateLimit = tier.limit_ticket_rate;
+        }
+      }
+    }
 
     if (rateLimit > 0) {
       const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();

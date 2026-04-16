@@ -141,6 +141,26 @@ export default async function TicketDetailPage({
 
   const isAgent = profile?.role === 'agent' || profile?.role === 'admin';
 
+  // Tier capability checks for ticket creator
+  const isCreator = user.id === ticket.creator_id;
+  const tierCaps = {
+    change_visibility: false,
+    set_severity: false,
+    change_status: false,
+    change_type: false,
+    add_remove_tags: false,
+  };
+  if (isCreator && !isAgent) {
+    const capNames = Object.keys(tierCaps) as (keyof typeof tierCaps)[];
+    const results = await Promise.all(
+      capNames.map((cap) => supabase.rpc('user_has_tier_capability', { capability: cap }))
+    );
+    capNames.forEach((cap, i) => {
+      tierCaps[cap] = results[i].data === true;
+    });
+  }
+  const hasAnyTierCap = Object.values(tierCaps).some(Boolean);
+
   const { data: posts } = await supabase
     .from('posts')
     .select(`
@@ -550,7 +570,7 @@ export default async function TicketDetailPage({
   let allCategories: { id: string; name: string }[] = [];
   let allAgents: { id: string; display_name: string | null; email: string }[] = [];
   let allTags: { id: string; name: string; color: string }[] = [];
-  if (isAgent) {
+  if (isAgent || hasAnyTierCap) {
     const [typesRes, catsRes, agentsRes, tagsRes] = await Promise.all([
       supabase.from('ticket_types').select('id, name').order('name'),
       supabase.from('categories').select('id, name').order('name'),
@@ -915,7 +935,7 @@ export default async function TicketDetailPage({
                     >
                       {tag.name}
                     </span>
-                    {isAgent && (
+                    {(isAgent || tierCaps.add_remove_tags) && (
                       <form action={removeTagFromTicket} className="inline">
                         <input type="hidden" name="ticket_id" value={ticket.id} />
                         <input type="hidden" name="tag_id" value={tag.id} />
@@ -937,7 +957,7 @@ export default async function TicketDetailPage({
         )}
 
         {/* Agent: Add tag */}
-        {isAgent && availableTags.length > 0 && (
+        {(isAgent || tierCaps.add_remove_tags) && availableTags.length > 0 && (
           <form action={addTagToTicket} className="mt-2 flex gap-2 items-center" data-testid="add-tag-form">
             <input type="hidden" name="ticket_id" value={ticket.id} />
             <select
@@ -1280,6 +1300,91 @@ export default async function TicketDetailPage({
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">KB Article</label>
                 <GenerateKbArticleButton ticketId={ticket.id} />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Tier capability controls (for non-agent ticket creators with active tier) */}
+      {!isAgent && hasAnyTierCap && !ticket.merged_into_id && (
+        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6" data-testid="tier-controls">
+          <h2 className="text-sm font-semibold text-gray-700 mb-4 uppercase tracking-wider">Ticket Controls</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Status */}
+            {tierCaps.change_status && (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Status</label>
+                <div className="flex flex-wrap gap-1">
+                  {ticket.status !== 'open' && (
+                    <form action={changeTicketStatus}>
+                      <input type="hidden" name="ticket_id" value={ticket.id} />
+                      <input type="hidden" name="new_status" value="open" />
+                      <button type="submit" className="px-3 py-1 text-xs rounded bg-green-100 text-green-700 hover:bg-green-200">
+                        {ticket.status === 'closed' ? 'Re-open' : 'Mark Open'}
+                      </button>
+                    </form>
+                  )}
+                  {ticket.status !== 'pending' && (
+                    <form action={changeTicketStatus}>
+                      <input type="hidden" name="ticket_id" value={ticket.id} />
+                      <input type="hidden" name="new_status" value="pending" />
+                      <button type="submit" className="px-3 py-1 text-xs rounded bg-yellow-100 text-yellow-700 hover:bg-yellow-200">Pending</button>
+                    </form>
+                  )}
+                  {ticket.status !== 'closed' && (
+                    <form action={changeTicketStatus}>
+                      <input type="hidden" name="ticket_id" value={ticket.id} />
+                      <input type="hidden" name="new_status" value="closed" />
+                      <button type="submit" className="px-3 py-1 text-xs rounded bg-red-100 text-red-700 hover:bg-red-200">Close</button>
+                    </form>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Severity */}
+            {tierCaps.set_severity && (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Severity</label>
+                <form action={changeSeverity} className="flex gap-1 items-center">
+                  <input type="hidden" name="ticket_id" value={ticket.id} />
+                  <select name="new_severity" defaultValue={ticket.severity} className="rounded border border-gray-300 px-2 py-1 text-xs">
+                    {['low', 'medium', 'high', 'critical'].map((s) => (
+                      <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+                    ))}
+                  </select>
+                  <button type="submit" className="px-3 py-1 text-xs rounded bg-gray-100 text-gray-700 hover:bg-gray-200">Set</button>
+                </form>
+              </div>
+            )}
+
+            {/* Type */}
+            {tierCaps.change_type && allTypes.length > 0 && (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Type</label>
+                <form action={changeType} className="flex gap-1 items-center">
+                  <input type="hidden" name="ticket_id" value={ticket.id} />
+                  <select name="new_type_id" defaultValue={ticket.type_id ?? ''} className="rounded border border-gray-300 px-2 py-1 text-xs">
+                    {allTypes.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                  <button type="submit" className="px-3 py-1 text-xs rounded bg-gray-100 text-gray-700 hover:bg-gray-200">Set</button>
+                </form>
+              </div>
+            )}
+
+            {/* Privacy */}
+            {tierCaps.change_visibility && (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Privacy</label>
+                <form action={toggleTicketPrivacyAction}>
+                  <input type="hidden" name="ticket_id" value={ticket.id} />
+                  <button type="submit" className={`px-3 py-1 text-xs rounded ${ticket.is_private ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}>
+                    {ticket.is_private ? 'Make Public' : 'Make Private'}
+                  </button>
+                </form>
               </div>
             )}
           </div>

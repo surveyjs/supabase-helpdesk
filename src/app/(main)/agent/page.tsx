@@ -10,6 +10,7 @@ import {
   type AgentTicketFilters,
 } from '@/lib/queries/agent-dashboard';
 import { Badge } from '@/components/ui/Badge';
+import { TierBadge } from '@/components/ui/TierBadge';
 import { DisplayName } from '@/components/features/users/DisplayName';
 import { Pagination } from '@/components/ui/Pagination';
 import { createSavedView, renameSavedView, deleteSavedView } from '@/lib/actions/saved-views';
@@ -68,6 +69,7 @@ export default async function AgentDashboardPage({
     agent: (params.agent as string) ?? '',
     team: (params.team as string) ?? '',
     tags: (params.tags as string) ?? '',
+    tier: (params.tier as string) ?? '',
     sort: (params.sort as string) ?? '',
     page: (params.page as string) ?? '1',
   };
@@ -358,6 +360,25 @@ export default async function AgentDashboardPage({
               ))}
             </select>
           </div>
+
+          {/* Tier (only show when tiers are defined) */}
+          {filterOptions.tiers.length > 0 && (
+            <div>
+              <label htmlFor="filter-tier" className="block text-xs font-medium text-gray-500 mb-1">Tier</label>
+              <select
+                id="filter-tier"
+                name="tier"
+                defaultValue={filters.tier}
+                className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+              >
+                <option value="">All</option>
+                <option value="none">No tier</option>
+                {filterOptions.tiers.map((t) => (
+                  <option key={t.key} value={t.key}>{t.display_name}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Tag filter (multi-select pills) */}
@@ -465,6 +486,16 @@ export default async function AgentDashboardPage({
                       displayName={ticket.creator_display_name ?? 'User'}
                       isCurrentUserAgent={true}
                     />
+                    {ticket.creator_tier_active && ticket.creator_tier_key && (
+                      <span className="ml-1">
+                        <TierBadge
+                          tierKey={ticket.creator_tier_key}
+                          displayName={ticket.creator_tier_display_name ?? ''}
+                          color={ticket.creator_tier_color ?? 'gray'}
+                          icon={ticket.creator_tier_icon}
+                        />
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <Badge variant="status" value={ticket.status} />

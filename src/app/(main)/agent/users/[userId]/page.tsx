@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { createServerClient } from '@/lib/supabase/server';
 import { requireAgent } from '@/lib/supabase/auth';
 import { renderMarkdown } from '@/lib/utils/markdown';
+import { assignTier } from '@/lib/actions/tiers';
 import { UserNoteForm } from './UserNoteForm';
 import { UserNoteItem } from './UserNoteItem';
 import { AdminUserActions } from './AdminUserActions';
@@ -27,7 +28,7 @@ export default async function UserDetailPage({
   // Fetch target user profile
   const { data: targetUser } = await supabase
     .from('profiles')
-    .select('id, display_name, email, role, team_id, is_blocked, created_at')
+    .select('id, display_name, email, role, team_id, is_blocked, created_at, tier_id, tier_expires_at')
     .eq('id', userId)
     .single();
 
@@ -49,6 +50,28 @@ export default async function UserDetailPage({
     .from('tickets')
     .select('id', { count: 'exact', head: true })
     .eq('creator_id', userId);
+
+  // Fetch tier info
+  let tierInfo: { key: string; display_name: string; color: string } | null = null;
+  if (targetUser.tier_id) {
+    const { data: tier } = await supabase
+      .from('subscription_tiers')
+      .select('key, display_name, color')
+      .eq('id', targetUser.tier_id)
+      .single();
+    tierInfo = tier ?? null;
+  }
+  const tierExpired = targetUser.tier_expires_at && new Date(targetUser.tier_expires_at) < new Date();
+
+  // Fetch available tiers (for admin assignment)
+  let allTiers: { id: string; key: string; display_name: string }[] = [];
+  if (isAdmin) {
+    const { data: tiers } = await supabase
+      .from('subscription_tiers')
+      .select('id, key, display_name')
+      .order('sort_order');
+    allTiers = tiers ?? [];
+  }
 
   // Fetch user notes
   const { data: notes } = await supabase
@@ -129,6 +152,21 @@ export default async function UserDetailPage({
               {new Date(targetUser.created_at).toLocaleDateString()}
             </dd>
           </div>
+          {tierInfo && (
+            <div>
+              <dt className="text-gray-500">Subscription Tier</dt>
+              <dd className="text-gray-900" data-testid="user-tier">
+                <span className={tierExpired ? 'text-gray-400 line-through' : ''}>
+                  {tierInfo.display_name} ({tierInfo.key})
+                </span>
+                {targetUser.tier_expires_at && (
+                  <span className={`ml-2 text-xs ${tierExpired ? 'text-red-500' : 'text-gray-500'}`}>
+                    {tierExpired ? 'Expired' : 'Expires'} {new Date(targetUser.tier_expires_at).toLocaleDateString()}
+                  </span>
+                )}
+              </dd>
+            </div>
+          )}
         </dl>
       </div>
 
@@ -141,6 +179,37 @@ export default async function UserDetailPage({
             isBlocked={targetUser.is_blocked}
             role={targetUser.role}
           />
+
+          {/* Tier Assignment */}
+          {allTiers.length > 0 && (
+            <div className="mt-6 pt-4 border-t border-gray-200" data-testid="admin-tier-assignment">
+              <h3 className="text-sm font-medium text-gray-700 mb-2">Subscription Tier</h3>
+              <form action={assignTier} className="flex items-end gap-3">
+                <input type="hidden" name="user_id" value={targetUser.id} />
+                <div>
+                  <label className="block text-xs text-gray-500 mb-0.5">Tier</label>
+                  <select name="tier_id" defaultValue={targetUser.tier_id ?? 'none'} className="rounded border border-gray-300 px-2 py-1.5 text-sm">
+                    <option value="none">None</option>
+                    {allTiers.map((t) => (
+                      <option key={t.id} value={t.id}>{t.display_name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-0.5">Expires At (optional)</label>
+                  <input
+                    name="expires_at"
+                    type="datetime-local"
+                    defaultValue={targetUser.tier_expires_at ? new Date(targetUser.tier_expires_at).toISOString().slice(0, 16) : ''}
+                    className="rounded border border-gray-300 px-2 py-1.5 text-sm"
+                  />
+                </div>
+                <button type="submit" className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700">
+                  Assign Tier
+                </button>
+              </form>
+            </div>
+          )}
         </div>
       )}
 

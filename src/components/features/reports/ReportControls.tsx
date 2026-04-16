@@ -9,6 +9,7 @@ type Props = {
   isAdmin: boolean;
   types: { id: string; name: string }[];
   categories: { id: string; name: string }[];
+  tiers?: { key: string; display_name: string }[];
 };
 
 const PRESETS: Record<string, { label: string; days: number }> = {
@@ -17,7 +18,7 @@ const PRESETS: Record<string, { label: string; days: number }> = {
   '90d': { label: 'Last 90 days', days: 90 },
 };
 
-export function ReportControls({ isAdmin, types, categories }: Props) {
+export function ReportControls({ isAdmin, types, categories, tiers }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
@@ -29,6 +30,7 @@ export function ReportControls({ isAdmin, types, categories }: Props) {
   const currentSeverity = searchParams.get('severity') || '';
   const currentType = searchParams.get('type') || '';
   const currentCategory = searchParams.get('category') || '';
+  const currentTier = searchParams.get('tier') || '';
 
   const updateParams = useCallback(
     (updates: Record<string, string>) => {
@@ -166,6 +168,21 @@ export function ReportControls({ isAdmin, types, categories }: Props) {
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
+
+            {tiers && tiers.length > 0 && (
+              <select
+                value={currentTier}
+                onChange={(e) => updateParams({ tier: e.target.value })}
+                className="px-2 py-1 text-sm border border-gray-300 rounded"
+                aria-label="Tier"
+              >
+                <option value="">All Tiers</option>
+                <option value="none">No tier</option>
+                {tiers.map((t) => (
+                  <option key={t.key} value={t.key}>{t.display_name}</option>
+                ))}
+              </select>
+            )}
           </>
         )}
       </div>

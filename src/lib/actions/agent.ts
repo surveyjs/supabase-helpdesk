@@ -24,10 +24,41 @@ async function requireAgentRole() {
   return { supabase, user, profile };
 }
 
-export async function changeTicketStatus(formData: FormData): Promise<void> {
-  const { supabase, user } = await requireAgentRole();
+/**
+ * Require agent role OR ticket creator with an active tier capability.
+ * Returns { supabase, user, profile, isAgent }.
+ */
+async function requireAgentOrTierCapability(ticketId: number, capability: string) {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id, role')
+    .eq('id', user.id)
+    .single();
+  if (!profile) throw new Error('Forbidden');
 
+  const isAgent = ['agent', 'admin'].includes(profile.role);
+  if (isAgent) return { supabase, user, profile, isAgent: true as const };
+
+  // Check if user is the ticket creator AND has the tier capability
+  const { data: ticket } = await supabase
+    .from('tickets')
+    .select('creator_id')
+    .eq('id', ticketId)
+    .single();
+  if (!ticket || ticket.creator_id !== user.id) throw new Error('Forbidden');
+
+  const { data: hasCap } = await supabase.rpc('user_has_tier_capability', { capability });
+  if (!hasCap) throw new Error('Forbidden');
+
+  return { supabase, user, profile, isAgent: false as const };
+}
+
+export async function changeTicketStatus(formData: FormData): Promise<void> {
   const ticketId = Number(formData.get('ticket_id'));
+  const { supabase, user } = await requireAgentOrTierCapability(ticketId, 'change_status');
   const newStatus = formData.get('new_status') as string;
 
   if (!['open', 'pending', 'closed'].includes(newStatus)) return;
@@ -340,9 +371,9 @@ export async function changeUrgency(formData: FormData): Promise<void> {
 }
 
 export async function changeSeverity(formData: FormData): Promise<void> {
-  const { supabase, user } = await requireAgentRole();
-
   const ticketId = Number(formData.get('ticket_id'));
+  const { supabase, user } = await requireAgentOrTierCapability(ticketId, 'set_severity');
+
   const newSeverity = formData.get('new_severity') as string;
 
   if (!VALID_PRIORITIES.includes(newSeverity)) return;
@@ -385,9 +416,9 @@ export async function changeSeverity(formData: FormData): Promise<void> {
 }
 
 export async function changeType(formData: FormData): Promise<void> {
-  const { supabase, user } = await requireAgentRole();
-
   const ticketId = Number(formData.get('ticket_id'));
+  const { supabase, user } = await requireAgentOrTierCapability(ticketId, 'change_type');
+
   const newTypeId = formData.get('new_type_id') as string;
 
   const { data: typeExists } = await supabase
@@ -466,9 +497,8 @@ export async function changeCategory(formData: FormData): Promise<void> {
 }
 
 export async function toggleTicketPrivacy(formData: FormData): Promise<void> {
-  const { supabase, user } = await requireAgentRole();
-
   const ticketId = Number(formData.get('ticket_id'));
+  const { supabase, user } = await requireAgentOrTierCapability(ticketId, 'change_visibility');
 
   const { data: ticket } = await supabase
     .from('tickets')
@@ -511,9 +541,9 @@ export async function toggleTicketPrivacy(formData: FormData): Promise<void> {
 // ============================================================
 
 export async function addTagToTicket(formData: FormData): Promise<void> {
-  const { supabase, user } = await requireAgentRole();
-
   const ticketId = Number(formData.get('ticket_id'));
+  const { supabase, user } = await requireAgentOrTierCapability(ticketId, 'add_remove_tags');
+
   const tagId = formData.get('tag_id') as string;
   if (!ticketId || !tagId) return;
 
@@ -543,9 +573,9 @@ export async function addTagToTicket(formData: FormData): Promise<void> {
 }
 
 export async function removeTagFromTicket(formData: FormData): Promise<void> {
-  const { supabase, user } = await requireAgentRole();
-
   const ticketId = Number(formData.get('ticket_id'));
+  const { supabase, user } = await requireAgentOrTierCapability(ticketId, 'add_remove_tags');
+
   const tagId = formData.get('tag_id') as string;
   if (!ticketId || !tagId) return;
 

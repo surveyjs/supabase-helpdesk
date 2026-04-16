@@ -103,9 +103,37 @@ export async function uploadAttachments(
     } catch { /* use defaults */ }
   }
   const parsedMaxSize = maxSizeRes.data ? parseInt(maxSizeRes.data.value, 10) : NaN;
-  const maxSizeMb = Number.isFinite(parsedMaxSize) && parsedMaxSize > 0 ? parsedMaxSize : 10;
+  let maxSizeMb = Number.isFinite(parsedMaxSize) && parsedMaxSize > 0 ? parsedMaxSize : 10;
   const parsedMaxFiles = maxFilesRes.data ? parseInt(maxFilesRes.data.value, 10) : NaN;
-  const maxFilesPerPost = Number.isFinite(parsedMaxFiles) && parsedMaxFiles > 0 ? parsedMaxFiles : 5;
+  let maxFilesPerPost = Number.isFinite(parsedMaxFiles) && parsedMaxFiles > 0 ? parsedMaxFiles : 5;
+
+  // Check tier overrides for file limits
+  const { data: tierProfile } = await supabase
+    .from('profiles')
+    .select('tier_id, tier_expires_at')
+    .eq('id', user.id)
+    .single();
+
+  if (tierProfile?.tier_id) {
+    const tierActive = !tierProfile.tier_expires_at || new Date(tierProfile.tier_expires_at) > new Date();
+    if (tierActive) {
+      const { data: tier } = await supabase
+        .from('subscription_tiers')
+        .select('limit_max_file_size, limit_max_files_per_post')
+        .eq('id', tierProfile.tier_id)
+        .single();
+      if (tier?.limit_max_file_size != null) {
+        // Tier stores bytes; convert to MB, cap at 50MB
+        const tierMb = Math.min(tier.limit_max_file_size / (1024 * 1024), 50);
+        if (tierMb > maxSizeMb) maxSizeMb = tierMb;
+      }
+      if (tier?.limit_max_files_per_post != null) {
+        const tierFiles = Math.min(tier.limit_max_files_per_post, 20);
+        if (tierFiles > maxFilesPerPost) maxFilesPerPost = tierFiles;
+      }
+    }
+  }
+
   const maxSizeBytes = maxSizeMb * 1024 * 1024;
 
   // Get files from formData

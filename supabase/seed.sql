@@ -414,3 +414,34 @@ INSERT INTO kb_articles (id, title, slug, body, status, category_id, author_id) 
 
 -- Reset sequence for kb_articles id
 SELECT setval('kb_articles_id_seq', 3);
+
+-- ============================================================
+-- Phase 20 — Subscription Tiers
+-- ============================================================
+
+INSERT INTO subscription_tiers (key, display_name, color, icon, sort_order,
+  cap_change_visibility, cap_set_severity, cap_change_status, cap_change_type, cap_add_remove_tags,
+  limit_ticket_rate, limit_max_file_size, limit_max_files_per_post)
+VALUES
+  ('free', 'Free', 'gray', NULL, 1,
+    false, false, false, false, false,
+    NULL, NULL, NULL),
+  ('licensed', 'Licensed', 'blue', NULL, 2,
+    true, false, false, false, false,
+    20, NULL, NULL),
+  ('enterprise', 'Enterprise', 'purple', NULL, 3,
+    true, true, true, true, true,
+    50, 26214400, NULL);
+
+-- Tier assignments
+-- Alice → Enterprise (no expiration)
+UPDATE profiles SET tier_id = (SELECT id FROM subscription_tiers WHERE key = 'enterprise'), tier_expires_at = NULL
+WHERE email = 'alice@example.com';
+
+-- Bob → Licensed (expires 2026-12-31)
+UPDATE profiles SET tier_id = (SELECT id FROM subscription_tiers WHERE key = 'licensed'), tier_expires_at = '2026-12-31T23:59:59Z'
+WHERE email = 'bob@example.com';
+
+-- Dave → Licensed (expired 2026-01-01)
+UPDATE profiles SET tier_id = (SELECT id FROM subscription_tiers WHERE key = 'licensed'), tier_expires_at = '2026-01-01T00:00:00Z'
+WHERE email = 'dave@example.com';

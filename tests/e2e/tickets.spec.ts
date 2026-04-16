@@ -46,6 +46,12 @@ test.describe('Tickets', () => {
       await admin.from('posts').delete().in('ticket_id', ids);
       await admin.from('tickets').delete().in('id', ids);
     }
+
+    // Raise rate limit so concurrent E2E suites don't block ticket creation
+    await admin.from('app_settings').upsert(
+      { key: 'ticket_creation_rate_limit', value: '100' },
+      { onConflict: 'key' },
+    );
   });
 
   test('create a ticket with all fields → appears in "My Tickets"', async ({ page }) => {
@@ -75,7 +81,7 @@ test.describe('Tickets', () => {
     await expect(page.getByRole('heading', { name: 'E2E Test Ticket' })).toBeVisible();
 
     // Check metadata
-    await expect(page.getByText('Issue')).toBeVisible();
+    await expect(page.getByRole('definition').filter({ hasText: 'Issue' })).toBeVisible();
     await expect(page.getByText(/Urgency: High/)).toBeVisible();
 
     // Check original post

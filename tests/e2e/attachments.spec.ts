@@ -65,6 +65,12 @@ test.describe('File Attachments', () => {
       await admin.from('tickets').delete().in('id', ids);
     }
 
+    // Raise rate limit so concurrent E2E suites don't block ticket creation
+    await admin.from('app_settings').upsert(
+      { key: 'ticket_creation_rate_limit', value: '100' },
+      { onConflict: 'key' },
+    );
+
     // Create temp directory for test files
     tmpDir = path.join(__dirname, '..', '.tmp-attachments');
     if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });

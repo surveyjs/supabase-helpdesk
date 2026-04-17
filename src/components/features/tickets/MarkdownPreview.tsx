@@ -69,7 +69,7 @@ export function MarkdownPreview({
           {text ? (
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
           ) : (
-            <p className="text-gray-400 italic">Nothing to preview</p>
+            <p className="text-gray-500 italic">Nothing to preview</p>
           )}
         </div>
       )}

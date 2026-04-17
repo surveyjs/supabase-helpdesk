@@ -123,7 +123,7 @@ export default async function ArticleDetailPage({
           className="prose prose-sm max-w-none"
           dangerouslySetInnerHTML={{ __html: htmlBody }}
         />
-        <p className="mt-6 text-xs text-gray-400">
+        <p className="mt-6 text-xs text-gray-500">
           Last updated on {new Date(lastUpdated).toLocaleDateString()}
         </p>
       </div>

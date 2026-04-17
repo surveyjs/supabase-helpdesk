@@ -74,7 +74,7 @@ export async function AttachmentList({
                 />
               </a>
             ) : (
-              <span className="text-gray-400 text-lg">📎</span>
+              <span className="text-gray-500 text-lg">📎</span>
             )}
 
             <div className="flex-1 min-w-0">
@@ -93,7 +93,7 @@ export async function AttachmentList({
                   {att.original_filename}
                 </span>
               )}
-              <span className="text-xs text-gray-400">{formatSize(att.file_size)}</span>
+              <span className="text-xs text-gray-500">{formatSize(att.file_size)}</span>
             </div>
 
             {canDelete && (

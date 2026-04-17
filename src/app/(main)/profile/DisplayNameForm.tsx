@@ -30,7 +30,7 @@ export function DisplayNameForm({
           required
         />
         {enforceUniqueness && (
-          <p className="text-xs text-gray-400 mt-1">Display names must be unique.</p>
+          <p className="text-xs text-gray-500 mt-1">Display names must be unique.</p>
         )}
       </div>
       {state.error && (

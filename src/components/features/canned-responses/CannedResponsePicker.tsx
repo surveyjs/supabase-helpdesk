@@ -91,10 +91,10 @@ export function CannedResponsePicker({
           </div>
           <div className="max-h-60 overflow-y-auto">
             {isPending && (
-              <p className="text-xs text-gray-400 p-3 text-center">Loading…</p>
+              <p className="text-xs text-gray-500 p-3 text-center">Loading…</p>
             )}
             {!isPending && responses.length === 0 && (
-              <p className="text-xs text-gray-400 p-3 text-center">No responses found.</p>
+              <p className="text-xs text-gray-500 p-3 text-center">No responses found.</p>
             )}
             {!isPending && responses.map((r) => (
               <button

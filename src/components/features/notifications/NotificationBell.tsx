@@ -86,8 +86,8 @@ export function NotificationBell({ initialUnreadCount, userId }: NotificationBel
       <button
         type="button"
         onClick={handleToggle}
-        className="relative text-gray-500 hover:text-gray-700 focus:outline-none"
-        aria-label="Notifications"
+        className="relative text-gray-500 hover:text-gray-700 min-h-[44px] min-w-[44px] flex items-center justify-center rounded focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
+        aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"

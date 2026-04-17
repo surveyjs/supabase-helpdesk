@@ -21,11 +21,14 @@ import { BulkActionToolbar } from '@/components/features/bulk-actions/BulkAction
 
 function getContrastColor(hex: string): string {
   const c = hex.replace('#', '');
-  const r = parseInt(c.substring(0, 2), 16) / 255;
-  const g = parseInt(c.substring(2, 4), 16) / 255;
-  const b = parseInt(c.substring(4, 6), 16) / 255;
-  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  return luminance < 0.5 ? '#FFFFFF' : '#111827';
+  const srgb = [0, 2, 4].map((i) => {
+    const v = parseInt(c.substring(i, i + 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  });
+  const L = 0.2126 * srgb[0] + 0.7152 * srgb[1] + 0.0722 * srgb[2];
+  const ratioWhite = 1.05 / (L + 0.05);
+  const ratioDark = (L + 0.05) / 0.05;
+  return ratioWhite >= ratioDark ? '#FFFFFF' : '#000000';
 }
 
 function buildTagFilterUrl(filters: Record<string, string | undefined>, newTags: string): string {
@@ -141,7 +144,7 @@ export default async function AgentDashboardPage({
         <div className="flex flex-wrap items-center gap-2 mb-3">
           <span className="text-sm font-medium text-gray-700">Saved Views:</span>
           {savedViews.length === 0 && (
-            <span className="text-sm text-gray-400">None yet</span>
+            <span className="text-sm text-gray-500">None yet</span>
           )}
           {savedViews.map((view) => {
             const viewFilters = (view.filters ?? {}) as Record<string, string>;
@@ -199,7 +202,14 @@ export default async function AgentDashboardPage({
       </div>
 
       {/* Filter Bar */}
-      <form method="get" action="/agent" className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
+      <details className="bg-white rounded-lg border border-gray-200 mb-4 group" open>
+        <summary className="px-4 py-3 cursor-pointer text-sm font-medium text-gray-700 hover:text-gray-900 list-none flex items-center justify-between md:hidden focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none rounded-lg">
+          <span>Filters</span>
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </summary>
+        <form method="get" action="/agent" className="p-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
           {/* Search */}
           <div>
@@ -398,7 +408,7 @@ export default async function AgentDashboardPage({
                     key={tag.id}
                     href={`/agent?${buildTagFilterUrl(filters, newTags)}`}
                     className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${
-                      isSelected ? 'ring-2 ring-offset-1 ring-blue-500' : 'opacity-70 hover:opacity-100'
+                      isSelected ? 'ring-2 ring-offset-1 ring-blue-500' : 'hover:ring-1 hover:ring-gray-300'
                     }`}
                     style={{ backgroundColor: tag.color, color: textColor }}
                   >
@@ -416,18 +426,19 @@ export default async function AgentDashboardPage({
         <div className="flex items-center gap-2 mt-3">
           <button
             type="submit"
-            className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
+            className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 font-medium min-h-[44px] focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
           >
             Apply Filters
           </button>
           <Link
             href="/agent"
-            className="px-4 py-1.5 text-sm text-gray-600 hover:text-gray-800"
+            className="px-4 py-1.5 text-sm text-gray-600 hover:text-gray-800 min-h-[44px] inline-flex items-center"
           >
             Clear All
           </Link>
         </div>
       </form>
+      </details>
 
       {/* Result count */}
       <p className="text-sm text-gray-600 mb-4" data-testid="result-count">
@@ -446,7 +457,43 @@ export default async function AgentDashboardPage({
             tags={filterOptions.tags}
             isAdmin={profile.role === 'admin'}
           />
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          {/* Mobile card layout */}
+          <div className="md:hidden space-y-3">
+            {tickets.map((ticket) => (
+              <div key={ticket.id} className="bg-white rounded-lg border border-gray-200 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="pt-1 min-w-[44px] min-h-[44px] flex items-center justify-center">
+                    <TicketCheckbox ticketId={ticket.id} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <Link
+                      href={`/tickets/${ticket.id}/${ticket.slug}`}
+                      className="text-sm font-medium text-blue-600 hover:text-blue-800 line-clamp-2 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none rounded"
+                    >
+                      {ticket.title}
+                    </Link>
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                      <Badge variant="status" value={ticket.status} />
+                      <Badge variant="priority" value={ticket.urgency} />
+                      {ticket.sla_status && ticket.sla_status !== 'no_sla' && (
+                        <span className="text-xs text-gray-500">
+                          SLA: {ticket.sla_status === 'breached' ? 'Breached' :
+                                ticket.sla_status === 'approaching' ? 'Approaching' :
+                                ticket.sla_status === 'met' ? 'On track' :
+                                ticket.sla_status.replace('_', ' ')}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      {new Date(ticket.updated_at).toLocaleDateString()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* Desktop table layout */}
+          <div className="hidden md:block bg-white rounded-lg border border-gray-200 overflow-hidden">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
@@ -477,7 +524,7 @@ export default async function AgentDashboardPage({
                       {ticket.title}
                     </Link>
                     {ticket.is_private && (
-                      <span className="ml-1 text-xs text-gray-400" title="Private">🔒</span>
+                      <span className="ml-1 text-xs text-gray-500" title="Private">🔒</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-700">
@@ -541,7 +588,7 @@ export default async function AgentDashboardPage({
                         </span>
                       </span>
                     ) : (
-                      <span className="text-xs text-gray-400">—</span>
+                      <span className="text-xs text-gray-500">—</span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-600">

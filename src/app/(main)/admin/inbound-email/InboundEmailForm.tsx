@@ -67,7 +67,7 @@ export function InboundEmailForm({
             placeholder="support@example.com"
             className="w-full max-w-md rounded border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
           />
-          <p className="text-xs text-gray-400 mt-1">
+          <p className="text-xs text-gray-500 mt-1">
             This address is used as the Reply-To header in outbound notification emails so replies are routed back to the system.
           </p>
         </div>
@@ -106,7 +106,7 @@ export function InboundEmailForm({
                 <span className="text-sm font-medium text-gray-700">
                   {templateLabels[tpl.event_type] ?? tpl.event_type}
                 </span>
-                <span className="ml-2 text-xs text-gray-400">
+                <span className="ml-2 text-xs text-gray-500">
                   {tpl.subject}
                 </span>
               </div>
@@ -130,7 +130,7 @@ export function InboundEmailForm({
         <code className="block bg-gray-50 px-3 py-2 rounded text-sm text-gray-800 font-mono">
           POST /api/inbound-email
         </code>
-        <p className="text-xs text-gray-400 mt-2">
+        <p className="text-xs text-gray-500 mt-2">
           Set the <code className="text-gray-600">INBOUND_EMAIL_WEBHOOK_SECRET</code> environment variable and
           include it as a Bearer token in the Authorization header.
         </p>

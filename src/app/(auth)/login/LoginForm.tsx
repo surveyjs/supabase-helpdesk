@@ -173,10 +173,10 @@ export function LoginForm({ config }: { config: PublicAuthConfig }) {
       )}
 
       <div className="mt-4 flex items-center justify-between text-sm">
-        <a href="/forgot-password" className="text-blue-600 hover:text-blue-800">
+        <a href="/forgot-password" className="text-blue-600 hover:text-blue-800 underline underline">
           Forgot password?
         </a>
-        <a href="/signup" className="text-blue-600 hover:text-blue-800">
+        <a href="/signup" className="text-blue-600 hover:text-blue-800 underline underline">
           Don&apos;t have an account? Sign up
         </a>
       </div>

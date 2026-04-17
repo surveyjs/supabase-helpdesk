@@ -179,8 +179,8 @@ test.describe('Authentication', () => {
     const details = page.locator('details');
     await details.locator('summary').click();
 
-    await expect(page.getByRole('link', { name: 'Profile' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Notification Settings' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Profile' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Notification Settings' })).toBeVisible();
   });
 
   test('sign out button: visible outside dropdown', async ({ page }) => {

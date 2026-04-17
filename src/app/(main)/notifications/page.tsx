@@ -92,7 +92,7 @@ export default async function NotificationsPage({
                   >
                     {notif.message}
                   </p>
-                  <p className="text-xs text-gray-400 mt-0.5">
+                  <p className="text-xs text-gray-500 mt-0.5">
                     {new Date(notif.created_at).toLocaleString()}
                   </p>
                 </div>

@@ -105,7 +105,7 @@ export function NotificationDropdown({ initialNotifications, onClose, onMarkAllR
                   <p className={`text-sm ${!notif.is_read ? 'font-medium text-gray-900' : 'text-gray-700'}`}>
                     {notif.message}
                   </p>
-                  <p className="text-xs text-gray-400 mt-0.5">
+                  <p className="text-xs text-gray-500 mt-0.5">
                     {relativeTime(notif.created_at)}
                   </p>
                 </div>

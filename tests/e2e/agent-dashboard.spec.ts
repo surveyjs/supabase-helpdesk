@@ -82,7 +82,7 @@ test.describe('Agent Dashboard', () => {
     await page.getByRole('button', { name: 'Apply Filters' }).click();
 
     await expect(page).toHaveURL(/q=Password/);
-    await expect(page.getByText('Password reset not working')).toBeVisible();
+    await expect(page.locator('.hidden.md\\:block').getByText('Password reset not working').first()).toBeVisible();
   });
 
   test('filter by submitter email works', async ({ page }) => {

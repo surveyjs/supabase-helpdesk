@@ -144,7 +144,7 @@ function SocialProviderCard({
         {provider === 'gitlab' && (
           <div>
             <label htmlFor="gitlab_instance_url" className="block text-sm font-medium text-gray-700 mb-1">
-              Instance URL <span className="text-gray-400 font-normal">(optional, for self-hosted)</span>
+              Instance URL <span className="text-gray-500 font-normal">(optional, for self-hosted)</span>
             </label>
             <input
               id="gitlab_instance_url"

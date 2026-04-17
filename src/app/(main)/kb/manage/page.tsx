@@ -115,7 +115,7 @@ export default async function KbManagePage({
             </button>
           )}
           {!isAdmin && (
-            <span className="text-xs text-gray-400">(Admin only)</span>
+            <span className="text-xs text-gray-500">(Admin only)</span>
           )}
         </form>
       </div>
@@ -214,7 +214,7 @@ export default async function KbManagePage({
                     <td className="px-4 py-2 text-gray-600">
                       {auth?.display_name ?? '—'}
                       {editor && editor.id !== auth?.id && (
-                        <span className="text-xs text-gray-400 block">
+                        <span className="text-xs text-gray-500 block">
                           edited by {editor.display_name}
                         </span>
                       )}

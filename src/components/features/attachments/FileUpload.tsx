@@ -121,7 +121,7 @@ export function FileUpload({
           <p className="text-sm text-gray-500">
             Drop files here or click to select
           </p>
-          <p className="text-xs text-gray-400 mt-1">
+          <p className="text-xs text-gray-500 mt-1">
             Max {maxFileSizeMb}MB per file · {remainingSlots} file(s) remaining
           </p>
         </div>

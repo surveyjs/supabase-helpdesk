@@ -156,7 +156,7 @@ export default async function UserDetailPage({
             <div>
               <dt className="text-gray-500">Subscription Tier</dt>
               <dd className="text-gray-900" data-testid="user-tier">
-                <span className={tierExpired ? 'text-gray-400 line-through' : ''}>
+                <span className={tierExpired ? 'text-gray-500 line-through' : ''}>
                   {tierInfo.display_name} ({tierInfo.key})
                 </span>
                 {targetUser.tier_expires_at && (

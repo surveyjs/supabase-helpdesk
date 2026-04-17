@@ -80,7 +80,7 @@ export function SignupForm({ config }: { config: PublicAuthConfig }) {
         <ExternalButton providerName={config.externalProviderName} />
         <p className="mt-4 text-sm text-center text-gray-600">
           Already have an account?{' '}
-          <a href="/login" className="text-blue-600 hover:text-blue-800">Log in</a>
+          <a href="/login" className="text-blue-600 hover:text-blue-800 underline underline">Log in</a>
         </p>
       </>
     );
@@ -93,7 +93,7 @@ export function SignupForm({ config }: { config: PublicAuthConfig }) {
         <h1 className="text-2xl font-semibold text-gray-900 mb-4">Check your email</h1>
         <p className="text-gray-600 text-sm">{state.message}</p>
         <div className="mt-6">
-          <a href="/login" className="text-sm text-blue-600 hover:text-blue-800">
+          <a href="/login" className="text-sm text-blue-600 hover:text-blue-800 underline underline">
             Back to log in
           </a>
         </div>
@@ -202,7 +202,7 @@ export function SignupForm({ config }: { config: PublicAuthConfig }) {
 
       <p className="mt-4 text-sm text-center text-gray-600">
         Already have an account?{' '}
-        <a href="/login" className="text-blue-600 hover:text-blue-800">Log in</a>
+        <a href="/login" className="text-blue-600 hover:text-blue-800 underline underline">Log in</a>
       </p>
     </>
   );

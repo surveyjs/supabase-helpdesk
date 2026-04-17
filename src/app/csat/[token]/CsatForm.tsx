@@ -122,7 +122,7 @@ export function CsatForm({ token, existingRating, existingComment }: CsatFormPro
           placeholder="Tell us about your experience..."
           data-testid="csat-comment"
         />
-        <p className="text-xs text-gray-400 mt-1">{comment.length}/5000</p>
+        <p className="text-xs text-gray-500 mt-1">{comment.length}/5000</p>
       </div>
 
       {result?.error && (

@@ -152,7 +152,7 @@ export function ArticleEditorForm({
               {bodyText ? (
                 <div dangerouslySetInnerHTML={{ __html: simpleMarkdownPreview(bodyText) }} />
               ) : (
-                <p className="text-gray-400">Nothing to preview</p>
+                <p className="text-gray-500">Nothing to preview</p>
               )}
             </div>
           </>

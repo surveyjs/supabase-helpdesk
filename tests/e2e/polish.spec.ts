@@ -49,7 +49,6 @@ test.describe('Polish', () => {
       const mobileMenu = page.locator('#mobile-nav-menu');
       await expect(mobileMenu).toBeVisible();
       // Should contain navigation links
-      await expect(mobileMenu.locator('a')).toHaveCount(await mobileMenu.locator('a').count());
       expect(await mobileMenu.locator('a').count()).toBeGreaterThan(0);
     });
 
@@ -88,6 +87,7 @@ test.describe('Polish', () => {
       await page.goto('/tickets');
       // Check the hamburger button size
       const hamburger = page.locator('button[aria-label*="menu" i], button[aria-controls="mobile-menu"]');
+      await expect(hamburger).toBeVisible();
       const box = await hamburger.boundingBox();
       expect(box).toBeTruthy();
       expect(box!.width).toBeGreaterThanOrEqual(44);

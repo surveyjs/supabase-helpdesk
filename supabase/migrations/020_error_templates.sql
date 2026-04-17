@@ -27,5 +27,5 @@ An unexpected error occurred. Please try again later.
 
 This survey link has expired or has already been used.
 
-[Go to login]({{homeUrl}}/login)')
+[Go to login](/login)')
 ON CONFLICT (key) DO NOTHING;

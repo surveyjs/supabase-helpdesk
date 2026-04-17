@@ -59,7 +59,7 @@ export default async function TiersPage() {
                 placeholder="e.g., premium"
                 className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
               />
-              <p className="text-xs text-gray-400 mt-0.5">Lowercase, alphanumeric, hyphens. Immutable after creation.</p>
+              <p className="text-xs text-gray-500 mt-0.5">Lowercase, alphanumeric, hyphens. Immutable after creation.</p>
             </div>
             <div>
               <label htmlFor="tier-display-name" className="block text-xs font-medium text-gray-500 mb-1">Display Name</label>
@@ -186,7 +186,7 @@ export default async function TiersPage() {
                           <input type="hidden" name="tier_ids" value={JSON.stringify(
                             tiers.map((t, i) => i === idx - 1 ? tier.id : i === idx ? tiers[idx - 1].id : t.id)
                           )} />
-                          <button type="submit" className="text-xs text-gray-400 hover:text-gray-700" title="Move up">↑</button>
+                          <button type="submit" className="text-xs text-gray-500 hover:text-gray-700" title="Move up">↑</button>
                         </form>
                       )}
                       {idx < tiers.length - 1 && (
@@ -194,7 +194,7 @@ export default async function TiersPage() {
                           <input type="hidden" name="tier_ids" value={JSON.stringify(
                             tiers.map((t, i) => i === idx ? tiers[idx + 1].id : i === idx + 1 ? tier.id : t.id)
                           )} />
-                          <button type="submit" className="text-xs text-gray-400 hover:text-gray-700" title="Move down">↓</button>
+                          <button type="submit" className="text-xs text-gray-500 hover:text-gray-700" title="Move down">↓</button>
                         </form>
                       )}
                     </div>

@@ -82,7 +82,7 @@ test.describe('Agent Dashboard', () => {
     await page.getByRole('button', { name: 'Apply Filters' }).click();
 
     await expect(page).toHaveURL(/q=Password/);
-    await expect(page.getByText('Password reset not working')).toBeVisible();
+    await expect(page.locator('.hidden.md\\:block').getByText('Password reset not working').first()).toBeVisible();
   });
 
   test('filter by submitter email works', async ({ page }) => {
@@ -303,7 +303,7 @@ test.describe('Agent Ticket Detail Controls', () => {
     await btn.click();
     await assignResp;
     await expect(btn).toBeHidden({ timeout: 15000 });
-    await expect(page.getByRole('main').getByText('Agent Smith', { exact: true })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('main').getByRole('definition').filter({ hasText: 'Agent Smith' })).toBeVisible({ timeout: 10000 });
     // Cleanup: unassign
     const unassignBtn = page.getByRole('button', { name: 'Unassign' });
     await expect(unassignBtn).toBeVisible({ timeout: 10000 });

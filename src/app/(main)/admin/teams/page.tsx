@@ -77,7 +77,7 @@ export default async function AdminTeamsPage() {
                   Members
                 </summary>
                 {team.members.length === 0 ? (
-                  <p className="text-sm text-gray-400 mb-2">No members</p>
+                  <p className="text-sm text-gray-500 mb-2">No members</p>
                 ) : (
                   <ul className="space-y-1 mb-3">
                     {team.members.map((member) => (
@@ -85,7 +85,7 @@ export default async function AdminTeamsPage() {
                         <span className="text-gray-900">
                           {member.display_name ?? member.email}
                         </span>
-                        <span className="text-gray-400 text-xs">{member.email}</span>
+                        <span className="text-gray-500 text-xs">{member.email}</span>
                         <form action={removeTeamMember} className="inline">
                           <input type="hidden" name="user_id" value={member.id} />
                           <button

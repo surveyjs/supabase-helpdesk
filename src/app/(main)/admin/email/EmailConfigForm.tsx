@@ -180,7 +180,7 @@ export function EmailConfigForm({
             defaultValue={coalescingDelay}
             className="w-32 rounded border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
           />
-          <p className="text-xs text-gray-400 mt-1">0 = disabled (notifications sent immediately). Max: 15.</p>
+          <p className="text-xs text-gray-500 mt-1">0 = disabled (notifications sent immediately). Max: 15.</p>
         </div>
 
         {delayState?.message && (

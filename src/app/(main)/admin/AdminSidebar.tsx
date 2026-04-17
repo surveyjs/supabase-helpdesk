@@ -32,34 +32,63 @@ const SECTIONS = [
 export function AdminSidebar() {
   const pathname = usePathname();
 
+  const currentSection = SECTIONS.find(
+    (s) => pathname === s.href || pathname.startsWith(s.href + '/'),
+  );
+
   return (
-    <nav
-      className="w-56 shrink-0 border-r border-gray-200 pr-4"
-      aria-label="Admin navigation"
-    >
-      <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-        Setup
-      </h2>
-      <ul className="space-y-0.5">
-        {SECTIONS.map((section) => {
-          const isActive = pathname === section.href || pathname.startsWith(section.href + '/');
-          return (
-            <li key={section.href}>
-              <Link
-                href={section.href}
-                className={`block px-3 py-2 rounded text-sm ${
-                  isActive
-                    ? 'bg-blue-50 text-blue-700 font-medium'
-                    : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                }`}
-                aria-current={isActive ? 'page' : undefined}
-              >
-                {section.label}
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </nav>
+    <>
+      {/* Mobile: dropdown select */}
+      <div className="md:hidden mb-4 w-full">
+        <label htmlFor="admin-mobile-nav" className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+          Setup
+        </label>
+        <select
+          id="admin-mobile-nav"
+          className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none min-h-[44px]"
+          value={currentSection?.href ?? SECTIONS[0].href}
+          onChange={(e) => {
+            window.location.href = e.target.value;
+          }}
+          aria-label="Admin navigation"
+        >
+          {SECTIONS.map((section) => (
+            <option key={section.href} value={section.href}>
+              {section.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Desktop: sidebar */}
+      <nav
+        className="hidden md:block w-56 shrink-0 border-r border-gray-200 pr-4"
+        aria-label="Admin navigation"
+      >
+        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+          Setup
+        </h2>
+        <ul className="space-y-0.5">
+          {SECTIONS.map((section) => {
+            const isActive = pathname === section.href || pathname.startsWith(section.href + '/');
+            return (
+              <li key={section.href}>
+                <Link
+                  href={section.href}
+                  className={`block px-3 py-2 rounded text-sm focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none ${
+                    isActive
+                      ? 'bg-blue-50 text-blue-700 font-medium'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                  aria-current={isActive ? 'page' : undefined}
+                >
+                  {section.label}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+    </>
   );
 }

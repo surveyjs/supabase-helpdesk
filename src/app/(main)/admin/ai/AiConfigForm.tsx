@@ -373,7 +373,7 @@ export function AiConfigForm({ settings, usage }: Props) {
         )}
 
         {Object.keys(usage.byFeature).length === 0 && (
-          <p className="text-sm text-gray-400">No AI usage this month.</p>
+          <p className="text-sm text-gray-500">No AI usage this month.</p>
         )}
       </div>
 

@@ -8,11 +8,14 @@ import {
 
 function getContrastColor(hex: string): string {
   const c = hex.replace('#', '');
-  const r = parseInt(c.substring(0, 2), 16) / 255;
-  const g = parseInt(c.substring(2, 4), 16) / 255;
-  const b = parseInt(c.substring(4, 6), 16) / 255;
-  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  return luminance < 0.5 ? '#FFFFFF' : '#111827';
+  const srgb = [0, 2, 4].map((i) => {
+    const v = parseInt(c.substring(i, i + 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  });
+  const L = 0.2126 * srgb[0] + 0.7152 * srgb[1] + 0.0722 * srgb[2];
+  const ratioWhite = 1.05 / (L + 0.05);
+  const ratioDark = (L + 0.05) / 0.05;
+  return ratioWhite >= ratioDark ? '#FFFFFF' : '#000000';
 }
 
 export default async function AdminTagsPage() {

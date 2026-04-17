@@ -28,7 +28,7 @@ export default async function AdminTypesPage() {
                 <span className="text-sm font-medium text-gray-900">
                   {type.name}
                   {type.is_default && (
-                    <span className="ml-2 text-xs text-green-600 font-normal">(default)</span>
+                    <span className="ml-2 text-xs text-green-700 font-normal">(default)</span>
                   )}
                 </span>
 

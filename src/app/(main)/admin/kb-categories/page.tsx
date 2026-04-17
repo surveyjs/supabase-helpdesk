@@ -30,7 +30,7 @@ export default async function AdminKbCategoriesPage() {
                 <span className="text-sm font-medium text-gray-900 min-w-24">
                   {cat.name}
                 </span>
-                <span className="text-xs text-gray-400">order: {cat.display_order}</span>
+                <span className="text-xs text-gray-500">order: {cat.display_order}</span>
 
                 {/* Reorder buttons */}
                 {index > 0 && (

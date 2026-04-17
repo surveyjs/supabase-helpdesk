@@ -35,7 +35,7 @@ export function ChangePasswordForm() {
             className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
             required
           />
-          <p className="text-xs text-gray-400 mt-1">
+          <p className="text-xs text-gray-500 mt-1">
             At least 8 characters, with uppercase, lowercase, and a digit.
           </p>
         </div>

@@ -54,7 +54,7 @@ export function UserNoteItem({
           <span className="font-medium text-gray-900">{authorName}</span>
           <span className="text-gray-500 ml-2">{formatTime(createdAt)}</span>
           {editedAt && (
-            <span className="text-gray-400 ml-2 text-xs">(edited)</span>
+            <span className="text-gray-500 ml-2 text-xs">(edited)</span>
           )}
         </div>
         <div className="flex items-center gap-2">

@@ -10,10 +10,10 @@ export default async function AuthLayout({
   if (user) redirect('/');
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+    <main id="main" className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-md bg-white rounded-lg border border-gray-200 p-8">
         {children}
       </div>
-    </div>
+    </main>
   );
 }

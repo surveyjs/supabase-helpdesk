@@ -195,7 +195,7 @@ export default async function UsersPage({
                   <td className="px-4 py-3 text-gray-600">{team?.name ?? '—'}</td>
                   <td className="px-4 py-3 text-gray-600" data-testid={`user-tier-${user.id}`}>
                     {tierObj ? (
-                      <span className={tierExpired ? 'text-gray-400 line-through' : ''}>
+                      <span className={tierExpired ? 'text-gray-500 line-through' : ''}>
                         {tierObj.display_name}
                       </span>
                     ) : '—'}

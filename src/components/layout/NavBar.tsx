@@ -4,6 +4,7 @@ import { signOut } from '@/lib/actions/auth';
 import { getUnreadCount } from '@/lib/actions/notifications';
 import { NotificationBell } from '@/components/features/notifications/NotificationBell';
 import { createServerClient } from '@/lib/supabase/server';
+import { MobileMenu } from './MobileMenu';
 
 function RoleBadge({ role }: { role: string }) {
   if (role === 'admin') {
@@ -39,49 +40,44 @@ export default async function NavBar() {
 
   const displayName = profile?.display_name || user?.email || '';
 
+  // Build nav links for both desktop and mobile
+  const navLinks: { href: string; label: string }[] = [];
+  if (user) navLinks.push({ href: '/tickets', label: 'My Tickets' });
+  if (profile && ['agent', 'admin'].includes(profile.role)) {
+    navLinks.push({ href: '/agent', label: 'Agent Dashboard' });
+  }
+  if (profile && profile.role === 'admin') {
+    navLinks.push({ href: '/admin', label: 'Setup' });
+  }
+  if (kbVisible) navLinks.push({ href: '/help', label: 'Help Center' });
+  if (profile && ['agent', 'admin'].includes(profile.role)) {
+    navLinks.push({ href: '/kb/manage', label: 'Manage Articles' });
+    navLinks.push({ href: '/reports', label: 'Reports' });
+    navLinks.push({ href: '/canned-responses', label: 'Canned Responses' });
+  }
+
   return (
-    <nav className="bg-white border-b border-gray-200 px-4 py-3" aria-label="Main navigation">
+    <nav className="bg-white border-b border-gray-200 px-4 py-3 relative" aria-label="Main navigation">
       <div className="max-w-5xl mx-auto flex items-center justify-between">
         {/* Left side */}
         <div className="flex items-center gap-4">
-          <Link href="/" className="text-lg font-semibold text-gray-900">
+          <Link href="/" className="text-lg font-semibold text-gray-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none rounded">
             HelpDesk
           </Link>
-          {user && (
-            <Link href="/tickets" className="text-sm text-gray-600 hover:text-gray-900">
-              My Tickets
-            </Link>
-          )}
-          {profile && ['agent', 'admin'].includes(profile.role) && (
-            <Link href="/agent" className="text-sm text-gray-600 hover:text-gray-900">
-              Agent Dashboard
-            </Link>
-          )}
-          {profile && profile.role === 'admin' && (
-            <Link href="/admin" className="text-sm text-gray-600 hover:text-gray-900">
-              Setup
-            </Link>
-          )}
-          {kbVisible && (
-            <Link href="/help" className="text-sm text-gray-600 hover:text-gray-900">
-              Help Center
-            </Link>
-          )}
-          {profile && ['agent', 'admin'].includes(profile.role) && (
-            <Link href="/kb/manage" className="text-sm text-gray-600 hover:text-gray-900">
-              Manage Articles
-            </Link>
-          )}
-          {profile && ['agent', 'admin'].includes(profile.role) && (
-            <Link href="/reports" className="text-sm text-gray-600 hover:text-gray-900">
-              Reports
-            </Link>
-          )}
-          {profile && ['agent', 'admin'].includes(profile.role) && (
-            <Link href="/canned-responses" className="text-sm text-gray-600 hover:text-gray-900">
-              Canned Responses
-            </Link>
-          )}
+          {/* Mobile hamburger */}
+          <MobileMenu links={navLinks} />
+          {/* Desktop links */}
+          <div className="hidden md:flex items-center gap-4">
+            {navLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="text-sm text-gray-600 hover:text-gray-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none rounded px-1"
+              >
+                {link.label}
+              </Link>
+            ))}
+          </div>
         </div>
 
         {/* Right side */}
@@ -92,20 +88,20 @@ export default async function NavBar() {
               <NotificationBell initialUnreadCount={unreadCount} userId={user.id} />
 
               {/* User info with dropdown */}
-              <div className="flex items-center gap-2">
+              <div className="hidden sm:flex items-center gap-2">
                 <details className="relative">
-                  <summary className="flex items-center gap-2 cursor-pointer list-none text-sm text-gray-700 hover:text-gray-900">
+                  <summary className="flex items-center gap-2 cursor-pointer list-none text-sm text-gray-700 hover:text-gray-900 min-h-[44px] px-2 rounded focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none" aria-label={`User menu for ${displayName}`} aria-haspopup="true">
                     <span>{displayName}</span>
                     {profile && <RoleBadge role={profile.role} />}
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
                   </summary>
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded border border-gray-200 shadow-lg py-1 z-50">
-                    <a href="/profile" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded border border-gray-200 shadow-lg py-1 z-50" role="menu">
+                    <a href="/profile" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 min-h-[44px] flex items-center focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 focus-visible:outline-none" role="menuitem">
                       Profile
                     </a>
-                    <a href="/notification-settings" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                    <a href="/notification-settings" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 min-h-[44px] flex items-center focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 focus-visible:outline-none" role="menuitem">
                       Notification Settings
                     </a>
                   </div>
@@ -116,14 +112,14 @@ export default async function NavBar() {
               <form action={signOut}>
                 <button
                   type="submit"
-                  className="text-sm text-gray-600 hover:text-gray-900 px-2 py-1 rounded hover:bg-gray-100"
+                  className="text-sm text-gray-600 hover:text-gray-900 px-2 py-1 rounded hover:bg-gray-100 min-h-[44px] min-w-[44px] focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
                 >
                   Sign out
                 </button>
               </form>
             </>
           ) : (
-            <a href="/login" className="text-sm text-blue-600 hover:text-blue-800">
+            <a href="/login" className="text-sm text-blue-600 hover:text-blue-800 min-h-[44px] flex items-center focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none rounded px-2">
               Log in
             </a>
           )}

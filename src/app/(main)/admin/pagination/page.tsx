@@ -39,7 +39,7 @@ export default async function AdminPaginationPage() {
           <div key={f.key}>
             <label htmlFor={f.key} className="block text-sm font-medium text-gray-700 mb-1">
               {f.label}
-              <span className="text-xs text-gray-400 ml-2">({f.min}–{f.max})</span>
+              <span className="text-xs text-gray-500 ml-2">({f.min}–{f.max})</span>
             </label>
             <input
               id={f.key}

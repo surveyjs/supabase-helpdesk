@@ -21,7 +21,7 @@ export function ArticleFeedback({
         <span className="text-sm text-gray-500">
           👍 {helpfulCount} · 👎 {notHelpfulCount}
         </span>
-        <span className="text-xs text-gray-400">Log in to vote</span>
+        <span className="text-xs text-gray-500">Log in to vote</span>
       </div>
     );
   }

@@ -181,7 +181,7 @@ export function CannedResponseList({
                   <span className="text-xs text-gray-500">
                     by {r.author?.display_name ?? 'Unknown'}
                   </span>
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-gray-500">
                     {new Date(r.updated_at).toLocaleDateString()}
                   </span>
                 </div>

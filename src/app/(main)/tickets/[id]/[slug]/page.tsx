@@ -50,11 +50,14 @@ import { GenerateKbArticleButton } from './GenerateKbArticleButton';
 
 function getContrastColor(hex: string): string {
   const c = hex.replace('#', '');
-  const r = parseInt(c.substring(0, 2), 16) / 255;
-  const g = parseInt(c.substring(2, 4), 16) / 255;
-  const b = parseInt(c.substring(4, 6), 16) / 255;
-  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  return luminance < 0.5 ? '#FFFFFF' : '#111827';
+  const srgb = [0, 2, 4].map((i) => {
+    const v = parseInt(c.substring(i, i + 2), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  });
+  const L = 0.2126 * srgb[0] + 0.7152 * srgb[1] + 0.0722 * srgb[2];
+  const ratioWhite = 1.05 / (L + 0.05);
+  const ratioDark = (L + 0.05) / 0.05;
+  return ratioWhite >= ratioDark ? '#FFFFFF' : '#000000';
 }
 
 const SLA_DOT_COLORS: Record<SlaIndicatorStatus, string> = {
@@ -441,7 +444,7 @@ export default async function TicketDetailPage({
                 </span>
               )}
               {post.edited_at && (
-                <span className="ml-2 text-xs text-gray-400">(edited)</span>
+                <span className="ml-2 text-xs text-gray-500">(edited)</span>
               )}
             </span>
             <time dateTime={post.created_at} className="text-xs text-gray-500">
@@ -553,7 +556,7 @@ export default async function TicketDetailPage({
     return (
       <div key={entry.id} className="py-1 px-4 text-xs text-gray-500" data-testid={`activity-${entry.id}`}>
         <span>{formatActivityMessage(entry)}</span>
-        <span className="ml-2 text-gray-400">{formatTime(entry.created_at)}</span>
+        <span className="ml-2 text-gray-500">{formatTime(entry.created_at)}</span>
       </div>
     );
   }
@@ -864,7 +867,7 @@ export default async function TicketDetailPage({
                 </div>
               </dl>
             ) : (
-              <p className="text-sm text-gray-400">No SLA</p>
+              <p className="text-sm text-gray-500">No SLA</p>
             )}
           </div>
         )}
@@ -891,7 +894,7 @@ export default async function TicketDetailPage({
                     <p className="mt-1 pl-2 border-l-2 border-gray-200">{csatRating.comment}</p>
                   </details>
                 )}
-                <p className="text-xs text-gray-400">
+                <p className="text-xs text-gray-500">
                   Submitted {new Date(csatRating.submitted_at).toLocaleDateString()}
                 </p>
                 {isOwner && isRegularUser && (
@@ -941,7 +944,7 @@ export default async function TicketDetailPage({
                         <input type="hidden" name="tag_id" value={tag.id} />
                         <button
                           type="submit"
-                          className="text-xs text-gray-400 hover:text-red-500"
+                          className="text-xs text-gray-500 hover:text-red-500"
                           aria-label={`Remove tag ${tag.name}`}
                           title={`Remove ${tag.name}`}
                         >
@@ -979,7 +982,7 @@ export default async function TicketDetailPage({
         <div className="mt-4 border-t border-gray-200 pt-4" data-testid="follow-section">
           <div className="flex items-center gap-3">
             {isTicketOwner ? (
-              <span className="text-xs text-gray-400">Following (owner)</span>
+              <span className="text-xs text-gray-500">Following (owner)</span>
             ) : !isBlocked ? (
               isFollowing ? (
                 <form action={unfollowTicket}>

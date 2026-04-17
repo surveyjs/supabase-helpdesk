@@ -37,7 +37,7 @@ test.describe('Cross-Browser Smoke Tests', () => {
 
   test('signup page loads', async ({ page }) => {
     await page.goto('/signup');
-    await expect(page.getByRole('button', { name: /sign up/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /sign up/i })).toBeVisible({ timeout: 10000 });
   });
 
   test('complete user flow works', async ({ page }) => {

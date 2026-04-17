@@ -167,7 +167,7 @@ test.describe('Polish', () => {
     test('404 page shows for nonexistent path', async ({ page }) => {
       await page.goto('/this-does-not-exist-at-all');
       await expect(page.locator('body')).toContainText(/404|not found/i);
-      await expect(page.locator('a[href="/"]')).toBeVisible();
+      await expect(page.locator('a[href="/"]').first()).toBeVisible();
     });
 
     test('CSAT page with invalid token shows error', async ({ page }) => {

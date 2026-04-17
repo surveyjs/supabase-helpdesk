@@ -47,7 +47,7 @@ jobs:
           version: latest
       - run: supabase start
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium firefox webkit
       - name: Run E2E tests
         run: npm run test:e2e
       - uses: actions/upload-artifact@v4

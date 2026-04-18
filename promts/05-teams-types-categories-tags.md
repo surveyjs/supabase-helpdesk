@@ -143,7 +143,7 @@ Update the ticket detail page to show the category (if set) in the metadata sect
 ### 10. NavBar Update
 
 Update `src/components/layout/NavBar.tsx`:
-- Add a "Setup" link visible only to admins, pointing to `/admin/types` (Phase 7 will change this to `/admin` with a sidebar, but for now link to the first admin page)
+- Add a "Setup" link visible only to admins, inside the user menu dropdown as the first item, pointing to `/admin/types` (Phase 7 will change this to `/admin` with a sidebar)
 
 ### 11. Tests
 

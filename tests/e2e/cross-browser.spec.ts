@@ -24,7 +24,7 @@ async function loginAs(page: Page, email: string) {
       await expect(page).toHaveURL('/', { timeout: 15000 });
     }
   }
-  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('summary[aria-haspopup="true"]')).toBeVisible({ timeout: 15000 });
 }
 
 test.describe('Cross-Browser Smoke Tests', () => {

@@ -30,7 +30,7 @@ async function loginAs(page: Page, email: string, password: string, expectSucces
         await expect(page).toHaveURL('/', { timeout: 15000 });
       }
     }
-    await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('summary[aria-haspopup="true"]')).toBeVisible({ timeout: 15000 });
   }
 }
 
@@ -128,7 +128,9 @@ test.describe('Authentication', () => {
   test('sign out: clears session, redirects to /login', async ({ page }) => {
     await loginAs(page, 'alice@example.com', 'Password123');
     await expect(page).toHaveURL('/', { timeout: 10000 });
-    await page.getByRole('button', { name: 'Sign out' }).click();
+    // Open user menu dropdown and click Sign out
+    await page.locator('details summary').click();
+    await page.getByRole('menuitem', { name: 'Sign out' }).click();
     await expect(page).toHaveURL(/\/login/, { timeout: 10000 });
   });
 
@@ -183,15 +185,19 @@ test.describe('Authentication', () => {
     await expect(page.getByRole('menuitem', { name: 'Notification Settings' })).toBeVisible();
   });
 
-  test('sign out button: visible outside dropdown', async ({ page }) => {
+  test('sign out is inside user dropdown as last item', async ({ page }) => {
     await loginAs(page, 'alice@example.com', 'Password123', true);
 
-    const signOutButton = page.getByRole('button', { name: 'Sign out' });
-    await expect(signOutButton).toBeVisible();
+    // Open the user menu dropdown
+    await page.locator('details summary').click();
 
-    // Verify it is NOT inside the details dropdown
-    const detailsContent = page.locator('details div');
-    await expect(detailsContent.getByRole('button', { name: 'Sign out' })).toHaveCount(0);
+    // Sign out should be inside the dropdown as a menuitem
+    const signOutMenuItem = page.getByRole('menuitem', { name: 'Sign out' });
+    await expect(signOutMenuItem).toBeVisible();
+
+    // Verify Sign out is inside the details dropdown
+    const detailsContent = page.locator('details div[role="menu"]');
+    await expect(detailsContent.getByRole('menuitem', { name: 'Sign out' })).toBeVisible();
   });
 
   test('full reset-password flow', async ({ page }) => {

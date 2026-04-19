@@ -306,7 +306,7 @@ Each audit log entry includes:
 ### 15. NavBar Update
 
 Update `src/components/layout/NavBar.tsx`:
-- Change the "Setup" link (added in Phase 5) to point to `/admin` (which redirects to `/admin/types`)
+- Change the "Setup" link (added in Phase 5) to point to `/admin` (which redirects to `/admin/types`). The "Setup" link is inside the user menu dropdown as the first item for admins.
 
 ### 16. Tests
 

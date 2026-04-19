@@ -6,7 +6,7 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Log in' }).click();
   await expect(page).toHaveURL('/', { timeout: 10000 });
-  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('summary[aria-haspopup="true"]')).toBeVisible({ timeout: 10000 });
 }
 
 // ============================================================
@@ -145,22 +145,25 @@ test.describe('Reports Page - Agent View', () => {
 
 test.describe('NavBar Reports Link', () => {
   test('reports link visibility by role', async ({ page }) => {
-    // Agent sees the link
+    // Agent sees the link in user menu dropdown
     await loginAs(page, 'agent.smith@example.com');
-    await expect(page.getByRole('link', { name: 'Reports' })).toBeVisible();
+    await page.locator('details summary').click();
+    await expect(page.getByRole('menuitem', { name: 'Reports' })).toBeVisible();
 
     // Sign out and log in as admin
-    await page.getByRole('button', { name: 'Sign out' }).click();
+    await page.getByRole('menuitem', { name: 'Sign out' }).click();
     await expect(page).toHaveURL('/login', { timeout: 10000 });
 
     await loginAs(page, 'admin@example.com');
-    await expect(page.getByRole('link', { name: 'Reports' })).toBeVisible();
+    await page.locator('details summary').click();
+    await expect(page.getByRole('menuitem', { name: 'Reports' })).toBeVisible();
 
     // Sign out and log in as regular user
-    await page.getByRole('button', { name: 'Sign out' }).click();
+    await page.getByRole('menuitem', { name: 'Sign out' }).click();
     await expect(page).toHaveURL('/login', { timeout: 10000 });
 
     await loginAs(page, 'alice@example.com');
-    await expect(page.getByRole('link', { name: 'Reports' })).not.toBeVisible();
+    await page.locator('details summary').click();
+    await expect(page.getByRole('menuitem', { name: 'Reports' })).not.toBeVisible();
   });
 });

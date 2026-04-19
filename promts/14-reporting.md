@@ -136,7 +136,7 @@ All chart components are `"use client"` and receive data as props from the serve
 ### 7. NavBar Update
 
 Update `src/components/layout/NavBar.tsx`:
-- Add **"Reports"** link visible to agents and admins
+- Add **"Reports"** link visible to agents and admins, inside the user menu dropdown (after "My Tickets", before "Canned Responses")
 - Links to `/reports`
 
 ### 8. Tests

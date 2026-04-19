@@ -202,7 +202,7 @@ Update `src/lib/actions/tickets.ts` — `createTicket`:
 ### 8. NavBar Update
 
 Update `src/components/layout/NavBar.tsx`:
-- Add **"Canned Responses"** link visible to agents/admins
+- Add **"Canned Responses"** link visible to agents/admins, inside the user menu dropdown (after "Reports", before "Profile")
 - Links to `/canned-responses`
 
 ### 9. Seed Data

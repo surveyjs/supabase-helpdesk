@@ -103,12 +103,16 @@ Implement the client helpers created as stubs in Phase 0:
 
 **`src/components/layout/NavBar.tsx`**:
 - Server Component
-- Left: "HelpDesk" logo link using `<Link>` from `next/link` (links to `/`, will become configurable in Phase 7). Use `next/link` for internal navigation to satisfy the `@next/next/no-html-link-for-pages` lint rule. Add a "My Tickets" link pointing to `/tickets` (page built in Phase 3 — renders now, page returns 404 until then). Role-conditional links (Agent Dashboard, Setup) added in their respective phases.
+- Left: "HelpDesk" logo link using `<Link>` from `next/link` (links to `/`, will become configurable in Phase 7). Use `next/link` for internal navigation to satisfy the `@next/next/no-html-link-for-pages` lint rule. Add a "My Tickets" link pointing to `/tickets` (visible only to regular users — agents/admins get this link in their user menu dropdown instead). Role-conditional links (Agent Dashboard) added in their respective phases.
 - Right (authenticated):
   - Notification bell placeholder icon (Phase 10 adds interactive client component)
-  - Display name (or email fallback) + role badge pill: "Admin" (red/orange) for admins, "Agent" (blue) for agents, no badge for regular users
-  - **Dropdown menu** using HTML `<details>`/`<summary>` (no client-side JavaScript needed, no `"use client"`): contains "Profile" link and "Notification Settings" link (both placeholder routes for now)
-  - **Separate** "Sign out" button outside the dropdown (always visible)
+  - **User menu dropdown** using HTML `<details>`/`<summary>` (no client-side JavaScript needed, no `"use client"`):
+    - Summary shows: Display name (or email fallback) + role badge pill: "Admin" (red/orange) for admins, "Agent" (blue) for agents, no badge for regular users
+    - Dropdown contains role-based links followed by common links, with "Sign out" always last:
+      - **Admin only:** "Setup" link (first item, added in Phase 7)
+      - **Agents/admins only:** "My Tickets", "Reports" (Phase 14), "Canned Responses" (Phase 16)
+      - **All users:** "Profile" link, "Notification Settings" link
+      - **All users:** "Sign out" button (always last item, uses `<form>` with server action)
 - Right (unauthenticated): "Log in" link. (Phase 3 may add "Browse Tickets" link if public access is enabled per req 1.5/16.10.)
 - Structure the NavBar markup so it can be converted to a hamburger menu on small screens in Phase 22 (no mobile behavior needed now, but the DOM structure should be collapsible)
 - Fetch user profile server-side to show display name and role
@@ -177,15 +181,15 @@ Create migration **`supabase/migrations/002_auth.sql`**:
 - Test authenticated redirect: visiting `/login` redirects to `/`
 - Test nav bar: shows display name + role badge when logged in
 - Test nav bar: shows "Log in" link when not logged in
-- Test nav bar dropdown: `<details>` opens/closes, contains Profile and Notification Settings links
-- Test sign out button: visible outside dropdown, clicking signs out
+- Test nav bar dropdown: `<details>` opens/closes, contains Profile and Notification Settings links, and Sign out as last item
+- Test sign out: is inside user dropdown as a menuitem, clicking signs out
 
 ## Implementation Notes
 
 - **Visual design:** Follow `docs/design.md` — gray-50 page background, white cards with subtle borders, blue primary buttons, Geist font (sans + mono), max-width ~5xl centered content. All forms must have proper labels and be keyboard-navigable (WCAG 2.1 AA).
 - Enforce content-length limits from architecture constraint 9 on all form inputs (e.g., display_name max 100 chars, email max 320 chars). Validate both client-side (for UX, using `maxLength` attributes) and server-side (in Server Actions).
 - All auth mutations happen via Server Actions (architecture constraint 1)
-- The NavBar dropdown uses `<details>`/`<summary>` (no JS, no `"use client"`). However, the auth form pages (`login`, `signup`, `forgot-password`, `reset-password`) require `"use client"` because they use React's `useActionState` hook for Server Action form state management.
+- The NavBar dropdown uses `<details>`/`<summary>` (no JS, no `"use client"`). The dropdown contains role-specific links, common links (Profile, Notification Settings), and Sign out as the last item using a `<form>` with server action. However, the auth form pages (`login`, `signup`, `forgot-password`, `reset-password`) require `"use client"` because they use React's `useActionState` hook for Server Action form state management.
 - Login rate limiting is in the Server Action, not client-side
 - The login_attempts check uses a service-role client (bypasses RLS) since unauthenticated users can't have RLS context
 

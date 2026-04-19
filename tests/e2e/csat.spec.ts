@@ -28,7 +28,7 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
     }
   }
 
-  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('summary[aria-haspopup="true"]')).toBeVisible({ timeout: 15000 });
 }
 
 /** Navigate to an admin page, retrying once if requireAdmin() redirect race occurs. */
@@ -322,7 +322,8 @@ test.describe('CSAT Admin Settings', () => {
 
   test('CSAT settings page loads for admin', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await expect(page.getByRole('link', { name: 'Setup' })).toBeVisible({ timeout: 10000 });
+    await page.locator('details summary').click();
+    await expect(page.getByRole('menuitem', { name: 'Setup' })).toBeVisible({ timeout: 10000 });
     await gotoAdmin(page, '/admin/csat');
 
     await expect(page.getByRole('heading', { name: 'CSAT Settings' })).toBeVisible({ timeout: 10000 });

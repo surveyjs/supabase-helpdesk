@@ -161,7 +161,8 @@ When the current user is an agent, show additional controls:
 ### 5. NavBar Update
 
 Update NavBar to show:
-- "Agent Dashboard" link (visible only to agents/admins)
+- "Agent Dashboard" link in the top-level navigation bar (visible only to agents/admins)
+- "My Tickets", "Reports", and "Canned Responses" links are NOT in the top-level nav for agents/admins — they go in the user menu dropdown (see Phase 2 NavBar spec)
 
 ### 6. Tests
 

@@ -39,22 +39,36 @@ export default async function NavBar() {
   const kbVisible = kbSetting?.value === 'true';
 
   const displayName = profile?.display_name || user?.email || '';
+  const isAgent = profile && ['agent', 'admin'].includes(profile.role);
+  const isAdmin = profile && profile.role === 'admin';
 
-  // Build nav links for both desktop and mobile
+  // Build nav links for both desktop and mobile (top-level navigation bar)
   const navLinks: { href: string; label: string }[] = [];
-  if (user) navLinks.push({ href: '/tickets', label: 'My Tickets' });
-  if (profile && ['agent', 'admin'].includes(profile.role)) {
+  // Regular users see "My Tickets" in top nav; agents/admins get it in the user menu instead
+  if (user && !isAgent) navLinks.push({ href: '/tickets', label: 'My Tickets' });
+  if (isAgent) {
     navLinks.push({ href: '/agent', label: 'Agent Dashboard' });
   }
-  if (profile && profile.role === 'admin') {
-    navLinks.push({ href: '/admin', label: 'Setup' });
-  }
   if (kbVisible) navLinks.push({ href: '/help', label: 'Help Center' });
-  if (profile && ['agent', 'admin'].includes(profile.role)) {
+  if (isAgent) {
     navLinks.push({ href: '/kb/manage', label: 'Manage Articles' });
-    navLinks.push({ href: '/reports', label: 'Reports' });
-    navLinks.push({ href: '/canned-responses', label: 'Canned Responses' });
   }
+
+  // Build user menu links (inside the dropdown)
+  const userMenuLinks: { href: string; label: string }[] = [];
+  // Admin: Setup is first
+  if (isAdmin) {
+    userMenuLinks.push({ href: '/admin', label: 'Setup' });
+  }
+  // Agents/admins: My Tickets, Reports, Canned Responses
+  if (isAgent) {
+    userMenuLinks.push({ href: '/tickets', label: 'My Tickets' });
+    userMenuLinks.push({ href: '/reports', label: 'Reports' });
+    userMenuLinks.push({ href: '/canned-responses', label: 'Canned Responses' });
+  }
+  // All users: Profile, Notification Settings
+  userMenuLinks.push({ href: '/profile', label: 'Profile' });
+  userMenuLinks.push({ href: '/notification-settings', label: 'Notification Settings' });
 
   return (
     <nav className="bg-white border-b border-gray-200 px-4 py-3 relative" aria-label="Main navigation">
@@ -98,25 +112,23 @@ export default async function NavBar() {
                     </svg>
                   </summary>
                   <div className="absolute right-0 mt-2 w-48 bg-white rounded border border-gray-200 shadow-lg py-1 z-50" role="menu">
-                    <a href="/profile" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 min-h-[44px] flex items-center focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 focus-visible:outline-none" role="menuitem">
-                      Profile
-                    </a>
-                    <a href="/notification-settings" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 min-h-[44px] flex items-center focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 focus-visible:outline-none" role="menuitem">
-                      Notification Settings
-                    </a>
+                    {userMenuLinks.map((link) => (
+                      <a key={link.href} href={link.href} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 min-h-[44px] flex items-center focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 focus-visible:outline-none" role="menuitem">
+                        {link.label}
+                      </a>
+                    ))}
+                    <form action={signOut}>
+                      <button
+                        type="submit"
+                        className="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 min-h-[44px] flex items-center focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 focus-visible:outline-none"
+                        role="menuitem"
+                      >
+                        Sign out
+                      </button>
+                    </form>
                   </div>
                 </details>
               </div>
-
-              {/* Sign out — always visible, outside dropdown */}
-              <form action={signOut}>
-                <button
-                  type="submit"
-                  className="text-sm text-gray-600 hover:text-gray-900 px-2 py-1 rounded hover:bg-gray-100 min-h-[44px] min-w-[44px] focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
-                >
-                  Sign out
-                </button>
-              </form>
             </>
           ) : (
             <a href="/login" className="text-sm text-blue-600 hover:text-blue-800 min-h-[44px] flex items-center focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none rounded px-2">

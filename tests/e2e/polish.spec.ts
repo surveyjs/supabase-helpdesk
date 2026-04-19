@@ -24,7 +24,10 @@ async function loginAs(page: Page, email: string) {
       await expect(page).toHaveURL('/', { timeout: 15000 });
     }
   }
-  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible({ timeout: 15000 });
+  // On mobile the user dropdown is hidden; check for either it or the hamburger
+  await expect(
+    page.locator('summary[aria-haspopup="true"]:visible, button[aria-controls="mobile-nav-menu"]:visible').first()
+  ).toBeVisible({ timeout: 15000 });
 }
 
 test.describe('Polish', () => {

@@ -129,6 +129,8 @@ Create migration **`supabase/migrations/003_tickets.sql`**:
 - Native image upload via `onImageUpload` prop (drag-and-drop, paste, toolbar button)
 - Hidden `<textarea>` with `name` attribute for Server Action form compatibility
 - `compact` prop for smaller forms (comments, notes)
+- `viewMode` prop (`'both' | 'preview' | 'editor'`) — controls editor/preview display, driven by user's `editor_view_mode` profile preference
+- `extraToolbarPlugins` prop — allows injecting custom toolbar buttons (e.g., canned response plugin for agents)
 - `onValueChange` callback for external text insertion (canned responses, AI suggestions)
 - `data-testid="markdown-editor"` on wrapper div
 
@@ -153,15 +155,16 @@ Create migration **`supabase/migrations/003_tickets.sql`**:
 - Fetch ticket by ID
 - If slug doesn't match current title slug: redirect 307 to correct URL
 - Check access: own ticket, public ticket, teammate ticket (if on team), or agent
+- **Full-width layout**: the ticket detail page uses full viewport width (overriding the `max-w-5xl` constraint from the main layout). Apply via a CSS breakout class `.ticket-detail-full-width` on the outermost wrapper or via a nested layout.
 - **Two-column layout**: main content area (left, ~65-70%) with subject, posts timeline, and reply form; sidebar (right, ~30-35%) with ticket metadata, agent controls, and secondary info. Responsive: single-column on mobile, two-column on `lg+` breakpoint.
-- **Sidebar** (`data-testid="ticket-sidebar"`): type, category, status badge, urgency badge, severity badge, assigned agent, creator (+ team name §4.4), dates, SLA, CSAT, tags, custom fields, follow/unfollow, agent controls, tier controls, user notes, AI summary. Sidebar uses `sticky top-4` on desktop.
-- **Main area** (`data-testid="ticket-main-content"`): editable title, ticket id + status + creation time summary, posts timeline, reply form
+- **Sidebar** (`data-testid="ticket-sidebar"`): single sticky scrollable container (`lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto`). Contains: ticket number (#123) as first field, type, category, status badge, urgency badge, severity badge, assigned agent, creator (+ team name §4.4), created date with relative time (e.g., "4/18/2026 (2 d ago)"), last updated, SLA, CSAT, tags, custom fields, follow/unfollow, agent controls, tier controls, user notes, AI summary. When the viewer is an agent, fields editable in Agent Controls (Type, Category, Urgency, Severity, Assignment, Privacy) are **hidden** from the Ticket Information section to avoid duplication. Uses compact inline `<dl>` layout (one `<dt>`+`<dd>` per line with `flex` and `w-28` label column).
+- **Main area** (`data-testid="ticket-main-content"`): editable title only (no ticket #, no status badge, no border/hr under title), posts timeline (with Posts/Notes tabs for agents), reply form
+- **No back-links** — no "← My Tickets" or "← Agent Dashboard" links. These are in the nav bar.
 - **Phase 3 renders only root posts** (`post_type = 'post'` AND `NOT is_draft`). Comments, notes, threaded replies, post editing, and Posts/Notes tab separation are added in Phase 6. Post visibility is enforced by RLS.
 - Show original post first, then subsequent posts in chronological order
 - Each post: author display name, timestamp, markdown body rendered to HTML
 - Current user's posts: blue-tinted background; others: white
-- Include a "Back to My Tickets" link at the top of the page
-- Reply form at the bottom of the main content area (uses `<MarkdownEditor>` component)
+- Reply form at the bottom of the main content area (uses `<MarkdownEditor>` component with `viewMode` from user profile)
 - If ticket is duplicate: show banner with link to original (full-width, above the two-column layout)
 
 **`src/app/(main)/tickets/public/page.tsx`** — Browse Public Tickets:

@@ -2,57 +2,93 @@
 
 ## Summary
 
-Redesign the ticket detail page with three major improvements:
-1. **Rich Markdown editor** — Replace plain textareas with a full-featured Markdown editor supporting live preview, code snippets, toolbar, and file attachment integration
-2. **Two-column layout** — Subject & posts/notes on the left (main area), ticket metadata & controls on the right (sidebar)
-3. **Posts/Notes tab separation** — Posts and replies visible to all users; internal notes shown under a separate "Notes" tab visible only to agents. Regular users see no tabs (just the posts stream).
+Redesign the ticket detail page with these improvements:
+
+1. **Full-width layout** — Remove `max-w-5xl` constraint for the ticket detail page; use all available viewport width to maximize space for subjects and posts
+2. **Rich Markdown editor** — Replace plain textareas with `react-markdown-editor-lite` via a single abstraction layer (`MarkdownEditor.tsx`)
+3. **Canned response in editor toolbar** — Move the "Insert canned response" feature into a custom editor toolbar plugin (agent mode only), replacing the standalone `CannedResponsePicker` dropdown above the form
+4. **Remove FileUpload drop zone on posts** — The editor handles image attachments natively via `onImageUpload`. Remove `FileUpload` component from individual post cards (read-only posts especially should never show a drop zone). Keep `AttachmentList` for displaying existing attachments.
+5. **Editor view preference in user profile** — Store the user's preferred editor display mode (`both` | `preview` | `editor`) in the `profiles` table. The user can toggle between modes on the fly; the preference persists across sessions.
+6. **Compact ticket information** — Display metadata on a single line per field (e.g., `Type  Issue` on one line). Use a horizontal `dt/dd` layout instead of stacked labels.
+7. **Hide agent-editable fields from ticket info** — Fields that agents can change (Type, Category, Urgency, Severity, Assignment, Privacy) are already in the Agent Controls panel. When the viewer is an agent, hide these duplicated fields from the Ticket Information section to reduce noise.
+8. **Unified sidebar** — Ticket Information and Agent Controls share the same sticky right-column container with internal scrolling, so agent controls are never pushed off-screen.
+9. **Ticket header cleanup** — Remove the border under the subject line. Move `#123` from the main content area into the first line of the Ticket Information sidebar. Show relative age next to the Created date, e.g., `Created  4/18/2026 (2 d ago)`. Remove status badge from main content (it's already in the sidebar).
+10. **Remove back-links** — Remove "← My Tickets" and "← Agent Dashboard" links from ticket detail page top. These are already in the navigation bar.
+11. **Two-column layout** — Subject & posts on the left (main area), ticket metadata & controls on the right (sidebar)
+12. **Posts/Notes tab separation** — Posts and replies visible to all; internal notes under a separate "Notes" tab visible only to agents
 
 ---
 
-## 1. Rich Markdown Editor Component
+## 1. Full-Width Layout for Ticket Detail
 
-### New Dependencies
+### Problem
 
-Install `react-markdown-editor-lite` and a markdown parser:
+The `(main)` layout applies `max-w-5xl` (1024 px) to all pages via:
 
-```bash
-npm install react-markdown-editor-lite markdown-it
+```tsx
+// src/app/(main)/layout.tsx
+<main id="main" className="flex-1 max-w-5xl mx-auto w-full px-4 py-6">
 ```
 
-`react-markdown-editor-lite` provides:
-- Editor / Preview / Split (side-by-side) modes
-- Built-in toolbar: bold, italic, strikethrough, headings, links, images, quotes, ordered/unordered lists, code (inline + fenced blocks), tables, horizontal rules
-- **Native image upload support** — `onImageUpload` prop handles drag-and-drop, paste, and toolbar upload button; returns a Promise resolving with the uploaded URL
-- Pluggable toolbar (custom plugins via `MdEditor.use()`)
-- Custom markdown parser — uses `markdown-it` (or any parser returning HTML/ReactElement)
-- Synced scrolling between editor and preview
-- Compatible with server-side rendering (use `dynamic` import with `ssr: false`)
+This constrains long ticket subjects, wide code blocks in posts, and the two-column layout.
 
-### Abstraction Layer — Why It Matters
+### Solution
 
-**All editor usage MUST go through a single wrapper component: `MarkdownEditor.tsx`.** No other file should import `react-markdown-editor-lite` directly. This ensures:
-- Swapping to a different editor library (e.g., `@uiw/react-md-editor`, `milkdown`, `tiptap`) requires changing **only one file**
-- Consistent props interface (`name`, `value`, `compact`, `onValueChange`, `onImageUpload`) across the entire app
-- Centralized SSR-safe dynamic import, theme config, and plugin registration
+The ticket detail page (`/tickets/[id]/[slug]`) should use full viewport width (minus padding). All other pages keep the existing `max-w-5xl`.
 
-### Replace `MarkdownPreview.tsx`
+**Option A — CSS breakout class:**
 
-**`src/components/features/tickets/MarkdownEditor.tsx`** (new file, replaces `MarkdownPreview.tsx`):
+Add a class on the ticket detail page's outermost wrapper that overrides the parent's max-width:
+
+```tsx
+// In page.tsx — outermost wrapper
+<div className="ticket-detail-full-width">
+  ...
+</div>
+```
+
+```css
+/* In globals.css */
+.ticket-detail-full-width {
+  max-width: 100%;
+  margin-left: calc(-50vw + 50%);
+  margin-right: calc(-50vw + 50%);
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+  width: 100vw;
+}
+```
+
+**Option B — nested layout file:**
+
+Create `src/app/(main)/tickets/[id]/[slug]/layout.tsx` that wraps children without the `max-w-5xl` constraint. This may require restructuring the outer layout to not apply max-width on the `<main>` tag and instead apply it per-page or per-layout-group.
+
+Choose whichever is simpler. The key requirement: ticket detail content spans ~100% viewport width while other pages stay constrained.
+
+---
+
+## 2. Rich Markdown Editor Component
+
+### Dependencies
+
+```bash
+npm install react-markdown-editor-lite markdown-it @types/markdown-it
+```
+
+### Abstraction Layer — `MarkdownEditor.tsx`
+
+**`src/components/features/tickets/MarkdownEditor.tsx`** — the ONLY file importing `react-markdown-editor-lite`. Swapping editors means changing only this file.
 
 ```tsx
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import MarkdownIt from 'markdown-it';
 
-// Import react-markdown-editor-lite with SSR disabled (it depends on browser APIs)
 const MdEditor = dynamic(() => import('react-markdown-editor-lite'), { ssr: false });
-
-// Import editor styles
 import 'react-markdown-editor-lite/lib/index.css';
 
-// Initialize markdown parser (shared instance)
 const mdParser = new MarkdownIt({ html: false, linkify: true, typographer: true });
 
 export interface MarkdownEditorProps {
@@ -62,9 +98,12 @@ export interface MarkdownEditorProps {
   maxLength?: number;
   placeholder?: string;
   compact?: boolean;
+  /** Editor view mode — controlled by user preference */
+  viewMode?: 'both' | 'preview' | 'editor';
   onValueChange?: (value: string) => void;
-  /** Called when user uploads an image (drag/drop/paste/toolbar). Return the image URL. */
   onImageUpload?: (file: File) => Promise<string>;
+  /** Toolbar plugins to prepend (e.g., canned response button for agents) */
+  extraToolbarPlugins?: string[];
 }
 
 export function MarkdownEditor({
@@ -74,10 +113,18 @@ export function MarkdownEditor({
   maxLength,
   placeholder,
   compact,
+  viewMode = 'both',
   onValueChange,
   onImageUpload,
+  extraToolbarPlugins,
 }: MarkdownEditorProps) {
   const [value, setValue] = useState(defaultValue ?? '');
+
+  useEffect(() => {
+    if (defaultValue !== undefined && defaultValue !== value) {
+      setValue(defaultValue);
+    }
+  }, [defaultValue]);
 
   const handleChange = useCallback(({ text }: { text: string }) => {
     setValue(text);
@@ -85,10 +132,7 @@ export function MarkdownEditor({
   }, [onValueChange]);
 
   const handleImageUpload = useCallback(async (file: File): Promise<string> => {
-    if (onImageUpload) {
-      return onImageUpload(file);
-    }
-    // Fallback: convert to data URI (not recommended for production)
+    if (onImageUpload) return onImageUpload(file);
     return new Promise((resolve) => {
       const reader = new FileReader();
       reader.onload = (e) => resolve(e.target?.result as string);
@@ -96,9 +140,15 @@ export function MarkdownEditor({
     });
   }, [onImageUpload]);
 
+  // Derive view config from viewMode prop
+  const viewConfig = {
+    menu: true,
+    md: viewMode === 'both' || viewMode === 'editor',
+    html: viewMode === 'both' || viewMode === 'preview',
+  };
+
   return (
     <div data-testid="markdown-editor">
-      {/* Hidden textarea for form submission (keeps form action working) */}
       <textarea
         name={name}
         value={value}
@@ -107,243 +157,542 @@ export function MarkdownEditor({
         readOnly
         hidden
         aria-hidden="true"
+        tabIndex={-1}
       />
       <MdEditor
         value={value}
         onChange={handleChange}
-        renderHTML={(text) => mdParser.render(text)}
+        renderHTML={(text: string) => mdParser.render(text)}
         onImageUpload={handleImageUpload}
         style={{ height: compact ? '150px' : '250px' }}
         placeholder={placeholder ?? 'Write using Markdown…'}
-        view={{ menu: true, md: true, html: !compact }}
-        canView={{ menu: true, md: true, html: true, fullScreen: false, hideMenu: false }}
+        view={viewConfig}
+        canView={{ menu: true, md: true, html: true, both: true, fullScreen: false, hideMenu: false }}
+        plugins={extraToolbarPlugins}
       />
     </div>
   );
 }
 ```
 
-**Key behaviors:**
-- **Single abstraction layer** — this is the ONLY file that imports `react-markdown-editor-lite`. Changing editors means modifying only this component.
-- Wraps `react-markdown-editor-lite` with SSR-safe dynamic import
-- Hidden `<textarea>` with `name` attribute to integrate with existing Server Action form submissions (the editor manages state, the hidden field submits)
-- `compact` prop for smaller comment/note forms (hides preview panel by default)
-- `onValueChange` callback for integration with parent components (e.g., AI suggestion injection, canned response insertion)
-- `onImageUpload` prop — receives a `File`, must return a `Promise<string>` with the URL. The editor supports drag-and-drop, paste, and toolbar upload natively.
-- Uses `markdown-it` for preview rendering (consistent with server-side rendering config)
-
-### Public API for External Insertion
-
-For integrations like canned responses and AI suggested replies, expose a way to insert text:
-
-```tsx
-// In ReplyForm.tsx — pass a callback to set editor value
-const [replyBody, setReplyBody] = useState('');
-
-function handleInsertCanned(body: string) {
-  setReplyBody((prev) => prev + body);
-}
-
-<MarkdownEditor
-  name="body"
-  defaultValue={replyBody}
-  onValueChange={setReplyBody}
-  ...
-/>
-```
-
-The `SuggestReplyButton` and `CannedResponsePicker` should set the editor value via the parent component's state rather than directly manipulating a textarea ref.
+**Key props:**
+- `viewMode` (`'both' | 'preview' | 'editor'`) — drives the `view` config from user preference
+- `extraToolbarPlugins` — allows injecting custom toolbar buttons (e.g., canned response)
+- `compact` — smaller height for comments and notes
+- `onImageUpload` — native drag-drop/paste/toolbar upload
+- Hidden `<textarea>` for Server Action form compatibility
 
 ### Where the Editor Is Used
 
-Replace the plain `<textarea>` with `<MarkdownEditor>` in:
-
-| Component | Current | New |
-|-----------|---------|-----|
-| `ReplyForm.tsx` | `<textarea name="body" aria-label="Reply body">` | `<MarkdownEditor name="body" placeholder="Write your reply…">` |
-| `NoteForm.tsx` | `<textarea name="body" aria-label="Note body">` | `<MarkdownEditor name="body" compact placeholder="Write an internal note…">` |
-| `CommentForm.tsx` | `<textarea name="body" aria-label="Comment body">` | `<MarkdownEditor name="body" compact placeholder="Write a comment…">` |
-| `EditablePost.tsx` (edit mode) | `<textarea name="body">` | `<MarkdownEditor name="body">` |
-| `TicketForm.tsx` (create ticket description) | `<MarkdownPreview name="body">` | `<MarkdownEditor name="body" placeholder="Describe your issue…">` |
-
-**Keep the old `MarkdownPreview.tsx`** — it's no longer used in forms, but keep it as a deprecated file (or delete it). All form inputs now use `MarkdownEditor`.
-
-### File Attachment Integration in Editor
-
-`react-markdown-editor-lite` has **native image upload support** via the `onImageUpload` prop. When a user drags/drops, pastes, or uses the toolbar image button, the editor calls this handler and automatically inserts `![filename](url)` into the editor content.
-
-Implement the `onImageUpload` handler to upload to Supabase Storage and return the signed URL:
-
-```tsx
-// In ReplyForm.tsx (or wherever MarkdownEditor is used with attachments)
-async function handleImageUpload(file: File): Promise<string> {
-  const formData = new FormData();
-  formData.append('file', file);
-  // Use the existing upload server action or API endpoint
-  const result = await uploadAttachment(formData, ticketId, postId);
-  return result.signedUrl; // The editor inserts ![filename](signedUrl) automatically
-}
-
-<MarkdownEditor
-  name="body"
-  onImageUpload={handleImageUpload}
-  ...
-/>
-```
-
-The existing `FileUpload` component remains for non-image attachments (PDFs, zips, etc.) and is shown below each post in `AttachmentList`. Images dropped into the editor are **also** stored as attachments in the database for consistency.
-
-**Note:** If the `onImageUpload` prop is not provided to `MarkdownEditor`, the editor falls back to a data URI (for development/preview only). In production forms, always pass the Supabase upload handler.
+| Component | New |
+|-----------|-----|
+| `ReplyForm.tsx` | `<MarkdownEditor>` with `viewMode` from profile + `extraToolbarPlugins` for canned response (agent only) |
+| `NoteForm.tsx` | `<MarkdownEditor compact>` with `viewMode` from profile |
+| `CommentForm.tsx` | `<MarkdownEditor compact>` with `viewMode` from profile |
+| `EditablePost.tsx` (edit mode) | `<MarkdownEditor>` with `viewMode` from profile |
+| `TicketForm.tsx` (description) | `<MarkdownEditor>` with `viewMode` from profile |
 
 ---
 
-## 2. Two-Column Layout
+## 3. Canned Response as Editor Toolbar Plugin
 
-### Layout Structure
+### Problem
 
-Replace the current single-column vertical layout with a two-column design:
+The `CannedResponsePicker` is currently a standalone dropdown rendered above the reply form. It inserts text by appending to state. This is disconnected from the editor and takes extra vertical space.
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│  ← My Tickets    ← Agent Dashboard                              │
-├─────────────────────────────────────┬────────────────────────────┤
-│  MAIN CONTENT (left, ~65-70%)       │  SIDEBAR (right, ~30-35%)  │
-│                                     │                            │
-│  [Duplicate/Merge banners]          │  Ticket Metadata           │
-│                                     │  - Status badge            │
-│  Subject (editable title)           │  - Urgency/Severity badges │
-│  #123 · open · 2h ago              │  - Type                    │
-│                                     │  - Category                │
-│  ┌─[Posts]──[Notes (agents)]──┐     │  - Created by (+ team)     │
-│  │                            │     │  - Assigned to             │
-│  │  Original post             │     │  - Created / Updated dates │
-│  │  ├─ Comment 1              │     │  - SLA Status (agents)     │
-│  │  │  └─ Reply to comment    │     │  - CSAT rating             │
-│  │  Activity log entry        │     │  - Tags                    │
-│  │  Post 2                    │     │  - Custom fields           │
-│  │  Post 3                    │     │  - Follow/Unfollow         │
-│  │                            │     │                            │
-│  │  [Show X older posts]      │     │  Agent Controls            │
-│  │                            │     │  - Status buttons          │
-│  │  Reply form (editor)       │     │  - Assignment              │
-│  │                            │     │  - Urgency/Severity        │
-│  └────────────────────────────┘     │  - Type/Category           │
-│                                     │  - Privacy toggle          │
-│                                     │  - Duplicate/Merge         │
-│                                     │  - Delete (admin)          │
-│                                     │  - KB Article gen          │
-│                                     │                            │
-│                                     │  Tier Controls (users)     │
-│                                     │                            │
-│                                     │  User Notes (agents)       │
-│                                     │  AI Summary (agents)       │
-│                                     │                            │
-│                                     │  Source Article (agents)   │
-│                                     │  Followers (agents)        │
-└─────────────────────────────────────┴────────────────────────────┘
-```
+### Solution
 
-### Implementation
+Register a **custom toolbar plugin** for `react-markdown-editor-lite` that opens the canned response picker as a dropdown anchored to a toolbar button. This keeps the insertion contextual and reduces UI clutter.
 
-Update `src/app/(main)/tickets/[id]/[slug]/page.tsx`:
-
-```tsx
-return (
-  <div>
-    {/* Back links */}
-    <div className="flex items-center gap-4 mb-4">
-      <Link href="/tickets">← My Tickets</Link>
-      {isAgent && <Link href="/agent">← Agent Dashboard</Link>}
-    </div>
-
-    {/* Duplicate / Merge banners — full width */}
-    {ticket.duplicate_of_id && ( /* ... existing banner ... */ )}
-    {ticket.merged_into_id && ( /* ... existing banner ... */ )}
-
-    {/* Two-column layout */}
-    <div className="flex flex-col lg:flex-row gap-6">
-      {/* LEFT: Main content area */}
-      <div className="flex-1 min-w-0" data-testid="ticket-main-content">
-        {/* Subject */}
-        <div className="mb-4">
-          <EditableTitle ticketId={ticket.id} title={ticket.title} canEdit={canEditTitle} />
-          <div className="flex items-center gap-2 mt-1 text-sm text-gray-500">
-            <span>#{ticket.id}</span>
-            <span>·</span>
-            <Badge variant="status" value={ticket.status} />
-            <span>·</span>
-            <time>{formatTime(ticket.created_at)}</time>
-          </div>
-        </div>
-
-        {/* Posts / Notes tabs (agents see two tabs, users see only posts — no tab bar) */}
-        {isAgent ? (
-          <TicketTabs
-            postsContent={/* posts timeline + reply form */}
-            notesContent={/* notes list + note form */}
-            noteCount={noteCount}
-          />
-        ) : (
-          /* Users: just render posts stream directly, no tabs */
-          <div>
-            {/* posts timeline + reply form */}
-          </div>
-        )}
-      </div>
-
-      {/* RIGHT: Sidebar */}
-      <aside className="w-full lg:w-80 xl:w-96 flex-shrink-0" data-testid="ticket-sidebar">
-        {/* Ticket metadata card */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4 sticky top-4">
-          {/* ... all metadata fields moved here ... */}
-        </div>
-
-        {/* Agent controls card */}
-        {isAgent && !ticket.merged_into_id && (
-          <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4" data-testid="agent-controls">
-            {/* ... agent controls moved here ... */}
-          </div>
-        )}
-
-        {/* Tier controls (non-agent users with tier capabilities) */}
-        {!isAgent && hasAnyTierCap && !ticket.merged_into_id && (
-          <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4" data-testid="tier-controls">
-            {/* ... tier controls moved here ... */}
-          </div>
-        )}
-
-        {/* User Notes (agents only) */}
-        {isAgent && creatorNoteCount > 0 && ( /* ... */ )}
-
-        {/* AI Summary (agents only) */}
-        {isAgent && aiTicketSummaryEnabled && allPosts.length >= aiTicketSummaryMinPosts && (
-          <AiTicketSummary ticketId={ticket.id} />
-        )}
-      </aside>
-    </div>
-
-    <RealtimeTicketUpdates ticketId={ticket.id} />
-  </div>
-);
-```
-
-### Responsive Behavior
-
-- **Desktop (lg and above):** Two-column layout, sidebar on the right
-- **Mobile/Tablet (below lg):** Single column — sidebar content stacks below the main content area
-- Sidebar uses `sticky top-4` so it stays visible when scrolling long ticket threads on desktop
-
----
-
-## 3. Posts / Notes Tab Separation
-
-### New Client Component: `TicketTabs.tsx`
-
-**`src/app/(main)/tickets/[id]/[slug]/TicketTabs.tsx`**:
+**`src/components/features/tickets/CannedResponsePlugin.tsx`** (new file):
 
 ```tsx
 'use client';
 
+import { PluginComponent } from 'react-markdown-editor-lite';
+import { useState, useRef, useEffect } from 'react';
+import { searchCannedResponses } from '@/lib/actions/canned-responses';
+
+const CannedResponsePlugin: PluginComponent = ({ editor }) => {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<{ id: string; title: string; body: string }[]>([]);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Debounced search
+  useEffect(() => {
+    if (!open || query.length < 1) { setResults([]); return; }
+    const timer = setTimeout(async () => {
+      const fd = new FormData();
+      fd.set('query', query);
+      const res = await searchCannedResponses(fd);
+      setResults(res);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [query, open]);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  function handleSelect(body: string) {
+    editor.insertText(body);  // Insert at cursor position
+    setOpen(false);
+    setQuery('');
+  }
+
+  return (
+    <span className="button" title="Insert canned response" ref={containerRef}>
+      <span onClick={() => setOpen(!open)} style={{ cursor: 'pointer', fontSize: '14px' }}>
+        📋
+      </span>
+      {open && (
+        <div className="absolute top-full left-0 z-50 mt-1 w-80 bg-white border border-gray-200 rounded-lg shadow-lg p-2">
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search canned responses…"
+            className="w-full px-2 py-1 text-sm border border-gray-300 rounded mb-2"
+            autoFocus
+          />
+          <div className="max-h-48 overflow-y-auto space-y-1">
+            {results.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                onClick={() => handleSelect(r.body)}
+                className="w-full text-left px-2 py-1 text-sm hover:bg-gray-100 rounded"
+              >
+                <span className="font-medium">{r.title}</span>
+                <span className="block text-xs text-gray-500 line-clamp-1">{r.body}</span>
+              </button>
+            ))}
+            {query && results.length === 0 && (
+              <p className="text-xs text-gray-400 px-2">No matches</p>
+            )}
+          </div>
+        </div>
+      )}
+    </span>
+  );
+};
+
+CannedResponsePlugin.pluginName = 'canned-response';
+CannedResponsePlugin.align = 'left';
+
+export default CannedResponsePlugin;
+```
+
+**Registration** — in `MarkdownEditor.tsx`, register the plugin at module level:
+
+```tsx
+import MdEditorLib from 'react-markdown-editor-lite';
+import CannedResponsePlugin from './CannedResponsePlugin';
+MdEditorLib.use(CannedResponsePlugin);
+```
+
+Then in `ReplyForm.tsx`, pass `extraToolbarPlugins={['canned-response']}` only when `isAgent` is true. **Remove** the standalone `<CannedResponsePicker>` import from `ReplyForm.tsx`.
+
+---
+
+## 4. Remove FileUpload Drop Zone from Posts
+
+### Problem
+
+Each post card currently renders a `<FileUpload>` drag-and-drop zone for the post author and agents. Since the editor now handles image attachments natively via `onImageUpload`, the separate drop zone is redundant — especially on read-only posts.
+
+### Changes
+
+In `page.tsx` `renderPostCard()`, **remove**:
+
+```tsx
+// REMOVE THIS BLOCK
+{!isDraft && (isCurrentUser || isAgent) && (
+  <FileUpload
+    postId={post.id}
+    allowedTypes={allowedFileTypes}
+    maxFileSizeMb={maxFileSizeMb}
+    maxFilesPerPost={maxFilesPerPost}
+    existingCount={attachmentCountMap.get(post.id) ?? 0}
+  />
+)}
+```
+
+- **Keep** `<AttachmentList>` — displays existing attachments below each post
+- **Keep** the `FileUpload` component source file — may be used for non-image attachments in other contexts
+- Remove the `FileUpload` import from `page.tsx` if it becomes unused
+- Remove variables used only for `FileUpload` props (`allowedFileTypes`, `maxFileSizeMb`, `maxFilesPerPost`) if they become unused after this change
+
+---
+
+## 5. Editor View Preference in User Profile
+
+### Database Migration
+
+**`supabase/migrations/021_editor_preference.sql`** (new):
+
+```sql
+-- Add editor view mode preference to profiles
+ALTER TABLE profiles
+  ADD COLUMN editor_view_mode TEXT NOT NULL DEFAULT 'both'
+  CHECK (editor_view_mode IN ('both', 'preview', 'editor'));
+```
+
+### Server Action
+
+Add to **`src/lib/actions/profile.ts`**:
+
+```tsx
+export async function updateEditorViewMode(formData: FormData) {
+  const supabase = await createServerClient();
+  const user = await requireAuth();
+  const mode = formData.get('editor_view_mode') as string;
+
+  if (!['both', 'preview', 'editor'].includes(mode)) {
+    return { error: 'Invalid editor view mode' };
+  }
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ editor_view_mode: mode })
+    .eq('id', user.id);
+
+  if (error) return { error: error.message };
+  revalidatePath('/');
+  return {};
+}
+```
+
+### UI — In-Editor Toggle
+
+Add a small toggle (three buttons or a dropdown) inside the `MarkdownEditor` component (above or alongside the toolbar) that lets the user switch between:
+- **Both** — editor + preview side-by-side (default)
+- **Preview** — preview only
+- **Editor** — editor only
+
+When the user changes the mode:
+1. Immediately update the editor view (local state)
+2. Persist to the database via `updateEditorViewMode` server action (debounced, fire-and-forget)
+
+### Passing the Preference
+
+The ticket detail `page.tsx` (server component) fetches the current user's profile including `editor_view_mode` and passes it down to the form components:
+
+```tsx
+// In page.tsx — already has profile data
+const editorViewMode = profile?.editor_view_mode ?? 'both';
+
+// Pass to ReplyForm, NoteForm, etc.
+<ReplyForm ticketId={ticket.id} isAgent={isAgent} editorViewMode={editorViewMode} />
+```
+
+Each form component passes `viewMode={editorViewMode}` to `<MarkdownEditor>`.
+
+### Profile Page
+
+On `/profile`, add an "Editor Preference" section showing the current mode with radio buttons or a dropdown. This is a convenience — the primary way to change the mode is the in-editor toggle.
+
+---
+
+## 6. Compact Ticket Information
+
+### Problem
+
+Current ticket info uses stacked `<dt>` / `<dd>` pairs — each field takes two lines. This wastes vertical space in the sidebar.
+
+### Solution
+
+Use an inline `<dl>` layout where label and value are on the same line:
+
+```
+#123
+Type           Issue
+Category       Billing
+Created by     Alice (Support Team)
+Assigned to    Agent Smith
+Created        4/18/2026 (2 d ago)
+Last updated   4/20/2026
+```
+
+Implementation:
+
+```tsx
+<dl className="text-sm space-y-1">
+  <div className="flex items-baseline gap-2">
+    <dt className="text-gray-500 w-28 flex-shrink-0">Ticket</dt>
+    <dd className="text-gray-900 font-medium">#{ticket.id}</dd>
+  </div>
+  <div className="flex items-baseline gap-2">
+    <dt className="text-gray-500 w-28 flex-shrink-0">Type</dt>
+    <dd className="text-gray-900">{typeName}</dd>
+  </div>
+  {/* ... same pattern for each field ... */}
+</dl>
+```
+
+Each `<div>` wraps one `<dt>` + `<dd>` pair, displayed as `flex` with a fixed-width label column (`w-28` ≈ 7rem).
+
+---
+
+## 7. Hide Agent-Editable Fields from Ticket Info (Agent View)
+
+### Problem
+
+When an agent views the ticket, the Ticket Information section shows Type, Category, Urgency, Severity, Assignment, Privacy — but these same fields appear in the Agent Controls panel with edit controls. Showing them twice is redundant.
+
+### Solution
+
+When `isAgent === true`, **hide** these from the Ticket Information section:
+- Type
+- Category
+- Urgency badge
+- Severity badge
+- Assigned to
+- Privacy indicator
+
+These remain editable in the Agent Controls panel.
+
+When the viewer is a **regular user**, all fields stay visible in Ticket Information (they don't see Agent Controls).
+
+```tsx
+{/* In the ticket metadata dl */}
+{!isAgent && (
+  <>
+    <div className="flex items-baseline gap-2">
+      <dt className="text-gray-500 w-28 flex-shrink-0">Type</dt>
+      <dd className="text-gray-900">{typeName}</dd>
+    </div>
+    {categoryName && (
+      <div className="flex items-baseline gap-2">
+        <dt className="text-gray-500 w-28 flex-shrink-0">Category</dt>
+        <dd className="text-gray-900">{categoryName}</dd>
+      </div>
+    )}
+    <div className="flex items-baseline gap-2">
+      <dt className="text-gray-500 w-28 flex-shrink-0">Assigned to</dt>
+      <dd className="text-gray-900">{assignedAgentName ?? 'Unassigned'}</dd>
+    </div>
+    {/* Urgency, Severity badges also hidden for agents */}
+  </>
+)}
+```
+
+**Always shown** (all viewers): Ticket number, Status badge, Created by (+ team), Created date (with relative time), Last updated, Source article, Custom fields, Tags, Follow/Unfollow, CSAT, SLA status.
+
+---
+
+## 8. Unified Sidebar — Single Scrollable Container
+
+### Problem
+
+The Ticket Information card and Agent Controls card are separate blocks. The info card has `lg:sticky lg:top-4` but agent controls are below it and scroll with the page. On long ticket threads, agent controls may be off-screen.
+
+### Solution
+
+Wrap **all** sidebar content in a single sticky container with internal scrolling:
+
+```tsx
+<aside className="w-full lg:w-80 xl:w-96 flex-shrink-0" data-testid="ticket-sidebar">
+  <div className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto space-y-4">
+    {/* Ticket Information */}
+    <div className="bg-white rounded-lg border border-gray-200 p-4">
+      {/* ... compact metadata fields ... */}
+    </div>
+
+    {/* Agent Controls (agents only) */}
+    {isAgent && !ticket.merged_into_id && (
+      <div className="bg-white rounded-lg border border-gray-200 p-4" data-testid="agent-controls">
+        {/* ... controls ... */}
+      </div>
+    )}
+
+    {/* Tier Controls, User Notes, AI Summary, etc. */}
+  </div>
+</aside>
+```
+
+Key CSS:
+- `lg:sticky lg:top-4` — sticks to top on desktop
+- `lg:max-h-[calc(100vh-2rem)]` — limits height to viewport minus padding
+- `lg:overflow-y-auto` — internal scroll when content exceeds viewport
+
+---
+
+## 9. Ticket Header Cleanup
+
+### Remove Horizontal Rule / Border Under Subject
+
+The subject line should flow directly into the posts content with no card border or `<hr>`.
+
+### Move Ticket Number to Sidebar
+
+Remove `<span>#{ticket.id}</span>` from the main content area. Show it as the **first line** in the Ticket Information sidebar:
+
+```tsx
+<div className="flex items-baseline gap-2">
+  <dt className="text-gray-500 w-28 flex-shrink-0">Ticket</dt>
+  <dd className="text-gray-900 font-medium">#{ticket.id}</dd>
+</div>
+```
+
+### Relative Time on Created Date
+
+Show relative time in parentheses next to the absolute date:
+
+```tsx
+<div className="flex items-baseline gap-2">
+  <dt className="text-gray-500 w-28 flex-shrink-0">Created</dt>
+  <dd className="text-gray-900">
+    {new Date(ticket.created_at).toLocaleDateString()} ({formatRelativeTime(ticket.created_at)})
+  </dd>
+</div>
+```
+
+Add **`formatRelativeTime()`** utility to `src/lib/utils/time.ts` (or existing utils):
+
+```tsx
+export function formatRelativeTime(dateStr: string): string {
+  const now = new Date();
+  const date = new Date(dateStr);
+  const diffMs = now.getTime() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffHrs = Math.floor(diffMin / 60);
+  const diffDays = Math.floor(diffHrs / 24);
+  const diffMonths = Math.floor(diffDays / 30);
+  const diffYears = Math.floor(diffDays / 365);
+
+  if (diffMin < 1) return 'just now';
+  if (diffMin < 60) return `${diffMin} min ago`;
+  if (diffHrs < 24) return `${diffHrs} h ago`;
+  if (diffDays < 30) return `${diffDays} d ago`;
+  if (diffMonths < 12) return `${diffMonths} mo ago`;
+  return `${diffYears} y ago`;
+}
+```
+
+### Remove Status Badge from Main Content
+
+The status badge below the title in main content is redundant — it's in the sidebar. The main content subject area becomes just:
+
+```tsx
+<div className="mb-4">
+  <EditableTitle ticketId={ticket.id} title={ticket.title} canEdit={canEditTitle} />
+</div>
+```
+
+---
+
+## 10. Remove Back-Links from Ticket Detail
+
+Delete the entire back-links `<div>`:
+
+```tsx
+// REMOVE THIS BLOCK
+<div className="flex items-center gap-4 mb-4">
+  <Link href="/tickets" className="text-sm text-blue-600 hover:text-blue-800">
+    ← My Tickets
+  </Link>
+  {isAgent && (
+    <Link href="/agent" className="text-sm text-blue-600 hover:text-blue-800">
+      ← Agent Dashboard
+    </Link>
+  )}
+</div>
+```
+
+These destinations are already in the navigation bar.
+
+---
+
+## 11. Two-Column Layout
+
+### Layout Structure
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│  [Duplicate/Merge banners — full width]                                  │
+├───────────────────────────────────────────┬──────────────────────────────┤
+│  MAIN CONTENT (left, flex-1)              │  SIDEBAR (right, w-80/w-96)  │
+│                                           │  ┌─────────────────────────┐ │
+│  Subject (editable title, full width)     │  │ Ticket Info (compact)   │ │
+│                                           │  │ Ticket   #123           │ │
+│  ┌─[Posts]──[Notes (agents)]──┐           │  │ Status   ● Open         │ │
+│  │                            │           │  │ Created by  Alice       │ │
+│  │  Original post             │           │  │ Created  4/18 (2d ago)  │ │
+│  │  ├─ Comment thread         │           │  │ Tags  [bug] [urgent]   │ │
+│  │  Activity entry            │           │  │ (Type/Cat/etc hidden    │ │
+│  │  Post 2 (with attachments) │           │  │  for agents — shown in  │ │
+│  │  ...                       │           │  │  Agent Controls below)  │ │
+│  │                            │           │  ├─────────────────────────┤ │
+│  │  [Show X older posts]      │           │  │ Agent Controls          │ │
+│  │                            │           │  │ Status / Assign / Type  │ │
+│  │  Reply form (MarkdownEditor│           │  │ Category / Urgency ...  │ │
+│  │   with 📋 toolbar canned)  │           │  ├─────────────────────────┤ │
+│  └────────────────────────────┘           │  │ User Notes / AI Summary │ │
+│                                           │  └─────────────────────────┘ │
+│                                           │  (single sticky scrollable)  │
+└───────────────────────────────────────────┴──────────────────────────────┘
+```
+
+### Implementation
+
+```tsx
+<div className="ticket-detail-full-width">
+  {/* Banners (full width) */}
+  {ticket.duplicate_of_id && ( /* ... */ )}
+  {ticket.merged_into_id && ( /* ... */ )}
+
+  <div className="flex flex-col lg:flex-row gap-6">
+    {/* LEFT: Main content */}
+    <div className="flex-1 min-w-0" data-testid="ticket-main-content">
+      <div className="mb-4">
+        <EditableTitle ... />
+      </div>
+
+      {isAgent ? (
+        <TicketTabs ... />
+      ) : (
+        <div>{/* posts stream */}</div>
+      )}
+    </div>
+
+    {/* RIGHT: Sidebar (unified, sticky, scrollable) */}
+    <aside className="w-full lg:w-80 xl:w-96 flex-shrink-0" data-testid="ticket-sidebar">
+      <div className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto space-y-4">
+        {/* Ticket info card (compact, agent-filtered) */}
+        {/* Agent controls card (agents only) */}
+        {/* Tier controls (users with tier caps) */}
+        {/* User notes, AI summary, etc. */}
+      </div>
+    </aside>
+  </div>
+
+  <RealtimeTicketUpdates ticketId={ticket.id} />
+</div>
+```
+
+### Responsive Behavior
+
+- **Desktop (lg+):** Two-column, sidebar on right
+- **Mobile/Tablet (<lg):** Single column, sidebar stacks below main content
+
+---
+
+## 12. Posts / Notes Tab Separation
+
+### `TicketTabs.tsx`
+
+```tsx
+'use client';
 import { useState } from 'react';
 
 export function TicketTabs({
@@ -360,41 +709,18 @@ export function TicketTabs({
   return (
     <div data-testid="ticket-tabs">
       <div className="flex border-b border-gray-200 mb-4" role="tablist">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'posts'}
+        <button role="tab" aria-selected={activeTab === 'posts'}
           onClick={() => setActiveTab('posts')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
-            activeTab === 'posts'
-              ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-          }`}
-          data-testid="posts-tab"
-        >
+          className={...} data-testid="posts-tab">
           Posts
         </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'notes'}
+        <button role="tab" aria-selected={activeTab === 'notes'}
           onClick={() => setActiveTab('notes')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${
-            activeTab === 'notes'
-              ? 'border-amber-600 text-amber-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-          }`}
-          data-testid="notes-tab"
-        >
+          className={...} data-testid="notes-tab">
           Notes
-          {noteCount > 0 && (
-            <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
-              {noteCount}
-            </span>
-          )}
+          {noteCount > 0 && <span className="...">{noteCount}</span>}
         </button>
       </div>
-
       <div role="tabpanel">
         {activeTab === 'posts' ? postsContent : notesContent}
       </div>
@@ -403,457 +729,163 @@ export function TicketTabs({
 }
 ```
 
-### Content Organization
-
-**Posts tab** (visible to everyone):
-- Original post (always first)
-- Collapsible timeline of root posts (not notes) + activity log entries, interleaved chronologically
-- Comments/replies threaded under their parent posts
-- Reply form at the bottom (with `MarkdownEditor`)
-- No notes appear in this tab
-
-**Notes tab** (visible only to agents):
-- List of all internal notes for this ticket, sorted chronologically (oldest first)
-- Each note shows: author, timestamp, body (rendered Markdown), edit/delete buttons
-- Note form at the bottom (with `MarkdownEditor compact`)
-- Only posts where `post_type = 'note'` appear here
-
 ### Separation Logic
 
-In the server component, split the rendered posts:
-
 ```tsx
-// Separate notes from regular posts/comments
 const notePosts = renderedPosts.filter((p) => p.post_type === 'note');
 const nonNotePosts = renderedPosts.filter((p) => p.post_type !== 'note');
-
-// Build timeline from non-note posts only
-const rootPosts = nonNotePosts.filter(
-  (p) => !p.is_original && !p.parent_post_id && !p.parent_comment_id && p.post_type !== 'comment',
-);
-// ... rest of timeline building uses non-note posts only ...
-
 const noteCount = notePosts.length;
+// Build timeline from nonNotePosts only
 ```
 
-### User View (No Tabs)
+### User View
 
-Regular users never see the "Notes" tab. They see:
-- Just the posts stream directly (no tab bar, no tab buttons)
-- Same layout as the current "Posts" tab content
-- The `TicketTabs` component is only rendered for agents
-
-```tsx
-{isAgent ? (
-  <TicketTabs
-    postsContent={renderPostsTabContent()}
-    notesContent={renderNotesTabContent()}
-    noteCount={noteCount}
-  />
-) : (
-  renderPostsTabContent()
-)}
-```
+Regular users see the posts stream directly — no tabs, no notes.
 
 ---
 
-## 4. Data-TestID Summary
-
-New and updated `data-testid` attributes:
+## 13. Data-TestID Summary
 
 | Element | data-testid |
 |---------|-------------|
 | Main content area | `ticket-main-content` |
 | Sidebar | `ticket-sidebar` |
-| Tab container (agents only) | `ticket-tabs` |
+| Tab container (agents) | `ticket-tabs` |
 | Posts tab button | `posts-tab` |
 | Notes tab button | `notes-tab` |
 | Markdown editor wrapper | `markdown-editor` |
-| Existing: agent controls | `agent-controls` (unchanged) |
-| Existing: tier controls | `tier-controls` (unchanged) |
-| Existing: all post/activity testids | unchanged |
+| Agent controls | `agent-controls` |
+| Tier controls | `tier-controls` |
 
 ---
 
-## 5. E2E Test Updates
+## 14. E2E Test Updates
 
-### `tests/e2e/posts-comments.spec.ts`
+### Updated selectors across all test files
 
-**Updated tests:**
+- **Metadata checks** — scope to `page.getByTestId('ticket-sidebar')`
+- **Editor interaction** — use `page.locator('[data-testid="markdown-editor"]').locator('textarea')`
+- **Reply form** — no standalone `CannedResponsePicker` above form; canned response is in the editor toolbar (📋 button)
+- **Note form** — accessible via "Notes" tab for agents
+- **No back-links** — tests must not expect "← My Tickets" or "← Agent Dashboard" links on ticket detail
+- **No FileUpload** — remove expectations of drop zones on post cards
+- **Compact info** — metadata fields are single-line in the sidebar
 
-- **"add a reply to the ticket"**: The reply form now uses `MarkdownEditor`. Instead of `page.getByLabel('Reply body').fill(...)`, interact with the editor:
-  ```typescript
-  // The MarkdownEditor renders a contenteditable area or textarea inside the MDEditor wrapper
-  // Target the textarea within the editor component
-  const editor = page.locator('[data-testid="markdown-editor"]').last();
-  await editor.locator('textarea').fill('A root reply to the ticket.');
-  ```
-  The submit button selector stays the same (find the "Reply" button inside the form).
+### New tests
 
-- **"agent can add an internal note"**: The note form now uses `MarkdownEditor`. Additionally, notes are now under a separate tab:
-  ```typescript
-  // Agent must click the Notes tab first
-  await page.getByTestId('notes-tab').click();
-  // Then fill the note form
-  const noteEditor = page.locator('[data-testid="markdown-editor"]').last();
-  await noteEditor.locator('textarea').fill('Internal agent note content.');
-  await page.getByRole('button', { name: 'Add Note' }).click();
-  ```
-
-- **"note not visible to regular user"**: Now verify that the user does not see any tab bar (no `ticket-tabs` element) AND the note content is not visible:
-  ```typescript
-  await expect(page.getByTestId('ticket-tabs')).not.toBeVisible();
-  await expect(page.getByText('Internal agent note content.')).not.toBeVisible();
-  ```
-
-- **"add a comment on a post"**: Comment form now uses `MarkdownEditor`. Update the fill selector to target the editor textarea.
-
-- **"edit a post"**: The edit mode now renders `MarkdownEditor` instead of a plain textarea. Update:
-  ```typescript
-  const editEditor = page.locator('[data-testid="markdown-editor"]').first();
-  await editEditor.locator('textarea').clear();
-  await editEditor.locator('textarea').fill('Edited root reply content.');
-  ```
-
-- **All ticket metadata checks**: Metadata (type, urgency, etc.) has moved to the sidebar. Update selectors:
-  ```typescript
-  // Metadata is now in the sidebar
-  const sidebar = page.getByTestId('ticket-sidebar');
-  await expect(sidebar.getByText('Issue')).toBeVisible();
-  await expect(sidebar.getByText(/Urgency: High/)).toBeVisible();
-  ```
-
-### `tests/e2e/tickets.spec.ts`
-
-**Updated tests:**
-
-- **"ticket detail shows correct metadata and posts"**: Metadata is now in the sidebar:
-  ```typescript
-  const sidebar = page.getByTestId('ticket-sidebar');
-  await expect(sidebar.getByRole('definition').filter({ hasText: 'Issue' })).toBeVisible();
-  await expect(sidebar.getByText(/Urgency: High/)).toBeVisible();
-  ```
-
-- **"reply to a ticket"**: Use MarkdownEditor:
-  ```typescript
-  const editor = page.locator('[data-testid="markdown-editor"]').last();
-  await editor.locator('textarea').fill('This is a test reply from E2E.');
-  ```
-
-- **"create a ticket with all fields"**: The ticket creation form now uses `MarkdownEditor` for the description field. Update the description fill:
-  ```typescript
-  // Description field now uses MarkdownEditor
-  const descEditor = page.locator('[data-testid="markdown-editor"]');
-  await descEditor.locator('textarea').fill('This is a test ticket created by E2E test. **Bold text** and `code`.');
-  ```
-
-- **"ticket detail shows team name next to creator display name"**: Team name is now in the sidebar.
-
-### `tests/e2e/advanced-tickets.spec.ts`
-
-**Updated tests:**
-
-- **"merged ticket stub is read-only — no reply form"**: Update to check there's no Reply section in the main content area:
-  ```typescript
-  await expect(page.getByTestId('ticket-main-content').getByRole('heading', { name: 'Reply' })).not.toBeVisible({ timeout: 3000 });
-  ```
-
-- **Agent controls checks**: Now scoped to the sidebar:
-  ```typescript
-  await expect(page.getByTestId('ticket-sidebar').getByTestId('agent-controls')).not.toBeVisible();
-  ```
-
-### `tests/e2e/attachments.spec.ts`
-
-**Updated tests:**
-
-- **"file upload drop zone is visible on post"**: No change needed (drop zone is within the post card, which is in the main content area).
-
-- All file-related selectors are unchanged since `AttachmentList` and `FileUpload` stay within post cards.
-
-### New Tests
-
-Add these tests to `tests/e2e/posts-comments.spec.ts`:
-
-- **"two-column layout: sidebar shows metadata"**: Verify that the sidebar exists and contains expected metadata fields:
-  ```typescript
-  test('two-column layout: sidebar shows metadata', async ({ page }) => {
-    await loginAs(page, 'alice@example.com');
-    await page.goto(ticketUrl || await resolveTicketUrl());
-    
-    const sidebar = page.getByTestId('ticket-sidebar');
-    await expect(sidebar).toBeVisible();
-    await expect(sidebar.getByText('Type')).toBeVisible();
-    await expect(sidebar.getByText('Created by')).toBeVisible();
-  });
-  ```
-
-- **"agent sees Posts and Notes tabs"**: Verify that the tab bar appears for agents:
-  ```typescript
-  test('agent sees Posts and Notes tabs', async ({ page }) => {
-    await loginAs(page, 'agent.smith@example.com');
-    await page.goto(ticketUrl || await resolveTicketUrl());
-    
-    await expect(page.getByTestId('ticket-tabs')).toBeVisible();
-    await expect(page.getByTestId('posts-tab')).toBeVisible();
-    await expect(page.getByTestId('notes-tab')).toBeVisible();
-  });
-  ```
-
-- **"Notes tab shows note count badge when notes exist"**: When there are internal notes, the Notes tab must display the count in a badge:
-  ```typescript
-  test('Notes tab shows note count badge when notes exist', async ({ page }) => {
-    await loginAs(page, 'agent.smith@example.com');
-    await page.goto(ticketUrl || await resolveTicketUrl());
-    
-    const notesTab = page.getByTestId('notes-tab');
-    await expect(notesTab).toBeVisible();
-    const badge = notesTab.locator('span');
-    await expect(badge).toBeVisible();
-    await expect(badge).toHaveText(/\d+/);
-  });
-  ```
-
-- **"regular user does not see tab bar"**: Verify no tabs for users:
-  ```typescript
-  test('regular user does not see tab bar', async ({ page }) => {
-    await loginAs(page, 'alice@example.com');
-    await page.goto(ticketUrl || await resolveTicketUrl());
-    
-    await expect(page.getByTestId('ticket-tabs')).not.toBeVisible();
-  });
-  ```
-
-- **"markdown editor shows toolbar"**: Verify the editor has formatting toolbar:
-  ```typescript
-  test('markdown editor shows toolbar', async ({ page }) => {
-    await loginAs(page, 'alice@example.com');
-    await page.goto(ticketUrl || await resolveTicketUrl());
-    
-    const editor = page.locator('[data-testid="markdown-editor"]').first();
-    await expect(editor).toBeVisible();
-    // react-markdown-editor-lite renders a toolbar with .rc-md-editor class
-    await expect(editor.locator('.rc-md-navigation')).toBeVisible();
-  });
-  ```
+- `two-column layout: sidebar shows metadata` — verify sidebar visible with compact metadata
+- `agent sees Posts and Notes tabs` — verify tab bar for agents
+- `Notes tab shows note count badge` — verify badge with count
+- `regular user does not see tab bar` — no `ticket-tabs` visible
+- `editor toolbar visible` — `.rc-md-navigation` visible
+- `agent sees canned response in editor toolbar` — toolbar contains 📋 button
+- `full-width layout on ticket detail` — content wider than standard max-w-5xl
+- `editor view mode preference persists` — change mode, reload, verify same mode
+- `agent does not see duplicate fields in ticket info` — Type, Category not in info when agent
+- `user sees all fields in ticket info` — Type, Category visible for regular users
 
 ---
 
-## 6. Files Modified
+## 15. Files Modified
 
 ### Source Files
 
 | File | Action | Description |
 |------|--------|-------------|
-| `src/components/features/tickets/MarkdownEditor.tsx` | **Create** | New rich Markdown editor component |
-| `src/components/features/tickets/MarkdownPreview.tsx` | **Delete or deprecate** | Replaced by MarkdownEditor |
-| `src/app/(main)/tickets/[id]/[slug]/page.tsx` | **Major update** | Two-column layout, tabs, note separation |
-| `src/app/(main)/tickets/[id]/[slug]/TicketTabs.tsx` | **Create** | Tab switcher for Posts/Notes (agents) |
-| `src/app/(main)/tickets/[id]/[slug]/ReplyForm.tsx` | **Update** | Use MarkdownEditor instead of textarea |
-| `src/app/(main)/tickets/[id]/[slug]/NoteForm.tsx` | **Update** | Use MarkdownEditor compact mode |
-| `src/app/(main)/tickets/[id]/[slug]/CommentForm.tsx` | **Update** | Use MarkdownEditor compact mode |
-| `src/app/(main)/tickets/[id]/[slug]/EditablePost.tsx` | **Update** | Use MarkdownEditor in edit mode |
-| `src/components/features/tickets/TicketForm.tsx` | **Update** | Use MarkdownEditor for description field |
-| `package.json` | **Update** | Add `react-markdown-editor-lite` and `markdown-it` dependencies |
+| `src/components/features/tickets/MarkdownEditor.tsx` | **Update** | Add `viewMode`, `extraToolbarPlugins` props; register CannedResponsePlugin |
+| `src/components/features/tickets/CannedResponsePlugin.tsx` | **Create** | Editor toolbar plugin for canned responses |
+| `src/app/(main)/tickets/[id]/[slug]/page.tsx` | **Major update** | Full-width class, remove back-links, two-column layout, compact sidebar info, hide agent-duplicate fields, unified sticky sidebar, remove FileUpload from posts, move ticket # to sidebar, relative time |
+| `src/app/(main)/tickets/[id]/[slug]/TicketTabs.tsx` | **Keep** | Already created — no changes |
+| `src/app/(main)/tickets/[id]/[slug]/ReplyForm.tsx` | **Update** | Remove CannedResponsePicker, accept `editorViewMode` prop, pass `viewMode` and `extraToolbarPlugins` to editor |
+| `src/app/(main)/tickets/[id]/[slug]/NoteForm.tsx` | **Update** | Accept `editorViewMode` prop, pass `viewMode` to editor |
+| `src/app/(main)/tickets/[id]/[slug]/CommentForm.tsx` | **Update** | Accept `editorViewMode` prop, pass `viewMode` to editor |
+| `src/app/(main)/tickets/[id]/[slug]/EditablePost.tsx` | **Update** | Accept `editorViewMode` prop, pass `viewMode` to editor |
+| `src/components/features/tickets/TicketForm.tsx` | **Update** | Accept `editorViewMode` prop, pass `viewMode` to editor |
+| `src/lib/actions/profile.ts` | **Update** | Add `updateEditorViewMode` server action |
+| `src/lib/utils/time.ts` | **Create or update** | Add `formatRelativeTime()` utility |
+| `src/app/(main)/profile/page.tsx` | **Update** | Add editor preference section |
+| `src/app/globals.css` | **Update** | Add `.ticket-detail-full-width` CSS class |
+| `supabase/migrations/021_editor_preference.sql` | **Create** | Add `editor_view_mode` column to profiles |
+| `package.json` | **Update** | Add dependencies (if not already present) |
 
 ### E2E Test Files
 
-| File | Action | Description |
-|------|--------|-------------|
-| `tests/e2e/tickets.spec.ts` | **Update** | Metadata selectors scoped to sidebar; editor interaction updated |
-| `tests/e2e/posts-comments.spec.ts` | **Update** | Editor selectors updated; tabs testing; notes tab interaction |
-| `tests/e2e/advanced-tickets.spec.ts` | **Update** | Sidebar-scoped agent controls check |
-| `tests/e2e/attachments.spec.ts` | **Minor review** | Verify no breakage from layout change |
-
-### Prompts Updated
-
-| File | Section Updated | Description |
-|------|-----------------|-------------|
-| `promts/03-tickets-user.md` | Ticket Detail page, MarkdownPreview, TicketForm | Two-column layout, MarkdownEditor, sidebar metadata |
-| `promts/06-posts-comments-notes.md` | Ticket Detail section, NoteForm, tabs, all e2e tests | Tabs for posts/notes, MarkdownEditor in all forms, sidebar layout |
-| `promts/08-file-attachments.md` | FileUpload integration note | Note about editor image insertion |
+| File | Action |
+|------|--------|
+| `tests/e2e/tickets.spec.ts` | Update selectors: sidebar, editor, no back-links, compact info |
+| `tests/e2e/posts-comments.spec.ts` | Update: tabs, editor, sidebar, no FileUpload, canned response in toolbar |
+| `tests/e2e/advanced-tickets.spec.ts` | Sidebar-scoped agent controls |
+| `tests/e2e/attachments.spec.ts` | Remove FileUpload drop zone expectations on posts |
 
 ---
 
-## 7. Prompt Updates
+## 16. Prompt & Spec Updates
+
+The following original prompts and specs need to be updated to reflect these changes:
+
+### `docs/design.md`
+
+- Add exception to "Centered content area, max-width ~5xl" — ticket detail page uses full width
+- Add note about compact sidebar metadata layout
+
+### `docs/requirements.md`
+
+- §3.4 Ticket detail — mention full-width layout, compact sidebar info, no back-links, relative time on Created date
+- §3.12 Markdown preview — update to reference the rich editor with user-selectable view mode (both/preview/editor)
+- Add new requirement for `editor_view_mode` user preference on `profiles` table
 
 ### `promts/03-tickets-user.md`
 
-#### Section "3. UI Components" → `MarkdownPreview.tsx` entry:
-
-**Old:**
-```
-**`src/components/features/tickets/MarkdownPreview.tsx`**:
-- `"use client"` component (permitted by architecture constraint 2b)
-- "Write" / "Preview" toggle tabs
-- Preview renders Markdown client-side with same sanitization config
-```
-
-**New:**
-```
-**`src/components/features/tickets/MarkdownEditor.tsx`**:
-- `"use client"` component (permitted by architecture constraint 2b)
-- **Abstraction layer** — this is the ONLY file importing the underlying editor library. Swapping to a different editor requires changes only here.
-- Rich Markdown editor using `react-markdown-editor-lite` (dynamically imported with `ssr: false`)
-- Uses `markdown-it` for preview rendering (consistent with server-side config)
-- Built-in toolbar: bold, italic, headings, links, images, code blocks (fenced + inline), lists, tables, quotes
-- Editor / Preview / Split modes
-- Native image upload via `onImageUpload` prop (drag-and-drop, paste, toolbar button)
-- Hidden `<textarea>` with `name` attribute for Server Action form compatibility
-- `compact` prop for smaller forms (comments, notes) — hides preview panel
-- `onValueChange` callback for external text insertion (canned responses, AI suggestions)
-- `data-testid="markdown-editor"` on wrapper div
-```
-
-#### Section "3. UI Components" → `TicketForm.tsx` entry:
-
-**Add note:**
-```
-- Description field uses `<MarkdownEditor>` (not a plain textarea or MarkdownPreview)
-```
-
-#### Section "4. Pages" → Ticket Detail (`src/app/(main)/tickets/[id]/[slug]/page.tsx`):
-
-**Old:**
-```
-- Show: title, type name, status badge, urgency badge, severity badge, category (if set), assigned agent display name (if any), creator display name, creation date
-```
-
-**New:**
-```
-- **Two-column layout**: main content area (left, ~65-70%) with subject, posts timeline, and reply form; sidebar (right, ~30-35%) with ticket metadata, agent controls, and secondary info
-- **Sidebar** (`data-testid="ticket-sidebar"`): type, category, status badge, urgency badge, severity badge, assigned agent, creator (+ team name), dates, SLA, CSAT, tags, custom fields, follow/unfollow, agent controls, tier controls, user notes, AI summary
-- **Main area** (`data-testid="ticket-main-content"`): editable title, status/time summary, posts timeline (or tabbed posts+notes for agents), reply form
-- Responsive: single-column on mobile, two-column on lg+ breakpoint
-- Sidebar uses `sticky top-4` on desktop
-```
-
-#### Section "6. Tests" → `tests/e2e/tickets.spec.ts`:
-
-**Add/update these entries:**
-```
-- Ticket detail: metadata (type, urgency) appears in the sidebar (`data-testid="ticket-sidebar"`)
-- Create ticket form uses MarkdownEditor for description (interact via `[data-testid="markdown-editor"] textarea`)
-- Reply form uses MarkdownEditor (interact via `[data-testid="markdown-editor"] textarea`)
-```
+- Ticket detail page section: full-width layout, remove back-links, compact sidebar info, ticket # in sidebar, relative time, hide agent-duplicate fields, unified sticky sidebar
+- MarkdownEditor section: add `viewMode` and `extraToolbarPlugins` props
+- TicketForm: pass `editorViewMode` to editor
 
 ### `promts/06-posts-comments-notes.md`
 
-#### Section "3. Ticket Detail Page Updates" → Add new subsection before 3a:
-
-**Add:**
-```
-#### 3.0 Posts / Notes Tab Separation
-
-Create `src/app/(main)/tickets/[id]/[slug]/TicketTabs.tsx` — a `"use client"` component:
-- Two tabs: "Posts" and "Notes"
-- "Posts" tab shows the timeline of all non-note posts, comments, activity entries, and the reply form
-- "Notes" tab shows all internal notes chronologically and the note form at the bottom
-- Note count badge on the Notes tab
-- `data-testid="ticket-tabs"` on container, `data-testid="posts-tab"` and `data-testid="notes-tab"` on buttons
-
-**Only agents see tabs.** Regular users see the posts stream directly — no `TicketTabs` component is rendered. Users never see notes or the Notes tab.
-
-Split rendered posts in the server component:
-- `notePosts = renderedPosts.filter(p => p.post_type === 'note')`
-- `nonNotePosts = renderedPosts.filter(p => p.post_type !== 'note')`
-- Build the timeline from `nonNotePosts` only
-- Pass both to `TicketTabs` for agents; render only the posts stream for users
-```
-
-#### Section "3d. Note Form" — update:
-
-**Old:**
-```
-- Below the reply form area, show a separate "Add Internal Note" section for agents
-```
-
-**New:**
-```
-- Inside the "Notes" tab (not below the reply form), show the "Add Internal Note" section
-- The note form uses `<MarkdownEditor name="body" compact>` instead of a plain textarea
-```
-
-#### Section "3b. Inline Edit Form" — add note:
-
-```
-- The edit form renders `<MarkdownEditor>` instead of a plain `<textarea>`
-```
-
-#### Section "3c. Inline Comment/Reply Forms" — add note:
-
-```
-- Comment/reply forms use `<MarkdownEditor name="body" compact>` instead of a plain textarea
-```
-
-#### Section "5. Tests" → `tests/e2e/posts-comments.spec.ts` — update entries:
-
-**Add:**
-```
-- Agent sees "Posts" and "Notes" tabs on ticket detail
-- Regular user does not see tab bar
-- Agent clicking "Notes" tab shows internal notes and note form
-- Note not visible in the "Posts" tab for agents
-- Two-column layout: sidebar shows metadata (Type, Created by fields visible)
-- Markdown editor shows toolbar
-```
-
-**Update existing:**
-```
-- Add a reply → uses MarkdownEditor (fill via `[data-testid="markdown-editor"] textarea`)
-- Add a comment → uses MarkdownEditor (fill via `[data-testid="markdown-editor"] textarea`)
-- Add internal note → click "Notes" tab first, then fill MarkdownEditor
-- Note not visible to regular user → also verify no `ticket-tabs` element
-- Edit a post → edit mode shows MarkdownEditor
-```
+- ReplyForm: canned response via editor toolbar plugin (not standalone picker), pass `editorViewMode`
+- NoteForm: pass `editorViewMode`
+- CommentForm: pass `editorViewMode`
+- EditablePost: pass `editorViewMode`
+- Remove reference to CannedResponsePicker as a standalone component in forms
 
 ### `promts/08-file-attachments.md`
 
-#### Section "5. UI Components" → Add note to `FileUpload.tsx` section:
+- Remove FileUpload from post cards (it's no longer rendered per-post)
+- Keep AttachmentList for displaying existing attachments
+- Note that image uploads are handled by the editor's onImageUpload
 
-```
-**Note:** The post form now uses `MarkdownEditor` (from the ticket detail redesign). File attachments remain as a separate component below each post. The `FileUpload` component is unchanged.
-```
+### `promts/15-user-profile.md`
+
+- Add `editor_view_mode` column to profiles table
+- Add editor preference section to profile page
+- Add `updateEditorViewMode` server action
 
 ---
 
-## Implementation Notes
-
-- **Abstraction layer is critical** — `MarkdownEditor.tsx` is the only file that imports `react-markdown-editor-lite`. All other components use `<MarkdownEditor>` via its stable props interface. Switching to a different editor (e.g., `@uiw/react-md-editor`, `milkdown`) requires editing only this one file.
-- `react-markdown-editor-lite` must be dynamically imported with `{ ssr: false }` because it depends on browser APIs (window, document)
-- It requires a separate markdown parser — use `markdown-it` (already used server-side for rendering posts)
-- The hidden textarea pattern ensures the existing Server Action form submission logic continues to work without changes to server actions
-- Image upload is handled natively by the editor — `onImageUpload: (file: File) => Promise<string>` — the editor inserts `![](url)` automatically
-- The two-column layout uses Tailwind's `flex-col lg:flex-row` for responsive behavior
-- The sidebar uses `sticky top-4` and `flex-shrink-0` with a fixed width (`w-80 xl:w-96`) on desktop
-- Notes are completely separated from the posts timeline — they do not appear interspersed with posts even for agents
-- Activity log entries related to notes (e.g., "draft published" for notes) should appear in the Notes tab, not the Posts tab
-- The `TicketTabs` component is a minimal client component — it only manages which tab is active
-
 ## Verification Checklist
 
-- [ ] `npm install` adds `react-markdown-editor-lite` and `markdown-it` successfully
-- [ ] Markdown editor renders with toolbar (bold, italic, code, etc.)
-- [ ] Editor preview mode shows rendered markdown
-- [ ] Code snippets render correctly in preview (fenced code blocks)
-- [ ] Image drag-and-drop uploads to Supabase Storage and inserts `![](url)` in editor
-- [ ] Image paste from clipboard works the same way
+- [ ] Ticket detail page uses full viewport width
+- [ ] Other pages still use `max-w-5xl`
+- [ ] Markdown editor renders with toolbar
+- [ ] Editor view mode toggleable (both/preview/editor)
+- [ ] View mode preference persists in profile
+- [ ] Canned response accessible via editor toolbar button (agents only)
+- [ ] No standalone CannedResponsePicker above forms
+- [ ] No FileUpload drop zone on post cards
+- [ ] AttachmentList still shows existing attachments
+- [ ] Image drag-and-drop into editor works
 - [ ] Two-column layout: sidebar on right on desktop, stacked on mobile
-- [ ] Sidebar displays all ticket metadata, agent controls, tags, SLA, CSAT
-- [ ] Sidebar is sticky on scroll
+- [ ] Sidebar content in single sticky scrollable container
+- [ ] Ticket info compact — single-line per field
+- [ ] Agent-editable fields hidden from ticket info (agent view)
+- [ ] Regular user sees all fields in ticket info
+- [ ] Ticket number in sidebar, not main content
+- [ ] Created date shows relative time: `4/18/2026 (2 d ago)`
+- [ ] No status badge under subject in main content
+- [ ] No "← My Tickets" / "← Agent Dashboard" links
 - [ ] Agents see Posts + Notes tabs
-- [ ] Regular users see no tabs, just the posts stream
-- [ ] Notes appear only in the Notes tab for agents
-- [ ] Notes are invisible to regular users
-- [ ] Reply form uses MarkdownEditor
-- [ ] Note form uses MarkdownEditor (compact)
-- [ ] Comment forms use MarkdownEditor (compact)
-- [ ] Edit mode uses MarkdownEditor
-- [ ] Ticket creation form uses MarkdownEditor
-- [ ] Canned response insertion works with the new editor
-- [ ] AI suggested reply works with the new editor
-- [ ] File attachments still work on posts
-- [ ] Collapsible timeline still works
+- [ ] Regular users see no tabs
+- [ ] Notes only in Notes tab for agents
 - [ ] `npm run typecheck` passes
 - [ ] `npm run lint` passes
-- [ ] `npm run test:e2e` passes all updated tests
+- [ ] All E2E tests pass with updated selectors

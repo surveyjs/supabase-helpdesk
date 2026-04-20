@@ -114,6 +114,7 @@ Update the reply/post composition form (used on ticket detail page):
 - Props: `onInsert: (body: string) => void`
 - Fetches canned responses on open (or caches them)
 - Search input + filtered list + click to insert
+- **Note (ticket detail redesign):** On the ticket detail page, the `CannedResponsePicker` is no longer used as a standalone component above the reply form. Instead, canned response insertion is handled by a custom toolbar plugin (`CannedResponsePlugin.tsx`) registered in the `MarkdownEditor`. The standalone component may still be used in other contexts.
 
 ### 5. Follow/Unfollow UI on Ticket Detail
 

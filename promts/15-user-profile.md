@@ -70,6 +70,10 @@ CREATE POLICY user_notes_delete ON user_notes
   - Disabled for agents/admins (must be demoted first)
   - Clicking shows a confirmation modal: "This action is irreversible. Your account will be anonymized."
   - On confirm: call `deleteOwnAccount` Server Action
+- **Editor preference** section:
+  - Show the current editor view mode (`both`, `preview`, or `editor`) with radio buttons or a segmented control
+  - On change: call `updateEditorViewMode` server action to persist the preference
+  - This is a convenience — the primary way to change the mode is the in-editor toggle on any Markdown editor
 
 ### 3. Server Actions for Profile
 
@@ -97,6 +101,12 @@ CREATE POLICY user_notes_delete ON user_notes
   - Invalidate auth session via Supabase Admin API (service-role: `auth.admin.deleteUser(userId)`)
   - Log to `admin_audit_log`
   - Redirect to login page
+
+- `updateEditorViewMode(formData: FormData)`:
+  - Validate `editor_view_mode` is one of `'both'`, `'preview'`, `'editor'`
+  - Update `profiles.editor_view_mode` for the current user
+  - Revalidate
+  - Note: The `editor_view_mode` column is added via `supabase/migrations/021_editor_preference.sql`
 
 ### 4. Agent-Viewable User Profile
 

@@ -175,7 +175,7 @@ Each post/comment/note shows:
 #### 3b. Inline Edit Form
 
 When the user clicks "Edit" on a post/comment/note:
-- Replace the rendered body with a `<MarkdownEditor>` component pre-filled with the current Markdown body
+- Replace the rendered body with a `<MarkdownEditor>` component pre-filled with the current Markdown body, with `viewMode` from the user's profile preference
 - Show "Save" and "Cancel" buttons
 - On save: call `editPost` Server Action
 - On cancel: revert to rendered view
@@ -183,7 +183,7 @@ When the user clicks "Edit" on a post/comment/note:
 
 #### 3c. Inline Comment/Reply Forms
 
-- Each post has a "Reply" link that reveals an inline comment form (`<MarkdownEditor name="body" compact>` + "Comment" button)
+- Each post has a "Reply" link that reveals an inline comment form (`<MarkdownEditor name="body" compact viewMode={editorViewMode}>` + "Comment" button)
 - Each level-1 comment has a "Reply" link that reveals a reply form
 - Forms call `addComment` Server Action with appropriate `parent_post_id` and `parent_comment_id`
 - These are `<form>` elements with hidden fields for IDs
@@ -191,7 +191,7 @@ When the user clicks "Edit" on a post/comment/note:
 #### 3d. Note Form (Agent Only)
 
 - Inside the **Notes tab** (not below the reply form), show the "Add Internal Note" section
-- `<MarkdownEditor name="body" compact>` with "Add Note" button
+- `<MarkdownEditor name="body" compact viewMode={editorViewMode}>` with "Add Note" button
 - Notes are always private — no privacy checkbox needed
 - Calls `addNote` Server Action
 

@@ -1,8 +1,9 @@
 'use client';
 
-import { useActionState, useRef } from 'react';
+import { useActionState, useState, useCallback } from 'react';
 import { replyToTicket, type TicketActionState } from '@/lib/actions/tickets';
 import { CannedResponsePicker } from '@/components/features/canned-responses/CannedResponsePicker';
+import { MarkdownEditor } from '@/components/features/tickets/MarkdownEditor';
 
 const initialState: TicketActionState = {};
 
@@ -14,26 +15,11 @@ export function ReplyForm({
   isAgent?: boolean;
 }) {
   const [state, formAction, pending] = useActionState(replyToTicket, initialState);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [body, setBody] = useState('');
 
-  function handleInsertCanned(body: string) {
-    const ta = textareaRef.current;
-    if (!ta) return;
-    const start = ta.selectionStart;
-    const end = ta.selectionEnd;
-    const current = ta.value;
-    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-      window.HTMLTextAreaElement.prototype, 'value',
-    )?.set;
-    if (nativeInputValueSetter) {
-      nativeInputValueSetter.call(ta, current.slice(0, start) + body + current.slice(end));
-      ta.dispatchEvent(new Event('input', { bubbles: true }));
-    } else {
-      ta.value = current.slice(0, start) + body + current.slice(end);
-    }
-    ta.focus();
-    ta.selectionStart = ta.selectionEnd = start + body.length;
-  }
+  const handleInsertCanned = useCallback((text: string) => {
+    setBody((prev) => prev + text);
+  }, []);
 
   return (
     <form action={formAction} className="space-y-4">
@@ -49,15 +35,13 @@ export function ReplyForm({
       {isAgent && (
         <CannedResponsePicker onInsert={handleInsertCanned} />
       )}
-      <textarea
-        ref={textareaRef}
+      <MarkdownEditor
         name="body"
         required
-        rows={4}
         maxLength={50000}
         placeholder="Write your reply… (Markdown supported)"
-        className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-y"
-        aria-label="Reply body"
+        defaultValue={body}
+        onValueChange={setBody}
       />
       <button
         type="submit"

@@ -5,6 +5,7 @@ import { createTicket, type TicketActionState } from '@/lib/actions/tickets';
 import { getSuggestedArticles } from '@/lib/actions/kb';
 import { autoCategorizeTicket, detectDuplicateTickets, type AutoCategorizeResult, type DuplicateTicket } from '@/lib/actions/ai';
 import { generateSlug } from '@/lib/utils/slug';
+import { MarkdownEditor } from '@/components/features/tickets/MarkdownEditor';
 import Link from 'next/link';
 
 const initialState: TicketActionState = {};
@@ -110,26 +111,34 @@ export function TicketForm({
     }
   }
 
-  // AI auto-categorization on body blur
-  async function handleBodyBlur(e: React.FocusEvent<HTMLTextAreaElement>) {
-    if (!aiAutoCategEnabled || aiCategorized) return;
-    const body = e.target.value.trim();
-    const titleEl = document.getElementById('title') as HTMLInputElement | null;
-    const title = titleEl?.value.trim() ?? '';
-    if (!title || !body) return;
+  // AI auto-categorization on body change (debounced, replaces onBlur)
+  const bodyRef = useRef('');
+  const bodyCategDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    setAiCategorizePending(true);
-    try {
-      const fd = new FormData();
-      fd.set('title', title);
-      fd.set('body', body);
-      const result = await autoCategorizeTicket(fd);
-      applyAiSuggestions(result);
-    } catch {
-      // Silently ignore
-    } finally {
-      setAiCategorizePending(false);
-    }
+  function handleBodyChange(text: string) {
+    bodyRef.current = text;
+    // Debounce auto-categorization (triggers ~1s after last edit, like blur used to)
+    if (!aiAutoCategEnabled || aiCategorized) return;
+    if (bodyCategDebounceRef.current) clearTimeout(bodyCategDebounceRef.current);
+    bodyCategDebounceRef.current = setTimeout(async () => {
+      const body = bodyRef.current.trim();
+      const titleEl = document.getElementById('title') as HTMLInputElement | null;
+      const title = titleEl?.value.trim() ?? '';
+      if (!title || !body) return;
+
+      setAiCategorizePending(true);
+      try {
+        const fd = new FormData();
+        fd.set('title', title);
+        fd.set('body', body);
+        const result = await autoCategorizeTicket(fd);
+        applyAiSuggestions(result);
+      } catch {
+        // Silently ignore
+      } finally {
+        setAiCategorizePending(false);
+      }
+    }, 1500);
   }
 
   function applyAiSuggestions(result: AutoCategorizeResult) {
@@ -155,9 +164,8 @@ export function TicketForm({
 
   async function handleReSuggest() {
     const titleEl = document.getElementById('title') as HTMLInputElement | null;
-    const bodyEl = document.getElementById('body') as HTMLTextAreaElement | null;
     const title = titleEl?.value.trim() ?? '';
-    const body = bodyEl?.value.trim() ?? '';
+    const body = bodyRef.current.trim();
     if (!title || !body) return;
 
     setAiCategorizePending(true);
@@ -184,6 +192,7 @@ export function TicketForm({
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       if (dupDebounceRef.current) clearTimeout(dupDebounceRef.current);
+      if (bodyCategDebounceRef.current) clearTimeout(bodyCategDebounceRef.current);
     };
   }, []);
 
@@ -346,15 +355,12 @@ export function TicketForm({
         <label htmlFor="body" className="block text-sm font-medium text-gray-700 mb-1">
           Description <span className="text-red-500">*</span>
         </label>
-        <textarea
-          id="body"
+        <MarkdownEditor
           name="body"
           required
-          rows={8}
           maxLength={50000}
-          onBlur={handleBodyBlur}
-          className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-y"
           placeholder="Describe your issue in detail (Markdown supported)"
+          onValueChange={handleBodyChange}
         />
         {state.fieldErrors?.body && (
           <p className="mt-1 text-sm text-red-600">{state.fieldErrors.body}</p>

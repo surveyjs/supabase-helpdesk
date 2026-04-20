@@ -75,7 +75,9 @@ test.describe('Tickets', () => {
     await page.getByLabel('Title').fill('E2E Test Ticket');
     await page.getByLabel('Type').selectOption({ label: 'Issue' });
     await page.getByLabel('Urgency').selectOption('high');
-    await page.getByLabel(/Description/).fill('This is a test ticket created by E2E test. **Bold text** and `code`.');
+    // Description field uses MarkdownEditor
+    const descEditor = page.locator('[data-testid="markdown-editor"]');
+    await descEditor.locator('textarea').fill('This is a test ticket created by E2E test. **Bold text** and `code`.');
     await page.getByRole('button', { name: 'Create Ticket' }).click();
 
     // Should redirect to ticket detail
@@ -94,9 +96,10 @@ test.describe('Tickets', () => {
 
     await expect(page.getByRole('heading', { name: 'E2E Test Ticket' })).toBeVisible();
 
-    // Check metadata
-    await expect(page.getByRole('definition').filter({ hasText: 'Issue' })).toBeVisible();
-    await expect(page.getByText(/Urgency: High/)).toBeVisible();
+    // Check metadata — now in the sidebar
+    const sidebar = page.getByTestId('ticket-sidebar');
+    await expect(sidebar.getByRole('definition').filter({ hasText: 'Issue' })).toBeVisible();
+    await expect(sidebar.getByText(/Urgency: High/)).toBeVisible();
 
     // Check original post
     await expect(page.getByText('This is a test ticket created by E2E test.')).toBeVisible();
@@ -112,7 +115,9 @@ test.describe('Tickets', () => {
     const aliceTickets = page.getByText('Password reset not working');
     if (await aliceTickets.isVisible()) {
       await aliceTickets.click();
-      await expect(page.getByText("Alice's Team")).toBeVisible();
+      // Team name is now in the sidebar
+      const sidebar = page.getByTestId('ticket-sidebar');
+      await expect(sidebar.getByText("Alice's Team")).toBeVisible();
     }
   });
 
@@ -120,12 +125,13 @@ test.describe('Tickets', () => {
     await loginAs(page, 'alice@example.com');
     await page.goto(await resolveTicketUrl());
 
-    // Wait for the reply form to be ready
-    await expect(page.getByLabel('Reply body')).toBeVisible({ timeout: 10000 });
+    // Wait for the reply form to be ready — now uses MarkdownEditor
+    const replyEditor = page.locator('[data-testid="markdown-editor"]').last();
+    await expect(replyEditor).toBeVisible({ timeout: 10000 });
 
-    // Fill reply
-    await page.getByLabel('Reply body').fill('This is a test reply from E2E.');
-    await page.locator('form').filter({ has: page.getByLabel('Reply body') }).getByRole('button', { name: 'Reply' }).click();
+    // Fill reply via the editor's textarea
+    await replyEditor.locator('textarea').fill('This is a test reply from E2E.');
+    await page.locator('form').filter({ has: replyEditor }).getByRole('button', { name: 'Reply' }).click();
 
     // Verify reply appears
     await expect(page.getByText('This is a test reply from E2E.')).toBeVisible({ timeout: 15000 });

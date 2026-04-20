@@ -164,11 +164,13 @@ test.describe('Advanced Tickets', () => {
     // Merge banner should be present
     await expect(page.getByTestId('merge-banner')).toBeVisible({ timeout: 10000 });
 
-    // Reply form should NOT be visible
-    await expect(page.getByRole('heading', { name: 'Reply' })).not.toBeVisible({ timeout: 3000 });
+    // Reply form should NOT be visible in the main content area
+    const mainContent = page.getByTestId('ticket-main-content');
+    await expect(mainContent.getByRole('heading', { name: 'Reply' })).not.toBeVisible({ timeout: 3000 });
 
-    // Agent controls should NOT be visible
-    await expect(page.getByTestId('agent-controls')).not.toBeVisible({ timeout: 3000 });
+    // Agent controls should NOT be visible in the sidebar
+    const sidebar = page.getByTestId('ticket-sidebar');
+    await expect(sidebar.getByTestId('agent-controls')).not.toBeVisible({ timeout: 3000 });
   });
 
   test('admin sees delete button on open ticket', async ({ page }) => {

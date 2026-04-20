@@ -79,9 +79,11 @@ test.describe('Posts, Comments & Notes', () => {
     await loginAs(page, 'alice@example.com');
     await page.goto(ticketUrl || await resolveTicketUrl());
 
-    await page.getByLabel('Reply body').fill('A root reply to the ticket.');
-    // Use the submit button inside the reply form (not the ReplyToggle button)
-    await page.locator('form').filter({ has: page.getByLabel('Reply body') }).getByRole('button', { name: 'Reply' }).click();
+    // Reply form now uses MarkdownEditor
+    const replyEditor = page.locator('[data-testid="markdown-editor"]').last();
+    await replyEditor.locator('textarea').fill('A root reply to the ticket.');
+    // Use the submit button inside the reply form
+    await page.locator('form').filter({ has: replyEditor }).getByRole('button', { name: 'Reply' }).click();
 
     await expect(page.getByText('A root reply to the ticket.')).toBeVisible({ timeout: 10000 });
   });
@@ -96,8 +98,9 @@ test.describe('Posts, Comments & Notes', () => {
     const firstReplyBtn = replyBtns.first();
     await firstReplyBtn.click();
 
-    // Fill in the comment form
-    await page.getByLabel('Comment body').fill('A threaded comment on the reply.');
+    // Fill in the comment form — now uses MarkdownEditor compact
+    const commentEditor = page.locator('[data-testid="markdown-editor"]').last();
+    await commentEditor.locator('textarea').fill('A threaded comment on the reply.');
     await page.getByRole('button', { name: 'Comment' }).click();
 
     await expect(page.getByText('A threaded comment on the reply.')).toBeVisible({ timeout: 10000 });
@@ -122,7 +125,9 @@ test.describe('Posts, Comments & Notes', () => {
     const lastReplyBtn = replyBtns.last();
     await lastReplyBtn.click();
 
-    await page.getByLabel('Comment body').fill('A level-2 reply to the comment.');
+    // Comment form now uses MarkdownEditor compact
+    const commentEditor = page.locator('[data-testid="markdown-editor"]').last();
+    await commentEditor.locator('textarea').fill('A level-2 reply to the comment.');
     await page.getByRole('button', { name: 'Comment' }).click();
 
     await expect(page.getByText('A level-2 reply to the comment.')).toBeVisible({ timeout: 10000 });
@@ -150,7 +155,12 @@ test.describe('Posts, Comments & Notes', () => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(ticketUrl || await resolveTicketUrl());
 
-    await page.getByLabel('Note body').fill('Internal agent note content.');
+    // Agent must click the Notes tab first
+    await page.getByTestId('notes-tab').click();
+
+    // Note form now uses MarkdownEditor compact
+    const noteEditor = page.locator('[data-testid="markdown-editor"]').last();
+    await noteEditor.locator('textarea').fill('Internal agent note content.');
     await page.getByRole('button', { name: 'Add Note' }).click();
 
     await expect(page.getByText('Internal agent note content.')).toBeVisible({ timeout: 10000 });
@@ -161,6 +171,8 @@ test.describe('Posts, Comments & Notes', () => {
     await loginAs(page, 'alice@example.com');
     await page.goto(ticketUrl || await resolveTicketUrl());
 
+    // Regular user should not see the tab bar at all
+    await expect(page.getByTestId('ticket-tabs')).not.toBeVisible();
     await expect(page.getByText('Internal agent note content.')).not.toBeVisible();
   });
 
@@ -172,10 +184,10 @@ test.describe('Posts, Comments & Notes', () => {
     const editBtns = page.locator('[data-testid="edit-post-btn"]');
     await editBtns.first().click();
 
-    // Change the text
-    const textarea = page.locator('textarea[name="body"]').first();
-    await textarea.clear();
-    await textarea.fill('Edited root reply content.');
+    // Edit mode now renders MarkdownEditor
+    const editEditor = page.locator('[data-testid="markdown-editor"]').first();
+    await editEditor.locator('textarea').clear();
+    await editEditor.locator('textarea').fill('Edited root reply content.');
     await page.getByRole('button', { name: 'Save' }).first().click();
 
     await expect(page.getByText('Edited root reply content.')).toBeVisible({ timeout: 10000 });
@@ -209,7 +221,8 @@ test.describe('Posts, Comments & Notes', () => {
     await page.goto(ticketUrl || await resolveTicketUrl());
 
     // The Reply form should be visible for agents
-    await expect(page.getByLabel('Reply body')).toBeVisible();
+    const replyEditor = page.locator('[data-testid="markdown-editor"]');
+    await expect(replyEditor.first()).toBeVisible();
   });
 
   test('agent can make a post private → privacy badge shows', async ({ page }) => {
@@ -229,8 +242,10 @@ test.describe('Posts, Comments & Notes', () => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(ticketUrl || await resolveTicketUrl());
 
-    await page.getByLabel('Reply body').fill('Temporary post to be deleted.');
-    await page.locator('form').filter({ has: page.getByLabel('Reply body') }).getByRole('button', { name: 'Reply' }).click();
+    // Reply form now uses MarkdownEditor
+    const replyEditor = page.locator('[data-testid="markdown-editor"]').last();
+    await replyEditor.locator('textarea').fill('Temporary post to be deleted.');
+    await page.locator('form').filter({ has: replyEditor }).getByRole('button', { name: 'Reply' }).click();
     await expect(page.getByText('Temporary post to be deleted.')).toBeVisible({ timeout: 10000 });
 
     // Delete it – find the delete button in the same post container
@@ -329,5 +344,81 @@ test.describe('Collapsible Timeline', () => {
     // All posts should now be visible
     await expect(page.getByText('Post number 1 for collapsible timeline test.')).toBeVisible();
     await expect(page.getByText('Post number 12 for collapsible timeline test.')).toBeVisible();
+  });
+});
+
+test.describe('Ticket Detail Layout & Tabs', () => {
+  let ticketUrl: string;
+
+  async function resolveLayoutTicketUrl(): Promise<string> {
+    const admin = createServiceRoleClient();
+    for (const slug of ['e2e-posts-renamed-ticket', 'e2e-posts-test-ticket']) {
+      const { data } = await admin
+        .from('tickets')
+        .select('id, slug')
+        .eq('slug', slug)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (data) return `/tickets/${data.id}/${data.slug}`;
+    }
+    throw new Error('Could not find layout test ticket in DB');
+  }
+
+  test('two-column layout: sidebar shows metadata', async ({ page }) => {
+    await loginAs(page, 'alice@example.com');
+    await page.goto(ticketUrl || await resolveLayoutTicketUrl());
+
+    const sidebar = page.getByTestId('ticket-sidebar');
+    await expect(sidebar).toBeVisible({ timeout: 10000 });
+    await expect(sidebar.getByText('Type')).toBeVisible();
+    await expect(sidebar.getByText('Created by')).toBeVisible();
+  });
+
+  test('two-column layout: main content area exists', async ({ page }) => {
+    await loginAs(page, 'alice@example.com');
+    await page.goto(ticketUrl || await resolveLayoutTicketUrl());
+
+    const mainContent = page.getByTestId('ticket-main-content');
+    await expect(mainContent).toBeVisible({ timeout: 10000 });
+  });
+
+  test('agent sees Posts and Notes tabs', async ({ page }) => {
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto(ticketUrl || await resolveLayoutTicketUrl());
+
+    await expect(page.getByTestId('ticket-tabs')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('posts-tab')).toBeVisible();
+    await expect(page.getByTestId('notes-tab')).toBeVisible();
+  });
+
+  test('Notes tab shows note count badge when notes exist', async ({ page }) => {
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto(ticketUrl || await resolveLayoutTicketUrl());
+
+    const notesTab = page.getByTestId('notes-tab');
+    await expect(notesTab).toBeVisible({ timeout: 10000 });
+    // The badge inside the Notes tab should display the note count
+    const badge = notesTab.locator('span');
+    await expect(badge).toBeVisible();
+    // Should contain a number (at least 1 note exists from earlier test)
+    await expect(badge).toHaveText(/\d+/);
+  });
+
+  test('regular user does not see tab bar', async ({ page }) => {
+    await loginAs(page, 'alice@example.com');
+    await page.goto(ticketUrl || await resolveLayoutTicketUrl());
+
+    await expect(page.getByTestId('ticket-tabs')).not.toBeVisible({ timeout: 5000 });
+  });
+
+  test('markdown editor shows toolbar', async ({ page }) => {
+    await loginAs(page, 'alice@example.com');
+    await page.goto(ticketUrl || await resolveLayoutTicketUrl());
+
+    const editor = page.locator('[data-testid="markdown-editor"]').first();
+    await expect(editor).toBeVisible({ timeout: 10000 });
+    // react-markdown-editor-lite renders a navigation toolbar
+    await expect(editor.locator('.rc-md-navigation')).toBeVisible();
   });
 });

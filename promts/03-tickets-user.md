@@ -116,14 +116,21 @@ Create migration **`supabase/migrations/003_tickets.sql`**:
 - Server Component
 
 **`src/components/features/tickets/TicketForm.tsx`**:
-- Create ticket form with: title, type selector, urgency selector, category selector (if categories exist), body (textarea), privacy checkbox
+- Create ticket form with: title, type selector, urgency selector, category selector (if categories exist), body (`<MarkdownEditor>` component), privacy checkbox
 - Server Action form submission
 - Validation error display
 
-**`src/components/features/tickets/MarkdownPreview.tsx`**:
+**`src/components/features/tickets/MarkdownEditor.tsx`**:
 - `"use client"` component (permitted by architecture constraint 2b)
-- "Write" / "Preview" toggle tabs
-- Preview renders Markdown client-side with same sanitization config
+- **Abstraction layer** — this is the ONLY file importing the underlying editor library (`react-markdown-editor-lite`). Swapping to a different editor requires changes only here.
+- Rich Markdown editor using `react-markdown-editor-lite` (dynamically imported with `ssr: false`)
+- Uses `markdown-it` for preview rendering (consistent with server-side config)
+- Built-in toolbar: bold, italic, headings, links, images, code blocks (fenced + inline), lists, tables, quotes
+- Native image upload via `onImageUpload` prop (drag-and-drop, paste, toolbar button)
+- Hidden `<textarea>` with `name` attribute for Server Action form compatibility
+- `compact` prop for smaller forms (comments, notes)
+- `onValueChange` callback for external text insertion (canned responses, AI suggestions)
+- `data-testid="markdown-editor"` on wrapper div
 
 ### 4. Pages
 
@@ -146,15 +153,16 @@ Create migration **`supabase/migrations/003_tickets.sql`**:
 - Fetch ticket by ID
 - If slug doesn't match current title slug: redirect 307 to correct URL
 - Check access: own ticket, public ticket, teammate ticket (if on team), or agent
-- Show: title, type name, status badge, urgency badge, severity badge, category (if set), assigned agent display name (if any), creator display name, creation date
-- Show team name label next to creator display name if creator belongs to a team (§4.4)
-- **Phase 3 renders only root posts** (`post_type = 'post'` AND `NOT is_draft`). Comments, notes, threaded replies, and post editing are added in Phase 6. Post visibility is enforced by RLS — the query result automatically excludes posts the current user cannot see (private posts, notes, drafts).
+- **Two-column layout**: main content area (left, ~65-70%) with subject, posts timeline, and reply form; sidebar (right, ~30-35%) with ticket metadata, agent controls, and secondary info. Responsive: single-column on mobile, two-column on `lg+` breakpoint.
+- **Sidebar** (`data-testid="ticket-sidebar"`): type, category, status badge, urgency badge, severity badge, assigned agent, creator (+ team name §4.4), dates, SLA, CSAT, tags, custom fields, follow/unfollow, agent controls, tier controls, user notes, AI summary. Sidebar uses `sticky top-4` on desktop.
+- **Main area** (`data-testid="ticket-main-content"`): editable title, ticket id + status + creation time summary, posts timeline, reply form
+- **Phase 3 renders only root posts** (`post_type = 'post'` AND `NOT is_draft`). Comments, notes, threaded replies, post editing, and Posts/Notes tab separation are added in Phase 6. Post visibility is enforced by RLS.
 - Show original post first, then subsequent posts in chronological order
 - Each post: author display name, timestamp, markdown body rendered to HTML
 - Current user's posts: blue-tinted background; others: white
 - Include a "Back to My Tickets" link at the top of the page
-- Reply form at the bottom (textarea + "Reply" button)
-- If ticket is duplicate: show banner with link to original
+- Reply form at the bottom of the main content area (uses `<MarkdownEditor>` component)
+- If ticket is duplicate: show banner with link to original (full-width, above the two-column layout)
 
 **`src/app/(main)/tickets/public/page.tsx`** — Browse Public Tickets:
 - Paginated list of all public tickets
@@ -204,9 +212,9 @@ Extend `supabase/seed.sql` (created in Phase 2) to add:
 
 **`tests/e2e/tickets.spec.ts`**:
 - Create a ticket with all fields → appears in "My Tickets"
-- Ticket detail shows correct metadata and posts
-- Ticket detail shows team name next to creator display name (if on team)
-- Reply to a ticket → new post appears
+- Ticket detail shows correct metadata in the sidebar (`data-testid="ticket-sidebar"`) — type, urgency visible
+- Ticket detail shows team name next to creator display name in the sidebar (if on team)
+- Reply to a ticket → new post appears (reply form uses MarkdownEditor — interact via `[data-testid="markdown-editor"] textarea`)
 - Search tickets by title → correct results (uses full-text search)
 - Filter by status → correct results
 - Slug redirect works (navigate to wrong slug → redirected)
@@ -221,8 +229,10 @@ Extend `supabase/seed.sql` (created in Phase 2) to add:
 ## Implementation Notes
 
 - Install additional server-side markdown dependencies: `npm install unified remark-parse remark-gfm remark-rehype rehype-sanitize rehype-stringify`
-- `react-markdown` (installed in Phase 0) is used only for the client-side MarkdownPreview component
-- All data fetching is server-side (no client components except MarkdownPreview)
+- Install rich Markdown editor: `npm install react-markdown-editor-lite markdown-it`
+- `markdown-it` is used by the editor for preview rendering and should also be used server-side for post rendering
+- `MarkdownEditor.tsx` is an abstraction layer — no other file imports `react-markdown-editor-lite` directly
+- All data fetching is server-side (client components: MarkdownEditor, TicketForm)
 - Search and filters are all URL search params
 - The `tickets/[id]/[slug]` route uses Next.js dynamic segments
 - Markdown is rendered server-side for posts; preview uses client-side rendering with the same config

@@ -140,6 +140,7 @@ The bucket should be named `attachments` with RLS enabled. Access policies:
 - Show selected files list with remove buttons before upload
 - Upload progress indicator (optional — Supabase Storage provides upload progress)
 - After upload: files appear below the post body
+- **Note:** The post form now uses `MarkdownEditor` (from the ticket detail redesign). File attachments remain as a separate component below each post. The `FileUpload` component is unchanged.
 
 **`src/components/features/attachments/AttachmentList.tsx`**:
 - Server Component

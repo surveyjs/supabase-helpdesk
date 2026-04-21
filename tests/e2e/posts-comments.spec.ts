@@ -348,7 +348,7 @@ test.describe('Collapsible Timeline', () => {
 });
 
 test.describe('Ticket Detail Layout & Tabs', () => {
-  let ticketUrl: string;
+  let ticketUrl: string | undefined;
 
   async function resolveLayoutTicketUrl(): Promise<string> {
     const admin = createServiceRoleClient();

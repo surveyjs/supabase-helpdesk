@@ -10,8 +10,8 @@ Redesign the ticket detail page with these improvements:
 4. **Remove FileUpload drop zone on posts** — The editor handles image attachments natively via `onImageUpload`. Remove `FileUpload` component from individual post cards (read-only posts especially should never show a drop zone). Keep `AttachmentList` for displaying existing attachments.
 5. **Editor view preference in user profile** — Store the user's preferred editor display mode (`both` | `preview` | `editor`) in the `profiles` table. The user can toggle between modes on the fly; the preference persists across sessions.
 6. **Compact ticket information** — Display metadata on a single line per field (e.g., `Type  Issue` on one line). Use a horizontal `dt/dd` layout instead of stacked labels.
-7. **Hide agent-editable fields from ticket info** — Fields that agents can change (Type, Category, Urgency, Severity, Assignment, Privacy) are already in the Agent Controls panel. When the viewer is an agent, hide these duplicated fields from the Ticket Information section to reduce noise.
-8. **Unified sidebar** — Ticket Information and Agent Controls share the same sticky right-column container with internal scrolling, so agent controls are never pushed off-screen.
+7. **Single Ticket Info window with embedded controls** — Merge Ticket Information and Agent Controls into one right-column card. Keep ticket number and status at the top, and render editable controls inline by role/capability.
+8. **Role/capability-aware fields** — Agents see status action buttons (`Mark Pending`, `Close Ticket`) and editable rows for assignment, urgency, severity, type, category, and visibility. Users see read-only values unless they have specific tier capabilities, in which case only those fields become editable.
 9. **Ticket header cleanup** — Remove the border under the subject line. Move `#123` from the main content area into the first line of the Ticket Information sidebar. Show relative age next to the Created date, e.g., `Created  4/18/2026 (2 d ago)`. Remove status badge from main content (it's already in the sidebar).
 10. **Remove back-links** — Remove "← My Tickets" and "← Agent Dashboard" links from ticket detail page top. These are already in the navigation bar.
 11. **Two-column layout** — Subject & posts on the left (main area), ticket metadata & controls on the right (sidebar)
@@ -443,62 +443,30 @@ Each `<div>` wraps one `<dt>` + `<dd>` pair, displayed as `flex` with a fixed-wi
 
 ---
 
-## 7. Hide Agent-Editable Fields from Ticket Info (Agent View)
+## 7. Embed Agent Controls in Ticket Info
 
-### Problem
+### Final behavior
 
-When an agent views the ticket, the Ticket Information section shows Type, Category, Urgency, Severity, Assignment, Privacy — but these same fields appear in the Agent Controls panel with edit controls. Showing them twice is redundant.
+Use one Ticket Info card for both metadata and controls.
 
-### Solution
+- Keep the top row unchanged: `#ticket-id` + status badge.
+- For **agents**: add a `Status` line with buttons `Mark Pending` and `Close Ticket`.
+- For **agents**: render editable controls inline in Ticket Info for assignment, urgency, severity, type, category, and visibility.
+- For **users with tier capabilities**: enable only the specific editable fields they are allowed to change.
+- For **users without capabilities**: keep read-only values (or hidden behavior where already applicable).
+- Visibility row is always shown; action button (`Make Public` / `Make Private`) is shown only if viewer has permission.
 
-When `isAgent === true`, **hide** these from the Ticket Information section:
-- Type
-- Category
-- Urgency badge
-- Severity badge
-- Assigned to
-- Privacy indicator
-
-These remain editable in the Agent Controls panel.
-
-When the viewer is a **regular user**, all fields stay visible in Ticket Information (they don't see Agent Controls).
-
-```tsx
-{/* In the ticket metadata dl */}
-{!isAgent && (
-  <>
-    <div className="flex items-baseline gap-2">
-      <dt className="text-gray-500 w-28 flex-shrink-0">Type</dt>
-      <dd className="text-gray-900">{typeName}</dd>
-    </div>
-    {categoryName && (
-      <div className="flex items-baseline gap-2">
-        <dt className="text-gray-500 w-28 flex-shrink-0">Category</dt>
-        <dd className="text-gray-900">{categoryName}</dd>
-      </div>
-    )}
-    <div className="flex items-baseline gap-2">
-      <dt className="text-gray-500 w-28 flex-shrink-0">Assigned to</dt>
-      <dd className="text-gray-900">{assignedAgentName ?? 'Unassigned'}</dd>
-    </div>
-    {/* Urgency, Severity badges also hidden for agents */}
-  </>
-)}
-```
-
-**Always shown** (all viewers): Ticket number, Status badge, Created by (+ team), Created date (with relative time), Last updated, Source article, Custom fields, Tags, Follow/Unfollow, CSAT, SLA status.
+Merged tickets remain read-only in this same window.
 
 ---
 
-## 8. Unified Sidebar — Single Scrollable Container
+## 8. Unified Sidebar and Single Ticket Info Window
 
-### Problem
+### Final behavior
 
-The Ticket Information card and Agent Controls card are separate blocks. The info card has `lg:sticky lg:top-4` but agent controls are below it and scroll with the page. On long ticket threads, agent controls may be off-screen.
+Sidebar stays as one sticky right-column container. Ticket metadata and controls are unified into one Ticket Info card (no separate Agent Controls card).
 
-### Solution
-
-Wrap **all** sidebar content in a single sticky container with internal scrolling:
+Use this structure:
 
 ```tsx
 <aside className="w-full lg:w-80 xl:w-96 flex-shrink-0" data-testid="ticket-sidebar">
@@ -507,13 +475,6 @@ Wrap **all** sidebar content in a single sticky container with internal scrollin
     <div className="bg-white rounded-lg border border-gray-200 p-4">
       {/* ... compact metadata fields ... */}
     </div>
-
-    {/* Agent Controls (agents only) */}
-    {isAgent && !ticket.merged_into_id && (
-      <div className="bg-white rounded-lg border border-gray-200 p-4" data-testid="agent-controls">
-        {/* ... controls ... */}
-      </div>
-    )}
 
     {/* Tier Controls, User Notes, AI Summary, etc. */}
   </div>

@@ -168,9 +168,9 @@ test.describe('Advanced Tickets', () => {
     const mainContent = page.getByTestId('ticket-main-content');
     await expect(mainContent.getByRole('heading', { name: 'Reply' })).not.toBeVisible({ timeout: 3000 });
 
-    // Agent controls should NOT be visible in the sidebar
+    // Ticket info should show merged read-only status text in sidebar
     const sidebar = page.getByTestId('ticket-sidebar');
-    await expect(sidebar.getByTestId('agent-controls')).not.toBeVisible({ timeout: 3000 });
+    await expect(sidebar.getByText('Read-only (merged)')).toBeVisible({ timeout: 3000 });
   });
 
   test('admin sees delete button on open ticket', async ({ page }) => {

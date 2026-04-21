@@ -1,8 +1,7 @@
 'use client';
 
-import { useActionState, useState, useCallback } from 'react';
+import { useActionState, useState } from 'react';
 import { replyToTicket, type TicketActionState } from '@/lib/actions/tickets';
-import { CannedResponsePicker } from '@/components/features/canned-responses/CannedResponsePicker';
 import { MarkdownEditor } from '@/components/features/tickets/MarkdownEditor';
 
 const initialState: TicketActionState = {};
@@ -10,16 +9,14 @@ const initialState: TicketActionState = {};
 export function ReplyForm({
   ticketId,
   isAgent = false,
+  editorViewMode = 'both',
 }: {
   ticketId: number;
   isAgent?: boolean;
+  editorViewMode?: 'both' | 'preview' | 'editor';
 }) {
   const [state, formAction, pending] = useActionState(replyToTicket, initialState);
   const [body, setBody] = useState('');
-
-  const handleInsertCanned = useCallback((text: string) => {
-    setBody((prev) => prev + text);
-  }, []);
 
   return (
     <form action={formAction} className="space-y-4">
@@ -32,9 +29,6 @@ export function ReplyForm({
           {state.error}
         </div>
       )}
-      {isAgent && (
-        <CannedResponsePicker onInsert={handleInsertCanned} />
-      )}
       <MarkdownEditor
         name="body"
         required
@@ -42,6 +36,8 @@ export function ReplyForm({
         placeholder="Write your reply… (Markdown supported)"
         defaultValue={body}
         onValueChange={setBody}
+        viewMode={editorViewMode}
+        extraToolbarPlugins={isAgent ? ['canned-response'] : undefined}
       />
       <button
         type="submit"

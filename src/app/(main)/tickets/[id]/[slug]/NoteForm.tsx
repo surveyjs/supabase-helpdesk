@@ -6,7 +6,13 @@ import { MarkdownEditor } from '@/components/features/tickets/MarkdownEditor';
 
 const initialState: TicketActionState = {};
 
-export function NoteForm({ ticketId }: { ticketId: number }) {
+export function NoteForm({
+  ticketId,
+  editorViewMode = 'both',
+}: {
+  ticketId: number;
+  editorViewMode?: 'both' | 'preview' | 'editor';
+}) {
   const [state, formAction, pending] = useActionState(addNote, initialState);
 
   return (
@@ -25,6 +31,7 @@ export function NoteForm({ ticketId }: { ticketId: number }) {
           maxLength={50000}
           placeholder="Write an internal note… (only visible to agents)"
           compact
+          viewMode={editorViewMode}
         />
         <button
           type="submit"

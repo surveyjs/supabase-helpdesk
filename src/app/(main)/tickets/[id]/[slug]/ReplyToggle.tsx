@@ -6,9 +6,11 @@ import { CommentForm } from './CommentForm';
 export function ReplyToggle({
   parentPostId,
   parentCommentId,
+  editorViewMode = 'both',
 }: {
   parentPostId: string;
   parentCommentId?: string;
+  editorViewMode?: 'both' | 'preview' | 'editor';
 }) {
   const [open, setOpen] = useState(false);
 
@@ -27,7 +29,11 @@ export function ReplyToggle({
 
   return (
     <div>
-      <CommentForm parentPostId={parentPostId} parentCommentId={parentCommentId} />
+      <CommentForm
+        parentPostId={parentPostId}
+        parentCommentId={parentCommentId}
+        editorViewMode={editorViewMode}
+      />
       <button
         type="button"
         onClick={() => setOpen(false)}

@@ -11,11 +11,13 @@ export function EditablePost({
   htmlBody,
   rawBody,
   canEdit,
+  editorViewMode = 'both',
 }: {
   postId: string;
   htmlBody: string;
   rawBody: string;
   canEdit: boolean;
+  editorViewMode?: 'both' | 'preview' | 'editor';
 }) {
   const [editing, setEditing] = useState(false);
   const [state, formAction, pending] = useActionState(editPost, initialState);
@@ -43,6 +45,7 @@ export function EditablePost({
           defaultValue={rawBody}
           required
           maxLength={50000}
+          viewMode={editorViewMode}
         />
         <div className="flex gap-2">
           <button

@@ -3,6 +3,11 @@
 import dynamic from 'next/dynamic';
 import { useState, useCallback, useEffect } from 'react';
 import MarkdownIt from 'markdown-it';
+import MdEditorLib from 'react-markdown-editor-lite';
+import CannedResponsePlugin from './CannedResponsePlugin';
+
+// Register custom plugins
+MdEditorLib.use(CannedResponsePlugin);
 
 // Import react-markdown-editor-lite with SSR disabled (it depends on browser APIs)
 const MdEditor = dynamic(() => import('react-markdown-editor-lite'), { ssr: false });
@@ -13,6 +18,26 @@ import 'react-markdown-editor-lite/lib/index.css';
 // Initialize markdown parser (shared instance)
 const mdParser = new MarkdownIt({ html: false, linkify: true, typographer: true });
 
+const DEFAULT_TOOLBAR_PLUGINS: string[] = [
+  'header',
+  'font-bold',
+  'font-italic',
+  'font-underline',
+  'font-strikethrough',
+  'list-unordered',
+  'list-ordered',
+  'block-quote',
+  'block-wrap',
+  'block-code-inline',
+  'block-code-block',
+  'table',
+  'image',
+  'link',
+  'clear',
+  'logger',
+  'mode-toggle',
+];
+
 export interface MarkdownEditorProps {
   name: string;
   defaultValue?: string;
@@ -20,9 +45,13 @@ export interface MarkdownEditorProps {
   maxLength?: number;
   placeholder?: string;
   compact?: boolean;
+  /** Editor view mode — controlled by user preference */
+  viewMode?: 'both' | 'preview' | 'editor';
   onValueChange?: (value: string) => void;
   /** Called when user uploads an image (drag/drop/paste/toolbar). Return the image URL. */
   onImageUpload?: (file: File) => Promise<string>;
+  /** Toolbar plugins to prepend (e.g., canned response button for agents) */
+  extraToolbarPlugins?: string[];
 }
 
 export function MarkdownEditor({
@@ -32,8 +61,10 @@ export function MarkdownEditor({
   maxLength,
   placeholder,
   compact,
+  viewMode = 'both',
   onValueChange,
   onImageUpload,
+  extraToolbarPlugins,
 }: MarkdownEditorProps) {
   const [value, setValue] = useState(defaultValue ?? '');
 
@@ -62,6 +93,18 @@ export function MarkdownEditor({
     });
   }, [onImageUpload]);
 
+  // Derive view config from viewMode prop
+  const viewConfig = {
+    menu: true,
+    md: viewMode === 'both' || viewMode === 'editor',
+    html: viewMode === 'both' || viewMode === 'preview',
+  };
+
+  // Preserve default toolbar buttons while allowing page-specific extras.
+  const plugins = extraToolbarPlugins && extraToolbarPlugins.length > 0
+    ? Array.from(new Set([...DEFAULT_TOOLBAR_PLUGINS, ...extraToolbarPlugins]))
+    : undefined;
+
   return (
     <div data-testid="markdown-editor">
       {/* Hidden textarea for form submission (keeps Server Action forms working) */}
@@ -82,8 +125,9 @@ export function MarkdownEditor({
         onImageUpload={handleImageUpload}
         style={{ height: compact ? '150px' : '250px' }}
         placeholder={placeholder ?? 'Write using Markdown…'}
-        view={{ menu: true, md: true, html: !compact }}
+        view={viewConfig}
         canView={{ menu: true, md: true, html: true, both: true, fullScreen: false, hideMenu: false }}
+        plugins={plugins}
       />
     </div>
   );

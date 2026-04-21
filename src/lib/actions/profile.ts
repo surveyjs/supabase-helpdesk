@@ -222,6 +222,34 @@ export async function deleteOwnAccount(): Promise<ProfileActionState> {
 // User Notes (Agent actions)
 // ============================================================
 
+export async function updateEditorViewMode(
+  _prev: ProfileActionState,
+  formData: FormData,
+): Promise<ProfileActionState> {
+  const { supabase, user } = await requireAuthUser();
+  const mode = formData.get('editor_view_mode') as string;
+
+  if (!['both', 'preview', 'editor'].includes(mode)) {
+    return { error: 'Invalid editor view mode.' };
+  }
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ editor_view_mode: mode })
+    .eq('id', user.id);
+
+  if (error) {
+    return { error: 'Failed to update editor preference.' };
+  }
+
+  revalidatePath('/');
+  return { success: 'Editor preference saved.' };
+}
+
+// ============================================================
+// User Notes (Agent CRUD actions)
+// ============================================================
+
 export async function createUserNote(
   _prev: ProfileActionState,
   formData: FormData,

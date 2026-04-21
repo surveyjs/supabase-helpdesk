@@ -7,9 +7,15 @@ export default async function NewTicketPage({
 }: {
   searchParams: Promise<{ from_article?: string }>;
 }) {
-  await requireAuth();
+  const user = await requireAuth();
   const { from_article } = await searchParams;
   const supabase = await createServerClient();
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('editor_view_mode')
+    .eq('id', user.id)
+    .single();
 
   // Fetch ticket types
   const { data: ticketTypes } = await supabase
@@ -81,6 +87,7 @@ export default async function NewTicketPage({
           customFields={customFields ?? []}
           defaultPrivate={defaultPrivate}
           showPrivacyControl={showPrivacyControl}
+          editorViewMode={(profile?.editor_view_mode as 'both' | 'preview' | 'editor' | null) ?? 'both'}
           initialTitle={fromArticleTitle}
           sourceArticleId={fromArticleId}
           aiAutoCategEnabled={aiAutoCategEnabled}

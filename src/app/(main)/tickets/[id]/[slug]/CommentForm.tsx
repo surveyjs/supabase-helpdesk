@@ -9,9 +9,11 @@ const initialState: TicketActionState = {};
 export function CommentForm({
   parentPostId,
   parentCommentId,
+  editorViewMode = 'both',
 }: {
   parentPostId: string;
   parentCommentId?: string;
+  editorViewMode?: 'both' | 'preview' | 'editor';
 }) {
   const [state, formAction, pending] = useActionState(addComment, initialState);
 
@@ -32,6 +34,7 @@ export function CommentForm({
         maxLength={50000}
         placeholder="Write a comment… (Markdown supported)"
         compact
+        viewMode={editorViewMode}
       />
       <button
         type="submit"

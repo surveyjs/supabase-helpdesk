@@ -33,6 +33,7 @@ export function TicketForm({
   customFields,
   defaultPrivate,
   showPrivacyControl,
+  editorViewMode = 'both',
   initialTitle,
   sourceArticleId,
   aiAutoCategEnabled,
@@ -43,6 +44,7 @@ export function TicketForm({
   customFields?: CustomField[];
   defaultPrivate: boolean;
   showPrivacyControl: boolean;
+  editorViewMode?: 'both' | 'preview' | 'editor';
   initialTitle?: string | null;
   sourceArticleId?: number | null;
   aiAutoCategEnabled?: boolean;
@@ -361,6 +363,7 @@ export function TicketForm({
           maxLength={50000}
           placeholder="Describe your issue in detail (Markdown supported)"
           onValueChange={handleBodyChange}
+          viewMode={editorViewMode}
         />
         {state.fieldErrors?.body && (
           <p className="mt-1 text-sm text-red-600">{state.fieldErrors.body}</p>

@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/supabase/auth';
 import { DisplayNameForm } from './DisplayNameForm';
 import { ChangePasswordForm } from './ChangePasswordForm';
 import { DeleteAccountButton } from './DeleteAccountButton';
+import { EditorPreferenceForm } from './EditorPreferenceForm';
 
 export default async function ProfilePage() {
   const user = await requireAuth();
@@ -11,7 +12,7 @@ export default async function ProfilePage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('id, email, display_name, role, team_id, created_at')
+    .select('id, email, display_name, role, team_id, created_at, editor_view_mode')
     .eq('id', user.id)
     .single();
 
@@ -97,6 +98,14 @@ export default async function ProfilePage() {
           <ChangePasswordForm />
         </div>
       )}
+
+      {/* Editor preference */}
+      <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Editor Preference</h2>
+        <EditorPreferenceForm
+          currentMode={(profile.editor_view_mode as 'both' | 'preview' | 'editor' | null) ?? 'both'}
+        />
+      </div>
 
       {/* Delete account */}
       <div className="bg-white rounded-lg border border-gray-200 p-6">

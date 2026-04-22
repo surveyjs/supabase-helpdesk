@@ -354,10 +354,11 @@ export function TicketForm({
       )}
 
       <div>
-        <label htmlFor="body" className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor="body_md" className="block text-sm font-medium text-gray-700 mb-1">
           Description <span className="text-red-500">*</span>
         </label>
         <MarkdownEditor
+          id="body"
           name="body"
           required
           maxLength={50000}

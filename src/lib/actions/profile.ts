@@ -243,6 +243,7 @@ export async function updateEditorViewMode(
   }
 
   revalidatePath('/');
+  revalidatePath('/profile');
   return { success: 'Editor preference saved.' };
 }
 

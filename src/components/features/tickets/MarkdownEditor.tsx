@@ -2,9 +2,9 @@
 
 import dynamic from 'next/dynamic';
 import { useState, useCallback, useEffect } from 'react';
-import MarkdownIt from 'markdown-it';
 import MdEditorLib from 'react-markdown-editor-lite';
 import CannedResponsePlugin from './CannedResponsePlugin';
+import { renderMarkdown } from '@/lib/utils/markdown';
 
 type MdEditorLibWithUse = {
   use: (plugin: unknown) => void;
@@ -24,10 +24,7 @@ const MdEditor = dynamic(() => import('react-markdown-editor-lite'), { ssr: fals
 // Import editor styles
 import 'react-markdown-editor-lite/lib/index.css';
 
-// Initialize markdown parser (shared instance)
-const mdParser = new MarkdownIt({ html: false, linkify: true, typographer: true });
-
-const DEFAULT_TOOLBAR_PLUGINS: string[] = [
+const BASE_TOOLBAR_PLUGINS: string[] = [
   'header',
   'font-bold',
   'font-italic',
@@ -40,7 +37,6 @@ const DEFAULT_TOOLBAR_PLUGINS: string[] = [
   'block-code-inline',
   'block-code-block',
   'table',
-  'image',
   'link',
   'clear',
   'logger',
@@ -48,6 +44,7 @@ const DEFAULT_TOOLBAR_PLUGINS: string[] = [
 ];
 
 export interface MarkdownEditorProps {
+  id?: string;
   name: string;
   defaultValue?: string;
   required?: boolean;
@@ -64,6 +61,7 @@ export interface MarkdownEditorProps {
 }
 
 export function MarkdownEditor({
+  id,
   name,
   defaultValue,
   required,
@@ -90,18 +88,6 @@ export function MarkdownEditor({
     onValueChange?.(text);
   }, [onValueChange]);
 
-  const handleImageUpload = useCallback(async (file: File): Promise<string> => {
-    if (onImageUpload) {
-      return onImageUpload(file);
-    }
-    // Fallback: convert to data URI (for development/preview only)
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target?.result as string);
-      reader.readAsDataURL(file);
-    });
-  }, [onImageUpload]);
-
   // Derive view config from viewMode prop
   const viewConfig = {
     menu: true,
@@ -110,14 +96,18 @@ export function MarkdownEditor({
   };
 
   // Preserve default toolbar buttons while allowing page-specific extras.
+  const defaultPlugins = onImageUpload
+    ? [...BASE_TOOLBAR_PLUGINS, 'image']
+    : BASE_TOOLBAR_PLUGINS;
   const plugins = extraToolbarPlugins && extraToolbarPlugins.length > 0
-    ? Array.from(new Set([...DEFAULT_TOOLBAR_PLUGINS, ...extraToolbarPlugins]))
-    : undefined;
+    ? Array.from(new Set([...defaultPlugins, ...extraToolbarPlugins]))
+    : defaultPlugins;
 
   return (
     <div data-testid="markdown-editor">
       {/* Hidden textarea for form submission (keeps Server Action forms working) */}
       <textarea
+        id={id}
         name={name}
         value={value}
         required={required}
@@ -128,10 +118,11 @@ export function MarkdownEditor({
         tabIndex={-1}
       />
       <MdEditor
+        id={id}
         value={value}
         onChange={handleChange}
-        renderHTML={(text: string) => mdParser.render(text)}
-        onImageUpload={handleImageUpload}
+        renderHTML={(text: string) => renderMarkdown(text)}
+        onImageUpload={onImageUpload}
         style={{ height: compact ? '150px' : '250px' }}
         placeholder={placeholder ?? 'Write using Markdown…'}
         view={viewConfig}

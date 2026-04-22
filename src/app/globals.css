@@ -10,13 +10,3 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
-
-/* Full-width breakout for ticket detail page */
-.ticket-detail-full-width {
-  max-width: none;
-  margin-left: calc(-50vw + 50%);
-  margin-right: calc(-50vw + 50%);
-  padding-left: 1.5rem;
-  padding-right: 1.5rem;
-  width: 100vw;
-}

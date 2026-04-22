@@ -15,7 +15,6 @@
   "dependencies": {
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.103.0",
-    "@types/markdown-it": "^14.1.2",
     "geist": "^1.7.0",
     "isomorphic-dompurify": "^3.8.0",
     "markdown-it": "^14.1.1",
@@ -37,6 +36,7 @@
     "@axe-core/playwright": "^4.11.1",
     "@playwright/test": "^1.59.1",
     "@tailwindcss/postcss": "^4",
+    "@types/markdown-it": "^14.1.2",
     "@types/node": "^20",
     "@types/nodemailer": "^8.0.0",
     "@types/react": "^19",

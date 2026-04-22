@@ -2,10 +2,17 @@
 
 import { useActionState } from 'react';
 import { addNote, type TicketActionState } from '@/lib/actions/tickets';
+import { MarkdownEditor } from '@/components/features/tickets/MarkdownEditor';
 
 const initialState: TicketActionState = {};
 
-export function NoteForm({ ticketId }: { ticketId: number }) {
+export function NoteForm({
+  ticketId,
+  editorViewMode = 'both',
+}: {
+  ticketId: number;
+  editorViewMode?: 'both' | 'preview' | 'editor';
+}) {
   const [state, formAction, pending] = useActionState(addNote, initialState);
 
   return (
@@ -18,14 +25,13 @@ export function NoteForm({ ticketId }: { ticketId: number }) {
             {state.error}
           </div>
         )}
-        <textarea
+        <MarkdownEditor
           name="body"
           required
-          rows={3}
           maxLength={50000}
           placeholder="Write an internal note… (only visible to agents)"
-          className="block w-full rounded border border-amber-300 bg-white px-3 py-2 text-sm focus:border-amber-500 focus:ring-1 focus:ring-amber-500 outline-none resize-y"
-          aria-label="Note body"
+          compact
+          viewMode={editorViewMode}
         />
         <button
           type="submit"

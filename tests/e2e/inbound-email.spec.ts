@@ -34,8 +34,11 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
 /** Navigate to an admin page, retrying once if requireAdmin() redirect race occurs. */
 async function gotoAdmin(page: Page, path: string) {
   await page.goto(path);
-  if (!page.url().includes('/admin')) {
+  try {
+    await page.waitForURL(/\/admin\//, { timeout: 5000 });
+  } catch {
     await page.goto(path);
+    await page.waitForURL(/\/admin\//, { timeout: 10000 });
   }
 }
 

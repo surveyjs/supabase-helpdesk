@@ -228,7 +228,7 @@ test.describe('Ticket creation from article', () => {
     await expect(typeSelect).toBeVisible({ timeout: 10000 });
     await typeSelect.selectOption({ label: 'Issue' });
 
-    const descField = page.getByLabel(/Description/);
+    const descField = page.locator('[data-testid="markdown-editor"]').first().locator('textarea[name="textarea"]');
     await expect(descField).toBeVisible({ timeout: 10000 });
     await descField.fill('I followed the article but still have a question.');
 
@@ -275,7 +275,7 @@ test.describe('Ticket creation from article', () => {
     await page.goto(`/tickets/${ticket.id}/${ticket.slug}`);
     // Wait for ticket detail page to load
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText('Created from article')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('From article')).toBeVisible({ timeout: 10000 });
     await expect(page.getByRole('link', { name: 'How to create a ticket' })).toBeVisible();
   });
 });
@@ -307,12 +307,18 @@ test.describe('Suggested articles on ticket creation', () => {
 // ============================================================
 
 test.describe('NavBar KB links', () => {
+  test.describe.configure({ mode: 'serial' });
+
   test.beforeAll(async () => {
     const svc = createServiceRoleClient();
     await svc.from('app_settings').upsert({ key: 'kb_visible', value: 'true' });
   });
 
   test('Help Center link visible when KB enabled', async ({ page }) => {
+    // Re-assert the DB state inside the test so a parallel worker race cannot flip it.
+    const svc = createServiceRoleClient();
+    await svc.from('app_settings').upsert({ key: 'kb_visible', value: 'true' });
+
     await page.goto('/help');
     await expect(page.getByRole('link', { name: 'Help Center' })).toBeVisible({ timeout: 10000 });
   });

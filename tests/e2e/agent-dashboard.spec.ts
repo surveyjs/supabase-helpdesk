@@ -156,10 +156,11 @@ test.describe('Agent Ticket Detail Controls', () => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(ticketUrl);
 
-    await expect(page.getByTestId('agent-controls')).toBeVisible({ timeout: 10000 });
+    const sidebar = page.getByTestId('ticket-sidebar');
+    await expect(sidebar).toBeVisible({ timeout: 10000 });
 
     // Find and click "Mark Pending"
-    const pendingBtn = page.getByRole('button', { name: 'Mark Pending' });
+    const pendingBtn = sidebar.getByRole('button', { name: 'Mark Pending' });
     await expect(pendingBtn).toBeVisible({ timeout: 10000 });
     const pendingResp = page.waitForResponse(
       (resp) => resp.request().method() === 'POST' && resp.status() < 400,
@@ -167,54 +168,61 @@ test.describe('Agent Ticket Detail Controls', () => {
     );
     await pendingBtn.click();
     await pendingResp;
-    await expect(page.getByTestId('agent-controls').getByText('Pending')).toBeVisible({ timeout: 10000 });
+    await expect(sidebar.getByText('Pending')).toBeVisible({ timeout: 10000 });
 
-    // Re-open
-    const reopenBtn = page.getByRole('button', { name: 'Mark Open' });
-    await expect(reopenBtn).toBeVisible({ timeout: 10000 });
-    const openResp = page.waitForResponse(
+    // Close from pending
+    const closeBtn = sidebar.getByRole('button', { name: 'Close Ticket' });
+    await expect(closeBtn).toBeVisible({ timeout: 10000 });
+    const closeResp = page.waitForResponse(
       (resp) => resp.request().method() === 'POST' && resp.status() < 400,
       { timeout: 15000 },
     );
-    await reopenBtn.click();
-    await openResp;
-    await expect(page.getByTestId('agent-controls').getByText('Open')).toBeVisible({ timeout: 10000 });
+    await closeBtn.click();
+    await closeResp;
+    await expect(sidebar.getByText('Closed')).toBeVisible({ timeout: 10000 });
+
+    // Restore for subsequent tests
+    const admin = createServiceRoleClient();
+    const ticketId = Number(ticketUrl.split('/')[2]);
+    await admin.from('tickets').update({ status: 'open' }).eq('id', ticketId);
   });
 
   test('agent can change urgency/severity from detail page', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(ticketUrl);
-    await expect(page.getByTestId('agent-controls')).toBeVisible({ timeout: 10000 });
+    const sidebar = page.getByTestId('ticket-sidebar');
+    await expect(sidebar).toBeVisible({ timeout: 10000 });
 
     // Change urgency
-    await page.locator('#agent-urgency').selectOption('critical');
-    await page.locator('#agent-urgency').locator('..').getByRole('button', { name: 'Set' }).click();
-    await expect(page.getByText('Urgency: Critical')).toBeVisible({ timeout: 10000 });
+    await sidebar.locator('select[name="new_urgency"]').selectOption('critical');
+    await sidebar.locator('select[name="new_urgency"]').locator('..').getByRole('button', { name: 'Set' }).click();
+    await expect(sidebar.locator('select[name="new_urgency"]')).toHaveValue('critical');
 
     // Change severity
-    await page.locator('#agent-severity').selectOption('high');
-    await page.locator('#agent-severity').locator('..').getByRole('button', { name: 'Set' }).click();
-    await expect(page.getByText('Severity: High')).toBeVisible({ timeout: 10000 });
+    await sidebar.locator('select[name="new_severity"]').selectOption('high');
+    await sidebar.locator('select[name="new_severity"]').locator('..').getByRole('button', { name: 'Set' }).click();
+    await expect(sidebar.locator('select[name="new_severity"]')).toHaveValue('high');
 
     // Restore
-    await page.locator('#agent-urgency').selectOption('high');
-    await page.locator('#agent-urgency').locator('..').getByRole('button', { name: 'Set' }).click();
-    await page.locator('#agent-severity').selectOption('medium');
-    await page.locator('#agent-severity').locator('..').getByRole('button', { name: 'Set' }).click();
+    await sidebar.locator('select[name="new_urgency"]').selectOption('high');
+    await sidebar.locator('select[name="new_urgency"]').locator('..').getByRole('button', { name: 'Set' }).click();
+    await sidebar.locator('select[name="new_severity"]').selectOption('medium');
+    await sidebar.locator('select[name="new_severity"]').locator('..').getByRole('button', { name: 'Set' }).click();
   });
 
   test('agent can change type/category from detail page', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(ticketUrl);
+    const sidebar = page.getByTestId('ticket-sidebar');
 
     // Change type
-    await page.locator('#agent-type').selectOption({ label: 'Question' });
-    await page.locator('#agent-type').locator('..').getByRole('button', { name: 'Set' }).click();
+    await sidebar.locator('select[name="new_type_id"]').selectOption({ label: 'Question' });
+    await sidebar.locator('select[name="new_type_id"]').locator('..').getByRole('button', { name: 'Set' }).click();
     await page.waitForTimeout(1000);
 
     // Restore to Issue
-    await page.locator('#agent-type').selectOption({ label: 'Issue' });
-    await page.locator('#agent-type').locator('..').getByRole('button', { name: 'Set' }).click();
+    await sidebar.locator('select[name="new_type_id"]').selectOption({ label: 'Issue' });
+    await sidebar.locator('select[name="new_type_id"]').locator('..').getByRole('button', { name: 'Set' }).click();
   });
 
   test('agent can toggle privacy from detail page', async ({ page }) => {
@@ -222,7 +230,7 @@ test.describe('Agent Ticket Detail Controls', () => {
     await page.goto(ticketUrl);
 
     // Ticket is public (is_private=false) based on seed data
-    const controls = page.getByTestId('agent-controls');
+    const controls = page.getByTestId('ticket-sidebar');
     const privacyBtn = controls.getByRole('button', { name: /Make Private|Make Public/ });
     const btnText = await privacyBtn.textContent();
     await privacyBtn.click();

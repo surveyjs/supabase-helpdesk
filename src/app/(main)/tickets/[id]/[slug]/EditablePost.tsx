@@ -2,6 +2,7 @@
 
 import { useState, useActionState } from 'react';
 import { editPost, type TicketActionState } from '@/lib/actions/tickets';
+import { MarkdownEditor } from '@/components/features/tickets/MarkdownEditor';
 
 const initialState: TicketActionState = {};
 
@@ -10,11 +11,13 @@ export function EditablePost({
   htmlBody,
   rawBody,
   canEdit,
+  editorViewMode = 'both',
 }: {
   postId: string;
   htmlBody: string;
   rawBody: string;
   canEdit: boolean;
+  editorViewMode?: 'both' | 'preview' | 'editor';
 }) {
   const [editing, setEditing] = useState(false);
   const [state, formAction, pending] = useActionState(editPost, initialState);
@@ -37,13 +40,12 @@ export function EditablePost({
             {state.error}
           </div>
         )}
-        <textarea
+        <MarkdownEditor
           name="body"
           defaultValue={rawBody}
           required
-          rows={4}
           maxLength={50000}
-          className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-y"
+          viewMode={editorViewMode}
         />
         <div className="flex gap-2">
           <button

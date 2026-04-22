@@ -43,3 +43,5 @@ test-results/
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+playwright-results.json
+*.log

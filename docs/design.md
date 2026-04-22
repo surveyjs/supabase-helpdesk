@@ -15,11 +15,11 @@
 - Clean, minimal look. Light gray page background (`gray-50`), white cards with subtle borders.
 - Blue primary color for buttons and active states.
 - Status badges: **open** = green pill, **pending** = yellow pill, **closed** = gray pill.
-- Centered content area, max-width ~5xl.
+- Centered content area, max-width ~5xl. **Exception:** The ticket detail page (`/tickets/[id]/[slug]`) uses full viewport width to accommodate the two-column layout and long code blocks.
 - Use Geist font family (sans + mono).
 - Forms in white card containers with padding and rounded corners.
 - No dark mode needed (just light theme).
 - **Mobile responsive** — All pages must be fully responsive. On small screens: the nav bar collapses into a hamburger menu, ticket lists use a compact single-column layout, the ticket detail page stacks metadata above the timeline, and filter controls collapse into an expandable panel. Touch targets must be at least 44×44px.
 - **Accessibility** — The application must conform to **WCAG 2.1 Level AA**. All interactive elements must be keyboard-navigable, have visible focus indicators, and include appropriate ARIA attributes. Images and icons must have alt text or `aria-label`. Color must not be the sole means of conveying information (e.g., status badges include text labels alongside colors). Form inputs must have associated labels. Error messages must be programmatically associated with their fields.
 
----
+---

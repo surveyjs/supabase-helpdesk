@@ -180,7 +180,7 @@ test.describe('Custom fields', () => {
 
     // Fill in standard ticket fields
     await page.getByLabel(/title/i).fill('E2E Custom Fields Test Ticket');
-    await page.getByLabel(/body|description|content/i).first().fill('Testing custom fields on tickets.');
+    await page.locator('[data-testid="markdown-editor"]').first().locator('textarea[name="textarea"]').fill('Testing custom fields on tickets.');
 
     // Fill custom fields
     const textField = page.locator('[name="cf_E2E Text Field"]');

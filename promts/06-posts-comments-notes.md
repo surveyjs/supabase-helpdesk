@@ -133,6 +133,23 @@ CREATE TRIGGER posts_draft_publish_timestamp
 
 Significantly update `src/app/(main)/tickets/[id]/[slug]/page.tsx`:
 
+#### 3.0 Posts / Notes Tab Separation
+
+Create `src/app/(main)/tickets/[id]/[slug]/TicketTabs.tsx` — a `"use client"` component:
+- Two tabs: "Posts" and "Notes"
+- "Posts" tab shows the timeline of all non-note posts, comments, activity entries, and the reply form
+- "Notes" tab shows all internal notes chronologically and the note form at the bottom
+- Note count badge on the Notes tab
+- `data-testid="ticket-tabs"` on container, `data-testid="posts-tab"` and `data-testid="notes-tab"` on buttons
+
+**Only agents see tabs.** Regular users see the posts stream directly — no `TicketTabs` component is rendered. Users never see notes or the Notes tab.
+
+Split rendered posts in the server component:
+- `notePosts = renderedPosts.filter(p => p.post_type === 'note')`
+- `nonNotePosts = renderedPosts.filter(p => p.post_type !== 'note')`
+- Build the timeline from `nonNotePosts` only
+- Pass both to `TicketTabs` for agents; render only the posts stream for users
+
 #### 3a. Full Post Rendering with Threaded Comments
 
 Replace the current flat post list with a threaded view:
@@ -142,7 +159,7 @@ Replace the current flat post list with a threaded view:
 - **Comments** on each post: rendered indented beneath their parent post, sorted chronologically
   - Level-1 comments: indented once, with a "Reply" link
   - Level-2 comments (replies to comments): indented twice, **no** "Reply" link (max 2 levels)
-- **Notes** (`post_type = 'note'`): rendered only for agents, with amber/yellow background and "Internal Note" label
+- **Notes** (`post_type = 'note'`): rendered only for agents **in the Notes tab** (not in the Posts timeline), with amber/yellow background and "Internal Note" label
 - **Drafts** (`is_draft = true`): rendered only for agents, with a dashed border and "Draft" label. Show a "Publish" button. No reply/comment actions on drafts.
 
 Each post/comment/note shows:
@@ -158,7 +175,7 @@ Each post/comment/note shows:
 #### 3b. Inline Edit Form
 
 When the user clicks "Edit" on a post/comment/note:
-- Replace the rendered body with a `<textarea>` pre-filled with the current Markdown body
+- Replace the rendered body with a `<MarkdownEditor>` component pre-filled with the current Markdown body, with `viewMode` from the user's profile preference
 - Show "Save" and "Cancel" buttons
 - On save: call `editPost` Server Action
 - On cancel: revert to rendered view
@@ -166,15 +183,15 @@ When the user clicks "Edit" on a post/comment/note:
 
 #### 3c. Inline Comment/Reply Forms
 
-- Each post has a "Reply" link that reveals an inline comment form (textarea + "Comment" button)
+- Each post has a "Reply" link that reveals an inline comment form (`<MarkdownEditor name="body" compact viewMode={editorViewMode}>` + "Comment" button)
 - Each level-1 comment has a "Reply" link that reveals a reply form
 - Forms call `addComment` Server Action with appropriate `parent_post_id` and `parent_comment_id`
 - These are `<form>` elements with hidden fields for IDs
 
 #### 3d. Note Form (Agent Only)
 
-- Below the reply form area, show a separate "Add Internal Note" section for agents
-- Textarea with "Add Note" button
+- Inside the **Notes tab** (not below the reply form), show the "Add Internal Note" section
+- `<MarkdownEditor name="body" compact viewMode={editorViewMode}>` with "Add Note" button
 - Notes are always private — no privacy checkbox needed
 - Calls `addNote` Server Action
 
@@ -225,9 +242,11 @@ Implement progressive disclosure for long tickets:
 - Ensure the sanitization config allows `<table>`, `<thead>`, `<tbody>`, `<tr>`, `<th>`, `<td>` elements (for GFM tables)
 - Ensure `<del>` (strikethrough) and `<input type="checkbox" disabled>` (task lists) are allowed
 
-**`src/components/features/tickets/MarkdownPreview.tsx`**:
-- Verify the client-side preview renders consistently with server-side rendering
-- Both must use the same sanitization configuration
+**`src/components/features/tickets/MarkdownEditor.tsx`** (replaces `MarkdownPreview.tsx`):
+- Verify the client-side editor/preview renders consistently with server-side rendering
+- Rich Markdown editor using `react-markdown-editor-lite` with built-in toolbar, code block support, and native image upload (`onImageUpload` prop)
+- Both server-rendered HTML and editor preview must use the same sanitization configuration (both use `markdown-it`)
+- This component is an **abstraction layer** — it is the ONLY file that imports `react-markdown-editor-lite`. Swapping editors requires changing only this file.
 
 ### 5. Tests
 
@@ -254,11 +273,16 @@ Implement progressive disclosure for long tickets:
 - Title editing: slug is regenerated on title change (verify via `generate_slug()`)
 
 **`tests/e2e/posts-comments.spec.ts`** (new file):
-- Add a comment on a post → comment appears indented
+- Add a reply to the ticket → reply appears (uses MarkdownEditor — interact via `[data-testid="markdown-editor"] textarea`)
+- Add a comment on a post → comment appears indented (uses MarkdownEditor compact)
 - Reply to a comment → reply appears at level 2
 - Level-2 comment has no "Reply" action
-- Agent can add an internal note → note visible to agent, not to regular user
-- Edit a post → "(edited)" indicator shows
+- Agent sees "Posts" and "Notes" tabs on ticket detail (`data-testid="ticket-tabs"` visible)
+- Regular user does not see tab bar (`data-testid="ticket-tabs"` not visible)
+- Agent can add an internal note → click "Notes" tab first, fill MarkdownEditor, note visible to agent in Notes tab
+- Note not visible to regular user — also verify no `ticket-tabs` element
+- Note does not appear in the "Posts" tab for agents
+- Edit a post → "(edited)" indicator shows (edit mode renders MarkdownEditor)
 - Edit title → URL redirects to new slug
 - Agent can create a draft post → shows with "Draft" badge
 - Agent publishes draft → post becomes visible to users
@@ -267,20 +291,25 @@ Implement progressive disclosure for long tickets:
 - Activity log entries display inline (e.g., status change shows in timeline)
 - Collapsible timeline: ticket with >10 posts shows "Show older posts" link
 - Collapsible timeline: expanding shows hidden posts
+- Two-column layout: sidebar shows metadata (Type, Created by fields visible in `data-testid="ticket-sidebar"`)
+- Markdown editor shows toolbar with code formatting button
 
 ## Implementation Notes
 
 - **Client components**: This phase introduces several small `"use client"` wrappers:
-  - Inline edit toggle (post editing, title editing)
+  - Inline edit toggle (post editing, title editing) — uses `<MarkdownEditor>` in edit mode
   - Collapsible timeline expand/collapse
-  - Comment/reply form reveal
+  - Comment/reply form reveal — uses `<MarkdownEditor compact>`
+  - `TicketTabs` — Posts/Notes tab switcher (agents only)
   All must be minimal — no application state management. They wrap server-rendered content with a toggle.
 
 - **Post rendering order**: Fetch all posts for the ticket in one query. Sort and group in the Server Component:
-  1. Original post (always first)
-  2. Root posts + activity entries, interleaved chronologically
-  3. For each root post: comments sorted chronologically, with nesting
-  4. Apply visibility filters: agents see all; users see non-draft, non-note, non-private (unless owner/teammate)
+  1. Separate notes from non-notes: `notePosts` vs `nonNotePosts`
+  2. Original post (always first in Posts tab)
+  3. Root posts (non-notes) + activity entries, interleaved chronologically
+  4. For each root post: comments sorted chronologically, with nesting
+  5. Notes rendered separately in the Notes tab (agents only)
+  6. Apply visibility filters: agents see all; users see non-draft, non-note, non-private (unless owner/teammate)
 
 - **Privacy inheritance**: When a post is made private, all its comments become effectively private (they are children of the private post). The `get_root_post_is_private()` function (Phase 1) handles this at the RLS level.
 
@@ -300,7 +329,9 @@ Implement progressive disclosure for long tickets:
 - [ ] Comments appear threaded (indented) under their parent post
 - [ ] Level-2 comments have no Reply action
 - [ ] 3rd-level nesting is rejected
-- [ ] Notes are visible only to agents
+- [ ] Notes are visible only to agents, in the Notes tab (not in Posts timeline)
+- [ ] Agents see Posts and Notes tabs; regular users see no tabs
+- [ ] Notes tab shows note count badge
 - [ ] Drafts are visible only to agents, with "Publish" action
 - [ ] Publishing a draft makes it visible to users
 - [ ] Post editing shows "(edited)" indicator

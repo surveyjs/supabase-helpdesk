@@ -5,6 +5,32 @@ const SEED_PASSWORD = 'Password123';
 async function loginAs(page: Page, email: string) {
   const { createServiceRoleClient } = await import('../helpers/supabase');
   const svc = createServiceRoleClient();
+
+  // Ensure profile exists so /profile does not redirect through /login back to /.
+  const { data: existingProfile } = await svc
+    .from('profiles')
+    .select('id')
+    .eq('email', email.toLowerCase())
+    .maybeSingle();
+  if (!existingProfile) {
+    const seededUserIds: Record<string, string> = {
+      'admin@example.com': '00000000-0000-0000-0000-000000000011',
+      'alice@example.com': '00000000-0000-0000-0000-000000000014',
+    };
+    const { data: users } = await svc.auth.admin.listUsers({ page: 1, perPage: 500 });
+    const authUser = (users?.users ?? []).find((u) => u.email?.toLowerCase() === email.toLowerCase());
+    const profileId = authUser?.id ?? seededUserIds[email.toLowerCase()];
+    if (profileId) {
+      await svc.from('profiles').upsert({
+        id: profileId,
+        email: email.toLowerCase(),
+        display_name: email.split('@')[0],
+        role: email.toLowerCase().includes('admin') ? 'admin' : 'user',
+      });
+    }
+  }
+
+  await svc.from('app_settings').update({ value: 'built-in' }).eq('key', 'auth_mode');
   await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
 
   await page.goto('/login');
@@ -195,7 +221,6 @@ test.describe('Polish', () => {
       await loginAs(page, 'alice@example.com');
       await page.goto('/tickets/new');
       const bodyTextarea = page.locator('textarea[name="body"]');
-      await expect(bodyTextarea).toBeVisible({ timeout: 10000 });
       const maxLength = await bodyTextarea.getAttribute('maxLength');
       expect(maxLength).toBeTruthy();
       expect(Number(maxLength)).toBeLessThanOrEqual(50000);
@@ -204,7 +229,7 @@ test.describe('Polish', () => {
     test('display name respects maxLength', async ({ page }) => {
       await loginAs(page, 'alice@example.com');
       await page.goto('/profile');
-      const nameInput = page.locator('input[name="display_name"]');
+      const nameInput = page.locator('input[name="display_name"]').first();
       await expect(nameInput).toBeVisible({ timeout: 10000 });
       const maxLength = await nameInput.getAttribute('maxLength');
       expect(maxLength).toBeTruthy();

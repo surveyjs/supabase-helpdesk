@@ -7,6 +7,7 @@ import { createServiceRoleClient } from '../helpers/supabase';
 async function loginAs(page: Page, email: string, password = 'Password123') {
   const svc = createServiceRoleClient();
   await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
+  await svc.from('profiles').update({ editor_view_mode: 'both' }).eq('email', email.toLowerCase());
 
   await page.goto('/login');
   await page.getByLabel('Email').fill(email);
@@ -41,8 +42,37 @@ test.describe('Tickets', () => {
     if (ticketUrl) return ticketUrl;
     const svc = createServiceRoleClient();
     const { data } = await svc.from('tickets').select('id, slug').eq('slug', 'e2e-test-ticket').single();
-    if (!data) throw new Error('Could not find e2e-test-ticket in DB');
-    ticketUrl = `/tickets/${data.id}/${data.slug}`;
+    if (data) {
+      ticketUrl = `/tickets/${data.id}/${data.slug}`;
+      return ticketUrl;
+    }
+
+    // Fallback for isolated/single-test runs.
+    const { data: alice } = await svc.from('profiles').select('id').eq('email', 'alice@example.com').single();
+    const { data: typeData } = await svc.from('ticket_types').select('id').limit(1).single();
+    if (!alice || !typeData) throw new Error('Could not prepare fallback ticket');
+
+    const { data: created } = await svc
+      .from('tickets')
+      .insert({
+        title: 'E2E Test Ticket',
+        slug: 'e2e-test-ticket',
+        creator_id: alice.id,
+        type_id: typeData.id,
+        urgency: 'high',
+      })
+      .select('id, slug')
+      .single();
+
+    await svc.from('posts').insert({
+      ticket_id: created!.id,
+      author_id: alice.id,
+      body: 'This is a test ticket created by E2E test. **Bold text** and `code`.',
+      is_original: true,
+      post_type: 'post',
+    });
+
+    ticketUrl = `/tickets/${created!.id}/${created!.slug}`;
     return ticketUrl;
   }
 
@@ -75,7 +105,9 @@ test.describe('Tickets', () => {
     await page.getByLabel('Title').fill('E2E Test Ticket');
     await page.getByLabel('Type').selectOption({ label: 'Issue' });
     await page.getByLabel('Urgency').selectOption('high');
-    await page.getByLabel(/Description/).fill('This is a test ticket created by E2E test. **Bold text** and `code`.');
+    // Description field uses MarkdownEditor
+    const descEditor = page.locator('[data-testid="markdown-editor"]');
+    await descEditor.locator('textarea[name="textarea"]').fill('This is a test ticket created by E2E test. **Bold text** and `code`.');
     await page.getByRole('button', { name: 'Create Ticket' }).click();
 
     // Should redirect to ticket detail
@@ -94,9 +126,12 @@ test.describe('Tickets', () => {
 
     await expect(page.getByRole('heading', { name: 'E2E Test Ticket' })).toBeVisible();
 
-    // Check metadata
-    await expect(page.getByRole('definition').filter({ hasText: 'Issue' })).toBeVisible();
-    await expect(page.getByText(/Urgency: High/)).toBeVisible();
+    // Check metadata — now in the sidebar
+    const sidebar = page.getByTestId('ticket-sidebar');
+    await expect(sidebar.getByText('Type')).toBeVisible();
+    await expect(sidebar.locator('dd').filter({ hasText: 'Issue' }).first()).toBeVisible();
+    await expect(sidebar.getByText('Urgency')).toBeVisible();
+    await expect(sidebar.locator('dd').filter({ hasText: 'High' }).first()).toBeVisible();
 
     // Check original post
     await expect(page.getByText('This is a test ticket created by E2E test.')).toBeVisible();
@@ -112,7 +147,9 @@ test.describe('Tickets', () => {
     const aliceTickets = page.getByText('Password reset not working');
     if (await aliceTickets.isVisible()) {
       await aliceTickets.click();
-      await expect(page.getByText("Alice's Team")).toBeVisible();
+      // Team name is now in the sidebar
+      const sidebar = page.getByTestId('ticket-sidebar');
+      await expect(sidebar.getByText("Alice's Team")).toBeVisible();
     }
   });
 
@@ -120,15 +157,25 @@ test.describe('Tickets', () => {
     await loginAs(page, 'alice@example.com');
     await page.goto(await resolveTicketUrl());
 
-    // Wait for the reply form to be ready
-    await expect(page.getByLabel('Reply body')).toBeVisible({ timeout: 10000 });
+    // Wait for the reply form to be ready — now uses MarkdownEditor
+    const replyEditor = page.locator('[data-testid="markdown-editor"]').last();
+    await expect(replyEditor).toBeVisible({ timeout: 10000 });
 
-    // Fill reply
-    await page.getByLabel('Reply body').fill('This is a test reply from E2E.');
-    await page.locator('form').filter({ has: page.getByLabel('Reply body') }).getByRole('button', { name: 'Reply' }).click();
+    // Fill reply via the editor's textarea
+    await replyEditor.locator('textarea[name="textarea"]').fill('This is a test reply from E2E.');
+    const replyForm = page.locator('form').filter({ has: replyEditor });
+    const replyButton = replyForm.getByRole('button', { name: 'Reply' });
+
+    // Wait for submission to settle before checking for rendered reply text.
+    await replyButton.click({ force: true });
+    await page.waitForLoadState('networkidle');
 
     // Verify reply appears
-    await expect(page.getByText('This is a test reply from E2E.')).toBeVisible({ timeout: 15000 });
+    const renderedReply = page
+      .locator('[data-testid="post-body"], .prose, article')
+      .filter({ hasText: 'This is a test reply from E2E.' })
+      .first();
+    await expect(renderedReply).toBeVisible({ timeout: 15000 });
   });
 
   test('search tickets by title → correct results', async ({ page }) => {

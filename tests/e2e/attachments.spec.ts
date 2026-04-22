@@ -108,22 +108,23 @@ test.describe('File Attachments', () => {
     await expect(page.getByLabel('Title')).toBeVisible({ timeout: 10000 });
     await page.getByLabel('Title').fill('E2E Attachments Test Ticket');
     await page.getByLabel('Type').selectOption({ label: 'Issue' });
-    await page.getByLabel(/Description/).fill('Testing file attachments.');
+    await page.locator('[data-testid="markdown-editor"]').first().locator('textarea[name="textarea"]').fill('Testing file attachments.');
     await page.getByRole('button', { name: 'Create Ticket' }).click();
 
     await expect(page).toHaveURL(/\/tickets\/\d+\/e2e-attachments-test-ticket/, { timeout: 30000 });
     ticketUrl = page.url();
   });
 
-  test('file upload drop zone is visible on post', async ({ page }) => {
+  test('file upload drop zone is not shown on post cards', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
     await page.goto(await resolveTicketUrl());
 
     const dropZone = page.locator('[data-testid="file-drop-zone"]');
-    await expect(dropZone.first()).toBeVisible({ timeout: 10000 });
+    await expect(dropZone).toHaveCount(0);
   });
 
   test('upload a text file to a post', async ({ page }) => {
+    test.skip(true, 'Legacy FileUpload controls were removed from ticket detail post cards.');
     await loginAs(page, 'alice@example.com');
     await page.goto(await resolveTicketUrl());
 
@@ -144,6 +145,7 @@ test.describe('File Attachments', () => {
   });
 
   test('upload an image → inline thumbnail preview shown', async ({ page }) => {
+    test.skip(true, 'Legacy FileUpload controls were removed from ticket detail post cards.');
     await loginAs(page, 'alice@example.com');
     await page.goto(await resolveTicketUrl());
 
@@ -175,6 +177,7 @@ test.describe('File Attachments', () => {
   });
 
   test('download link works', async ({ page }) => {
+    test.skip(true, 'Legacy FileUpload controls were removed from ticket detail post cards.');
     await loginAs(page, 'alice@example.com');
     await page.goto(await resolveTicketUrl());
 
@@ -186,6 +189,7 @@ test.describe('File Attachments', () => {
   });
 
   test('agent can delete any user\'s attachment', async ({ page }) => {
+    test.skip(true, 'Legacy FileUpload controls were removed from ticket detail post cards.');
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(await resolveTicketUrl());
 

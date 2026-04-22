@@ -4,16 +4,29 @@ import { requireAuth } from '@/lib/supabase/auth';
 import { DisplayNameForm } from './DisplayNameForm';
 import { ChangePasswordForm } from './ChangePasswordForm';
 import { DeleteAccountButton } from './DeleteAccountButton';
+import { EditorPreferenceForm } from './EditorPreferenceForm';
 
 export default async function ProfilePage() {
   const user = await requireAuth();
   const supabase = await createServerClient();
 
-  const { data: profile } = await supabase
+  const profileSelect = 'id, email, display_name, role, team_id, created_at, editor_view_mode';
+  const { data: profileWithEditorMode, error: profileError } = await supabase
     .from('profiles')
-    .select('id, email, display_name, role, team_id, created_at')
+    .select(profileSelect)
     .eq('id', user.id)
     .single();
+
+  // Older local DBs may not have editor_view_mode yet; fall back without it.
+  let profile = profileWithEditorMode;
+  if (profileError?.code === '42703') {
+    const { data: profileWithoutEditorMode } = await supabase
+      .from('profiles')
+      .select('id, email, display_name, role, team_id, created_at')
+      .eq('id', user.id)
+      .single();
+    profile = profileWithoutEditorMode ? { ...profileWithoutEditorMode, editor_view_mode: null } : null;
+  }
 
   if (!profile) redirect('/login');
 
@@ -97,6 +110,14 @@ export default async function ProfilePage() {
           <ChangePasswordForm />
         </div>
       )}
+
+      {/* Editor preference */}
+      <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Editor Preference</h2>
+        <EditorPreferenceForm
+          currentMode={(profile.editor_view_mode as 'both' | 'preview' | 'editor' | null) ?? 'both'}
+        />
+      </div>
 
       {/* Delete account */}
       <div className="bg-white rounded-lg border border-gray-200 p-6">

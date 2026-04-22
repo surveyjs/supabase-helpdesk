@@ -2,15 +2,18 @@
 
 import { useActionState } from 'react';
 import { addComment, type TicketActionState } from '@/lib/actions/tickets';
+import { MarkdownEditor } from '@/components/features/tickets/MarkdownEditor';
 
 const initialState: TicketActionState = {};
 
 export function CommentForm({
   parentPostId,
   parentCommentId,
+  editorViewMode = 'both',
 }: {
   parentPostId: string;
   parentCommentId?: string;
+  editorViewMode?: 'both' | 'preview' | 'editor';
 }) {
   const [state, formAction, pending] = useActionState(addComment, initialState);
 
@@ -25,14 +28,13 @@ export function CommentForm({
           {state.error}
         </div>
       )}
-      <textarea
+      <MarkdownEditor
         name="body"
         required
-        rows={2}
         maxLength={50000}
         placeholder="Write a comment… (Markdown supported)"
-        className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-y"
-        aria-label="Comment body"
+        compact
+        viewMode={editorViewMode}
       />
       <button
         type="submit"

@@ -4,6 +4,7 @@ import { createServerClient } from '@/lib/supabase/server';
 import { requireAuth } from '@/lib/supabase/auth';
 import { generateSlug } from '@/lib/utils/slug';
 import { renderMarkdown } from '@/lib/utils/markdown';
+import { formatRelativeTime } from '@/lib/utils/time';
 import { Badge } from '@/components/ui/Badge';
 import { DisplayName } from '@/components/features/users/DisplayName';
 import { ReplyForm } from './ReplyForm';
@@ -13,7 +14,6 @@ import { ReplyToggle } from './ReplyToggle';
 import { NoteForm } from './NoteForm';
 import { CollapsibleTimeline, CollapsibleComments } from './CollapsibleTimeline';
 import { AttachmentList } from '@/components/features/attachments/AttachmentList';
-import { FileUpload } from '@/components/features/attachments/FileUpload';
 import { RealtimeTicketUpdates } from '@/components/features/tickets/RealtimeTicketUpdates';
 import {
   deletePost,
@@ -41,12 +41,13 @@ import {
 } from '@/lib/actions/agent';
 import { updateCustomFieldValue } from '@/lib/actions/admin';
 import { removeDuplicateLink } from '@/lib/actions/duplicate';
-import { MarkAsDuplicateForm } from './MarkAsDuplicateForm';
-import { MergeTicketForm } from './MergeTicketForm';
 import { DeleteTicketButton } from './DeleteTicketButton';
 import { SuggestReplyButton } from './SuggestReplyButton';
 import { AiTicketSummary } from './AiTicketSummary';
 import { GenerateKbArticleButton } from './GenerateKbArticleButton';
+import { TicketTabs } from './TicketTabs';
+import { MarkAsDuplicateForm } from './MarkAsDuplicateForm';
+import { MergeTicketForm } from './MergeTicketForm';
 
 function getContrastColor(hex: string): string {
   const c = hex.replace('#', '');
@@ -144,6 +145,22 @@ export default async function TicketDetailPage({
 
   const isAgent = profile?.role === 'agent' || profile?.role === 'admin';
 
+  // Backward-compatible: editor_view_mode may not exist before migration 021 is applied.
+  let editorViewMode: 'both' | 'preview' | 'editor' = 'both';
+  const { data: editorPref } = await supabase
+    .from('profiles')
+    .select('editor_view_mode')
+    .eq('id', user.id)
+    .maybeSingle();
+  const pref = (editorPref as { editor_view_mode?: string } | null)?.editor_view_mode;
+  if (pref === 'both' || pref === 'preview' || pref === 'editor') {
+    editorViewMode = pref;
+  }
+
+  // Keep ticket detail editors actionable on first render: preview-only mode hides editing toolbox.
+  const ticketDetailEditorViewMode: 'both' | 'preview' | 'editor' =
+    editorViewMode === 'preview' ? 'both' : editorViewMode;
+
   // Tier capability checks for ticket creator
   const isCreator = user.id === ticket.creator_id;
   const tierCaps = {
@@ -181,16 +198,13 @@ export default async function TicketDetailPage({
     .eq('ticket_id', ticket.id)
     .order('created_at', { ascending: true });
 
-  // Fetch timeline thresholds and file upload settings in a single batch
+  // Fetch timeline thresholds and AI settings in a single batch
   const { data: allSettings } = await supabase
     .from('app_settings')
     .select('key, value')
     .in('key', [
       'visible_posts_threshold',
       'visible_comments_threshold',
-      'allowed_file_types',
-      'max_file_size_mb',
-      'max_files_per_post',
       'ai_suggested_reply_enabled',
       'ai_ticket_summary_enabled',
       'ai_ticket_summary_min_posts',
@@ -207,31 +221,6 @@ export default async function TicketDetailPage({
   const visiblePostsThreshold = parseInt(settingsMap.get('visible_posts_threshold') ?? '10', 10) || 10;
   const visibleCommentsThreshold = parseInt(settingsMap.get('visible_comments_threshold') ?? '3', 10) || 3;
 
-  let allowedFileTypes: string[] = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'pdf', 'txt'];
-  const allowedTypesRaw = settingsMap.get('allowed_file_types');
-  if (allowedTypesRaw) {
-    try { allowedFileTypes = JSON.parse(allowedTypesRaw); } catch { /* use defaults */ }
-  }
-  const parsedMaxSize = parseInt(settingsMap.get('max_file_size_mb') ?? '10', 10);
-  const maxFileSizeMb = Number.isFinite(parsedMaxSize) && parsedMaxSize > 0 ? parsedMaxSize : 10;
-  const parsedMaxFiles = parseInt(settingsMap.get('max_files_per_post') ?? '5', 10);
-  const maxFilesPerPost = Number.isFinite(parsedMaxFiles) && parsedMaxFiles > 0 ? parsedMaxFiles : 5;
-
-  // Fetch attachment counts per post in a single query
-  const attachmentCountMap = new Map<string, number>();
-  if (posts && posts.length > 0) {
-    const postIds = posts.map((p) => p.id);
-    const { data: attachmentRows } = await supabase
-      .from('attachments')
-      .select('post_id')
-      .in('post_id', postIds);
-    if (attachmentRows) {
-      for (const row of attachmentRows) {
-        attachmentCountMap.set(row.post_id, (attachmentCountMap.get(row.post_id) ?? 0) + 1);
-      }
-    }
-  }
-
   // Check if user can reply (non-agents cannot reply to duplicates)
   const canReply = isAgent || !ticket.duplicate_of_id;
   const canEditTitle = isAgent || ticket.creator_id === user.id;
@@ -247,7 +236,13 @@ export default async function TicketDetailPage({
 
   // Organize posts: original, root posts, comments by parent
   const originalPost = renderedPosts.find((p) => p.is_original);
-  const rootPosts = renderedPosts.filter(
+
+  // Separate notes from non-notes for tab separation
+  const notePosts = renderedPosts.filter((p) => p.post_type === 'note');
+  const nonNotePosts = renderedPosts.filter((p) => p.post_type !== 'note');
+  const noteCount = notePosts.length;
+
+  const rootPosts = nonNotePosts.filter(
     (p) => !p.is_original && !p.parent_post_id && !p.parent_comment_id && p.post_type !== 'comment',
   );
   const commentsByParentPost = new Map<string, typeof renderedPosts>();
@@ -317,6 +312,11 @@ export default async function TicketDetailPage({
     const diffDays = Math.floor(diffHours / 24);
     if (diffDays < 7) return `${diffDays}d ago`;
     return d.toLocaleDateString();
+  }
+
+  function formatDateTimeWithRelative(dateStr: string) {
+    const d = new Date(dateStr);
+    return `${d.toLocaleDateString()} ${d.toLocaleTimeString()} (${formatRelativeTime(dateStr)})`;
   }
 
   function formatActivityMessage(entry: NonNullable<typeof activityLog>[number]) {
@@ -457,6 +457,7 @@ export default async function TicketDetailPage({
             htmlBody={post.htmlBody}
             rawBody={post.body}
             canEdit={canEditPost}
+              editorViewMode={ticketDetailEditorViewMode}
           />
 
           {/* Action buttons */}
@@ -503,17 +504,6 @@ export default async function TicketDetailPage({
             postId={post.id}
             canDelete={isCurrentUser || isAgent}
           />
-
-          {/* File upload (for post author or agent, not on drafts) */}
-          {!isDraft && (isCurrentUser || isAgent) && (
-            <FileUpload
-              postId={post.id}
-              allowedTypes={allowedFileTypes}
-              maxFileSizeMb={maxFileSizeMb}
-              maxFilesPerPost={maxFilesPerPost}
-              existingCount={attachmentCountMap.get(post.id) ?? 0}
-            />
-          )}
         </div>
 
         {/* Comments on this post (only for root-level / level-1) */}
@@ -540,12 +530,16 @@ export default async function TicketDetailPage({
         {/* Reply button */}
         {canReplyToPost && level === 0 && (
           <div className="mt-1 ml-6">
-            <ReplyToggle parentPostId={post.id} />
+            <ReplyToggle parentPostId={post.id} editorViewMode={ticketDetailEditorViewMode} />
           </div>
         )}
         {canReplyToPost && level === 1 && (
           <div className="mt-1 ml-12">
-            <ReplyToggle parentPostId={post.parent_post_id!} parentCommentId={post.id} />
+            <ReplyToggle
+              parentPostId={post.parent_post_id!}
+              parentCommentId={post.id}
+              editorViewMode={ticketDetailEditorViewMode}
+            />
           </div>
         )}
       </div>
@@ -691,24 +685,7 @@ export default async function TicketDetailPage({
   }
 
   return (
-    <div>
-      <div className="flex items-center gap-4 mb-4">
-        <Link
-          href="/tickets"
-          className="text-sm text-blue-600 hover:text-blue-800"
-        >
-          ← My Tickets
-        </Link>
-        {isAgent && (
-          <Link
-            href="/agent"
-            className="text-sm text-blue-600 hover:text-blue-800"
-          >
-            ← Agent Dashboard
-          </Link>
-        )}
-      </div>
-
+    <div className="relative left-1/2 right-1/2 w-screen -translate-x-1/2 px-6">
       {/* Duplicate banner */}
       {ticket.duplicate_of_id && (
         <div className="mb-4 p-3 rounded bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm">
@@ -749,727 +726,605 @@ export default async function TicketDetailPage({
         </div>
       )}
 
-      {/* Ticket header */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-        <EditableTitle ticketId={ticket.id} title={ticket.title} canEdit={canEditTitle} />
-
-        <div className="flex flex-wrap gap-2 mb-4">
-          <Badge variant="status" value={ticket.status} />
-          <Badge variant="priority" value={ticket.urgency} label={`Urgency: ${ticket.urgency.charAt(0).toUpperCase() + ticket.urgency.slice(1)}`} />
-          <Badge variant="priority" value={ticket.severity} label={`Severity: ${ticket.severity.charAt(0).toUpperCase() + ticket.severity.slice(1)}`} />
-          {ticket.is_private && (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-              Private
-            </span>
-          )}
-        </div>
-
-        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-          <div>
-            <dt className="text-gray-500">Type</dt>
-            <dd className="text-gray-900">{typeName}</dd>
-          </div>
-          {categoryName && (
-            <div>
-              <dt className="text-gray-500">Category</dt>
-              <dd className="text-gray-900">{categoryName}</dd>
+      {/* Two-column layout: fluid content + 400px information panel */}
+      <div className="flex flex-col lg:flex-row gap-6">
+        {/* LEFT: Main content area */}
+        <div className="w-full flex-1 min-w-0" data-testid="ticket-main-content">
+          {/* Subject */}
+          <div className="mb-4">
+            <EditableTitle ticketId={ticket.id} title={ticket.title} canEdit={canEditTitle} />
+            <div className="flex items-center gap-2 mt-1 text-sm text-gray-500">
+              <time title={new Date(ticket.created_at).toLocaleString()}>{formatRelativeTime(ticket.created_at)}</time>
+              <span>·</span>
+              <span>
+                <DisplayName
+                  userId={ticket.creator_id}
+                  displayName={creatorName}
+                  isCurrentUserAgent={isAgent}
+                />
+              </span>
             </div>
-          )}
-          <div>
-            <dt className="text-gray-500">Created by</dt>
-            <dd className="text-gray-900">
-              <DisplayName
-                userId={ticket.creator_id}
-                displayName={creatorName}
-                isCurrentUserAgent={isAgent}
-              />
-              {teamName && (
-                <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-                  {teamName}
-                </span>
+          </div>
+
+          {/* Posts / Notes tabs (agents see two tabs, users see only posts) */}
+          {isAgent ? (
+            <TicketTabs
+              postsContent={
+                <div className="space-y-4">
+                  {originalPost && renderPostCard(originalPost, 0)}
+                  {shouldCollapse && hiddenPostCount > 0 && (
+                    <CollapsibleTimeline hiddenCount={hiddenPostCount}>
+                      {renderTimelineItems(hiddenItems)}
+                    </CollapsibleTimeline>
+                  )}
+                  {renderTimelineItems(visibleItems)}
+                  {canReply && !ticket.merged_into_id && (
+                    <div className="bg-white rounded-lg border border-gray-200 p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-lg font-medium text-gray-900">Reply</h2>
+                        {aiSuggestedReplyEnabled && (
+                          <SuggestReplyButton ticketId={ticket.id} />
+                        )}
+                      </div>
+                      <ReplyForm
+                        ticketId={ticket.id}
+                        isAgent={isAgent}
+                        editorViewMode={ticketDetailEditorViewMode}
+                      />
+                    </div>
+                  )}
+                </div>
+              }
+              notesContent={
+                <div className="space-y-4">
+                  {notePosts.length > 0 ? (
+                    notePosts.map((note) => renderPostCard(note, 0))
+                  ) : (
+                    <p className="text-sm text-gray-500 italic">No internal notes yet.</p>
+                  )}
+                  {!ticket.merged_into_id && (
+                    <NoteForm ticketId={ticket.id} editorViewMode={ticketDetailEditorViewMode} />
+                  )}
+                </div>
+              }
+              noteCount={noteCount}
+            />
+          ) : (
+            <div className="space-y-4">
+              {originalPost && renderPostCard(originalPost, 0)}
+              {shouldCollapse && hiddenPostCount > 0 && (
+                <CollapsibleTimeline hiddenCount={hiddenPostCount}>
+                  {renderTimelineItems(hiddenItems)}
+                </CollapsibleTimeline>
               )}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-gray-500">Assigned to</dt>
-            <dd className="text-gray-900">{assignedAgentName ?? 'Unassigned'}</dd>
-          </div>
-          <div>
-            <dt className="text-gray-500">Created</dt>
-            <dd className="text-gray-900">
-              {new Date(ticket.created_at).toLocaleDateString()}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-gray-500">Last updated</dt>
-            <dd className="text-gray-900">
-              {new Date(ticket.updated_at).toLocaleDateString()}
-            </dd>
-          </div>
-          {sourceArticle && (
-            <div data-testid="source-article">
-              <dt className="text-gray-500">Created from article</dt>
-              <dd className="text-gray-900">
-                <Link
-                  href={`/help/${sourceArticle.id}/${sourceArticle.category_name ? generateSlug(sourceArticle.category_name) : 'uncategorized'}/${sourceArticle.slug}`}
-                  className="text-blue-600 hover:text-blue-800 text-sm"
-                >
-                  {sourceArticle.title}
-                </Link>
-              </dd>
+              {renderTimelineItems(visibleItems)}
+              {canReply && !ticket.merged_into_id && (
+                <div className="bg-white rounded-lg border border-gray-200 p-6">
+                  <h2 className="text-lg font-medium text-gray-900 mb-4">Reply</h2>
+                  <ReplyForm ticketId={ticket.id} isAgent={isAgent} editorViewMode={ticketDetailEditorViewMode} />
+                </div>
+              )}
             </div>
-          )}
-        </dl>
-
-        {/* SLA Indicators (agents only) */}
-        {isAgent && (
-          <div className="mt-4 border-t border-gray-200 pt-4" data-testid="sla-indicators">
-            <h3 className="text-sm font-medium text-gray-500 mb-2">SLA Status</h3>
-            {slaStatus ? (
-              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                <div>
-                  <dt className="text-gray-500">First Response SLA</dt>
-                  <dd className="text-gray-900 flex items-center gap-2">
-                    <SlaStatusDot status={slaStatus.firstResponse.status} />
-                    {slaStatus.firstResponse.status === 'met' ? (
-                      <span className="text-green-700">
-                        ✓ First response in {formatMinutesAsHours(slaStatus.firstResponse.elapsedMinutes)}
-                      </span>
-                    ) : slaStatus.firstResponse.status === 'breached' && slaStatus.firstResponse.completedAt ? (
-                      <span className="text-red-700">
-                        ✗ First response breached ({formatMinutesAsHours(slaStatus.firstResponse.elapsedMinutes)} of {formatMinutesAsHours(slaStatus.firstResponse.targetMinutes)})
-                      </span>
-                    ) : (
-                      <span>
-                        {formatMinutesAsHours(slaStatus.firstResponse.elapsedMinutes)} of {formatMinutesAsHours(slaStatus.firstResponse.targetMinutes)} elapsed ({slaStatus.firstResponse.percentage}%)
-                      </span>
-                    )}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-gray-500">Resolution SLA</dt>
-                  <dd className="text-gray-900 flex items-center gap-2">
-                    <SlaStatusDot status={slaStatus.resolution.status} />
-                    {slaStatus.resolution.status === 'met' ? (
-                      <span className="text-green-700">
-                        ✓ Resolved in {formatMinutesAsHours(slaStatus.resolution.elapsedMinutes)}
-                      </span>
-                    ) : slaStatus.resolution.status === 'breached' && slaStatus.resolution.completedAt ? (
-                      <span className="text-red-700">
-                        ✗ Resolution breached ({formatMinutesAsHours(slaStatus.resolution.elapsedMinutes)} of {formatMinutesAsHours(slaStatus.resolution.targetMinutes)})
-                      </span>
-                    ) : (
-                      <span>
-                        {formatMinutesAsHours(slaStatus.resolution.elapsedMinutes)} of {formatMinutesAsHours(slaStatus.resolution.targetMinutes)} elapsed ({slaStatus.resolution.percentage}%)
-                      </span>
-                    )}
-                  </dd>
-                </div>
-              </dl>
-            ) : (
-              <p className="text-sm text-gray-500">No SLA</p>
-            )}
-          </div>
-        )}
-
-        {/* CSAT Rating display */}
-        {(csatRating || canRate) && (
-          <div className="mt-4 border-t border-gray-200 pt-4" data-testid="csat-section">
-            <h3 className="text-sm font-medium text-gray-500 mb-2">Customer Satisfaction</h3>
-            {csatRating ? (
-              <div>
-                <div className="flex items-center gap-2 mb-1" data-testid="csat-rating-display">
-                  <span className="text-lg">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <span key={star} className={star <= csatRating.rating ? 'text-yellow-400' : 'text-gray-300'}>
-                        ★
-                      </span>
-                    ))}
-                  </span>
-                  <span className="text-sm text-gray-700 font-medium">{csatRating.rating}/5</span>
-                </div>
-                {csatRating.comment && (
-                  <details className="text-sm text-gray-600 mb-1">
-                    <summary className="cursor-pointer text-blue-600 hover:text-blue-800">Show comment</summary>
-                    <p className="mt-1 pl-2 border-l-2 border-gray-200">{csatRating.comment}</p>
-                  </details>
-                )}
-                <p className="text-xs text-gray-500">
-                  Submitted {new Date(csatRating.submitted_at).toLocaleDateString()}
-                </p>
-                {isOwner && isRegularUser && (
-                  <form action={async () => { 'use server'; await requestCsatToken(ticket.id); }}>
-                    <button
-                      type="submit"
-                      className="mt-2 text-sm text-blue-600 hover:text-blue-800 font-medium"
-                      data-testid="update-rating-link"
-                    >
-                      Update rating
-                    </button>
-                  </form>
-                )}
-              </div>
-            ) : canRate ? (
-              <form action={async () => { 'use server'; await requestCsatToken(ticket.id); }}>
-                <button
-                  type="submit"
-                  className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-                  data-testid="rate-ticket-link"
-                >
-                  Rate this ticket
-                </button>
-              </form>
-            ) : null}
-          </div>
-        )}
-
-        {/* Tags display */}
-        {ticketTags.length > 0 && (
-          <div className="mt-4" data-testid="ticket-tags">
-            <span className="text-sm text-gray-500 mr-2">Tags:</span>
-            <span className="inline-flex flex-wrap gap-1">
-              {ticketTags.map((tag) => {
-                const textColor = getContrastColor(tag.color);
-                return (
-                  <span key={tag.id} className="inline-flex items-center gap-1">
-                    <span
-                      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
-                      style={{ backgroundColor: tag.color, color: textColor }}
-                    >
-                      {tag.name}
-                    </span>
-                    {(isAgent || tierCaps.add_remove_tags) && (
-                      <form action={removeTagFromTicket} className="inline">
-                        <input type="hidden" name="ticket_id" value={ticket.id} />
-                        <input type="hidden" name="tag_id" value={tag.id} />
-                        <button
-                          type="submit"
-                          className="text-xs text-gray-500 hover:text-red-500"
-                          aria-label={`Remove tag ${tag.name}`}
-                          title={`Remove ${tag.name}`}
-                        >
-                          ×
-                        </button>
-                      </form>
-                    )}
-                  </span>
-                );
-              })}
-            </span>
-          </div>
-        )}
-
-        {/* Agent: Add tag */}
-        {(isAgent || tierCaps.add_remove_tags) && availableTags.length > 0 && (
-          <form action={addTagToTicket} className="mt-2 flex gap-2 items-center" data-testid="add-tag-form">
-            <input type="hidden" name="ticket_id" value={ticket.id} />
-            <select
-              name="tag_id"
-              className="rounded border border-gray-300 px-2 py-1 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-              aria-label="Select tag to add"
-            >
-              {availableTags.map((tag) => (
-                <option key={tag.id} value={tag.id}>{tag.name}</option>
-              ))}
-            </select>
-            <button type="submit" className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200">
-              Add Tag
-            </button>
-          </form>
-        )}
-
-        {/* Follow/Unfollow */}
-        <div className="mt-4 border-t border-gray-200 pt-4" data-testid="follow-section">
-          <div className="flex items-center gap-3">
-            {isTicketOwner ? (
-              <span className="text-xs text-gray-500">Following (owner)</span>
-            ) : !isBlocked ? (
-              isFollowing ? (
-                <form action={unfollowTicket}>
-                  <input type="hidden" name="ticket_id" value={ticket.id} />
-                  <button
-                    type="submit"
-                    className="px-3 py-1 text-xs rounded bg-gray-100 text-gray-700 hover:bg-gray-200"
-                    data-testid="unfollow-btn"
-                  >
-                    Unfollow
-                  </button>
-                </form>
-              ) : (
-                <form action={followTicket}>
-                  <input type="hidden" name="ticket_id" value={ticket.id} />
-                  <button
-                    type="submit"
-                    className="px-3 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200"
-                    data-testid="follow-btn"
-                  >
-                    Follow
-                  </button>
-                </form>
-              )
-            ) : null}
-          </div>
-
-          {/* Followers list (agents only) */}
-          {isAgent && followers.length > 0 && (
-            <details className="mt-2" data-testid="followers-list">
-              <summary className="text-xs text-gray-500 cursor-pointer">
-                {followers.length} follower{followers.length !== 1 ? 's' : ''}
-              </summary>
-              <ul className="mt-1 space-y-0.5">
-                {followers.map((f) => (
-                  <li key={f.user_id} className="text-xs text-gray-600">
-                    {f.display_name}
-                  </li>
-                ))}
-              </ul>
-            </details>
           )}
         </div>
 
-        {/* Custom fields display */}
-        {customFieldDefs && customFieldDefs.length > 0 && (
-          <div className="mt-4 border-t border-gray-200 pt-4" data-testid="custom-fields">
-            <h3 className="text-sm font-medium text-gray-500 mb-2">Custom Fields</h3>
-            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-              {customFieldDefs.map((field) => {
-                const val = ticketCustomFields[field.name];
-                const displayVal = field.field_type === 'checkbox'
-                  ? (val ? 'Yes' : 'No')
-                  : val != null ? String(val) : '—';
-                return (
-                  <div key={field.id}>
-                    <dt className="text-gray-500">{field.name}</dt>
-                    <dd className="text-gray-900 flex items-center gap-2">
-                      <span>{displayVal}</span>
-                      {(isAgent || isOwner) && (
-                        <details className="inline">
-                          <summary className="text-xs text-blue-600 cursor-pointer">Edit</summary>
-                          <form action={updateCustomFieldValue} className="mt-1 flex gap-1 items-center">
+        {/* RIGHT: Sidebar */}
+        <aside className="w-full lg:w-[400px] lg:min-w-[400px] lg:max-w-[400px] flex-shrink-0 lg:sticky lg:top-4 lg:self-start" data-testid="ticket-sidebar">
+          <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
+            {/* Ticket # and status */}
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs text-gray-500 font-mono">#{ticket.id}</span>
+              <Badge variant="status" value={ticket.status} />
+            </div>
+
+            {/* Ticket info + controls */}
+            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+              {isAgent && (
+                <>
+                  <dt className="text-gray-500">Status</dt>
+                  <dd>
+                    {ticket.merged_into_id ? (
+                      <span className="text-xs text-gray-500">Read-only (merged)</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {ticket.status !== 'pending' && (
+                          <form action={changeTicketStatus}>
                             <input type="hidden" name="ticket_id" value={ticket.id} />
-                            <input type="hidden" name="field_name" value={field.name} />
-                            {field.field_type === 'text' && (
-                              <input type="text" name="value" defaultValue={val != null ? String(val) : ''} maxLength={1000} className="rounded border border-gray-300 px-2 py-1 text-xs" />
-                            )}
-                            {field.field_type === 'number' && (
-                              <input type="number" name="value" defaultValue={val != null ? String(val) : ''} className="rounded border border-gray-300 px-2 py-1 text-xs" />
-                            )}
-                            {field.field_type === 'dropdown' && (
-                              <select name="value" defaultValue={val != null ? String(val) : ''} className="rounded border border-gray-300 px-2 py-1 text-xs">
-                                <option value="">Select…</option>
-                                {(field.options as string[] | null)?.map((opt: string) => (
-                                  <option key={opt} value={opt}>{opt}</option>
-                                ))}
-                              </select>
-                            )}
-                            {field.field_type === 'checkbox' && (
-                              <select name="value" defaultValue={val ? 'true' : 'false'} className="rounded border border-gray-300 px-2 py-1 text-xs">
-                                <option value="true">Yes</option>
-                                <option value="false">No</option>
-                              </select>
-                            )}
-                            {field.field_type === 'date' && (
-                              <input type="date" name="value" defaultValue={val != null ? String(val) : ''} className="rounded border border-gray-300 px-2 py-1 text-xs" />
-                            )}
-                            <button type="submit" className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200">Save</button>
+                            <input type="hidden" name="new_status" value="pending" />
+                            <button type="submit" className="px-2 py-0.5 text-xs rounded bg-yellow-100 text-yellow-700 hover:bg-yellow-200">
+                              Mark Pending
+                            </button>
                           </form>
-                        </details>
+                        )}
+                        {ticket.status !== 'closed' && (
+                          <form action={changeTicketStatus}>
+                            <input type="hidden" name="ticket_id" value={ticket.id} />
+                            <input type="hidden" name="new_status" value="closed" />
+                            <button type="submit" className="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-700 hover:bg-gray-200">
+                              Close Ticket
+                            </button>
+                          </form>
+                        )}
+                      </div>
+                    )}
+                  </dd>
+                </>
+              )}
+
+              <dt className="text-gray-500">Urgency</dt>
+              <dd>
+                {isAgent && !ticket.merged_into_id ? (
+                  <form action={changeUrgency} className="flex gap-1 items-center">
+                    <input type="hidden" name="ticket_id" value={ticket.id} />
+                    <select
+                      name="new_urgency"
+                      defaultValue={ticket.urgency}
+                      className="flex-1 rounded border border-gray-300 px-1.5 py-0.5 text-xs"
+                    >
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                      <option value="critical">Critical</option>
+                    </select>
+                    <button type="submit" className="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-700 hover:bg-gray-200">Set</button>
+                  </form>
+                ) : (
+                  <Badge variant="priority" value={ticket.urgency} />
+                )}
+              </dd>
+
+              <dt className="text-gray-500">Severity</dt>
+              <dd>
+                {(isAgent || tierCaps.set_severity) && !ticket.merged_into_id ? (
+                  <form action={changeSeverity} className="flex gap-1 items-center">
+                    <input type="hidden" name="ticket_id" value={ticket.id} />
+                    <select
+                      name="new_severity"
+                      defaultValue={ticket.severity}
+                      className="flex-1 rounded border border-gray-300 px-1.5 py-0.5 text-xs"
+                    >
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                      <option value="critical">Critical</option>
+                    </select>
+                    <button type="submit" className="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-700 hover:bg-gray-200">Set</button>
+                  </form>
+                ) : (
+                  <Badge variant="priority" value={ticket.severity} />
+                )}
+              </dd>
+
+              <dt className="text-gray-500">Type</dt>
+              <dd>
+                {(isAgent || tierCaps.change_type) && !ticket.merged_into_id && allTypes.length > 0 ? (
+                  <form action={changeType} className="flex gap-1 items-center">
+                    <input type="hidden" name="ticket_id" value={ticket.id} />
+                    <select
+                      name="new_type_id"
+                      defaultValue={ticket.type_id}
+                      className="flex-1 rounded border border-gray-300 px-1.5 py-0.5 text-xs"
+                    >
+                      {allTypes.map((t) => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                    <button type="submit" className="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-700 hover:bg-gray-200">Set</button>
+                  </form>
+                ) : (
+                  <span className="text-gray-900">{typeName}</span>
+                )}
+              </dd>
+
+              {(categoryName || isAgent) && (
+                <>
+                  <dt className="text-gray-500">Category</dt>
+                  <dd>
+                    {isAgent && !ticket.merged_into_id ? (
+                      <form action={changeCategory} className="flex gap-1 items-center">
+                        <input type="hidden" name="ticket_id" value={ticket.id} />
+                        <select
+                          name="new_category_id"
+                          defaultValue={ticket.category_id ?? ''}
+                          className="flex-1 rounded border border-gray-300 px-1.5 py-0.5 text-xs"
+                        >
+                          <option value="">None</option>
+                          {allCategories.map((c) => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
+                        </select>
+                        <button type="submit" className="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-700 hover:bg-gray-200">Set</button>
+                      </form>
+                    ) : (
+                      <span className="text-gray-900">{categoryName ?? 'None'}</span>
+                    )}
+                  </dd>
+                </>
+              )}
+
+              <dt className="text-gray-500">Created by</dt>
+              <dd className="text-gray-900">
+                <DisplayName
+                  userId={ticket.creator_id}
+                  displayName={creatorName}
+                  isCurrentUserAgent={isAgent}
+                />
+                {teamName && (
+                  <span className="ml-1 text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">
+                    {teamName}
+                  </span>
+                )}
+              </dd>
+
+              <dt className="text-gray-500">Assigned</dt>
+              <dd className="text-gray-900">
+                {isAgent && !ticket.merged_into_id ? (
+                  <div className="space-y-1">
+                    <div>{assignedAgentName ?? 'Unassigned'}</div>
+                    <div className="flex flex-wrap gap-1">
+                      {!ticket.assigned_agent_id ? (
+                        <form action={assignToMe}>
+                          <input type="hidden" name="ticket_id" value={ticket.id} />
+                          <button type="submit" className="px-2 py-0.5 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200">Assign to me</button>
+                        </form>
+                      ) : (
+                        <form action={unassignAgent}>
+                          <input type="hidden" name="ticket_id" value={ticket.id} />
+                          <button type="submit" className="px-2 py-0.5 text-xs rounded bg-red-100 text-red-700 hover:bg-red-200">Unassign</button>
+                        </form>
                       )}
-                    </dd>
-                  </div>
-                );
-              })}
-            </dl>
-          </div>
-        )}
-      </div>
-
-      {/* Agent controls (hidden on merged tickets) */}
-      {isAgent && !ticket.merged_into_id && (
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6" data-testid="agent-controls">
-          <h2 className="text-sm font-semibold text-gray-700 mb-4 uppercase tracking-wider">Agent Controls</h2>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* Status buttons */}
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Status</label>
-              <div className="flex flex-wrap gap-1">
-                {ticket.status !== 'open' && (
-                  <form action={changeTicketStatus}>
-                    <input type="hidden" name="ticket_id" value={ticket.id} />
-                    <input type="hidden" name="new_status" value="open" />
-                    <button type="submit" className="px-3 py-1 text-xs rounded bg-green-100 text-green-700 hover:bg-green-200">
-                      {ticket.status === 'closed' ? 'Re-open' : 'Mark Open'}
-                    </button>
-                  </form>
-                )}
-                {ticket.status !== 'pending' && (
-                  <form action={changeTicketStatus}>
-                    <input type="hidden" name="ticket_id" value={ticket.id} />
-                    <input type="hidden" name="new_status" value="pending" />
-                    <button type="submit" className="px-3 py-1 text-xs rounded bg-yellow-100 text-yellow-700 hover:bg-yellow-200">
-                      Mark Pending
-                    </button>
-                  </form>
-                )}
-                {ticket.status !== 'closed' && (
-                  <form action={changeTicketStatus}>
-                    <input type="hidden" name="ticket_id" value={ticket.id} />
-                    <input type="hidden" name="new_status" value="closed" />
-                    <button type="submit" className="px-3 py-1 text-xs rounded bg-gray-100 text-gray-700 hover:bg-gray-200">
-                      Close Ticket
-                    </button>
-                  </form>
-                )}
-              </div>
-            </div>
-
-            {/* Assign agent */}
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Assignment</label>
-              {!ticket.assigned_agent_id ? (
-                <form action={assignToMe}>
-                  <input type="hidden" name="ticket_id" value={ticket.id} />
-                  <button type="submit" className="px-3 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200">
-                    Assign to me
-                  </button>
-                </form>
-              ) : (
-                <div className="flex flex-wrap gap-1">
-                  <form action={unassignAgent}>
-                    <input type="hidden" name="ticket_id" value={ticket.id} />
-                    <button type="submit" className="px-3 py-1 text-xs rounded bg-red-100 text-red-700 hover:bg-red-200">
-                      Unassign
-                    </button>
-                  </form>
-                </div>
-              )}
-              <form action={ticket.assigned_agent_id ? reassignAgent : assignAgent} className="mt-2 flex gap-1">
-                <input type="hidden" name="ticket_id" value={ticket.id} />
-                <select
-                  name="agent_id"
-                  className="flex-1 rounded border border-gray-300 px-2 py-1 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                  aria-label="Select agent"
-                >
-                  {allAgents.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.display_name ?? 'Agent'} ({a.email})
-                    </option>
-                  ))}
-                </select>
-                <button type="submit" className="px-3 py-1 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200">
-                  {ticket.assigned_agent_id ? 'Reassign' : 'Assign'}
-                </button>
-              </form>
-              {ticket.assigned_agent_id && (
-                <form action={reassignAgent} className="mt-1">
-                  <input type="hidden" name="ticket_id" value={ticket.id} />
-                  <input type="hidden" name="agent_id" value={allAgents[0]?.id ?? ''} />
-                  <input
-                    type="text"
-                    name="reason"
-                    placeholder="Reassignment reason (optional)…"
-                    className="w-full rounded border border-gray-300 px-2 py-1 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                    aria-label="Reassignment reason"
-                  />
-                </form>
-              )}
-            </div>
-
-            {/* Urgency */}
-            <div>
-              <label htmlFor="agent-urgency" className="block text-xs font-medium text-gray-500 mb-1">Urgency</label>
-              <form action={changeUrgency} className="flex gap-1">
-                <input type="hidden" name="ticket_id" value={ticket.id} />
-                <select
-                  id="agent-urgency"
-                  name="new_urgency"
-                  defaultValue={ticket.urgency}
-                  className="flex-1 rounded border border-gray-300 px-2 py-1 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                >
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                  <option value="critical">Critical</option>
-                </select>
-                <button type="submit" className="px-3 py-1 text-xs rounded bg-gray-100 text-gray-700 hover:bg-gray-200">
-                  Set
-                </button>
-              </form>
-            </div>
-
-            {/* Severity */}
-            <div>
-              <label htmlFor="agent-severity" className="block text-xs font-medium text-gray-500 mb-1">Severity</label>
-              <form action={changeSeverity} className="flex gap-1">
-                <input type="hidden" name="ticket_id" value={ticket.id} />
-                <select
-                  id="agent-severity"
-                  name="new_severity"
-                  defaultValue={ticket.severity}
-                  className="flex-1 rounded border border-gray-300 px-2 py-1 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                >
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                  <option value="critical">Critical</option>
-                </select>
-                <button type="submit" className="px-3 py-1 text-xs rounded bg-gray-100 text-gray-700 hover:bg-gray-200">
-                  Set
-                </button>
-              </form>
-            </div>
-
-            {/* Type */}
-            <div>
-              <label htmlFor="agent-type" className="block text-xs font-medium text-gray-500 mb-1">Type</label>
-              <form action={changeType} className="flex gap-1">
-                <input type="hidden" name="ticket_id" value={ticket.id} />
-                <select
-                  id="agent-type"
-                  name="new_type_id"
-                  defaultValue={ticket.type_id}
-                  className="flex-1 rounded border border-gray-300 px-2 py-1 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                >
-                  {allTypes.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
-                  ))}
-                </select>
-                <button type="submit" className="px-3 py-1 text-xs rounded bg-gray-100 text-gray-700 hover:bg-gray-200">
-                  Set
-                </button>
-              </form>
-            </div>
-
-            {/* Category */}
-            <div>
-              <label htmlFor="agent-category" className="block text-xs font-medium text-gray-500 mb-1">Category</label>
-              <form action={changeCategory} className="flex gap-1">
-                <input type="hidden" name="ticket_id" value={ticket.id} />
-                <select
-                  id="agent-category"
-                  name="new_category_id"
-                  defaultValue={ticket.category_id ?? ''}
-                  className="flex-1 rounded border border-gray-300 px-2 py-1 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                >
-                  <option value="">None</option>
-                  {allCategories.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-                <button type="submit" className="px-3 py-1 text-xs rounded bg-gray-100 text-gray-700 hover:bg-gray-200">
-                  Set
-                </button>
-              </form>
-            </div>
-
-            {/* Privacy toggle */}
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Privacy</label>
-              <form action={toggleTicketPrivacyAction}>
-                <input type="hidden" name="ticket_id" value={ticket.id} />
-                <button type="submit" className={`px-3 py-1 text-xs rounded ${ticket.is_private ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}>
-                  {ticket.is_private ? 'Make Public' : 'Make Private'}
-                </button>
-              </form>
-            </div>
-
-            {/* Mark as Duplicate */}
-            {!ticket.merged_into_id && !ticket.duplicate_of_id && (
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Duplicate</label>
-                <MarkAsDuplicateForm ticketId={ticket.id} />
-              </div>
-            )}
-
-            {/* Merge */}
-            {!ticket.merged_into_id && !ticket.duplicate_of_id && (
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Merge</label>
-                <MergeTicketForm ticketId={ticket.id} />
-              </div>
-            )}
-
-            {/* Delete (admin only) */}
-            {profile?.role === 'admin' && (
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Delete</label>
-                <DeleteTicketButton ticketId={ticket.id} isClosed={ticket.status === 'closed'} />
-              </div>
-            )}
-
-            {/* Generate KB Article (agents, closed tickets only) */}
-            {ticket.status === 'closed' && aiGenerateKbArticleEnabled && (
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">KB Article</label>
-                <GenerateKbArticleButton ticketId={ticket.id} />
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Tier capability controls (for non-agent ticket creators with active tier) */}
-      {!isAgent && hasAnyTierCap && !ticket.merged_into_id && (
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6" data-testid="tier-controls">
-          <h2 className="text-sm font-semibold text-gray-700 mb-4 uppercase tracking-wider">Ticket Controls</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* Status */}
-            {tierCaps.change_status && (
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Status</label>
-                <div className="flex flex-wrap gap-1">
-                  {ticket.status !== 'open' && (
-                    <form action={changeTicketStatus}>
+                    </div>
+                    <form action={ticket.assigned_agent_id ? reassignAgent : assignAgent} className="flex gap-1 items-center">
                       <input type="hidden" name="ticket_id" value={ticket.id} />
-                      <input type="hidden" name="new_status" value="open" />
-                      <button type="submit" className="px-3 py-1 text-xs rounded bg-green-100 text-green-700 hover:bg-green-200">
-                        {ticket.status === 'closed' ? 'Re-open' : 'Mark Open'}
+                      <select
+                        name="agent_id"
+                        aria-label="Select agent"
+                        className="flex-1 rounded border border-gray-300 px-1.5 py-0.5 text-xs"
+                      >
+                        {allAgents.map((a) => (
+                          <option key={a.id} value={a.id}>{a.display_name ?? 'Agent'} ({a.email})</option>
+                        ))}
+                      </select>
+                      {ticket.assigned_agent_id && (
+                        <input
+                          type="text"
+                          name="reason"
+                          placeholder="Reason (optional)"
+                          aria-label="Reassignment reason"
+                          className="w-32 rounded border border-gray-300 px-1.5 py-0.5 text-xs"
+                        />
+                      )}
+                      <button type="submit" className="px-1.5 py-0.5 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200">
+                        {ticket.assigned_agent_id ? 'Reassign' : 'Assign'}
                       </button>
                     </form>
-                  )}
-                  {ticket.status !== 'pending' && (
-                    <form action={changeTicketStatus}>
-                      <input type="hidden" name="ticket_id" value={ticket.id} />
-                      <input type="hidden" name="new_status" value="pending" />
-                      <button type="submit" className="px-3 py-1 text-xs rounded bg-yellow-100 text-yellow-700 hover:bg-yellow-200">Pending</button>
-                    </form>
-                  )}
-                  {ticket.status !== 'closed' && (
-                    <form action={changeTicketStatus}>
-                      <input type="hidden" name="ticket_id" value={ticket.id} />
-                      <input type="hidden" name="new_status" value="closed" />
-                      <button type="submit" className="px-3 py-1 text-xs rounded bg-red-100 text-red-700 hover:bg-red-200">Close</button>
-                    </form>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Severity */}
-            {tierCaps.set_severity && (
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Severity</label>
-                <form action={changeSeverity} className="flex gap-1 items-center">
-                  <input type="hidden" name="ticket_id" value={ticket.id} />
-                  <select name="new_severity" defaultValue={ticket.severity} className="rounded border border-gray-300 px-2 py-1 text-xs">
-                    {['low', 'medium', 'high', 'critical'].map((s) => (
-                      <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
-                    ))}
-                  </select>
-                  <button type="submit" className="px-3 py-1 text-xs rounded bg-gray-100 text-gray-700 hover:bg-gray-200">Set</button>
-                </form>
-              </div>
-            )}
-
-            {/* Type */}
-            {tierCaps.change_type && allTypes.length > 0 && (
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Type</label>
-                <form action={changeType} className="flex gap-1 items-center">
-                  <input type="hidden" name="ticket_id" value={ticket.id} />
-                  <select name="new_type_id" defaultValue={ticket.type_id ?? ''} className="rounded border border-gray-300 px-2 py-1 text-xs">
-                    {allTypes.map((t) => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
-                  <button type="submit" className="px-3 py-1 text-xs rounded bg-gray-100 text-gray-700 hover:bg-gray-200">Set</button>
-                </form>
-              </div>
-            )}
-
-            {/* Privacy */}
-            {tierCaps.change_visibility && (
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Privacy</label>
-                <form action={toggleTicketPrivacyAction}>
-                  <input type="hidden" name="ticket_id" value={ticket.id} />
-                  <button type="submit" className={`px-3 py-1 text-xs rounded ${ticket.is_private ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}>
-                    {ticket.is_private ? 'Make Public' : 'Make Private'}
-                  </button>
-                </form>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* User Notes tab (agents only, when creator has notes) */}
-      {isAgent && creatorNoteCount > 0 && (
-        <details className="bg-white rounded-lg border border-gray-200 p-6 mb-6" data-testid="user-notes-tab">
-          <summary className="cursor-pointer text-sm font-semibold text-gray-700 uppercase tracking-wider">
-            User Notes
-            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-              {creatorNoteCount}
-            </span>
-          </summary>
-          <div className="mt-4">
-            <Link
-              href={`/agent/users/${ticket.creator_id}`}
-              className="text-sm text-blue-600 hover:text-blue-800 mb-3 inline-block"
-            >
-              Open profile →
-            </Link>
-            <div className="space-y-3">
-              {creatorNotes.map((note) => (
-                <div key={note.id} className="border border-gray-200 rounded p-3 text-sm">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-medium text-gray-900">
-                      {note.author?.display_name ?? 'Unknown'}
-                    </span>
-                    <span className="text-xs text-gray-500">
-                      {new Date(note.created_at).toLocaleDateString()}
-                      {note.edited_at && ' (edited)'}
-                    </span>
                   </div>
-                  <p className="text-gray-700 whitespace-pre-wrap">{note.body}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </details>
-      )}
+                ) : (
+                  <span>{assignedAgentName ?? 'Unassigned'}</span>
+                )}
+              </dd>
 
-      {/* AI Summary panel (agents only) */}
-      {isAgent && aiTicketSummaryEnabled && allPosts.length >= aiTicketSummaryMinPosts && (
-        <AiTicketSummary ticketId={ticket.id} />
-      )}
+              {isAgent && !ticket.merged_into_id && !ticket.duplicate_of_id && (
+                <>
+                  <dt className="text-gray-500">Advanced</dt>
+                  <dd>
+                    <div className="flex flex-wrap gap-2">
+                      <MarkAsDuplicateForm ticketId={ticket.id} />
+                      <MergeTicketForm ticketId={ticket.id} />
+                    </div>
+                  </dd>
+                </>
+              )}
 
-      {/* Posts timeline */}
-      <div className="space-y-4 mb-6">
-        {/* Original post always first */}
-        {originalPost && renderPostCard(originalPost, 0)}
+              <dt className="text-gray-500">Created</dt>
+              <dd className="text-gray-900" title={new Date(ticket.created_at).toLocaleString()}>
+                {formatDateTimeWithRelative(ticket.created_at)}
+              </dd>
+              <dt className="text-gray-500">Updated</dt>
+              <dd className="text-gray-900" title={new Date(ticket.updated_at).toLocaleString()}>
+                {formatDateTimeWithRelative(ticket.updated_at)}
+              </dd>
 
-        {/* Collapsible older items */}
-        {shouldCollapse && hiddenPostCount > 0 && (
-          <CollapsibleTimeline hiddenCount={hiddenPostCount}>
-            {renderTimelineItems(hiddenItems)}
-          </CollapsibleTimeline>
-        )}
+              <dt className="text-gray-500">Visibility</dt>
+              <dd className="flex items-center gap-2">
+                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                  {ticket.is_private ? 'Private' : 'Public'}
+                </span>
+                {(isAgent || tierCaps.change_visibility) && !ticket.merged_into_id && (
+                  <form action={toggleTicketPrivacyAction}>
+                    <input type="hidden" name="ticket_id" value={ticket.id} />
+                    <button type="submit" className={`px-2 py-0.5 text-xs rounded ${ticket.is_private ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}>
+                      {ticket.is_private ? 'Make Public' : 'Make Private'}
+                    </button>
+                  </form>
+                )}
+              </dd>
 
-        {/* Visible timeline items */}
-        {renderTimelineItems(visibleItems)}
-      </div>
+              {sourceArticle && (
+                <>
+                  <dt className="text-gray-500">From article</dt>
+                  <dd data-testid="source-article">
+                    <Link
+                      href={`/help/${sourceArticle.id}/${sourceArticle.category_name ? generateSlug(sourceArticle.category_name) : 'uncategorized'}/${sourceArticle.slug}`}
+                      className="text-blue-600 hover:text-blue-800 text-xs"
+                    >
+                      {sourceArticle.title}
+                    </Link>
+                  </dd>
+                </>
+              )}
 
-      {/* Reply form (hidden on merged tickets) */}
-      {canReply && !ticket.merged_into_id && (
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-4">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-medium text-gray-900">Reply</h2>
-            {isAgent && aiSuggestedReplyEnabled && (
-              <SuggestReplyButton ticketId={ticket.id} />
+              {profile?.role === 'admin' && !ticket.merged_into_id && (
+                <>
+                  <dt className="text-gray-500">Delete</dt>
+                  <dd>
+                    <DeleteTicketButton ticketId={ticket.id} isClosed={ticket.status === 'closed'} />
+                  </dd>
+                </>
+              )}
+
+              {isAgent && ticket.status === 'closed' && aiGenerateKbArticleEnabled && !ticket.merged_into_id && (
+                <>
+                  <dt className="text-gray-500">KB Article</dt>
+                  <dd>
+                    <GenerateKbArticleButton ticketId={ticket.id} />
+                  </dd>
+                </>
+              )}
+            </dl>
+
+            {/* SLA Indicators (agents only) */}
+            {isAgent && (
+              <div className="mt-3 border-t border-gray-200 pt-3" data-testid="sla-indicators">
+                <h3 className="text-xs font-medium text-gray-500 mb-1">SLA</h3>
+                {slaStatus ? (
+                  <div className="space-y-1 text-xs">
+                    <div className="flex items-center gap-1.5">
+                      <SlaStatusDot status={slaStatus.firstResponse.status} />
+                      <span className="text-gray-500">Response:</span>
+                      {slaStatus.firstResponse.status === 'met' ? (
+                        <span className="text-green-700">✓ {formatMinutesAsHours(slaStatus.firstResponse.elapsedMinutes)}</span>
+                      ) : slaStatus.firstResponse.status === 'breached' && slaStatus.firstResponse.completedAt ? (
+                        <span className="text-red-700">✗ {formatMinutesAsHours(slaStatus.firstResponse.elapsedMinutes)}/{formatMinutesAsHours(slaStatus.firstResponse.targetMinutes)}</span>
+                      ) : (
+                        <span>{formatMinutesAsHours(slaStatus.firstResponse.elapsedMinutes)}/{formatMinutesAsHours(slaStatus.firstResponse.targetMinutes)} ({slaStatus.firstResponse.percentage}%)</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <SlaStatusDot status={slaStatus.resolution.status} />
+                      <span className="text-gray-500">Resolution:</span>
+                      {slaStatus.resolution.status === 'met' ? (
+                        <span className="text-green-700">✓ {formatMinutesAsHours(slaStatus.resolution.elapsedMinutes)}</span>
+                      ) : slaStatus.resolution.status === 'breached' && slaStatus.resolution.completedAt ? (
+                        <span className="text-red-700">✗ {formatMinutesAsHours(slaStatus.resolution.elapsedMinutes)}/{formatMinutesAsHours(slaStatus.resolution.targetMinutes)}</span>
+                      ) : (
+                        <span>{formatMinutesAsHours(slaStatus.resolution.elapsedMinutes)}/{formatMinutesAsHours(slaStatus.resolution.targetMinutes)} ({slaStatus.resolution.percentage}%)</span>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-400">No SLA</p>
+                )}
+              </div>
             )}
-          </div>
-          <ReplyForm ticketId={ticket.id} isAgent={isAgent} />
-        </div>
-      )}
 
-      {/* Note form (agents only, hidden on merged tickets) */}
-      {isAgent && !ticket.merged_into_id && (
-        <div className="mb-6">
-          <NoteForm ticketId={ticket.id} />
-        </div>
-      )}
+            {/* CSAT Rating display */}
+            {(csatRating || canRate) && (
+              <div className="mt-3 border-t border-gray-200 pt-3" data-testid="csat-section">
+                <h3 className="text-xs font-medium text-gray-500 mb-1">CSAT</h3>
+                {csatRating ? (
+                  <div>
+                    <div className="flex items-center gap-1" data-testid="csat-rating-display">
+                      <span className="text-sm">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <span key={star} className={star <= csatRating.rating ? 'text-yellow-400' : 'text-gray-300'}>★</span>
+                        ))}
+                      </span>
+                      <span className="text-xs text-gray-700">{csatRating.rating}/5</span>
+                    </div>
+                    {csatRating.comment && (
+                      <details className="text-xs text-gray-600 mt-1">
+                        <summary className="cursor-pointer text-blue-600 hover:text-blue-800">Comment</summary>
+                        <p className="mt-1 pl-2 border-l-2 border-gray-200">{csatRating.comment}</p>
+                      </details>
+                    )}
+                    {isOwner && isRegularUser && (
+                      <form action={async () => { 'use server'; await requestCsatToken(ticket.id); }}>
+                        <button type="submit" className="mt-1 text-xs text-blue-600 hover:text-blue-800" data-testid="update-rating-link">Update</button>
+                      </form>
+                    )}
+                  </div>
+                ) : canRate ? (
+                  <form action={async () => { 'use server'; await requestCsatToken(ticket.id); }}>
+                    <button type="submit" className="text-xs text-blue-600 hover:text-blue-800" data-testid="rate-ticket-link">Rate this ticket</button>
+                  </form>
+                ) : null}
+              </div>
+            )}
+
+            {/* Tags */}
+            {(ticketTags.length > 0 || ((isAgent || tierCaps.add_remove_tags) && availableTags.length > 0)) && (
+              <div className="mt-3 border-t border-gray-200 pt-3" data-testid="ticket-tags">
+                <div className="flex flex-wrap gap-1">
+                  {ticketTags.map((tag) => {
+                    const textColor = getContrastColor(tag.color);
+                    return (
+                      <span key={tag.id} className="inline-flex items-center gap-0.5">
+                        <span
+                          className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium"
+                          style={{ backgroundColor: tag.color, color: textColor }}
+                        >
+                          {tag.name}
+                        </span>
+                        {(isAgent || tierCaps.add_remove_tags) && (
+                          <form action={removeTagFromTicket} className="inline">
+                            <input type="hidden" name="ticket_id" value={ticket.id} />
+                            <input type="hidden" name="tag_id" value={tag.id} />
+                            <button type="submit" className="text-xs text-gray-400 hover:text-red-500" aria-label={`Remove tag ${tag.name}`}>×</button>
+                          </form>
+                        )}
+                      </span>
+                    );
+                  })}
+                </div>
+                {(isAgent || tierCaps.add_remove_tags) && availableTags.length > 0 && (
+                  <form action={addTagToTicket} className="mt-1.5 flex gap-1 items-center" data-testid="add-tag-form">
+                    <input type="hidden" name="ticket_id" value={ticket.id} />
+                    <select name="tag_id" className="rounded border border-gray-300 px-1.5 py-0.5 text-xs" aria-label="Select tag to add">
+                      {availableTags.map((tag) => (
+                        <option key={tag.id} value={tag.id}>{tag.name}</option>
+                      ))}
+                    </select>
+                    <button type="submit" className="px-1.5 py-0.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200">Add Tag</button>
+                  </form>
+                )}
+              </div>
+            )}
+
+            {/* Follow/Unfollow */}
+            <div className="mt-3 border-t border-gray-200 pt-3" data-testid="follow-section">
+              <div className="flex items-center gap-2">
+                {isTicketOwner ? (
+                  <span className="text-xs text-gray-500">Following (owner)</span>
+                ) : !isBlocked ? (
+                  isFollowing ? (
+                    <form action={unfollowTicket}>
+                      <input type="hidden" name="ticket_id" value={ticket.id} />
+                      <button type="submit" className="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-700 hover:bg-gray-200" data-testid="unfollow-btn">Unfollow</button>
+                    </form>
+                  ) : (
+                    <form action={followTicket}>
+                      <input type="hidden" name="ticket_id" value={ticket.id} />
+                      <button type="submit" className="px-2 py-0.5 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200" data-testid="follow-btn">Follow</button>
+                    </form>
+                  )
+                ) : null}
+                {isAgent && followers.length > 0 && (
+                  <span className="text-xs text-gray-400">{followers.length} follower{followers.length !== 1 ? 's' : ''}</span>
+                )}
+              </div>
+            </div>
+
+            {/* Custom fields */}
+            {customFieldDefs && customFieldDefs.length > 0 && (
+              <div className="mt-3 border-t border-gray-200 pt-3" data-testid="custom-fields">
+                <h3 className="text-xs font-medium text-gray-500 mb-1">Custom Fields</h3>
+                <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+                  {customFieldDefs.map((field) => {
+                    const val = ticketCustomFields[field.name];
+                    const displayVal = field.field_type === 'checkbox'
+                      ? (val ? 'Yes' : 'No')
+                      : val != null ? String(val) : '—';
+                    return (
+                      <div key={field.id} className="contents">
+                        <dt className="text-gray-500">{field.name}</dt>
+                        <dd className="text-gray-900 flex items-center gap-1">
+                          <span>{displayVal}</span>
+                          {(isAgent || isOwner) && (
+                            <details className="inline">
+                              <summary className="text-xs text-blue-600 cursor-pointer">✎</summary>
+                              <form action={updateCustomFieldValue} className="mt-1 flex gap-1 items-center">
+                                <input type="hidden" name="ticket_id" value={ticket.id} />
+                                <input type="hidden" name="field_name" value={field.name} />
+                                {field.field_type === 'text' && (
+                                  <input type="text" name="value" defaultValue={val != null ? String(val) : ''} maxLength={1000} className="rounded border border-gray-300 px-1.5 py-0.5 text-xs w-24" />
+                                )}
+                                {field.field_type === 'number' && (
+                                  <input type="number" name="value" defaultValue={val != null ? String(val) : ''} className="rounded border border-gray-300 px-1.5 py-0.5 text-xs w-20" />
+                                )}
+                                {field.field_type === 'dropdown' && (
+                                  <select name="value" defaultValue={val != null ? String(val) : ''} className="rounded border border-gray-300 px-1.5 py-0.5 text-xs">
+                                    <option value="">Select…</option>
+                                    {(field.options as string[] | null)?.map((opt: string) => (
+                                      <option key={opt} value={opt}>{opt}</option>
+                                    ))}
+                                  </select>
+                                )}
+                                {field.field_type === 'checkbox' && (
+                                  <select name="value" defaultValue={val ? 'true' : 'false'} className="rounded border border-gray-300 px-1.5 py-0.5 text-xs">
+                                    <option value="true">Yes</option>
+                                    <option value="false">No</option>
+                                  </select>
+                                )}
+                                {field.field_type === 'date' && (
+                                  <input type="date" name="value" defaultValue={val != null ? String(val) : ''} className="rounded border border-gray-300 px-1.5 py-0.5 text-xs" />
+                                )}
+                                <button type="submit" className="px-1.5 py-0.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200">Save</button>
+                              </form>
+                            </details>
+                          )}
+                        </dd>
+                      </div>
+                    );
+                  })}
+                </dl>
+              </div>
+            )}
+
+          </div>
+
+          {/* User Notes (agents only, when creator has notes) */}
+          {isAgent && creatorNoteCount > 0 && (
+            <details className="bg-white rounded-lg border border-gray-200 p-4 mb-4" data-testid="user-notes-tab">
+              <summary className="cursor-pointer text-sm font-semibold text-gray-700 uppercase tracking-wider">
+                User Notes
+                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                  {creatorNoteCount}
+                </span>
+              </summary>
+              <div className="mt-4">
+                <Link
+                  href={`/agent/users/${ticket.creator_id}`}
+                  className="text-sm text-blue-600 hover:text-blue-800 mb-3 inline-block"
+                >
+                  Open profile →
+                </Link>
+                <div className="space-y-3">
+                  {creatorNotes.map((note) => (
+                    <div key={note.id} className="border border-gray-200 rounded p-3 text-sm">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-medium text-gray-900">
+                          {note.author?.display_name ?? 'Unknown'}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {new Date(note.created_at).toLocaleDateString()}
+                          {note.edited_at && ' (edited)'}
+                        </span>
+                      </div>
+                      <p className="text-gray-700 whitespace-pre-wrap">{note.body}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </details>
+          )}
+
+          {/* AI Summary panel (agents only) */}
+          {isAgent && aiTicketSummaryEnabled && allPosts.length >= aiTicketSummaryMinPosts && (
+            <div className="mb-4">
+              <AiTicketSummary ticketId={ticket.id} />
+            </div>
+          )}
+
+          {/* Agent ticket information (bottom) */}
+          {isAgent && !ticket.merged_into_id && (
+            <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4" data-testid="agent-info-under-ticket-info">
+              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+                <dt className="text-gray-500">Followers</dt>
+                <dd className="text-gray-900">
+                  {followers.length} follower{followers.length !== 1 ? 's' : ''}
+                </dd>
+                <dt className="text-gray-500">User notes</dt>
+                <dd className="text-gray-900">{creatorNoteCount}</dd>
+                <dt className="text-gray-500">AI summary</dt>
+                <dd className="text-gray-900">
+                  {aiTicketSummaryEnabled && allPosts.length >= aiTicketSummaryMinPosts ? 'Available' : 'Not available'}
+                </dd>
+              </dl>
+            </div>
+          )}
+        </aside>
+      </div>
 
       {/* Realtime subscription for live updates */}
       <RealtimeTicketUpdates ticketId={ticket.id} />

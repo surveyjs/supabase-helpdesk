@@ -192,7 +192,7 @@ test.describe('Ticket Detail Realtime', () => {
     // Create a ticket to verify realtime component is present
     await page.goto('/tickets/new');
     await page.getByLabel('Title').fill('Realtime Test Ticket');
-    await page.locator('textarea, [role="textbox"]').first().fill('Testing realtime updates.');
+    await page.locator('[data-testid="markdown-editor"]').first().locator('textarea[name="textarea"]').fill('Testing realtime updates.');
 
     // Submit form
     await page.getByRole('button', { name: /submit|create/i }).click();

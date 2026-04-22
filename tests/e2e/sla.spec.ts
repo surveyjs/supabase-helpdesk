@@ -116,9 +116,11 @@ test.describe('SLA Indicators on Ticket Detail', () => {
     await page.goto(`/tickets/${ticketId}/${ticketSlug}`);
 
     // SLA section should be visible for agents
-    await expect(page.getByText('SLA Status')).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText('First Response')).toBeVisible();
-    await expect(page.getByText('Resolution')).toBeVisible();
+    const slaSection = page.getByTestId('sla-indicators');
+    await expect(slaSection).toBeVisible({ timeout: 10000 });
+    await expect(slaSection.getByText('SLA')).toBeVisible();
+    await expect(slaSection.getByText('Response:')).toBeVisible();
+    await expect(slaSection.getByText('Resolution:')).toBeVisible();
   });
 
   test('regular user does NOT see SLA indicators', async ({ page }) => {
@@ -127,7 +129,7 @@ test.describe('SLA Indicators on Ticket Detail', () => {
 
     // The ticket title should be visible but SLA should not
     await expect(page.getByText('E2E SLA Indicator Ticket')).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText('SLA Status')).not.toBeVisible();
+    await expect(page.getByTestId('sla-indicators')).not.toBeVisible();
   });
 });
 

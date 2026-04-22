@@ -5,6 +5,32 @@ const SEED_PASSWORD = 'Password123';
 async function loginAs(page: Page, email: string) {
   const { createServiceRoleClient } = await import('../helpers/supabase');
   const svc = createServiceRoleClient();
+
+  // Ensure profile exists so /profile does not redirect through /login back to /.
+  const { data: existingProfile } = await svc
+    .from('profiles')
+    .select('id')
+    .eq('email', email.toLowerCase())
+    .maybeSingle();
+  if (!existingProfile) {
+    const seededUserIds: Record<string, string> = {
+      'admin@example.com': '00000000-0000-0000-0000-000000000011',
+      'alice@example.com': '00000000-0000-0000-0000-000000000014',
+    };
+    const { data: users } = await svc.auth.admin.listUsers({ page: 1, perPage: 500 });
+    const authUser = (users?.users ?? []).find((u) => u.email?.toLowerCase() === email.toLowerCase());
+    const profileId = authUser?.id ?? seededUserIds[email.toLowerCase()];
+    if (profileId) {
+      await svc.from('profiles').upsert({
+        id: profileId,
+        email: email.toLowerCase(),
+        display_name: email.split('@')[0],
+        role: email.toLowerCase().includes('admin') ? 'admin' : 'user',
+      });
+    }
+  }
+
+  await svc.from('app_settings').update({ value: 'built-in' }).eq('key', 'auth_mode');
   await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
 
   await page.goto('/login');
@@ -36,6 +62,11 @@ test.describe('Cross-Browser Smoke Tests', () => {
   });
 
   test('signup page loads', async ({ page }) => {
+    // Ensure built-in auth so the standard signup form (with a Sign up button) renders.
+    const { createServiceRoleClient } = await import('../helpers/supabase');
+    const svc = createServiceRoleClient();
+    await svc.from('app_settings').update({ value: 'built-in' }).eq('key', 'auth_mode');
+
     await page.goto('/signup');
     await expect(page.getByRole('button', { name: /sign up/i })).toBeVisible({ timeout: 10000 });
   });
@@ -55,7 +86,7 @@ test.describe('Cross-Browser Smoke Tests', () => {
 
     // Visit profile
     await page.goto('/profile');
-    await expect(page.getByLabel('Display Name')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { name: 'My Profile' })).toBeVisible({ timeout: 10000 });
   });
 
   test('agent flow works', async ({ page }) => {

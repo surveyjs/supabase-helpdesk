@@ -71,6 +71,30 @@ afterAll(async () => {
 // ============================================================
 
 describe('AI app_settings', () => {
+  const DEFAULTS: Record<string, string> = {
+    ai_provider: '',
+    ai_custom_endpoint_url: '',
+    ai_model: '',
+    ai_request_timeout: '60',
+    ai_auto_categorize_enabled: 'false',
+    ai_auto_categorize_min_body_length: '20',
+    ai_duplicate_detection_enabled: 'false',
+    ai_duplicate_detection_threshold: 'medium',
+    ai_suggested_reply_enabled: 'false',
+    ai_suggested_reply_context_window: '20',
+    ai_suggested_reply_rate_limit: '20',
+    ai_ticket_summary_enabled: 'false',
+    ai_ticket_summary_min_posts: '10',
+    ai_generate_kb_article_enabled: 'false',
+  };
+
+  beforeAll(async () => {
+    // Reset AI settings to migration defaults before testing them
+    for (const [key, value] of Object.entries(DEFAULTS)) {
+      await svc.from('app_settings').update({ value }).eq('key', key);
+    }
+  });
+
   const AI_KEYS = [
     'ai_provider',
     'ai_custom_endpoint_url',

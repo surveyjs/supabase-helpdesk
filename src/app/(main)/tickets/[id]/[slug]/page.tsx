@@ -46,6 +46,8 @@ import { SuggestReplyButton } from './SuggestReplyButton';
 import { AiTicketSummary } from './AiTicketSummary';
 import { GenerateKbArticleButton } from './GenerateKbArticleButton';
 import { TicketTabs } from './TicketTabs';
+import { MarkAsDuplicateForm } from './MarkAsDuplicateForm';
+import { MergeTicketForm } from './MergeTicketForm';
 
 function getContrastColor(hex: string): string {
   const c = hex.replace('#', '');
@@ -976,12 +978,22 @@ export default async function TicketDetailPage({
                       <input type="hidden" name="ticket_id" value={ticket.id} />
                       <select
                         name="agent_id"
+                        aria-label="Select agent"
                         className="flex-1 rounded border border-gray-300 px-1.5 py-0.5 text-xs"
                       >
                         {allAgents.map((a) => (
                           <option key={a.id} value={a.id}>{a.display_name ?? 'Agent'} ({a.email})</option>
                         ))}
                       </select>
+                      {ticket.assigned_agent_id && (
+                        <input
+                          type="text"
+                          name="reason"
+                          placeholder="Reason (optional)"
+                          aria-label="Reassignment reason"
+                          className="w-32 rounded border border-gray-300 px-1.5 py-0.5 text-xs"
+                        />
+                      )}
                       <button type="submit" className="px-1.5 py-0.5 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200">
                         {ticket.assigned_agent_id ? 'Reassign' : 'Assign'}
                       </button>
@@ -991,6 +1003,18 @@ export default async function TicketDetailPage({
                   <span>{assignedAgentName ?? 'Unassigned'}</span>
                 )}
               </dd>
+
+              {isAgent && !ticket.merged_into_id && !ticket.duplicate_of_id && (
+                <>
+                  <dt className="text-gray-500">Advanced</dt>
+                  <dd>
+                    <div className="flex flex-wrap gap-2">
+                      <MarkAsDuplicateForm ticketId={ticket.id} />
+                      <MergeTicketForm ticketId={ticket.id} />
+                    </div>
+                  </dd>
+                </>
+              )}
 
               <dt className="text-gray-500">Created</dt>
               <dd className="text-gray-900" title={new Date(ticket.created_at).toLocaleString()}>
@@ -1151,7 +1175,7 @@ export default async function TicketDetailPage({
                         <option key={tag.id} value={tag.id}>{tag.name}</option>
                       ))}
                     </select>
-                    <button type="submit" className="px-1.5 py-0.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200">Add</button>
+                    <button type="submit" className="px-1.5 py-0.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200">Add Tag</button>
                   </form>
                 )}
               </div>

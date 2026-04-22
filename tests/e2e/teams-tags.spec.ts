@@ -125,7 +125,7 @@ test.describe('Tag Display and Management', () => {
       (resp) => resp.request().method() === 'POST' && resp.status() < 400,
       { timeout: 15000 },
     );
-    await addTagForm.getByRole('button', { name: 'Add Tag' }).click();
+    await addTagForm.getByRole('button', { name: /Add/ }).click();
     await responsePromise;
 
     // Reload to get fresh server-rendered page after revalidatePath

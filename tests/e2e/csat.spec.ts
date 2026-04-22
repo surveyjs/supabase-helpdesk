@@ -199,6 +199,22 @@ test.describe('CSAT on Ticket Detail', () => {
   test.beforeAll(async () => {
     const svc = createServiceRoleClient();
 
+    // Pre-cleanup: remove any stale ticket left over from a prior interrupted run.
+    const { data: stale } = await svc
+      .from('tickets')
+      .select('id')
+      .eq('slug', 'e2e-csat-detail-ticket')
+      .limit(1)
+      .maybeSingle();
+    if (stale) {
+      await svc.from('csat_ratings').delete().eq('ticket_id', stale.id);
+      await svc.from('csat_survey_schedule').delete().eq('ticket_id', stale.id);
+      await svc.from('activity_log').delete().eq('ticket_id', stale.id);
+      await svc.from('ticket_followers').delete().eq('ticket_id', stale.id);
+      await svc.from('posts').delete().eq('ticket_id', stale.id);
+      await svc.from('tickets').delete().eq('id', stale.id);
+    }
+
     const { data: alice } = await svc
       .from('profiles')
       .select('id')
@@ -299,6 +315,19 @@ test.describe('CSAT on Ticket Detail', () => {
   });
 
   test('"Update rating" link appears after rating is submitted', async ({ page }) => {
+    const svc = createServiceRoleClient();
+
+    // Self-heal for isolated/retry runs: ensure an existing submitted rating is present.
+    const token = crypto.randomBytes(32).toString('hex');
+    await svc.from('csat_ratings').insert({
+      ticket_id: ticketId,
+      token,
+      token_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      is_used: true,
+      rating: 5,
+      submitted_at: new Date().toISOString(),
+    });
+
     await loginAs(page, 'alice@example.com');
     await page.goto(`/tickets/${ticketId}/${ticketSlug}`);
 
@@ -350,10 +379,15 @@ test.describe('CSAT Admin Settings', () => {
     await page.getByTestId('csat-delay-4_hours').click();
     await page.getByTestId('csat-save-btn').click();
 
-    // Verify saved
-    await page.waitForTimeout(1000);
+    // Verify saved using polling (more reliable than fixed sleep).
     const svc = createServiceRoleClient();
-    const { data } = await svc.from('app_settings').select('value').eq('key', 'csat_survey_delay').single();
-    expect(data!.value).toBe('4_hours');
+    await expect.poll(async () => {
+      const { data } = await svc
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'csat_survey_delay')
+        .single();
+      return data?.value;
+    }, { timeout: 10000 }).toBe('4_hours');
   });
 });

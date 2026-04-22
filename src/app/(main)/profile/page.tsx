@@ -10,11 +10,23 @@ export default async function ProfilePage() {
   const user = await requireAuth();
   const supabase = await createServerClient();
 
-  const { data: profile } = await supabase
+  const profileSelect = 'id, email, display_name, role, team_id, created_at, editor_view_mode';
+  const { data: profileWithEditorMode, error: profileError } = await supabase
     .from('profiles')
-    .select('id, email, display_name, role, team_id, created_at, editor_view_mode')
+    .select(profileSelect)
     .eq('id', user.id)
     .single();
+
+  // Older local DBs may not have editor_view_mode yet; fall back without it.
+  let profile = profileWithEditorMode;
+  if (profileError?.code === '42703') {
+    const { data: profileWithoutEditorMode } = await supabase
+      .from('profiles')
+      .select('id, email, display_name, role, team_id, created_at')
+      .eq('id', user.id)
+      .single();
+    profile = profileWithoutEditorMode ? { ...profileWithoutEditorMode, editor_view_mode: null } : null;
+  }
 
   if (!profile) redirect('/login');
 

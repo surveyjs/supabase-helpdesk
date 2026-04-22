@@ -165,7 +165,7 @@ test.describe('Ticket creation form AI features', () => {
     await page.goto('/tickets/new');
 
     await expect(page.getByLabel('Title')).toBeVisible();
-    await expect(page.getByLabel(/description/i)).toBeVisible();
+    await expect(page.locator('[data-testid="markdown-editor"]').first().locator('textarea[name="textarea"]')).toBeVisible();
 
     // No AI suggested labels should appear
     await expect(page.getByTestId('ai-suggested-type')).not.toBeVisible();

@@ -11,8 +11,8 @@ type MdEditorLibWithUse = {
 };
 
 function registerEditorPlugins() {
-  const usePlugin = (MdEditorLib as unknown as MdEditorLibWithUse).use;
-  usePlugin(CannedResponsePlugin);
+  const registerPluginFn = (MdEditorLib as unknown as MdEditorLibWithUse).use;
+  registerPluginFn(CannedResponsePlugin);
 }
 
 // Register custom plugins once at module load.

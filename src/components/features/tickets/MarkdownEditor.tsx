@@ -6,8 +6,17 @@ import MarkdownIt from 'markdown-it';
 import MdEditorLib from 'react-markdown-editor-lite';
 import CannedResponsePlugin from './CannedResponsePlugin';
 
-// Register custom plugins
-MdEditorLib.use(CannedResponsePlugin);
+type MdEditorLibWithUse = {
+  use: (plugin: unknown) => void;
+};
+
+function registerEditorPlugins() {
+  const usePlugin = (MdEditorLib as unknown as MdEditorLibWithUse).use;
+  usePlugin(CannedResponsePlugin);
+}
+
+// Register custom plugins once at module load.
+registerEditorPlugins();
 
 // Import react-markdown-editor-lite with SSR disabled (it depends on browser APIs)
 const MdEditor = dynamic(() => import('react-markdown-editor-lite'), { ssr: false });

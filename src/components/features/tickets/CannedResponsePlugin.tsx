@@ -15,16 +15,12 @@ class CannedResponsePlugin extends PluginComponent<CannedState> {
 
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
   private containerRef: HTMLSpanElement | null = null;
+  state: CannedState = { open: false, query: '', results: [] };
   private handleOutsideClick = (e: MouseEvent) => {
     if (this.containerRef && !this.containerRef.contains(e.target as Node)) {
       this.setState({ open: false });
     }
   };
-
-  constructor(props: any) {
-    super(props);
-    this.state = { open: false, query: '', results: [] };
-  }
 
   componentDidMount() {
     document.addEventListener('mousedown', this.handleOutsideClick);

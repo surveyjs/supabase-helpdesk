@@ -112,7 +112,7 @@ test.describe('Subscription Tiers', () => {
   test('agent dashboard shows tier filter when tiers exist', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
-    await expect(page.getByRole('heading', { name: 'Agent Dashboard' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('link', { name: 'Agent Dashboard' })).toHaveAttribute('aria-current', 'page');
 
     // There should be a tier filter dropdown
     const tierFilter = page.getByLabel('Tier');
@@ -122,7 +122,7 @@ test.describe('Subscription Tiers', () => {
   test('agent dashboard shows tier badge for tiered users', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
-    await expect(page.getByRole('heading', { name: 'Agent Dashboard' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('link', { name: 'Agent Dashboard' })).toHaveAttribute('aria-current', 'page');
 
     // At least one tier badge should be visible (Alice has Enterprise tier from seed)
     const badges = page.getByTestId('tier-badge');
@@ -133,7 +133,7 @@ test.describe('Subscription Tiers', () => {
   test('tier filter filters tickets by tier', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
-    await expect(page.getByRole('heading', { name: 'Agent Dashboard' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('link', { name: 'Agent Dashboard' })).toHaveAttribute('aria-current', 'page');
 
     // Filter by "No tier"
     await page.getByLabel('Tier').selectOption('none');

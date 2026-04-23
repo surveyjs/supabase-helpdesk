@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { isActivePath } from './nav-utils';
 
 interface MobileMenuProps {
   links: { href: string; label: string }[];
@@ -10,6 +12,7 @@ interface MobileMenuProps {
 export function MobileMenu({ links }: MobileMenuProps) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const pathname = usePathname();
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
@@ -60,17 +63,25 @@ export function MobileMenu({ links }: MobileMenuProps) {
           aria-label="Mobile navigation"
         >
           <ul className="flex flex-col">
-            {links.map((link) => (
-              <li key={link.href}>
-                <Link
-                  href={link.href}
-                  className="block px-4 py-3 min-h-[44px] text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 focus-visible:outline-none"
-                  onClick={() => setOpen(false)}
-                >
-                  {link.label}
-                </Link>
-              </li>
-            ))}
+            {links.map((link) => {
+              const active = isActivePath(pathname, link.href);
+              return (
+                <li key={link.href}>
+                  <Link
+                    href={link.href}
+                    className={`block px-4 py-3 min-h-[44px] text-sm focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 focus-visible:outline-none ${
+                      active
+                        ? 'bg-blue-50 text-blue-700 font-medium'
+                        : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                    }`}
+                    aria-current={active ? 'page' : undefined}
+                    onClick={() => setOpen(false)}
+                  >
+                    {link.label}
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         </nav>
       )}

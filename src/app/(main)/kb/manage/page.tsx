@@ -83,16 +83,6 @@ export default async function KbManagePage({
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Manage Articles</h1>
-        <Link
-          href="/kb/manage/new"
-          className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
-        >
-          New Article
-        </Link>
-      </div>
-
       {/* KB Visibility toggle */}
       <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
         <form action={toggleKbVisibility} className="flex items-center gap-3">
@@ -168,6 +158,12 @@ export default async function KbManagePage({
           >
             Filter
           </button>
+          <Link
+            href="/kb/manage/new"
+            className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            New Article
+          </Link>
         </form>
       </div>
 

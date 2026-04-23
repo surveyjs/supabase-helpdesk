@@ -141,14 +141,14 @@ test.describe('SLA on Agent Dashboard', () => {
   test('agent dashboard shows SLA column header', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
-    await expect(page.getByRole('heading', { name: 'Agent Dashboard' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('link', { name: 'Agent Dashboard' })).toHaveAttribute('aria-current', 'page');
     await expect(page.getByText('SLA', { exact: true })).toBeVisible();
   });
 
   test('SLA Risk sort option is available', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
-    await expect(page.getByRole('heading', { name: 'Agent Dashboard' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('link', { name: 'Agent Dashboard' })).toHaveAttribute('aria-current', 'page');
 
     const sortSelect = page.getByLabel('Sort');
     await expect(sortSelect).toBeVisible();
@@ -162,7 +162,7 @@ test.describe('SLA on Agent Dashboard', () => {
   test('sorting by SLA Risk works', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
-    await expect(page.getByRole('heading', { name: 'Agent Dashboard' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('link', { name: 'Agent Dashboard' })).toHaveAttribute('aria-current', 'page');
 
     await page.getByLabel('Sort').selectOption('sla');
     await page.getByRole('button', { name: 'Apply Filters' }).click();

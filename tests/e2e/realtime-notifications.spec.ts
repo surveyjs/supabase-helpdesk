@@ -177,7 +177,7 @@ test.describe('Agent Dashboard Realtime', () => {
   test('agent dashboard page loads with realtime component', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
-    await expect(page.getByRole('heading', { name: 'Agent Dashboard' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('link', { name: 'Agent Dashboard' })).toHaveAttribute('aria-current', 'page');
   });
 });
 

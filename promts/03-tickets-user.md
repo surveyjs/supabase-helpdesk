@@ -141,7 +141,8 @@ Create migration **`supabase/migrations/003_tickets.sql`**:
 - Status filter (All / Active / Closed)
 - Search field (search by title or original post body)
 - Search and filter use URL search params
-- "Create Ticket" button
+- No page title heading (to avoid duplicating the selected top-nav label)
+- "New Ticket" action is placed inside the search/filter control row (not a separate page header)
 - **"Browse Public Tickets" link** (navigates to `/tickets/public`, per requirement 3.7)
 - Empty state if no tickets (friendly message + link to create)
 - Page size: default 20 (will be configurable by admin in Phase 7)
@@ -175,7 +176,7 @@ Create migration **`supabase/migrations/003_tickets.sql`**:
 
 ### 5. NavBar Update
 
-NavBar was already updated in Phase 2 with "My Tickets" link and role badges. **No NavBar changes needed in Phase 3.** (Phase 7 may add a "Browse Tickets" link for unauthenticated visitors per req §1.5/16.10.)
+Nav links use active-state highlighting for the selected section (`aria-current="page"`, active styling) in both desktop and mobile nav menus. (Phase 7 may add a "Browse Tickets" link for unauthenticated visitors per req §1.5/16.10.)
 
 ### 5a. Seed Data Update
 

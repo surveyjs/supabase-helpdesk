@@ -53,7 +53,7 @@ test.describe('Agent Dashboard', () => {
   test('dashboard loads with all tickets', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
-    await expect(page.getByRole('heading', { name: 'Agent Dashboard' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('link', { name: 'Agent Dashboard' })).toHaveAttribute('aria-current', 'page');
     // Should show result count
     await expect(page.getByTestId('result-count')).toBeVisible();
     const resultText = await page.getByTestId('result-count').textContent();

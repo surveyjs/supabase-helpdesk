@@ -101,7 +101,7 @@ export default async function AgentDashboardPage({
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold text-gray-900 mb-4">Agent Dashboard</h1>
+      <h1 className="sr-only">Agent Dashboard</h1>
 
       {/* Stats Panel */}
       <details className="mb-6 bg-white rounded-lg border border-gray-200">

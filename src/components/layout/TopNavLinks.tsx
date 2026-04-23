@@ -2,16 +2,12 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { isActivePath } from './nav-utils';
 
 type NavLink = {
   href: string;
   label: string;
 };
-
-function isActivePath(pathname: string, href: string): boolean {
-  if (href === '/') return pathname === '/';
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
 
 export function TopNavLinks({ links }: { links: NavLink[] }) {
   const pathname = usePathname();

@@ -170,7 +170,7 @@ export default async function MyTicketsPage({
 
         <Link
           href="/tickets/new"
-          className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+          className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
         >
           New Ticket
         </Link>

@@ -103,6 +103,7 @@ Phases 0–3 are complete: project init, database schema, authentication, and us
 **`src/app/(main)/agent/page.tsx`** — Agent Dashboard:
 - Require agent role (redirect non-agents)
 - Show all tickets from `agent_tickets` VIEW
+- No page title heading (top navigation already indicates the section)
 - Each row: title (link to detail), submitter display name (**never email** — 8.2), last-updated, post count, urgency badge, severity badge, status badge
 - **Important:** The `agent_tickets` VIEW includes `creator_email` for server-side filtering (8.5) only. Emails must NOT be rendered in the ticket list.
 - Filter bar at the top:
@@ -163,6 +164,7 @@ When the current user is an agent, show additional controls:
 Update NavBar to show:
 - "Agent Dashboard" link in the top-level navigation bar (visible only to agents/admins)
 - "My Tickets", "Reports", and "Canned Responses" links are NOT in the top-level nav for agents/admins — they go in the user menu dropdown (see Phase 2 NavBar spec)
+- Selected top-level links are visually highlighted and set `aria-current="page"` on desktop and mobile.
 
 ### 6. Tests
 
@@ -205,6 +207,7 @@ Update NavBar to show:
 - Agent stats panel: collapse/expand toggle works
 - Agent stats panel shows correct assigned/resolved counts
 - Agent stats panel shows "N/A" for CSAT and SLA metrics
+- E2E nav assertions should rely on active nav link state (`aria-current="page"`) rather than a page heading.
 
 ## Deferred Features (Added by Later Phases)
 

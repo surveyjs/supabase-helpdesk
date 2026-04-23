@@ -77,7 +77,8 @@ test.describe('Cross-Browser Smoke Tests', () => {
 
     // View ticket list
     await page.goto('/tickets');
-    await expect(page.locator('h1, [data-testid="ticket-list"]')).toBeVisible({ timeout: 10000 });
+    // The tickets page no longer has an h1 — verify the search form is rendered
+    await expect(page.locator('[aria-label="Search tickets"]')).toBeVisible({ timeout: 10000 });
 
     // Visit help center
     await page.goto('/help');

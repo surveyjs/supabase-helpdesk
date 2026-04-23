@@ -215,6 +215,7 @@ ON CONFLICT (key) DO NOTHING;
 
 **`src/app/(main)/help/page.tsx`** — Help center landing page:
 - Check `kb_visible` setting — if disabled, return 404
+- No page title heading (the selected nav item already labels the section)
 - List all KB categories with published article counts, ordered by `display_order`
 - Search bar at the top — navigates to `/help?q={query}`
 - When search query present: show paginated search results instead of category listing
@@ -243,6 +244,7 @@ ON CONFLICT (key) DO NOTHING;
 
 **`src/app/(main)/kb/manage/page.tsx`** — Agent article management:
 - Require agent role
+- No page title heading (the selected nav item already labels the section)
 - **"Knowledge base visible to public"** checkbox at top:
   - All agents can see the current state
   - Only admins can toggle it (disabled for non-admin agents, §19.5)
@@ -252,7 +254,7 @@ ON CONFLICT (key) DO NOTHING;
 - Filter by status, category
 - Search by title
 - Each row: link to edit, button to change status, delete button
-- "New Article" button → article editor page
+- "New Article" action is in the same filter/search control row → article editor page
 
 **`src/app/(main)/kb/manage/[id]/page.tsx`** — Article editor:
 - Require agent role
@@ -320,6 +322,10 @@ Update `src/components/layout/NavBar.tsx`:
   - Visible only to agents/admins
   - Links to `/kb/manage`
 
+- Active selected nav links:
+  - Apply active styling for selected top-level links on desktop and mobile nav
+  - Add `aria-current="page"` to the selected nav link
+
 Update the Admin Setup sidebar navigation to include the "KB Categories" link.
 
 ### 9. Seed Data
@@ -371,6 +377,7 @@ Extend `supabase/seed.sql` per `docs/seed-data.md`:
 - Article editor: create, edit, change status, delete
 - KB categories admin: create, rename, reorder, delete
 - KB visibility toggle: admin can toggle, agent sees read-only
+- Nav active-state checks should use `aria-current="page"` on "Help Center" and "Manage Articles" links instead of page heading assertions
 
 ## Implementation Notes
 

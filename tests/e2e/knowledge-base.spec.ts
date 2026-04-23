@@ -54,7 +54,7 @@ test.describe('Help Center – Public', () => {
 
   test('help center page loads with categories', async ({ page }) => {
     await page.goto('/help');
-    await expect(page.getByRole('heading', { name: 'Help Center' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('link', { name: 'Help Center' })).toHaveAttribute('aria-current', 'page');
     await expect(page.getByText('Getting Started')).toBeVisible();
     await expect(page.getByText('Troubleshooting')).toBeVisible();
   });
@@ -370,7 +370,7 @@ test.describe('Article Management', () => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/kb/manage');
 
-    await expect(page.getByRole('heading', { name: 'Manage Articles' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('link', { name: 'Manage Articles' })).toHaveAttribute('aria-current', 'page');
     // Should show seed articles
     await expect(page.getByText('How to create a ticket')).toBeVisible();
     await expect(page.getByText('Understanding ticket statuses')).toBeVisible();
@@ -482,7 +482,8 @@ test.describe('Article Management', () => {
     await page.getByRole('button', { name: /Delete/ }).click();
 
     // Should redirect to manage page (not the edit page)
-    await expect(page.getByRole('heading', { name: 'Manage Articles' })).toBeVisible({ timeout: 10000 });
+    await expect(page).toHaveURL(/\/kb\/manage$/, { timeout: 10000 });
+    await expect(page.getByRole('link', { name: 'Manage Articles' })).toHaveAttribute('aria-current', 'page');
 
     // Verify deletion
     const svc = createServiceRoleClient();
@@ -512,11 +513,11 @@ test.describe('KB visibility toggle', () => {
 
     // Verify page loaded (may need retry if session was lost during navigation)
     try {
-      await expect(page.getByRole('heading', { name: 'Manage Articles' })).toBeVisible({ timeout: 10000 });
+      await expect(page.getByRole('link', { name: 'Manage Articles' })).toHaveAttribute('aria-current', 'page');
     } catch {
       await loginAs(page, 'admin@example.com');
       await page.goto('/kb/manage');
-      await expect(page.getByRole('heading', { name: 'Manage Articles' })).toBeVisible({ timeout: 10000 });
+      await expect(page.getByRole('link', { name: 'Manage Articles' })).toHaveAttribute('aria-current', 'page');
     }
 
     await expect(page.getByText('Knowledge base visible to public')).toBeVisible({ timeout: 10000 });

@@ -29,8 +29,6 @@ export default async function HelpCenterPage({
 
     return (
       <div>
-        <h1 className="text-2xl font-semibold text-gray-900 mb-6">Help Center</h1>
-
         {/* Search bar */}
         <form action="/help" method="GET" className="mb-6">
           <div className="flex gap-2">
@@ -126,8 +124,6 @@ export default async function HelpCenterPage({
 
     return (
       <div>
-        <h1 className="text-2xl font-semibold text-gray-900 mb-6">Help Center</h1>
-
         {/* Search bar */}
         <form action="/help" method="GET" className="mb-6">
           <div className="flex gap-2">
@@ -192,8 +188,6 @@ export default async function HelpCenterPage({
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold text-gray-900 mb-6">Help Center</h1>
-
       {/* Search bar */}
       <form action="/help" method="GET" className="mb-6">
         <div className="flex gap-2">

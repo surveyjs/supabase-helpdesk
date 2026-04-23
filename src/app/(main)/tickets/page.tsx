@@ -104,18 +104,6 @@ export default async function MyTicketsPage({
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">
-          {isTeamView ? 'Team Tickets' : 'My Tickets'}
-        </h1>
-        <Link
-          href="/tickets/new"
-          className="bg-blue-600 text-white rounded px-4 py-2 text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-        >
-          Create Ticket
-        </Link>
-      </div>
-
       {/* Team toggle */}
       {hasTeam && (
         <div className="flex gap-2 mb-4" data-testid="team-toggle">
@@ -179,6 +167,13 @@ export default async function MyTicketsPage({
             </Link>
           )}
         </form>
+
+        <Link
+          href="/tickets/new"
+          className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+        >
+          New Ticket
+        </Link>
       </div>
 
       <div className="mb-4">

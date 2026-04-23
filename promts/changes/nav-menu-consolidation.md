@@ -14,6 +14,7 @@ Consolidate the navigation bar by moving role-specific links and the Sign out ac
 - "Agent Dashboard" → `/agent` (visible to agents/admins)
 - "Help Center" → `/help` (if KB is enabled)
 - "Manage Articles" → `/kb/manage` (visible to agents/admins)
+- Selected top-level link is highlighted and marked with `aria-current="page"` on both desktop and mobile menus.
 
 **User menu dropdown (right side, `<details>`/`<summary>`):**
 - Summary: `{displayName}` + role badge + chevron
@@ -32,6 +33,13 @@ Consolidate the navigation bar by moving role-specific links and the Sign out ac
 - Top-level "Reports" link (moved to dropdown)
 - Top-level "Canned Responses" link (moved to dropdown)
 - Top-level "My Tickets" link for agents/admins (moved to dropdown; remains top-level for regular users)
+
+### Page Header De-duplication
+
+For nav-driven top-level sections (`/tickets`, `/agent`, `/help`, `/kb/manage`):
+- Remove repeated visible page title headings when they duplicate the selected nav label.
+- Keep content sections and filter/search controls intact.
+- Place contextual primary actions in the filter/search control row (e.g., "New Ticket", "New Article") instead of a separate page title header row.
 
 ### E2E Test Updates
 

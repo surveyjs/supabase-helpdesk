@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 interface MobileMenuProps {
   links: { href: string; label: string }[];
@@ -10,6 +11,12 @@ interface MobileMenuProps {
 export function MobileMenu({ links }: MobileMenuProps) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const pathname = usePathname();
+
+  function isActivePath(href: string): boolean {
+    if (href === '/') return pathname === '/';
+    return pathname === href || pathname.startsWith(`${href}/`);
+  }
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
@@ -64,7 +71,12 @@ export function MobileMenu({ links }: MobileMenuProps) {
               <li key={link.href}>
                 <Link
                   href={link.href}
-                  className="block px-4 py-3 min-h-[44px] text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 focus-visible:outline-none"
+                  className={`block px-4 py-3 min-h-[44px] text-sm focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 focus-visible:outline-none ${
+                    isActivePath(link.href)
+                      ? 'bg-blue-50 text-blue-700 font-medium'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+                  }`}
+                  aria-current={isActivePath(link.href) ? 'page' : undefined}
                   onClick={() => setOpen(false)}
                 >
                   {link.label}

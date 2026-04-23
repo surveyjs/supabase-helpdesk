@@ -5,6 +5,7 @@ import { getUnreadCount } from '@/lib/actions/notifications';
 import { NotificationBell } from '@/components/features/notifications/NotificationBell';
 import { createServerClient } from '@/lib/supabase/server';
 import { MobileMenu } from './MobileMenu';
+import { TopNavLinks } from './TopNavLinks';
 
 function RoleBadge({ role }: { role: string }) {
   if (role === 'admin') {
@@ -81,17 +82,7 @@ export default async function NavBar() {
           {/* Mobile hamburger */}
           <MobileMenu links={navLinks} />
           {/* Desktop links */}
-          <div className="hidden md:flex items-center gap-4">
-            {navLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="text-sm text-gray-600 hover:text-gray-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none rounded px-1"
-              >
-                {link.label}
-              </Link>
-            ))}
-          </div>
+          <TopNavLinks links={navLinks} />
         </div>
 
         {/* Right side */}

@@ -61,8 +61,10 @@ test.describe('Team Tickets', () => {
     await loginAs(page, 'alice@example.com');
     await page.goto('/tickets?view=team');
 
-    // The heading should say Team Tickets
-    await expect(page.getByRole('heading', { name: 'Team Tickets' })).toBeVisible({ timeout: 10000 });
+    // Confirm team view is active (the "Team Tickets" tab is highlighted)
+    await expect(page.getByTestId('team-toggle')).toBeVisible({ timeout: 10000 });
+    const teamBtn = page.getByTestId('team-toggle').getByRole('link', { name: 'Team Tickets' });
+    await expect(teamBtn).toHaveClass(/bg-blue-600/, { timeout: 10000 });
 
     // Alice is on Alice's Team with Bob and Carol
     // Should see tickets from all team members with "by" display names

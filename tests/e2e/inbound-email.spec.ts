@@ -107,6 +107,7 @@ test.describe('Inbound Email Admin Configuration', () => {
     const toggle = page.getByLabel(/Enable inbound email/i);
     await toggle.setChecked(true);
     await page.getByRole('button', { name: 'Save' }).click();
+    await page.waitForLoadState('networkidle');
 
     // Verify saved in DB (more stable than asserting transient toast timing).
     const svc = createServiceRoleClient();
@@ -117,7 +118,7 @@ test.describe('Inbound Email Admin Configuration', () => {
         .eq('key', 'inbound_email_enabled')
         .single();
       return data?.value;
-    }, { timeout: 15000 }).toBe('true');
+    }, { timeout: 20000 }).toBe('true');
 
     // Reload and verify persisted
     await page.reload();

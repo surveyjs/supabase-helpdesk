@@ -289,6 +289,7 @@ test.describe('CSAT on Ticket Detail', () => {
 
     // Agent should see the ticket but not the rate link
     await expect(page.getByRole('heading', { name: 'E2E CSAT Detail Ticket' })).toBeVisible({ timeout: 10000 });
+    await page.waitForLoadState('networkidle');
     await expect(page.getByTestId('rate-ticket-link')).not.toBeVisible();
   });
 

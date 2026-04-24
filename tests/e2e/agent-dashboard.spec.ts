@@ -499,26 +499,29 @@ test.describe('Consolidated Views & Filters Panel', () => {
   });
 
   test('delete saved view (not Default)', async ({ page }) => {
+    const token = Date.now();
+    const viewName = `To Delete ${token}`;
+
     await loginAs(page, 'agent.smith@example.com');
-    await page.goto('/agent');
+    await page.goto('/agent?status=open');
 
     // Expand panel
     await page.getByText(/Views & Filters:/).click();
 
-    // Create a view
-    await page.getByLabel('Saved view name').fill('To Delete');
+    // Create a view with a unique name
+    await page.getByLabel('Saved view name').fill(viewName);
     await page.getByRole('button', { name: 'Save View' }).click();
     await page.waitForTimeout(1000);
 
     // View should exist
-    await expect(page.getByRole('link', { name: 'To Delete' })).toBeVisible();
+    await expect(page.getByRole('link', { name: viewName })).toBeVisible({ timeout: 10000 });
 
     // Delete it
-    await page.getByLabel('Delete saved view To Delete').click();
+    await page.getByLabel(`Delete saved view ${viewName}`).click();
     await page.waitForTimeout(1000);
 
     // View should be gone
-    await expect(page.getByRole('link', { name: 'To Delete' })).not.toBeVisible();
+    await expect(page.getByRole('link', { name: viewName })).not.toBeVisible();
   });
 
   test('cannot delete Default view (no delete button for Default)', async ({ page }) => {
@@ -587,7 +590,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
     await page.getByText(/Views & Filters:/).click();
     await page.getByLabel('Status').selectOption('closed');
     await page.getByRole('button', { name: 'Apply Filters' }).click();
-    await page.waitForTimeout(500);
+    await page.waitForURL(/status=closed/, { timeout: 10000 });
 
     // Verify filter applied
     await expect(page).toHaveURL(/status=closed/);
@@ -597,11 +600,11 @@ test.describe('Consolidated Views & Filters Panel', () => {
     if (await tickets.count() > 0) {
       const firstLink = tickets.first().getByRole('link').first();
       await firstLink.click();
-      await page.waitForTimeout(1000);
+      await page.waitForURL(/\/tickets\//, { timeout: 10000 });
 
       // Go back
       await page.goBack();
-      await page.waitForTimeout(500);
+      await page.waitForURL(/status=closed/, { timeout: 10000 });
 
       // Should still have status=closed in URL
       await expect(page).toHaveURL(/status=closed/);

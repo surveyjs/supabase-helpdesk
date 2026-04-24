@@ -289,6 +289,7 @@ test.describe('CSAT on Ticket Detail', () => {
 
     // Agent should see the ticket but not the rate link
     await expect(page.getByRole('heading', { name: 'E2E CSAT Detail Ticket' })).toBeVisible({ timeout: 10000 });
+    await page.waitForLoadState('networkidle');
     await expect(page.getByTestId('rate-ticket-link')).not.toBeVisible();
   });
 
@@ -351,8 +352,6 @@ test.describe('CSAT Admin Settings', () => {
 
   test('CSAT settings page loads for admin', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.locator('details summary').click();
-    await expect(page.getByRole('menuitem', { name: 'Setup' })).toBeVisible({ timeout: 10000 });
     await gotoAdmin(page, '/admin/csat');
 
     await expect(page.getByRole('heading', { name: 'CSAT Settings' })).toBeVisible({ timeout: 10000 });

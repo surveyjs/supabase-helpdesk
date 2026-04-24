@@ -114,6 +114,9 @@ test.describe('Subscription Tiers', () => {
     await page.goto('/agent');
     await expect(page.getByRole('link', { name: 'Agent Dashboard' })).toHaveAttribute('aria-current', 'page');
 
+    // Expand the consolidated Views & Filters panel
+    await page.getByText(/Views & Filters:/).click();
+
     // There should be a tier filter dropdown
     const tierFilter = page.getByLabel('Tier');
     await expect(tierFilter).toBeVisible({ timeout: 5000 });
@@ -134,6 +137,9 @@ test.describe('Subscription Tiers', () => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
     await expect(page.getByRole('link', { name: 'Agent Dashboard' })).toHaveAttribute('aria-current', 'page');
+
+    // Expand the consolidated Views & Filters panel
+    await page.getByText(/Views & Filters:/).click();
 
     // Filter by "No tier"
     await page.getByLabel('Tier').selectOption('none');

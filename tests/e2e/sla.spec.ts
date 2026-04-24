@@ -150,6 +150,9 @@ test.describe('SLA on Agent Dashboard', () => {
     await page.goto('/agent');
     await expect(page.getByRole('link', { name: 'Agent Dashboard' })).toHaveAttribute('aria-current', 'page');
 
+    // Expand the consolidated Views & Filters panel
+    await page.getByText(/Views & Filters:/).click();
+
     const sortSelect = page.getByLabel('Sort');
     await expect(sortSelect).toBeVisible();
 
@@ -163,6 +166,9 @@ test.describe('SLA on Agent Dashboard', () => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
     await expect(page.getByRole('link', { name: 'Agent Dashboard' })).toHaveAttribute('aria-current', 'page');
+
+    // Expand the consolidated Views & Filters panel
+    await page.getByText(/Views & Filters:/).click();
 
     await page.getByLabel('Sort').selectOption('sla');
     await page.getByRole('button', { name: 'Apply Filters' }).click();

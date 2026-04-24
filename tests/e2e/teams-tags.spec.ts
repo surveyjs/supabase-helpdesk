@@ -172,6 +172,9 @@ test.describe('Agent Dashboard Tag Filter', () => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
 
+    // Expand the consolidated Views & Filters panel
+    await page.getByText(/Views & Filters:/).click();
+
     const tagFilter = page.getByTestId('tag-filter');
     await expect(tagFilter).toBeVisible();
 

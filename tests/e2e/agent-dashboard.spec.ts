@@ -64,6 +64,9 @@ test.describe('Agent Dashboard', () => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
 
+    // Expand the consolidated Views & Filters panel
+    await page.getByText(/Views & Filters:/).click();
+
     // Filter by closed
     await page.getByLabel('Status').selectOption('closed');
     await page.getByRole('button', { name: 'Apply Filters' }).click();
@@ -77,6 +80,9 @@ test.describe('Agent Dashboard', () => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
 
+    // Expand the consolidated Views & Filters panel
+    await page.getByText(/Views & Filters:/).click();
+
     // Search for a ticket from seed data
     await page.getByLabel('Search').fill('Password reset');
     await page.getByRole('button', { name: 'Apply Filters' }).click();
@@ -89,6 +95,9 @@ test.describe('Agent Dashboard', () => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
 
+    // Expand the consolidated Views & Filters panel
+    await page.getByText(/Views & Filters:/).click();
+
     await page.getByLabel('Submitter Email').fill('alice@example.com');
     await page.getByRole('button', { name: 'Apply Filters' }).click();
 
@@ -100,6 +109,9 @@ test.describe('Agent Dashboard', () => {
   test('sort toggles work', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
+
+    // Expand the consolidated Views & Filters panel
+    await page.getByText(/Views & Filters:/).click();
 
     // Change sort to created
     await page.getByLabel('Sort By').selectOption('created');
@@ -121,6 +133,9 @@ test.describe('Agent Dashboard', () => {
     await page.goto('/agent');
 
     const allCount = await page.getByTestId('result-count').textContent();
+
+    // Expand the consolidated Views & Filters panel
+    await page.getByText(/Views & Filters:/).click();
 
     // Filter to closed only
     await page.getByLabel('Status').selectOption('closed');
@@ -268,7 +283,12 @@ test.describe('Agent Ticket Detail Controls', () => {
     // "Assign to me" button should be visible
     const assignBtn = page.getByRole('button', { name: 'Assign to me' });
     await expect(assignBtn).toBeVisible({ timeout: 10000 });
+    const assignResp = page.waitForResponse(
+      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
+      { timeout: 15000 },
+    );
     await assignBtn.click();
+    await assignResp;
 
     // Wait for "Assign to me" to disappear (server action + revalidation complete)
     await expect(assignBtn).toBeHidden({ timeout: 15000 });
@@ -278,7 +298,12 @@ test.describe('Agent Ticket Detail Controls', () => {
     await expect(unassignBtn).toBeVisible({ timeout: 15000 });
 
     // Unassign
+    const unassignResp = page.waitForResponse(
+      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
+      { timeout: 15000 },
+    );
     await unassignBtn.click();
+    await unassignResp;
 
     // Wait for "Unassign" to disappear before checking "Assign to me" reappears
     await expect(unassignBtn).toBeHidden({ timeout: 15000 });
@@ -356,31 +381,269 @@ test.describe('Agent Ticket Detail Controls', () => {
   });
 });
 
-test.describe('Saved Views', () => {
+test.describe('Consolidated Views & Filters Panel', () => {
   test.describe.configure({ mode: 'serial' });
 
-  test('create, apply, rename, delete saved views', async ({ page }) => {
+  test('panel is collapsed by default', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
 
-    // Create a saved view
-    await page.getByLabel('Saved view name').fill('Test E2E View');
-    await page.getByRole('button', { name: 'Save Current View' }).click();
+    // The consolidated panel summary should be visible
+    const summary = page.getByText(/Views & Filters:/);
+    await expect(summary).toBeVisible();
+
+    // Filter controls should not be visible (panel is closed)
+    const filterLabel = page.getByLabel('Search', { exact: true });
+    await expect(filterLabel).not.toBeVisible();
+  });
+
+  test('panel summary shows "Views & Filters: Default" when no view selected', async ({ page }) => {
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto('/agent');
+
+    // Summary should show "Default"
+    const summary = page.getByText('Views & Filters: Default');
+    await expect(summary).toBeVisible();
+  });
+
+  test('panel summary shows current view name when view is applied', async ({ page }) => {
+    const token = `view-${Date.now()}`;
+    const viewName = `My Test ${token}`;
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto(`/agent?status=closed&q=${encodeURIComponent(token)}`);
+
+    // Create and apply a saved view
+    // First, expand panel
+    await page.getByText(/Views & Filters:/).click();
+    await expect(page.getByLabel('Search', { exact: true })).toBeVisible();
+
+    // Save current view
+    const viewNameInput = page.getByLabel('Saved view name');
+    await viewNameInput.fill(viewName);
+    await page.getByRole('button', { name: 'Save View' }).click();
     await page.waitForTimeout(1000);
 
-    // View should appear
-    await expect(page.getByText('Test E2E View')).toBeVisible({ timeout: 10000 });
-
-    // Click to apply
-    await page.getByRole('link', { name: 'Test E2E View' }).click();
+    // Click the view to apply it
+    await page.getByRole('link', { name: viewName }).click();
     await page.waitForTimeout(500);
 
-    // Delete the view
-    await page.getByLabel('Delete saved view Test E2E View').click();
+    // Panel should now show the view name in summary
+    const summary = page.getByText(`Views & Filters: ${viewName}`);
+    await expect(summary).toBeVisible();
+
+    // Cleanup: delete the view (need to expand first)
+    await page.getByText(/Views & Filters:/).click();
+    await page.getByLabel(`Delete saved view ${viewName}`).click();
+    await page.waitForTimeout(1000);
+  });
+
+  test('can expand and collapse panel', async ({ page }) => {
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto('/agent');
+
+    // Panel is collapsed initially
+    const filterLabel = page.getByLabel('Search', { exact: true });
+    await expect(filterLabel).not.toBeVisible();
+
+    // Click summary to expand
+    await page.getByText(/Views & Filters:/).click();
+    
+    // Now filters should be visible
+    await expect(filterLabel).toBeVisible();
+
+    // Click again to collapse
+    await page.getByText(/Views & Filters:/).click();
+    await expect(filterLabel).not.toBeVisible();
+  });
+
+  test('saved views list shows Default as non-removable option', async ({ page }) => {
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto('/agent');
+
+    // Expand panel
+    await page.getByText(/Views & Filters:/).click();
+    
+    // Default should be visible and highlighted if current
+    await expect(page.getByRole('link', { name: 'Default' })).toBeVisible();
+  });
+
+  test('create and apply saved view', async ({ page }) => {
+    const token = `closed-only-${Date.now()}`;
+    const viewName = `Closed Only ${token}`;
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto(`/agent?status=closed&q=${encodeURIComponent(token)}`);
+
+    // Expand panel
+    await page.getByText(/Views & Filters:/).click();
+
+    // Create saved view
+    await page.getByLabel('Saved view name').fill(viewName);
+    await page.getByRole('button', { name: 'Save View' }).click();
+    await page.waitForTimeout(1000);
+
+    // View should appear in the list
+    await expect(page.getByRole('link', { name: viewName })).toBeVisible();
+
+    // Click it to apply
+    await page.getByRole('link', { name: viewName }).click();
+    await page.waitForTimeout(500);
+
+    // Summary should reflect the view
+    const summary = page.getByText(`Views & Filters: ${viewName}`);
+    await expect(summary).toBeVisible();
+
+    // Cleanup
+    await page.getByText(/Views & Filters:/).click();
+    await page.getByLabel(`Delete saved view ${viewName}`).click();
+    await page.waitForTimeout(1000);
+  });
+
+  test('delete saved view (not Default)', async ({ page }) => {
+    const token = Date.now();
+    const viewName = `To Delete ${token}`;
+
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto('/agent?status=open');
+
+    // Expand panel
+    await page.getByText(/Views & Filters:/).click();
+
+    // Create a view with a unique name
+    await page.getByLabel('Saved view name').fill(viewName);
+    await page.getByRole('button', { name: 'Save View' }).click();
+    await page.waitForTimeout(1000);
+
+    // View should exist
+    await expect(page.getByRole('link', { name: viewName })).toBeVisible({ timeout: 10000 });
+
+    // Delete it
+    await page.getByLabel(`Delete saved view ${viewName}`).click();
     await page.waitForTimeout(1000);
 
     // View should be gone
-    await expect(page.getByRole('link', { name: 'Test E2E View' })).not.toBeVisible();
+    await expect(page.getByRole('link', { name: viewName })).not.toBeVisible();
+  });
+
+  test('cannot delete Default view (no delete button for Default)', async ({ page }) => {
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto('/agent');
+
+    // Expand panel
+    await page.getByText(/Views & Filters:/).click();
+
+    // Default view should not have a delete button
+    await expect(page.getByRole('link', { name: 'Default' })).toBeVisible();
+
+    // There must be no delete button labelled for the Default view
+    await expect(page.getByLabel('Delete saved view Default')).toHaveCount(0);
+  });
+
+  test('applying custom filters updates URL and collapsed summary', async ({ page }) => {
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto('/agent');
+
+    // Expand panel
+    await page.getByText(/Views & Filters:/).click();
+
+    // Set a filter (status = closed)
+    await page.getByLabel('Status').selectOption('closed');
+
+    // Apply
+    await page.getByRole('button', { name: 'Apply Filters' }).click();
+    await page.waitForTimeout(500);
+
+    // URL should have the filter
+    await expect(page).toHaveURL(/status=closed/);
+
+    // Summary should still show Default (custom filters, not saved view)
+    const summary = page.getByText('Views & Filters: Default');
+    await expect(summary).toBeVisible();
+  });
+
+  test('clearing filters reverts to Default in collapsed summary', async ({ page }) => {
+    await loginAs(page, 'agent.smith@example.com');
+    // Start with a filtered URL
+    await page.goto('/agent?status=closed');
+
+    // Expand panel
+    await page.getByText(/Views & Filters:/).click();
+
+    // Click Clear All
+    await page.getByRole('link', { name: 'Clear All' }).click();
+    await page.waitForTimeout(500);
+
+    // Summary should show Default
+    const summary = page.getByText('Views & Filters: Default');
+    await expect(summary).toBeVisible();
+
+    // URL should be clean
+    await expect(page).toHaveURL('/agent');
+  });
+
+  test('browser back/forward preserves view and filter state', async ({ page }) => {
+    await loginAs(page, 'agent.smith@example.com');
+    
+    // Start at /agent
+    await page.goto('/agent');
+
+    // Expand panel and create a filtered view
+    await page.getByText(/Views & Filters:/).click();
+    await page.getByLabel('Status').selectOption('closed');
+    await page.getByRole('button', { name: 'Apply Filters' }).click();
+    await page.waitForURL(/status=closed/, { timeout: 10000 });
+
+    // Verify filter applied
+    await expect(page).toHaveURL(/status=closed/);
+    
+    // Navigate to a ticket and back
+    const tickets = page.locator('table tbody tr');
+    if (await tickets.count() > 0) {
+      const firstLink = tickets.first().getByRole('link').first();
+      await firstLink.click();
+      await page.waitForURL(/\/tickets\//, { timeout: 10000 });
+
+      // Go back
+      await page.goBack();
+      await page.waitForURL(/status=closed/, { timeout: 10000 });
+
+      // Should still have status=closed in URL
+      await expect(page).toHaveURL(/status=closed/);
+    }
+  });
+
+  test('create, apply, delete saved views', async ({ page }) => {
+    const token = Date.now();
+    const viewName = `E2E View ${token}`;
+
+    await loginAs(page, 'agent.smith@example.com');
+    // Start with non-empty filters so the saved view stores a non-empty filter set
+    await page.goto('/agent?status=closed');
+
+    // Expand the consolidated panel
+    await page.getByText(/Views & Filters:/).click();
+
+    // Create a saved view (captures current URL filters = {status: 'closed'})
+    await page.getByLabel('Saved view name').fill(viewName);
+    await page.getByRole('button', { name: 'Save View' }).click();
+    await page.waitForTimeout(1000);
+
+    // View should appear
+    await expect(page.getByRole('link', { name: viewName })).toBeVisible({ timeout: 10000 });
+
+    // Click to apply
+    await page.getByRole('link', { name: viewName }).click();
+    await page.waitForTimeout(500);
+
+    // Panel summary should show the view name
+    await expect(page.getByText(`Views & Filters: ${viewName}`)).toBeVisible();
+
+    // Delete the view (need to expand panel)
+    await page.getByText(/Views & Filters:/).click();
+    await page.getByLabel(`Delete saved view ${viewName}`).click();
+    await page.waitForTimeout(1000);
+
+    // View should be gone
+    await expect(page.getByRole('link', { name: viewName })).not.toBeVisible();
   });
 });
 

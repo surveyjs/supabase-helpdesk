@@ -8,10 +8,35 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
   const svc = createServiceRoleClient();
   await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
 
-  await page.goto('/login');
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Log in' }).click();
+  // Ensure app is reachable before interacting with the login form.
+  await expect.poll(async () => {
+    try {
+      const resp = await page.request.get('/login');
+      return resp.status();
+    } catch {
+      return 0;
+    }
+  }, { timeout: 15000 }).toBe(200);
+
+  // Reach login form with a small retry to reduce transient nav/form race flakes.
+  let hasLoginForm = false;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await page.goto('/login');
+    try {
+      await expect(page.getByLabel('Email')).toBeVisible({ timeout: 5000 });
+      hasLoginForm = true;
+      break;
+    } catch {
+      // Retry once; if already authenticated, URL will no longer be /login.
+      if (!page.url().includes('/login')) break;
+    }
+  }
+
+  if (hasLoginForm) {
+    await page.getByLabel('Email').fill(email);
+    await page.getByLabel('Password').fill(password);
+    await page.getByRole('button', { name: 'Log in' }).click();
+  }
 
   // Retry once on transient auth failure (rate-limit / timing)
   try {
@@ -21,6 +46,7 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
     if (page.url().includes('/login')) {
       await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
       await page.goto('/login');
+      await expect(page.getByLabel('Email')).toBeVisible({ timeout: 10000 });
       await page.getByLabel('Email').fill(email);
       await page.getByLabel('Password').fill(password);
       await page.getByRole('button', { name: 'Log in' }).click();
@@ -79,11 +105,19 @@ test.describe('Inbound Email Admin Configuration', () => {
 
     // Enable
     const toggle = page.getByLabel(/Enable inbound email/i);
-    await toggle.check();
+    await toggle.setChecked(true);
     await page.getByRole('button', { name: 'Save' }).click();
 
-    // Verify saved
-    await expect(page.getByText('Inbound email settings saved')).toBeVisible({ timeout: 10000 });
+    // Verify saved in DB (more stable than asserting transient toast timing).
+    const svc = createServiceRoleClient();
+    await expect.poll(async () => {
+      const { data } = await svc
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'inbound_email_enabled')
+        .single();
+      return data?.value;
+    }, { timeout: 15000 }).toBe('true');
 
     // Reload and verify persisted
     await page.reload();

@@ -102,13 +102,15 @@ export default async function AgentDashboardPage({
   // Determine current view name for consolidated panel summary
   // Use exact match: the view's stored filters must have the same keys and values as the
   // current linkParams (no extra or missing keys on either side).
-  const currentViewName = savedViews.find((view) => {
-    const viewFilters = (view.filters ?? {}) as Record<string, string>;
-    const viewKeys = Object.keys(viewFilters);
-    const linkKeys = Object.keys(linkParams);
-    if (viewKeys.length !== linkKeys.length) return false;
-    return viewKeys.every((key) => viewFilters[key] === linkParams[key]);
-  })?.name ?? 'Default';
+  const currentViewName = Object.keys(linkParams).length === 0
+    ? 'Default'
+    : (savedViews.find((view) => {
+      const viewFilters = (view.filters ?? {}) as Record<string, string>;
+      const viewKeys = Object.keys(viewFilters);
+      const linkKeys = Object.keys(linkParams);
+      if (viewKeys.length !== linkKeys.length) return false;
+      return viewKeys.every((key) => viewFilters[key] === linkParams[key]);
+    })?.name ?? 'Default');
 
   return (
     <div>

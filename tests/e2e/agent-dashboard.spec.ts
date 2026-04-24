@@ -283,7 +283,12 @@ test.describe('Agent Ticket Detail Controls', () => {
     // "Assign to me" button should be visible
     const assignBtn = page.getByRole('button', { name: 'Assign to me' });
     await expect(assignBtn).toBeVisible({ timeout: 10000 });
+    const assignResp = page.waitForResponse(
+      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
+      { timeout: 15000 },
+    );
     await assignBtn.click();
+    await assignResp;
 
     // Wait for "Assign to me" to disappear (server action + revalidation complete)
     await expect(assignBtn).toBeHidden({ timeout: 15000 });
@@ -293,7 +298,12 @@ test.describe('Agent Ticket Detail Controls', () => {
     await expect(unassignBtn).toBeVisible({ timeout: 15000 });
 
     // Unassign
+    const unassignResp = page.waitForResponse(
+      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
+      { timeout: 15000 },
+    );
     await unassignBtn.click();
+    await unassignResp;
 
     // Wait for "Unassign" to disappear before checking "Assign to me" reappears
     await expect(unassignBtn).toBeHidden({ timeout: 15000 });
@@ -397,8 +407,10 @@ test.describe('Consolidated Views & Filters Panel', () => {
   });
 
   test('panel summary shows current view name when view is applied', async ({ page }) => {
+    const token = `view-${Date.now()}`;
+    const viewName = `My Test ${token}`;
     await loginAs(page, 'agent.smith@example.com');
-    await page.goto('/agent');
+    await page.goto(`/agent?status=closed&q=${encodeURIComponent(token)}`);
 
     // Create and apply a saved view
     // First, expand panel
@@ -407,21 +419,21 @@ test.describe('Consolidated Views & Filters Panel', () => {
 
     // Save current view
     const viewNameInput = page.getByLabel('Saved view name');
-    await viewNameInput.fill('My Test View');
+    await viewNameInput.fill(viewName);
     await page.getByRole('button', { name: 'Save View' }).click();
     await page.waitForTimeout(1000);
 
     // Click the view to apply it
-    await page.getByRole('link', { name: 'My Test View' }).click();
+    await page.getByRole('link', { name: viewName }).click();
     await page.waitForTimeout(500);
 
     // Panel should now show the view name in summary
-    const summary = page.getByText('Views & Filters: My Test View');
+    const summary = page.getByText(`Views & Filters: ${viewName}`);
     await expect(summary).toBeVisible();
 
     // Cleanup: delete the view (need to expand first)
     await page.getByText(/Views & Filters:/).click();
-    await page.getByLabel('Delete saved view My Test View').click();
+    await page.getByLabel(`Delete saved view ${viewName}`).click();
     await page.waitForTimeout(1000);
   });
 
@@ -456,31 +468,33 @@ test.describe('Consolidated Views & Filters Panel', () => {
   });
 
   test('create and apply saved view', async ({ page }) => {
+    const token = `closed-only-${Date.now()}`;
+    const viewName = `Closed Only ${token}`;
     await loginAs(page, 'agent.smith@example.com');
-    await page.goto('/agent');
+    await page.goto(`/agent?status=closed&q=${encodeURIComponent(token)}`);
 
     // Expand panel
     await page.getByText(/Views & Filters:/).click();
 
     // Create saved view
-    await page.getByLabel('Saved view name').fill('Closed Only');
+    await page.getByLabel('Saved view name').fill(viewName);
     await page.getByRole('button', { name: 'Save View' }).click();
     await page.waitForTimeout(1000);
 
     // View should appear in the list
-    await expect(page.getByRole('link', { name: 'Closed Only' })).toBeVisible();
+    await expect(page.getByRole('link', { name: viewName })).toBeVisible();
 
     // Click it to apply
-    await page.getByRole('link', { name: 'Closed Only' }).click();
+    await page.getByRole('link', { name: viewName }).click();
     await page.waitForTimeout(500);
 
     // Summary should reflect the view
-    const summary = page.getByText('Views & Filters: Closed Only');
+    const summary = page.getByText(`Views & Filters: ${viewName}`);
     await expect(summary).toBeVisible();
 
     // Cleanup
     await page.getByText(/Views & Filters:/).click();
-    await page.getByLabel('Delete saved view Closed Only').click();
+    await page.getByLabel(`Delete saved view ${viewName}`).click();
     await page.waitForTimeout(1000);
   });
 
@@ -507,7 +521,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
     await expect(page.getByRole('link', { name: 'To Delete' })).not.toBeVisible();
   });
 
-  test('cannot delete Default view', async ({ page }) => {
+  test('cannot delete Default view (no delete button for Default)', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
 
@@ -593,40 +607,40 @@ test.describe('Consolidated Views & Filters Panel', () => {
       await expect(page).toHaveURL(/status=closed/);
     }
   });
-});
-
-test.describe('Saved Views (Consolidated Panel)', () => {
-  test.describe.configure({ mode: 'serial' });
 
   test('create, apply, delete saved views', async ({ page }) => {
+    const token = Date.now();
+    const viewName = `E2E View ${token}`;
+
     await loginAs(page, 'agent.smith@example.com');
-    await page.goto('/agent');
+    // Start with non-empty filters so the saved view stores a non-empty filter set
+    await page.goto('/agent?status=closed');
 
     // Expand the consolidated panel
     await page.getByText(/Views & Filters:/).click();
 
-    // Create a saved view
-    await page.getByLabel('Saved view name').fill('Test E2E View');
+    // Create a saved view (captures current URL filters = {status: 'closed'})
+    await page.getByLabel('Saved view name').fill(viewName);
     await page.getByRole('button', { name: 'Save View' }).click();
     await page.waitForTimeout(1000);
 
     // View should appear
-    await expect(page.getByRole('link', { name: 'Test E2E View' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('link', { name: viewName })).toBeVisible({ timeout: 10000 });
 
     // Click to apply
-    await page.getByRole('link', { name: 'Test E2E View' }).click();
+    await page.getByRole('link', { name: viewName }).click();
     await page.waitForTimeout(500);
 
     // Panel summary should show the view name
-    await expect(page.getByText('Views & Filters: Test E2E View')).toBeVisible();
+    await expect(page.getByText(`Views & Filters: ${viewName}`)).toBeVisible();
 
     // Delete the view (need to expand panel)
     await page.getByText(/Views & Filters:/).click();
-    await page.getByLabel('Delete saved view Test E2E View').click();
+    await page.getByLabel(`Delete saved view ${viewName}`).click();
     await page.waitForTimeout(1000);
 
     // View should be gone
-    await expect(page.getByRole('link', { name: 'Test E2E View' })).not.toBeVisible();
+    await expect(page.getByRole('link', { name: viewName })).not.toBeVisible();
   });
 });
 

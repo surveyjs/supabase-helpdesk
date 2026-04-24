@@ -106,6 +106,8 @@ test.describe('Authentication', () => {
   });
 
   test('login lockout: 5 failures → shows lockout message', async ({ page }) => {
+    const { createServiceRoleClient } = await import('../helpers/supabase');
+    const svc = createServiceRoleClient();
     const lockoutEmail = `lockout-e2e-${Date.now()}@example.com`;
 
     // Attempt 5 failed logins (this user doesn't exist but we're testing rate limit tracking)
@@ -116,6 +118,15 @@ test.describe('Authentication', () => {
       await page.getByRole('button', { name: 'Log in' }).click();
       await expect(page.getByRole('alert').first()).toBeVisible();
     }
+
+    await expect.poll(async () => {
+      const { data } = await svc
+        .from('login_attempts')
+        .select('attempt_count')
+        .eq('email', lockoutEmail.toLowerCase())
+        .maybeSingle();
+      return data?.attempt_count ?? 0;
+    }, { timeout: 10000 }).toBeGreaterThanOrEqual(5);
 
     // 6th attempt should show lockout message
     await page.goto('/login');

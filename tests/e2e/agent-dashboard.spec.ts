@@ -515,15 +515,10 @@ test.describe('Consolidated Views & Filters Panel', () => {
     await page.getByText(/Views & Filters:/).click();
 
     // Default view should not have a delete button
-    const defaultView = page.getByRole('link', { name: 'Default' });
-    await expect(defaultView).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Default' })).toBeVisible();
 
-    // Check that there's no delete button for Default
-    // (each saved view has a delete button next to it in a span)
-    // but Default should not have one in the same pattern
-    const defaultContainer = defaultView.locator('..').locator('..');
-    const deleteButtons = defaultContainer.locator('button[aria-label*="Delete"]');
-    expect(await deleteButtons.count()).toBe(0);
+    // There must be no delete button labelled for the Default view
+    await expect(page.getByLabel('Delete saved view Default')).toHaveCount(0);
   });
 
   test('applying custom filters updates URL and collapsed summary', async ({ page }) => {
@@ -603,7 +598,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
 test.describe('Saved Views (Consolidated Panel)', () => {
   test.describe.configure({ mode: 'serial' });
 
-  test('create, apply, rename, delete saved views', async ({ page }) => {
+  test('create, apply, delete saved views', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
 

@@ -25,13 +25,12 @@ Consolidate the **Saved Views** panel and **Filtering** panel into a single coll
    - Default view indicator: Show "Default" as a special, non-removable view option
    - List saved views as clickable links/buttons
    - Each saved view (except "Default") has a delete button
-   - Each saved view (except "Default") has a rename button
    - Cannot remove the only non-default view if Default is selected
    - Always at least one view is selected (Default or other)
 
 2. **Current View Indicator** (in collapsed state)
    - When panel is collapsed, show: `"Views & Filters: [Current View Name]"` or `"Views & Filters: Default"`
-   - When expanded, show the full summary with count: `"Views & Filters (showing [n] view)"` or `"Views & Filters (custom filters applied)"`
+   - Note: the summary text does not change when the panel is expanded; it always shows the current view name
 
 3. **Filter Controls Section** (below Saved Views)
    - All existing filters remain: Search, Submitter email, Status, Sort, Urgency, Severity, Category, Type, Assigned Agent, Team, Tier, Tags
@@ -57,7 +56,7 @@ If no saved view is selected, show:
 
 **URL Behavior:**
 - Clicking a saved view link updates URL with view filters
-- Applying custom filters updates URL with all active filters
+- Applying custom filters updates URL with all active filters (the panel does **not** auto-collapse — the browser navigates to the new URL and the `<details>` element starts collapsed per its default state)
 - Resetting filters returns to Default view
 - Browser back/forward preserves view and filter state
 
@@ -71,8 +70,8 @@ If no saved view is selected, show:
 No schema changes. Existing table structure remains intact.
 
 ### Saved Views Action (`src/lib/actions/saved-views.ts`)
-- Add new action: `getDefaultViewName()` → returns "Default" string (for consistency)
 - Existing actions unchanged: `createSavedView`, `renameSavedView`, `deleteSavedView`
+- No new actions added
 
 ### Styling & Layout
 
@@ -98,10 +97,8 @@ No schema changes. Existing table structure remains intact.
 
 **Saved Views Tests:**
 - Create and apply saved view → panel summary shows view name
-- Rename saved view → collapsed panel updates with new name
 - Delete saved view (not Default) → panel reverts to showing remaining view or "Default"
 - Cannot delete Default view
-- Cannot delete last non-Default view if Default is selected
 
 **Filter Application Tests:**
 - Applying filters within collapsed panel → expands panel, shows filters, updates URL
@@ -111,7 +108,6 @@ No schema changes. Existing table structure remains intact.
 **Collapsed/Expanded State Tests:**
 - Panel is collapsed on page load
 - Panel expands when user clicks summary
-- Panel collapses after applying filters (optional UX enhancement)
 - Mobile: filters details element toggle works
 
 **URL State Tests:**

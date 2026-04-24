@@ -131,7 +131,7 @@ Add a collapsible "My Stats" panel at the top of the agent dashboard using `<det
      - Label: `"Saved Views:"`
      - Special "Default" view: always present, non-removable, represents baseline ticket list with no special filters
      - List saved views as clickable links/buttons that apply stored filter combinations
-     - Each saved view (except "Default") shows rename and delete buttons
+     - Each saved view (except "Default") has a delete button
      - Cannot delete the only non-default view if Default is selected
      - Always at least one view is selected (Default or other)
 
@@ -158,7 +158,7 @@ Add a collapsible "My Stats" panel at the top of the agent dashboard using `<det
 
 **UI Behavior** (no `"use client"` needed — all CRUD via `<form>` + Server Actions):
 - Clicking a saved view link updates URL with stored filter params
-- Applying custom filters updates URL and collapses panel
+- Applying custom filters updates URL (the `<details>` panel is a native HTML element; it does not auto-collapse on navigation — it resets to its default collapsed state on page load)
 - Clearing filters reverts to "Default" in collapsed summary
 - Panel summary always reflects the currently active view
 - Browser back/forward preserves view and filter state

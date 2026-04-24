@@ -106,44 +106,74 @@ Phases 0–3 are complete: project init, database schema, authentication, and us
 - No page title heading (top navigation already indicates the section)
 - Each row: title (link to detail), submitter display name (**never email** — 8.2), last-updated, post count, urgency badge, severity badge, status badge
 - **Important:** The `agent_tickets` VIEW includes `creator_email` for server-side filtering (8.5) only. Emails must NOT be rendered in the ticket list.
-- Filter bar at the top:
-  - Status toggle: All / Active / Closed
-  - Search by title/content (searches ALL posts, not just original — §8.14)
-  - Filter by submitter email
-  - Filter by urgency (dropdown)
-  - Filter by severity (dropdown)
-  - Filter by category (dropdown, only if categories exist)
-  - Filter by type (dropdown)
-  - Filter by assigned agent (dropdown: All / Unassigned / each agent by display name + email)
-  - Filter by team (dropdown: All / No team / each team name)
-  - Sort toggle: Last Modified / Created
-- **All filter controls** (dropdowns, search input, toggles) are native HTML `<select>`, `<input>`, or `<Link>` elements with URL search params. Use a `<form method="GET">` pattern. No `"use client"` is needed for the filter bar.
 - Result count: "N ticket(s) found"
 - All filters are URL search params
 - Paginated
 
-### 3a. Saved Views (8.13)
-
-The `saved_views` table was created in Phase 1 with columns: `id`, `agent_id`, `name` (max 100 chars, CHECK constraint, UNIQUE per agent), `filters` (JSONB), `created_at`, `updated_at`, and RLS policies (agent CRUD own views only). **No migration needed — implement the UI and Server Actions for this existing table.**
-
-**Server Actions** (`src/lib/actions/saved-views.ts`):
-- `createSavedView(name, filters)` — require agent role, validate name length (max 100 chars), serialize current URL search params as `filters` JSONB, insert, revalidate.
-- `renameSavedView(viewId, newName)` — require agent role + ownership, validate name length, update, revalidate.
-- `deleteSavedView(viewId)` — require agent role + ownership, delete, revalidate.
-
-**UI** (no `"use client"` needed — all CRUD via `<form>` + Server Actions):
-- Quick-access links above the filter bar showing the agent's saved views (plain `<a>` links setting URL search params from stored `filters` JSON)
-- "Save current view" action uses a `<form>` with a text input for the name and a hidden field for the serialized current filters
-- Each saved view: click to apply filters, rename (`<form>` inline), delete (`<form>` button)
-- Clicking a saved view sets all URL search params from the stored `filters` JSON
-
-### 3b. Agent Personal Stats Panel (8.16)
+### 3a. Agent Personal Stats Panel (8.16)
 
 Add a collapsible "My Stats" panel at the top of the agent dashboard using `<details>`/`<summary>` (no JavaScript needed, consistent with Phase 2 NavBar dropdown pattern). Default state: collapsed.
 - Metrics for the last 30 days: tickets assigned, tickets resolved (closed), average response time, average resolution time, average CSAT rating, SLA compliance rate
 - Read-only, calculated server-side from existing data
 - Agents can only see their own stats
 - **Note:** CSAT and SLA stats will show meaningful data only after those features are built (Phases 11–12). For now, show "N/A" or 0 for those metrics.
+
+### 3b. Consolidated Views & Filters Panel
+
+**Important Change:** The Saved Views section and Filter bar are now consolidated into a single collapsible panel (see `promts/changes/agent-dashboard-panel-consolidation.md` for full UI spec).
+
+**Panel Structure:**
+- Position: immediately below the "My Stats" panel
+- Default state: **collapsed**
+- Summary (collapsed state): Shows `"Views & Filters: [Current View Name]"` or `"Views & Filters: Default"` if no view selected
+- When expanded, displays:
+  1. **Saved Views Section** (at top of expanded panel):
+     - Label: `"Saved Views:"`
+     - Special "Default" view: always present, non-removable, represents baseline ticket list with no special filters
+     - List saved views as clickable links/buttons that apply stored filter combinations
+     - Each saved view (except "Default") shows rename and delete buttons
+     - Cannot delete the only non-default view if Default is selected
+     - Always at least one view is selected (Default or other)
+
+  2. **Filter Controls Section** (below Saved Views):
+     - Status toggle: All / Active / Closed
+     - Search by title/content (searches ALL posts, not just original — §8.14)
+     - Filter by submitter email
+     - Filter by urgency (dropdown)
+     - Filter by severity (dropdown)
+     - Filter by category (dropdown, only if categories exist)
+     - Filter by type (dropdown)
+     - Filter by assigned agent (dropdown: All / Unassigned / each agent by display name + email)
+     - Filter by team (dropdown: All / No team / each team name)
+     - Filter by tier (dropdown, only if tiers defined)
+     - Filter by tags (multi-select pills)
+     - Sort toggle: Last Modified / Created / SLA Risk
+     - Grid layout: `grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3`
+     - "Apply Filters" button and "Clear All" link
+
+**Server Actions** (`src/lib/actions/saved-views.ts`):
+- Existing actions unchanged: `createSavedView(name, filters)`, `renameSavedView(viewId, newName)`, `deleteSavedView(viewId)`
+- All require agent role and validate ownership
+- All filters are serialized as JSONB in the `saved_views` table
+
+**UI Behavior** (no `"use client"` needed — all CRUD via `<form>` + Server Actions):
+- Clicking a saved view link updates URL with stored filter params
+- Applying custom filters updates URL and collapses panel
+- Clearing filters reverts to "Default" in collapsed summary
+- Panel summary always reflects the currently active view
+- Browser back/forward preserves view and filter state
+
+### 3c. Saved Views Semantics
+
+- **"Default" view**: Represents the baseline ticket list with no custom filters applied
+  - Never deleted; always available as fallback
+  - When user has custom filters but hasn't saved them, summary shows "Default"
+  - When user explicitly saves a view, it gets a custom name and becomes a "Saved View"
+  
+- **Saved Views**: Agent's custom filter combinations with assigned names
+  - Stored in `saved_views` table with `filters` JSONB
+  - Can be renamed and deleted (except the "Default" semantic meaning)
+  - Clicking applies all stored filters to the dashboard
 
 ### 4. Ticket Detail Updates (Agent View)
 
@@ -190,6 +220,21 @@ Update NavBar to show:
 - Regular user doesn't see the link
 - Non-agent navigating to `/agent` is redirected
 - Dashboard loads with all tickets
+- **Consolidated Views & Filters Panel:**
+  - Panel is collapsed on page load (by default)
+  - Panel summary shows "Views & Filters: Default" when no view selected
+  - Panel summary shows "Views & Filters: [View Name]" when saved view applied
+  - Clicking summary expands panel to show filters and saved views
+  - Saved views list shows "Default" as non-removable option
+  - Creating a saved view shows it in the expanded panel
+  - Clicking saved view applies filters and updates collapsed summary
+  - Renaming saved view updates collapsed summary (if active)
+  - Deleting saved view (not Default) works correctly
+  - Cannot delete Default view
+  - Cannot delete last non-Default view if Default is selected
+  - Applying custom filters updates URL and collapsed summary
+  - Clearing filters reverts to "Default" in collapsed summary
+  - Browser back/forward preserves view and filter state
 - Status filter works
 - Search by title works (all-posts search)
 - Filter by submitter email works
@@ -203,7 +248,6 @@ Update NavBar to show:
 - "Assign to me" button works
 - Agent can reassign ticket to another agent with a reason — reason appears as an internal note
 - Result count updates with filters
-- Saved views: create, apply, rename, delete
 - Agent stats panel: collapse/expand toggle works
 - Agent stats panel shows correct assigned/resolved counts
 - Agent stats panel shows "N/A" for CSAT and SLA metrics
@@ -236,7 +280,11 @@ The following features extend the agent dashboard and are NOT part of this phase
 - [ ] Non-agents redirected away from dashboard
 - [ ] Result count is accurate
 - [ ] All filters are URL-based (bookmarkable)
+- [ ] Views & Filters panel is collapsed by default
+- [ ] Views & Filters collapsed summary shows current view or "Default"
 - [ ] Saved views: create, apply, rename, delete all work
+- [ ] Default view is always available and cannot be deleted
+- [ ] Browser back/forward preserves view and filter state
 - [ ] Stats panel shows correct assigned/resolved counts for last 30 days
 - [ ] Stats panel CSAT and SLA metrics show "N/A"
 - [ ] `npm run typecheck` passes with no errors

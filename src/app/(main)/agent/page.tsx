@@ -99,6 +99,14 @@ export default async function AgentDashboardPage({
   // Serialize current filters for saved view
   const currentFiltersJson = JSON.stringify(linkParams);
 
+  // Determine current view name for consolidated panel summary
+  // Check if current URL matches any saved view
+  const currentViewName = savedViews.find((view) => {
+    const viewFilters = (view.filters ?? {}) as Record<string, string>;
+    // Check if all view filters match current filters
+    return Object.entries(viewFilters).every(([key, value]) => linkParams[key] === value);
+  })?.name ?? 'Default';
+
   return (
     <div>
       <h1 className="sr-only">Agent Dashboard</h1>
@@ -139,77 +147,98 @@ export default async function AgentDashboardPage({
         </div>
       </details>
 
-      {/* Saved Views */}
-      <div className="mb-4 bg-white rounded-lg border border-gray-200 p-4">
-        <div className="flex flex-wrap items-center gap-2 mb-3">
-          <span className="text-sm font-medium text-gray-700">Saved Views:</span>
-          {savedViews.length === 0 && (
-            <span className="text-sm text-gray-500">None yet</span>
-          )}
-          {savedViews.map((view) => {
-            const viewFilters = (view.filters ?? {}) as Record<string, string>;
-            const viewParams = new URLSearchParams(viewFilters);
-            return (
-              <span key={view.id} className="inline-flex items-center gap-1">
-                <a
-                  href={`/agent?${viewParams.toString()}`}
-                  className="text-sm text-blue-600 hover:text-blue-800 px-2 py-0.5 rounded bg-blue-50 hover:bg-blue-100"
-                >
-                  {view.name}
-                </a>
-                <form action={renameSavedView} className="inline-flex items-center">
-                  <input type="hidden" name="view_id" value={view.id} />
-                  <input
-                    type="text"
-                    name="name"
-                    defaultValue={view.name}
-                    className="w-20 text-xs border border-gray-300 rounded px-1 py-0.5 hidden"
-                    aria-label={`Rename ${view.name}`}
-                  />
-                </form>
-                <form action={deleteSavedView}>
-                  <input type="hidden" name="view_id" value={view.id} />
-                  <button
-                    type="submit"
-                    className="text-xs text-red-500 hover:text-red-700"
-                    title={`Delete ${view.name}`}
-                    aria-label={`Delete saved view ${view.name}`}
-                  >
-                    ×
-                  </button>
-                </form>
-              </span>
-            );
-          })}
-        </div>
-        <form action={createSavedView} className="flex items-center gap-2">
-          <input type="hidden" name="filters" value={currentFiltersJson} />
-          <input
-            type="text"
-            name="name"
-            placeholder="View name…"
-            maxLength={100}
-            className="text-sm rounded border border-gray-300 px-2 py-1 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-            aria-label="Saved view name"
-          />
-          <button
-            type="submit"
-            className="text-sm px-3 py-1 bg-gray-100 rounded hover:bg-gray-200 text-gray-700"
-          >
-            Save Current View
-          </button>
-        </form>
-      </div>
-
-      {/* Filter Bar */}
-      <details className="bg-white rounded-lg border border-gray-200 mb-4 group" open>
-        <summary className="px-4 py-3 cursor-pointer text-sm font-medium text-gray-700 hover:text-gray-900 list-none flex items-center justify-between md:hidden focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none rounded-lg">
-          <span>Filters</span>
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+      {/* Consolidated Views & Filters Panel */}
+      <details className="bg-white rounded-lg border border-gray-200 mb-4 group">
+        <summary className="px-4 py-3 cursor-pointer text-sm font-medium text-gray-700 hover:text-gray-900 list-none flex items-center justify-between focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none rounded-lg">
+          <span>Views & Filters: {currentViewName}</span>
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>
         </summary>
-        <form method="get" action="/agent" className="p-4">
+
+        <div className="px-4 pt-4 pb-4 border-t border-gray-200">
+          {/* Saved Views Section */}
+          <div className="mb-4">
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <span className="text-sm font-medium text-gray-700">Saved Views:</span>
+              {/* Default View */}
+              <a
+                href="/agent"
+                className={`text-sm px-2 py-0.5 rounded ${
+                  currentViewName === 'Default'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Default
+              </a>
+              {/* Saved Views */}
+              {savedViews.length === 0 && (
+                <span className="text-sm text-gray-500">None yet</span>
+              )}
+              {savedViews.map((view) => {
+                const viewFilters = (view.filters ?? {}) as Record<string, string>;
+                const viewParams = new URLSearchParams(viewFilters);
+                const isActive = currentViewName === view.name;
+                return (
+                  <span key={view.id} className="inline-flex items-center gap-1">
+                    <a
+                      href={`/agent?${viewParams.toString()}`}
+                      className={`text-sm px-2 py-0.5 rounded ${
+                        isActive
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {view.name}
+                    </a>
+                    <form action={renameSavedView} className="inline-flex items-center">
+                      <input type="hidden" name="view_id" value={view.id} />
+                      <input
+                        type="text"
+                        name="name"
+                        defaultValue={view.name}
+                        className="w-20 text-xs border border-gray-300 rounded px-1 py-0.5 hidden"
+                        aria-label={`Rename ${view.name}`}
+                      />
+                    </form>
+                    <form action={deleteSavedView}>
+                      <input type="hidden" name="view_id" value={view.id} />
+                      <button
+                        type="submit"
+                        className="text-xs text-red-500 hover:text-red-700"
+                        title={`Delete ${view.name}`}
+                        aria-label={`Delete saved view ${view.name}`}
+                      >
+                        ×
+                      </button>
+                    </form>
+                  </span>
+                );
+              })}
+            </div>
+            <form action={createSavedView} className="flex items-center gap-2">
+              <input type="hidden" name="filters" value={currentFiltersJson} />
+              <input
+                type="text"
+                name="name"
+                placeholder="View name…"
+                maxLength={100}
+                className="text-sm rounded border border-gray-300 px-2 py-1 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none flex-1"
+                aria-label="Saved view name"
+              />
+              <button
+                type="submit"
+                className="text-sm px-3 py-1 bg-gray-100 rounded hover:bg-gray-200 text-gray-700 whitespace-nowrap"
+              >
+                Save View
+              </button>
+            </form>
+          </div>
+
+          {/* Filter Controls Section */}
+          <div className="pt-4 border-t border-gray-200">
+            <form method="get" action="/agent">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
           {/* Search */}
           <div>
@@ -437,8 +466,10 @@ export default async function AgentDashboardPage({
             Clear All
           </Link>
         </div>
-      </form>
-      </details>
+            </form>
+          </div>
+        </div>
+        </details>
 
       {/* Result count */}
       <p className="text-sm text-gray-600 mb-4" data-testid="result-count">

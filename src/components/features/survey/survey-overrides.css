@@ -1,0 +1,90 @@
+/* HelpDesk-tuned overrides on top of survey-core.min.css.
+ * Applied alongside the theme defined in theme.json. */
+
+.sd-root-modern,
+.sd-root-modern.sd-root-modern--full-container,
+.sd-container-modern,
+.sd-body,
+.sd-body__page,
+.sd-page {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.sd-page,
+.sd-body__page {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.sd-question {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
+.sd-question__title {
+  font-weight: 500;
+  color: #111827;
+}
+
+.sd-input {
+  border: 1px solid #d1d5db !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  background: #ffffff !important;
+}
+
+.sd-input:focus,
+.sd-input:focus-within {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 1px #2563eb !important;
+  outline: none !important;
+}
+
+.sd-btn,
+.sd-navigation__complete-btn {
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  font-weight: 500 !important;
+  padding: 8px 16px !important;
+}
+
+.sd-btn--action,
+.sd-navigation__complete-btn {
+  background: #2563eb !important;
+  color: #ffffff !important;
+}
+
+.sd-btn--action:hover,
+.sd-navigation__complete-btn:hover {
+  background: #1d4ed8 !important;
+}
+
+.sd-action-bar,
+.sd-footer {
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin-top: 12px !important;
+}
+
+/* Dropdown / tagbox / select popup chrome */
+.sv-popup .sv-popup__container,
+.sv-popup__container {
+  background: #ffffff !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 6px !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1) !important;
+}
+
+.sv-list__item--selected .sv-list__item-body,
+.sv-list__item.sv-list__item--selected:hover .sv-list__item-body {
+  background: #2563eb !important;
+  color: #ffffff !important;
+}
+
+.sv-list__item:hover .sv-list__item-body,
+.sv-list__item--focused .sv-list__item-body {
+  background: rgba(37, 99, 235, 0.08) !important;
+}

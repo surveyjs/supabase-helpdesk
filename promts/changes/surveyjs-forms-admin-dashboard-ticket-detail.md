@@ -15,7 +15,9 @@ Introduce SurveyJS (React) as the form engine for the following areas:
 - Install latest SurveyJS packages for React:
   - `survey-core`
   - `survey-react-ui`
-- Use the default SurveyJS theme globally.
+- Apply a custom panelless SurveyJS theme that mirrors the app's Tailwind palette and typography (blue-600 primary, gray-200 borders, gray-900 text, system font stack). Theme is centralized in `src/components/features/survey/theme.json` and applied via `model.applyTheme(...)` inside `SurveyJsonForm`. CSS overrides in `src/components/features/survey/survey-overrides.css` remove residual SurveyJS borders/shadows so survey forms blend with surrounding card UI. The theme is applied to:
+  - All admin SurveyJS forms (Privacy, Pagination, Rate Limit, CSAT, User Settings, Inbound Email, Email SMTP/Delay, Survey UI Config).
+  - Agent dashboard filter form (`AgentFiltersSurvey`).
 
 ### 2. Admin JSON Configuration Tab
 

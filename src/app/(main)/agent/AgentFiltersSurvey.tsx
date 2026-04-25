@@ -36,134 +36,159 @@ export function AgentFiltersSurvey({ filters, filterOptions, config }: AgentFilt
   const router = useRouter();
 
   const schema = useMemo(() => {
-    const elements: Array<Record<string, unknown>> = [];
+    const definitions: Record<string, Record<string, unknown> | null> = {
+      q: config.enabledFilters.q
+        ? { type: 'text', name: 'q', title: 'Search', inputType: 'search', placeholder: 'Search title & all posts...' }
+        : null,
+      email: config.enabledFilters.email
+        ? { type: 'text', name: 'email', title: 'Submitter Email', placeholder: 'email@...' }
+        : null,
+      status: config.enabledFilters.status
+        ? {
+            type: 'dropdown',
+            name: 'status',
+            title: 'Status',
+            choices: [
+              { value: 'all', text: 'All' },
+              { value: 'active', text: 'Active' },
+              { value: 'closed', text: 'Closed' },
+            ],
+          }
+        : null,
+      sort: config.enabledFilters.sort
+        ? {
+            type: 'dropdown',
+            name: 'sort',
+            title: 'Sort By',
+            choices: [
+              { value: '', text: 'Last Modified' },
+              { value: 'created', text: 'Created Date' },
+              { value: 'sla', text: 'SLA Risk' },
+            ],
+          }
+        : null,
+      urgency: config.enabledFilters.urgency
+        ? {
+            type: 'dropdown',
+            name: 'urgency',
+            title: 'Urgency',
+            choices: [
+              { value: '', text: 'All' },
+              { value: 'low', text: 'Low' },
+              { value: 'medium', text: 'Medium' },
+              { value: 'high', text: 'High' },
+              { value: 'critical', text: 'Critical' },
+            ],
+          }
+        : null,
+      severity: config.enabledFilters.severity
+        ? {
+            type: 'dropdown',
+            name: 'severity',
+            title: 'Severity',
+            choices: [
+              { value: '', text: 'All' },
+              { value: 'low', text: 'Low' },
+              { value: 'medium', text: 'Medium' },
+              { value: 'high', text: 'High' },
+              { value: 'critical', text: 'Critical' },
+            ],
+          }
+        : null,
+      type: config.enabledFilters.type
+        ? {
+            type: 'dropdown',
+            name: 'type',
+            title: 'Type',
+            choices: [
+              { value: '', text: 'All' },
+              ...filterOptions.types.map((item) => ({ value: item.id, text: item.name })),
+            ],
+          }
+        : null,
+      category:
+        config.enabledFilters.category && filterOptions.categories.length > 0
+          ? {
+              type: 'dropdown',
+              name: 'category',
+              title: 'Category',
+              choices: [
+                { value: '', text: 'All' },
+                ...filterOptions.categories.map((item) => ({ value: item.id, text: item.name })),
+              ],
+            }
+          : null,
+      agent: config.enabledFilters.agent
+        ? {
+            type: 'dropdown',
+            name: 'agent',
+            title: 'Assigned Agent',
+            choices: [
+              { value: '', text: 'All' },
+              { value: 'unassigned', text: 'Unassigned' },
+              ...filterOptions.agents.map((agent) => ({
+                value: agent.id,
+                text: `${agent.display_name ?? 'Agent'} (${agent.email})`,
+              })),
+            ],
+          }
+        : null,
+      team: config.enabledFilters.team
+        ? {
+            type: 'dropdown',
+            name: 'team',
+            title: 'Team',
+            choices: [
+              { value: '', text: 'All' },
+              { value: 'none', text: 'No team' },
+              ...filterOptions.teams.map((item) => ({ value: item.id, text: item.name })),
+            ],
+          }
+        : null,
+      tier:
+        config.enabledFilters.tier && filterOptions.tiers.length > 0
+          ? {
+              type: 'dropdown',
+              name: 'tier',
+              title: 'Tier',
+              choices: [
+                { value: '', text: 'All' },
+                { value: 'none', text: 'No tier' },
+                ...filterOptions.tiers.map((item) => ({ value: item.key, text: item.display_name })),
+              ],
+            }
+          : null,
+      tags:
+        config.enabledFilters.tags && filterOptions.tags.length > 0
+          ? {
+              type: 'tagbox',
+              name: 'tags',
+              title: 'Tags',
+              choices: filterOptions.tags.map((tag) => ({ value: tag.id, text: tag.name })),
+              showSelectAllItem: false,
+            }
+          : null,
+    };
 
-    if (config.enabledFilters.q) {
-      elements.push({ type: 'text', name: 'q', title: 'Search', inputType: 'search', placeholder: 'Search title & all posts...' });
-    }
-    if (config.enabledFilters.email) {
-      elements.push({ type: 'text', name: 'email', title: 'Submitter Email', placeholder: 'email@...' });
-    }
-    if (config.enabledFilters.status) {
-      elements.push({
-        type: 'dropdown',
-        name: 'status',
-        title: 'Status',
-        choices: [
-          { value: 'all', text: 'All' },
-          { value: 'active', text: 'Active' },
-          { value: 'closed', text: 'Closed' },
-        ],
-      });
-    }
-    if (config.enabledFilters.sort) {
-      elements.push({
-        type: 'dropdown',
-        name: 'sort',
-        title: 'Sort By',
-        choices: [
-          { value: '', text: 'Last Modified' },
-          { value: 'created', text: 'Created Date' },
-          { value: 'sla', text: 'SLA Risk' },
-        ],
-      });
-    }
-    if (config.enabledFilters.urgency) {
-      elements.push({
-        type: 'dropdown',
-        name: 'urgency',
-        title: 'Urgency',
-        choices: [
-          { value: '', text: 'All' },
-          { value: 'low', text: 'Low' },
-          { value: 'medium', text: 'Medium' },
-          { value: 'high', text: 'High' },
-          { value: 'critical', text: 'Critical' },
-        ],
-      });
-    }
-    if (config.enabledFilters.severity) {
-      elements.push({
-        type: 'dropdown',
-        name: 'severity',
-        title: 'Severity',
-        choices: [
-          { value: '', text: 'All' },
-          { value: 'low', text: 'Low' },
-          { value: 'medium', text: 'Medium' },
-          { value: 'high', text: 'High' },
-          { value: 'critical', text: 'Critical' },
-        ],
-      });
-    }
-    if (config.enabledFilters.type) {
-      elements.push({
-        type: 'dropdown',
-        name: 'type',
-        title: 'Type',
-        choices: [
-          { value: '', text: 'All' },
-          ...filterOptions.types.map((item) => ({ value: item.id, text: item.name })),
-        ],
-      });
-    }
-    if (config.enabledFilters.category && filterOptions.categories.length > 0) {
-      elements.push({
-        type: 'dropdown',
-        name: 'category',
-        title: 'Category',
-        choices: [
-          { value: '', text: 'All' },
-          ...filterOptions.categories.map((item) => ({ value: item.id, text: item.name })),
-        ],
-      });
-    }
-    if (config.enabledFilters.agent) {
-      elements.push({
-        type: 'dropdown',
-        name: 'agent',
-        title: 'Assigned Agent',
-        choices: [
-          { value: '', text: 'All' },
-          { value: 'unassigned', text: 'Unassigned' },
-          ...filterOptions.agents.map((agent) => ({
-            value: agent.id,
-            text: `${agent.display_name ?? 'Agent'} (${agent.email})`,
-          })),
-        ],
-      });
-    }
-    if (config.enabledFilters.team) {
-      elements.push({
-        type: 'dropdown',
-        name: 'team',
-        title: 'Team',
-        choices: [
-          { value: '', text: 'All' },
-          { value: 'none', text: 'No team' },
-          ...filterOptions.teams.map((item) => ({ value: item.id, text: item.name })),
-        ],
-      });
-    }
-    if (config.enabledFilters.tier && filterOptions.tiers.length > 0) {
-      elements.push({
-        type: 'dropdown',
-        name: 'tier',
-        title: 'Tier',
-        choices: [
-          { value: '', text: 'All' },
-          { value: 'none', text: 'No tier' },
-          ...filterOptions.tiers.map((item) => ({ value: item.key, text: item.display_name })),
-        ],
-      });
-    }
-    if (config.enabledFilters.tags && filterOptions.tags.length > 0) {
-      elements.push({
-        type: 'tagbox',
-        name: 'tags',
-        title: 'Tags',
-        choices: filterOptions.tags.map((tag) => ({ value: tag.id, text: tag.name })),
-        showSelectAllItem: false,
+    // Logical groups rendered as rows. First enabled item in a group starts a
+    // new row; the rest get `startWithNewLine: false` so they sit beside it.
+    const groups: Array<Array<keyof typeof definitions>> = [
+      ['q'],
+      ['email'],
+      ['status', 'sort'],
+      ['urgency', 'severity'],
+      ['type', 'category'],
+      ['agent', 'team', 'tier'],
+      ['tags'],
+    ];
+
+    const elements: Array<Record<string, unknown>> = [];
+    for (const group of groups) {
+      const present = group
+        .map((key) => definitions[key])
+        .filter((item): item is Record<string, unknown> => item !== null);
+      present.forEach((element, index) => {
+        elements.push(index === 0 ? element : { ...element, startWithNewLine: false });
       });
     }
 

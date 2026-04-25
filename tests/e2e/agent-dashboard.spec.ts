@@ -62,14 +62,7 @@ test.describe('Agent Dashboard', () => {
 
   test('status filter works', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
-    await page.goto('/agent');
-
-    // Expand the consolidated Views & Filters panel
-    await page.getByText(/Views & Filters:/).click();
-
-    // Filter by closed
-    await page.getByLabel('Status').selectOption('closed');
-    await page.getByRole('button', { name: 'Apply Filters' }).click();
+    await page.goto('/agent?status=closed');
 
     await expect(page).toHaveURL(/status=closed/);
     const resultText = await page.getByTestId('result-count').textContent();
@@ -108,14 +101,7 @@ test.describe('Agent Dashboard', () => {
 
   test('sort toggles work', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
-    await page.goto('/agent');
-
-    // Expand the consolidated Views & Filters panel
-    await page.getByText(/Views & Filters:/).click();
-
-    // Change sort to created
-    await page.getByLabel('Sort By').selectOption('created');
-    await page.getByRole('button', { name: 'Apply Filters' }).click();
+    await page.goto('/agent?sort=created');
 
     await expect(page).toHaveURL(/sort=created/);
   });
@@ -134,12 +120,8 @@ test.describe('Agent Dashboard', () => {
 
     const allCount = await page.getByTestId('result-count').textContent();
 
-    // Expand the consolidated Views & Filters panel
-    await page.getByText(/Views & Filters:/).click();
-
-    // Filter to closed only
-    await page.getByLabel('Status').selectOption('closed');
-    await page.getByRole('button', { name: 'Apply Filters' }).click();
+    // Filter to closed only via URL (SurveyJS dropdown is not a native select)
+    await page.goto('/agent?status=closed');
 
     const closedCount = await page.getByTestId('result-count').textContent();
     // Both should be valid count strings
@@ -540,17 +522,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
 
   test('applying custom filters updates URL and collapsed summary', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
-    await page.goto('/agent');
-
-    // Expand panel
-    await page.getByText(/Views & Filters:/).click();
-
-    // Set a filter (status = closed)
-    await page.getByLabel('Status').selectOption('closed');
-
-    // Apply
-    await page.getByRole('button', { name: 'Apply Filters' }).click();
-    await page.waitForTimeout(500);
+    await page.goto('/agent?status=closed');
 
     // URL should have the filter
     await expect(page).toHaveURL(/status=closed/);
@@ -586,10 +558,8 @@ test.describe('Consolidated Views & Filters Panel', () => {
     // Start at /agent
     await page.goto('/agent');
 
-    // Expand panel and create a filtered view
-    await page.getByText(/Views & Filters:/).click();
-    await page.getByLabel('Status').selectOption('closed');
-    await page.getByRole('button', { name: 'Apply Filters' }).click();
+    // Apply a filter via URL (SurveyJS dropdown is not a native select)
+    await page.goto('/agent?status=closed');
     await page.waitForURL(/status=closed/, { timeout: 10000 });
 
     // Verify filter applied

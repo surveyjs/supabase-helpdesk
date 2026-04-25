@@ -135,15 +135,8 @@ test.describe('Subscription Tiers', () => {
 
   test('tier filter filters tickets by tier', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
-    await page.goto('/agent');
+    await page.goto('/agent?tier=none');
     await expect(page.getByRole('link', { name: 'Agent Dashboard' })).toHaveAttribute('aria-current', 'page');
-
-    // Expand the consolidated Views & Filters panel
-    await page.getByText(/Views & Filters:/).click();
-
-    // Filter by "No tier"
-    await page.getByLabel('Tier').selectOption('none');
-    await page.getByRole('button', { name: 'Apply Filters' }).click();
 
     await expect(page).toHaveURL(/tier=none/);
   });

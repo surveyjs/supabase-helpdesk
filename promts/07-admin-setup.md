@@ -318,6 +318,22 @@ Update `src/components/layout/NavBar.tsx`:
 - Custom field on ticket: custom_fields JSONB stores and retrieves correctly
 - Notification templates: admin can read and update
 - Non-admin cannot read notification templates (RLS)
+
+## Change Update — Survey UI Config Tab
+
+Add an additional admin section:
+- Sidebar item: `Survey UI Config`
+- Route: `/admin/survey-ui`
+
+This section stores and edits three JSON settings in `app_settings` using SurveyJS forms:
+- `survey_agent_dashboard_config`
+- `survey_ticket_detail_agent_config`
+- `survey_ticket_detail_user_config`
+
+Guidelines:
+- Save/reset actions must be admin-only and audit-logged.
+- Stored JSON must be validated and normalized before persistence.
+- Changes should revalidate affected pages (`/admin/survey-ui`, `/agent`, ticket detail pages as needed).
 - Agent/admin management: promote user to agent, demote back
 - Last admin guard: cannot demote the only admin
 - App settings: admin can update privacy, pagination, rate limit settings

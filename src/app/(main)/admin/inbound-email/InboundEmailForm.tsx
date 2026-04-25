@@ -1,8 +1,10 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useMemo } from 'react';
 import Link from 'next/link';
 import { updateInboundEmailSettings } from '@/lib/actions/admin';
+import { AdminSurveyForm } from '@/components/features/survey/AdminSurveyForm';
+import inboundEmailSchema from '@/components/features/survey/form-json/admin/inbound-email.json';
 
 type AutoReplyTemplate = {
   event_type: string;
@@ -18,12 +20,24 @@ export function InboundEmailForm({
   replyToAddress: string;
   autoReplyTemplates: AutoReplyTemplate[];
 }) {
-  const [state, formAction, isPending] = useActionState(
-    async (_prev: { message?: string }, formData: FormData) => {
-      const result = await updateInboundEmailSettings(formData);
-      return result;
+  const data = useMemo(
+    () => ({
+      inbound_email_enabled: enabled,
+      reply_to_address: replyToAddress,
+    }),
+    [enabled, replyToAddress],
+  );
+
+  const toFormData = useMemo(
+    () => (surveyData: Record<string, unknown>) => {
+      const fd = new FormData();
+      if (surveyData.inbound_email_enabled === true) {
+        fd.set('inbound_email_enabled', 'on');
+      }
+      fd.set('reply_to_address', String(surveyData.reply_to_address ?? '').trim());
+      return fd;
     },
-    {},
+    [],
   );
 
   const templateLabels: Record<string, string> = {
@@ -36,56 +50,25 @@ export function InboundEmailForm({
   return (
     <div className="space-y-6">
       {/* Inbound Email Configuration */}
-      <form action={formAction} className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
+      <div className="bg-white rounded-lg border border-gray-200 p-6 space-y-4" data-testid="inbound-email-survey-form">
         <h2 className="text-lg font-medium text-gray-900">Configuration</h2>
         <p className="text-sm text-gray-500">
           Enable inbound email processing to allow users to create tickets and reply to existing tickets by email.
         </p>
 
-        <div className="flex items-center gap-3">
-          <input
-            type="checkbox"
-            name="inbound_email_enabled"
-            id="inbound_email_enabled"
-            defaultChecked={enabled}
-            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-          />
-          <label htmlFor="inbound_email_enabled" className="text-sm font-medium text-gray-700">
-            Enable inbound email processing
-          </label>
-        </div>
-
-        <div>
-          <label htmlFor="reply_to_address" className="block text-sm font-medium text-gray-700 mb-1">
-            Reply-To Address
-          </label>
-          <input
-            type="email"
-            name="reply_to_address"
-            id="reply_to_address"
-            defaultValue={replyToAddress}
-            placeholder="support@example.com"
-            className="w-full max-w-md rounded border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-          />
-          <p className="text-xs text-gray-500 mt-1">
-            This address is used as the Reply-To header in outbound notification emails so replies are routed back to the system.
-          </p>
-        </div>
-
-        {state?.message && (
-          <p className={`text-sm ${state.message.includes('error') || state.message.includes('Error') || state.message.includes('required') ? 'text-red-600' : 'text-green-600'}`}>
-            {state.message}
-          </p>
-        )}
-
-        <button
-          type="submit"
-          disabled={isPending}
-          className="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 font-medium disabled:opacity-50"
-        >
-          {isPending ? 'Saving...' : 'Save'}
-        </button>
-      </form>
+        <AdminSurveyForm
+          schema={inboundEmailSchema}
+          data={data}
+          mode="autosave"
+          debounceMs={700}
+          saveAction={updateInboundEmailSettings}
+          toFormData={toFormData}
+          successMessage="Settings saved."
+        />
+        <p className="text-xs text-gray-500 mt-1">
+          This address is used as the Reply-To header in outbound notification emails so replies are routed back to the system.
+        </p>
+      </div>
 
       {/* Auto-Reply Templates */}
       <div className="bg-white rounded-lg border border-gray-200 p-6">

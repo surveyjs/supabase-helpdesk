@@ -1,0 +1,28 @@
+{
+  "showQuestionNumbers": "off",
+  "pages": [
+    {
+      "elements": [
+        {
+          "type": "radiogroup",
+          "name": "ticket_default_privacy",
+          "title": "Default Ticket Privacy",
+          "choices": [
+            { "value": "true", "text": "Private by default" },
+            { "value": "false", "text": "Public by default" }
+          ]
+        },
+        {
+          "type": "boolean",
+          "name": "allow_user_privacy_control",
+          "title": "Allow users to change ticket privacy"
+        },
+        {
+          "type": "boolean",
+          "name": "allow_public_ticket_browsing",
+          "title": "Allow public access for unauthenticated visitors"
+        }
+      ]
+    }
+  ]
+}

@@ -48,6 +48,11 @@ import { GenerateKbArticleButton } from './GenerateKbArticleButton';
 import { TicketTabs } from './TicketTabs';
 import { MarkAsDuplicateForm } from './MarkAsDuplicateForm';
 import { MergeTicketForm } from './MergeTicketForm';
+import {
+  canTierUseControl,
+  parseTicketDetailAgentConfig,
+  parseTicketDetailUserConfig,
+} from '@/lib/constants/survey-ui-config';
 
 function getContrastColor(hex: string): string {
   const c = hex.replace('#', '');
@@ -139,11 +144,15 @@ export default async function TicketDetailPage({
   // Fetch posts (include notes/drafts/comments for agents)
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role, is_blocked')
+    .select('role, is_blocked, tier_expires_at, tier:subscription_tiers(key)')
     .eq('id', user.id)
     .single();
 
   const isAgent = profile?.role === 'agent' || profile?.role === 'admin';
+  const viewerTier = Array.isArray(profile?.tier) ? profile?.tier[0] : profile?.tier;
+  const nowIso = new Date().toISOString();
+  const tierExpired = !!profile?.tier_expires_at && profile.tier_expires_at < nowIso;
+  const viewerTierKey = !tierExpired ? (viewerTier?.key ?? null) : null;
 
   // Backward-compatible: editor_view_mode may not exist before migration 021 is applied.
   let editorViewMode: 'both' | 'preview' | 'editor' = 'both';
@@ -209,6 +218,8 @@ export default async function TicketDetailPage({
       'ai_ticket_summary_enabled',
       'ai_ticket_summary_min_posts',
       'ai_generate_kb_article_enabled',
+      'survey_ticket_detail_agent_config',
+      'survey_ticket_detail_user_config',
     ]);
 
   const settingsMap = new Map(allSettings?.map((s) => [s.key, s.value]) ?? []);
@@ -220,6 +231,15 @@ export default async function TicketDetailPage({
 
   const visiblePostsThreshold = parseInt(settingsMap.get('visible_posts_threshold') ?? '10', 10) || 10;
   const visibleCommentsThreshold = parseInt(settingsMap.get('visible_comments_threshold') ?? '3', 10) || 3;
+  const detailAgentConfig = parseTicketDetailAgentConfig(settingsMap.get('survey_ticket_detail_agent_config'));
+  const detailUserConfig = parseTicketDetailUserConfig(settingsMap.get('survey_ticket_detail_user_config'));
+  const detailFieldConfig = isAgent ? detailAgentConfig.fields : detailUserConfig.fields;
+
+  const canTierStatusControl = canTierUseControl(detailUserConfig.tierControlRules.statusAllowedTiers, viewerTierKey);
+  const canTierSeverityControl = canTierUseControl(detailUserConfig.tierControlRules.severityAllowedTiers, viewerTierKey);
+  const canTierTypeControl = canTierUseControl(detailUserConfig.tierControlRules.typeAllowedTiers, viewerTierKey);
+  const canTierTagsControl = canTierUseControl(detailUserConfig.tierControlRules.tagsAllowedTiers, viewerTierKey);
+  const canTierVisibilityControl = canTierUseControl(detailUserConfig.tierControlRules.visibilityAllowedTiers, viewerTierKey);
 
   // Check if user can reply (non-agents cannot reply to duplicates)
   const canReply = isAgent || !ticket.duplicate_of_id;
@@ -819,7 +839,7 @@ export default async function TicketDetailPage({
 
             {/* Ticket info + controls */}
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-              {isAgent && (
+              {detailFieldConfig.status && (isAgent || (tierCaps.change_status && canTierStatusControl)) && (
                 <>
                   <dt className="text-gray-500">Status</dt>
                   <dd>
@@ -833,6 +853,15 @@ export default async function TicketDetailPage({
                             <input type="hidden" name="new_status" value="pending" />
                             <button type="submit" className="px-2 py-0.5 text-xs rounded bg-yellow-100 text-yellow-700 hover:bg-yellow-200">
                               Mark Pending
+                            </button>
+                          </form>
+                        )}
+                        {ticket.status !== 'open' && (
+                          <form action={changeTicketStatus}>
+                            <input type="hidden" name="ticket_id" value={ticket.id} />
+                            <input type="hidden" name="new_status" value="open" />
+                            <button type="submit" className="px-2 py-0.5 text-xs rounded bg-green-100 text-green-700 hover:bg-green-200">
+                              Mark Open
                             </button>
                           </form>
                         )}
@@ -851,72 +880,84 @@ export default async function TicketDetailPage({
                 </>
               )}
 
-              <dt className="text-gray-500">Urgency</dt>
-              <dd>
-                {isAgent && !ticket.merged_into_id ? (
-                  <form action={changeUrgency} className="flex gap-1 items-center">
-                    <input type="hidden" name="ticket_id" value={ticket.id} />
-                    <select
-                      name="new_urgency"
-                      defaultValue={ticket.urgency}
-                      className="flex-1 rounded border border-gray-300 px-1.5 py-0.5 text-xs"
-                    >
-                      <option value="low">Low</option>
-                      <option value="medium">Medium</option>
-                      <option value="high">High</option>
-                      <option value="critical">Critical</option>
-                    </select>
-                    <button type="submit" className="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-700 hover:bg-gray-200">Set</button>
-                  </form>
-                ) : (
-                  <Badge variant="priority" value={ticket.urgency} />
-                )}
-              </dd>
+              {detailFieldConfig.urgency && (
+                <>
+                  <dt className="text-gray-500">Urgency</dt>
+                  <dd>
+                    {isAgent && !ticket.merged_into_id ? (
+                      <form action={changeUrgency} className="flex gap-1 items-center">
+                        <input type="hidden" name="ticket_id" value={ticket.id} />
+                        <select
+                          name="new_urgency"
+                          defaultValue={ticket.urgency}
+                          className="flex-1 rounded border border-gray-300 px-1.5 py-0.5 text-xs"
+                        >
+                          <option value="low">Low</option>
+                          <option value="medium">Medium</option>
+                          <option value="high">High</option>
+                          <option value="critical">Critical</option>
+                        </select>
+                        <button type="submit" className="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-700 hover:bg-gray-200">Set</button>
+                      </form>
+                    ) : (
+                      <Badge variant="priority" value={ticket.urgency} />
+                    )}
+                  </dd>
+                </>
+              )}
 
-              <dt className="text-gray-500">Severity</dt>
-              <dd>
-                {(isAgent || tierCaps.set_severity) && !ticket.merged_into_id ? (
-                  <form action={changeSeverity} className="flex gap-1 items-center">
-                    <input type="hidden" name="ticket_id" value={ticket.id} />
-                    <select
-                      name="new_severity"
-                      defaultValue={ticket.severity}
-                      className="flex-1 rounded border border-gray-300 px-1.5 py-0.5 text-xs"
-                    >
-                      <option value="low">Low</option>
-                      <option value="medium">Medium</option>
-                      <option value="high">High</option>
-                      <option value="critical">Critical</option>
-                    </select>
-                    <button type="submit" className="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-700 hover:bg-gray-200">Set</button>
-                  </form>
-                ) : (
-                  <Badge variant="priority" value={ticket.severity} />
-                )}
-              </dd>
+              {detailFieldConfig.severity && (
+                <>
+                  <dt className="text-gray-500">Severity</dt>
+                  <dd>
+                    {(isAgent || (tierCaps.set_severity && canTierSeverityControl)) && !ticket.merged_into_id ? (
+                      <form action={changeSeverity} className="flex gap-1 items-center">
+                        <input type="hidden" name="ticket_id" value={ticket.id} />
+                        <select
+                          name="new_severity"
+                          defaultValue={ticket.severity}
+                          className="flex-1 rounded border border-gray-300 px-1.5 py-0.5 text-xs"
+                        >
+                          <option value="low">Low</option>
+                          <option value="medium">Medium</option>
+                          <option value="high">High</option>
+                          <option value="critical">Critical</option>
+                        </select>
+                        <button type="submit" className="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-700 hover:bg-gray-200">Set</button>
+                      </form>
+                    ) : (
+                      <Badge variant="priority" value={ticket.severity} />
+                    )}
+                  </dd>
+                </>
+              )}
 
-              <dt className="text-gray-500">Type</dt>
-              <dd>
-                {(isAgent || tierCaps.change_type) && !ticket.merged_into_id && allTypes.length > 0 ? (
-                  <form action={changeType} className="flex gap-1 items-center">
-                    <input type="hidden" name="ticket_id" value={ticket.id} />
-                    <select
-                      name="new_type_id"
-                      defaultValue={ticket.type_id}
-                      className="flex-1 rounded border border-gray-300 px-1.5 py-0.5 text-xs"
-                    >
-                      {allTypes.map((t) => (
-                        <option key={t.id} value={t.id}>{t.name}</option>
-                      ))}
-                    </select>
-                    <button type="submit" className="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-700 hover:bg-gray-200">Set</button>
-                  </form>
-                ) : (
-                  <span className="text-gray-900">{typeName}</span>
-                )}
-              </dd>
+              {detailFieldConfig.type && (
+                <>
+                  <dt className="text-gray-500">Type</dt>
+                  <dd>
+                    {(isAgent || (tierCaps.change_type && canTierTypeControl)) && !ticket.merged_into_id && allTypes.length > 0 ? (
+                      <form action={changeType} className="flex gap-1 items-center">
+                        <input type="hidden" name="ticket_id" value={ticket.id} />
+                        <select
+                          name="new_type_id"
+                          defaultValue={ticket.type_id}
+                          className="flex-1 rounded border border-gray-300 px-1.5 py-0.5 text-xs"
+                        >
+                          {allTypes.map((t) => (
+                            <option key={t.id} value={t.id}>{t.name}</option>
+                          ))}
+                        </select>
+                        <button type="submit" className="px-1.5 py-0.5 text-xs rounded bg-gray-100 text-gray-700 hover:bg-gray-200">Set</button>
+                      </form>
+                    ) : (
+                      <span className="text-gray-900">{typeName}</span>
+                    )}
+                  </dd>
+                </>
+              )}
 
-              {(categoryName || isAgent) && (
+              {detailFieldConfig.category && (categoryName || isAgent) && (
                 <>
                   <dt className="text-gray-500">Category</dt>
                   <dd>
@@ -942,67 +983,75 @@ export default async function TicketDetailPage({
                 </>
               )}
 
-              <dt className="text-gray-500">Created by</dt>
-              <dd className="text-gray-900">
-                <DisplayName
-                  userId={ticket.creator_id}
-                  displayName={creatorName}
-                  isCurrentUserAgent={isAgent}
-                />
-                {teamName && (
-                  <span className="ml-1 text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">
-                    {teamName}
-                  </span>
-                )}
-              </dd>
+              {detailFieldConfig.createdBy && (
+                <>
+                  <dt className="text-gray-500">Created by</dt>
+                  <dd className="text-gray-900">
+                    <DisplayName
+                      userId={ticket.creator_id}
+                      displayName={creatorName}
+                      isCurrentUserAgent={isAgent}
+                    />
+                    {teamName && (
+                      <span className="ml-1 text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">
+                        {teamName}
+                      </span>
+                    )}
+                  </dd>
+                </>
+              )}
 
-              <dt className="text-gray-500">Assigned</dt>
-              <dd className="text-gray-900">
-                {isAgent && !ticket.merged_into_id ? (
-                  <div className="space-y-1">
-                    <div>{assignedAgentName ?? 'Unassigned'}</div>
-                    <div className="flex flex-wrap gap-1">
-                      {!ticket.assigned_agent_id ? (
-                        <form action={assignToMe}>
+              {detailFieldConfig.assigned && (
+                <>
+                  <dt className="text-gray-500">Assigned</dt>
+                  <dd className="text-gray-900">
+                    {isAgent && !ticket.merged_into_id ? (
+                      <div className="space-y-1">
+                        <div>{assignedAgentName ?? 'Unassigned'}</div>
+                        <div className="flex flex-wrap gap-1">
+                          {!ticket.assigned_agent_id ? (
+                            <form action={assignToMe}>
+                              <input type="hidden" name="ticket_id" value={ticket.id} />
+                              <button type="submit" className="px-2 py-0.5 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200">Assign to me</button>
+                            </form>
+                          ) : (
+                            <form action={unassignAgent}>
+                              <input type="hidden" name="ticket_id" value={ticket.id} />
+                              <button type="submit" className="px-2 py-0.5 text-xs rounded bg-red-100 text-red-700 hover:bg-red-200">Unassign</button>
+                            </form>
+                          )}
+                        </div>
+                        <form action={ticket.assigned_agent_id ? reassignAgent : assignAgent} className="flex gap-1 items-center">
                           <input type="hidden" name="ticket_id" value={ticket.id} />
-                          <button type="submit" className="px-2 py-0.5 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200">Assign to me</button>
+                          <select
+                            name="agent_id"
+                            aria-label="Select agent"
+                            className="flex-1 rounded border border-gray-300 px-1.5 py-0.5 text-xs"
+                          >
+                            {allAgents.map((a) => (
+                              <option key={a.id} value={a.id}>{a.display_name ?? 'Agent'} ({a.email})</option>
+                            ))}
+                          </select>
+                          {ticket.assigned_agent_id && (
+                            <input
+                              type="text"
+                              name="reason"
+                              placeholder="Reason (optional)"
+                              aria-label="Reassignment reason"
+                              className="w-32 rounded border border-gray-300 px-1.5 py-0.5 text-xs"
+                            />
+                          )}
+                          <button type="submit" className="px-1.5 py-0.5 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200">
+                            {ticket.assigned_agent_id ? 'Reassign' : 'Assign'}
+                          </button>
                         </form>
-                      ) : (
-                        <form action={unassignAgent}>
-                          <input type="hidden" name="ticket_id" value={ticket.id} />
-                          <button type="submit" className="px-2 py-0.5 text-xs rounded bg-red-100 text-red-700 hover:bg-red-200">Unassign</button>
-                        </form>
-                      )}
-                    </div>
-                    <form action={ticket.assigned_agent_id ? reassignAgent : assignAgent} className="flex gap-1 items-center">
-                      <input type="hidden" name="ticket_id" value={ticket.id} />
-                      <select
-                        name="agent_id"
-                        aria-label="Select agent"
-                        className="flex-1 rounded border border-gray-300 px-1.5 py-0.5 text-xs"
-                      >
-                        {allAgents.map((a) => (
-                          <option key={a.id} value={a.id}>{a.display_name ?? 'Agent'} ({a.email})</option>
-                        ))}
-                      </select>
-                      {ticket.assigned_agent_id && (
-                        <input
-                          type="text"
-                          name="reason"
-                          placeholder="Reason (optional)"
-                          aria-label="Reassignment reason"
-                          className="w-32 rounded border border-gray-300 px-1.5 py-0.5 text-xs"
-                        />
-                      )}
-                      <button type="submit" className="px-1.5 py-0.5 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200">
-                        {ticket.assigned_agent_id ? 'Reassign' : 'Assign'}
-                      </button>
-                    </form>
-                  </div>
-                ) : (
-                  <span>{assignedAgentName ?? 'Unassigned'}</span>
-                )}
-              </dd>
+                      </div>
+                    ) : (
+                      <span>{assignedAgentName ?? 'Unassigned'}</span>
+                    )}
+                  </dd>
+                </>
+              )}
 
               {isAgent && !ticket.merged_into_id && !ticket.duplicate_of_id && (
                 <>
@@ -1016,29 +1065,41 @@ export default async function TicketDetailPage({
                 </>
               )}
 
-              <dt className="text-gray-500">Created</dt>
-              <dd className="text-gray-900" title={new Date(ticket.created_at).toLocaleString()}>
-                {formatDateTimeWithRelative(ticket.created_at)}
-              </dd>
-              <dt className="text-gray-500">Updated</dt>
-              <dd className="text-gray-900" title={new Date(ticket.updated_at).toLocaleString()}>
-                {formatDateTimeWithRelative(ticket.updated_at)}
-              </dd>
+              {detailFieldConfig.createdAt && (
+                <>
+                  <dt className="text-gray-500">Created</dt>
+                  <dd className="text-gray-900" title={new Date(ticket.created_at).toLocaleString()}>
+                    {formatDateTimeWithRelative(ticket.created_at)}
+                  </dd>
+                </>
+              )}
+              {detailFieldConfig.updatedAt && (
+                <>
+                  <dt className="text-gray-500">Updated</dt>
+                  <dd className="text-gray-900" title={new Date(ticket.updated_at).toLocaleString()}>
+                    {formatDateTimeWithRelative(ticket.updated_at)}
+                  </dd>
+                </>
+              )}
 
-              <dt className="text-gray-500">Visibility</dt>
-              <dd className="flex items-center gap-2">
-                <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-                  {ticket.is_private ? 'Private' : 'Public'}
-                </span>
-                {(isAgent || tierCaps.change_visibility) && !ticket.merged_into_id && (
-                  <form action={toggleTicketPrivacyAction}>
-                    <input type="hidden" name="ticket_id" value={ticket.id} />
-                    <button type="submit" className={`px-2 py-0.5 text-xs rounded ${ticket.is_private ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}>
-                      {ticket.is_private ? 'Make Public' : 'Make Private'}
-                    </button>
-                  </form>
-                )}
-              </dd>
+              {detailFieldConfig.visibility && (
+                <>
+                  <dt className="text-gray-500">Visibility</dt>
+                  <dd className="flex items-center gap-2">
+                    <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                      {ticket.is_private ? 'Private' : 'Public'}
+                    </span>
+                    {(isAgent || (tierCaps.change_visibility && canTierVisibilityControl)) && !ticket.merged_into_id && (
+                      <form action={toggleTicketPrivacyAction}>
+                        <input type="hidden" name="ticket_id" value={ticket.id} />
+                        <button type="submit" className={`px-2 py-0.5 text-xs rounded ${ticket.is_private ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}>
+                          {ticket.is_private ? 'Make Public' : 'Make Private'}
+                        </button>
+                      </form>
+                    )}
+                  </dd>
+                </>
+              )}
 
               {sourceArticle && (
                 <>
@@ -1143,7 +1204,7 @@ export default async function TicketDetailPage({
             )}
 
             {/* Tags */}
-            {(ticketTags.length > 0 || ((isAgent || tierCaps.add_remove_tags) && availableTags.length > 0)) && (
+            {detailFieldConfig.tags && (ticketTags.length > 0 || ((isAgent || (tierCaps.add_remove_tags && canTierTagsControl)) && availableTags.length > 0)) && (
               <div className="mt-3 border-t border-gray-200 pt-3" data-testid="ticket-tags">
                 <div className="flex flex-wrap gap-1">
                   {ticketTags.map((tag) => {
@@ -1156,7 +1217,7 @@ export default async function TicketDetailPage({
                         >
                           {tag.name}
                         </span>
-                        {(isAgent || tierCaps.add_remove_tags) && (
+                        {(isAgent || (tierCaps.add_remove_tags && canTierTagsControl)) && (
                           <form action={removeTagFromTicket} className="inline">
                             <input type="hidden" name="ticket_id" value={ticket.id} />
                             <input type="hidden" name="tag_id" value={tag.id} />
@@ -1167,7 +1228,7 @@ export default async function TicketDetailPage({
                     );
                   })}
                 </div>
-                {(isAgent || tierCaps.add_remove_tags) && availableTags.length > 0 && (
+                {(isAgent || (tierCaps.add_remove_tags && canTierTagsControl)) && availableTags.length > 0 && (
                   <form action={addTagToTicket} className="mt-1.5 flex gap-1 items-center" data-testid="add-tag-form">
                     <input type="hidden" name="ticket_id" value={ticket.id} />
                     <select name="tag_id" className="rounded border border-gray-300 px-1.5 py-0.5 text-xs" aria-label="Select tag to add">
@@ -1182,31 +1243,33 @@ export default async function TicketDetailPage({
             )}
 
             {/* Follow/Unfollow */}
-            <div className="mt-3 border-t border-gray-200 pt-3" data-testid="follow-section">
-              <div className="flex items-center gap-2">
-                {isTicketOwner ? (
-                  <span className="text-xs text-gray-500">Following (owner)</span>
-                ) : !isBlocked ? (
-                  isFollowing ? (
-                    <form action={unfollowTicket}>
-                      <input type="hidden" name="ticket_id" value={ticket.id} />
-                      <button type="submit" className="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-700 hover:bg-gray-200" data-testid="unfollow-btn">Unfollow</button>
-                    </form>
-                  ) : (
-                    <form action={followTicket}>
-                      <input type="hidden" name="ticket_id" value={ticket.id} />
-                      <button type="submit" className="px-2 py-0.5 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200" data-testid="follow-btn">Follow</button>
-                    </form>
-                  )
-                ) : null}
-                {isAgent && followers.length > 0 && (
-                  <span className="text-xs text-gray-400">{followers.length} follower{followers.length !== 1 ? 's' : ''}</span>
-                )}
+            {detailFieldConfig.follow && (
+              <div className="mt-3 border-t border-gray-200 pt-3" data-testid="follow-section">
+                <div className="flex items-center gap-2">
+                  {isTicketOwner ? (
+                    <span className="text-xs text-gray-500">Following (owner)</span>
+                  ) : !isBlocked ? (
+                    isFollowing ? (
+                      <form action={unfollowTicket}>
+                        <input type="hidden" name="ticket_id" value={ticket.id} />
+                        <button type="submit" className="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-700 hover:bg-gray-200" data-testid="unfollow-btn">Unfollow</button>
+                      </form>
+                    ) : (
+                      <form action={followTicket}>
+                        <input type="hidden" name="ticket_id" value={ticket.id} />
+                        <button type="submit" className="px-2 py-0.5 text-xs rounded bg-blue-100 text-blue-700 hover:bg-blue-200" data-testid="follow-btn">Follow</button>
+                      </form>
+                    )
+                  ) : null}
+                  {isAgent && followers.length > 0 && (
+                    <span className="text-xs text-gray-400">{followers.length} follower{followers.length !== 1 ? 's' : ''}</span>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Custom fields */}
-            {customFieldDefs && customFieldDefs.length > 0 && (
+            {detailFieldConfig.customFields && customFieldDefs && customFieldDefs.length > 0 && (
               <div className="mt-3 border-t border-gray-200 pt-3" data-testid="custom-fields">
                 <h3 className="text-xs font-medium text-gray-500 mb-1">Custom Fields</h3>
                 <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">

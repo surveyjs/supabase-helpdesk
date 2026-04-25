@@ -258,6 +258,16 @@ Update NavBar to show:
 The following features extend the agent dashboard and are NOT part of this phase:
 - Tag filter — Phase 5
 - Submitter display name as clickable profile link — Phase 15
+
+## Change Update — SurveyJS Filters
+
+Agent dashboard filters are now rendered through SurveyJS (React) instead of plain HTML form controls.
+
+Implementation expectations:
+- Keep URL-driven filtering semantics identical (`/agent?...`).
+- Keep saved views behavior unchanged.
+- Read optional JSON config from `app_settings.survey_agent_dashboard_config` to control enabled fields and default sort.
+- Preserve existing filter coverage (status, search, email, urgency, severity, category, type, agent, team, tier, tags, sort).
 - Block indicator on submitter names — Phase 15
 - SLA sort ("SLA Risk") — Phase 12
 - Bulk actions (checkboxes, toolbar) — Phase 17

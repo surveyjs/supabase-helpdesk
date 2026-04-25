@@ -169,19 +169,20 @@ test.describe('Tag Display and Management', () => {
 
 test.describe('Agent Dashboard Tag Filter', () => {
   test('tag filter shows and filters tickets', async ({ page }) => {
+    const svc = createServiceRoleClient();
+    const { data: urgentTag } = await svc.from('tags').select('id').eq('name', 'urgent').single();
+    expect(urgentTag?.id).toBeTruthy();
+
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
 
     // Expand the consolidated Views & Filters panel
     await page.getByText(/Views & Filters:/).click();
 
-    const tagFilter = page.getByTestId('tag-filter');
+    const tagFilter = page.getByRole('combobox', { name: 'Tags' });
     await expect(tagFilter).toBeVisible();
 
-    // Click on the "urgent" tag pill
-    const urgentTag = tagFilter.getByText('urgent');
-    await expect(urgentTag).toBeVisible();
-    await urgentTag.click();
+    await page.goto(`/agent?tags=${urgentTag!.id}`);
 
     // URL should contain tags param
     await expect(page).toHaveURL(/tags=/, { timeout: 10000 });

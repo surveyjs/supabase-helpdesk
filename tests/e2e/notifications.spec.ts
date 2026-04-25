@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { createServiceRoleClient } from '../helpers/supabase';
 
 /**
  * Helper: log in via the login form.
@@ -76,15 +77,23 @@ test.describe('Admin Email Configuration', () => {
     // Wait for the form to be fully hydrated
     await expect(page.getByText('SMTP Settings')).toBeVisible({ timeout: 10000 });
 
-    await page.getByLabel('SMTP Host').fill('localhost');
-    await page.getByLabel('SMTP Port').fill('54325');
-    await page.getByLabel('Sender Email').fill('test@helpdesk.local');
-    await page.getByLabel('Sender Name').fill('HelpDesk Test');
+    const smtpForm = page.getByTestId('email-smtp-survey-form');
+    
+    // Change just the SMTP host to verify autosave works
+    const hostField = smtpForm.getByRole('textbox', { name: /SMTP Host/i });
+    await hostField.fill('testhost.local');
+    await hostField.blur();
 
-    // Click Save button that follows the Sender Name field
-    await page.getByRole('button', { name: 'Save', exact: true }).first().click();
-
-    await expect(page.getByText('Email configuration saved.')).toBeVisible({ timeout: 10000 });
+    // Verify in database (email config persists in email_config table)
+    const svc = createServiceRoleClient();
+    await expect.poll(async () => {
+      const { data } = await svc
+        .from('email_config')
+        .select('smtp_host')
+        .limit(1)
+        .single();
+      return data?.smtp_host;
+    }, { timeout: 15000 }).toBe('testhost.local');
   });
 
   test('admin can see email sidebar link', async ({ page }) => {
@@ -99,16 +108,24 @@ test.describe('Admin Email Configuration', () => {
 
     await expect(page.getByText('Notification Coalescing')).toBeVisible({ timeout: 10000 });
 
-    const delayInput = page.getByLabel('Delay (minutes)');
-    await delayInput.fill('5');
-    // Click the Save button in the same form as the delay input
-    await delayInput.locator('xpath=ancestor::form').getByRole('button', { name: 'Save' }).click();
+    const delayForm = page.getByTestId('email-delay-survey-form');
+    const delayInput = delayForm.getByLabel('Delay (minutes)');
+    
+    // Clear and fill with a specific value
+    await delayInput.fill('');
+    await delayInput.fill('3');
+    await delayInput.blur();
 
-    await expect(page.getByText('Coalescing delay saved.')).toBeVisible({ timeout: 10000 });
-
-    // Reset
-    await delayInput.fill('2');
-    await delayInput.locator('xpath=ancestor::form').getByRole('button', { name: 'Save' }).click();
+    // Verify in database with polling (debounce + server action)
+    const svc = createServiceRoleClient();
+    await expect.poll(async () => {
+      const { data } = await svc
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'notification_coalescing_delay_minutes')
+        .single();
+      return data?.value;
+    }, { timeout: 15000 }).toBe('3');
   });
 });
 
@@ -167,3 +184,5 @@ test.describe('Admin Default Notification Preferences', () => {
     await expect(page.getByText('Default preferences saved.')).toBeVisible({ timeout: 10000 });
   });
 });
+
+

@@ -1,0 +1,47 @@
+{
+  "showQuestionNumbers": "off",
+  "pages": [
+    {
+      "elements": [
+        {
+          "type": "text",
+          "name": "smtp_host",
+          "title": "SMTP Host",
+          "isRequired": true
+        },
+        {
+          "type": "text",
+          "name": "smtp_port",
+          "title": "SMTP Port",
+          "inputType": "number",
+          "isRequired": true
+        },
+        {
+          "type": "text",
+          "name": "smtp_username",
+          "title": "Username"
+        },
+        {
+          "type": "text",
+          "name": "smtp_password",
+          "title": "Password",
+          "inputType": "password",
+          "placeholder": "Leave blank to keep existing password"
+        },
+        {
+          "type": "text",
+          "name": "sender_email",
+          "title": "Sender Email",
+          "inputType": "email",
+          "isRequired": true
+        },
+        {
+          "type": "text",
+          "name": "sender_name",
+          "title": "Sender Name",
+          "isRequired": true
+        }
+      ]
+    }
+  ]
+}

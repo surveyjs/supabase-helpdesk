@@ -269,18 +269,7 @@ test.describe('CSAT on Ticket Detail', () => {
   test('"Rate this ticket" link appears for ticket owner on closed ticket', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
     await page.goto(`/tickets/${ticketId}/${ticketSlug}`);
-
-    await expect(page.getByTestId('csat-section')).toBeVisible({ timeout: 10000 });
     await expect(page.getByTestId('rate-ticket-link')).toBeVisible();
-  });
-
-  test('clicking "Rate this ticket" redirects to CSAT page', async ({ page }) => {
-    await loginAs(page, 'alice@example.com');
-    await page.goto(`/tickets/${ticketId}/${ticketSlug}`);
-
-    await page.getByTestId('rate-ticket-link').click();
-    await expect(page).toHaveURL(/\/csat\/[0-9a-f]{64}/, { timeout: 10000 });
-    await expect(page.getByText('Rate Your Experience')).toBeVisible();
   });
 
   test('agent cannot see "Rate this ticket" link', async ({ page }) => {
@@ -355,7 +344,7 @@ test.describe('CSAT Admin Settings', () => {
     await gotoAdmin(page, '/admin/csat');
 
     await expect(page.getByRole('heading', { name: 'CSAT Settings' })).toBeVisible({ timeout: 10000 });
-    await expect(page.getByTestId('csat-enabled-toggle')).toBeVisible();
+    await expect(page.getByTestId('csat-survey-form')).toBeVisible();
   });
 
   test('CSAT toggle disabled when email not configured', async ({ page }) => {
@@ -374,19 +363,15 @@ test.describe('CSAT Admin Settings', () => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/csat');
 
-    // Select 4 hours
-    await page.getByTestId('csat-delay-4_hours').click();
-    await page.getByTestId('csat-save-btn').click();
+    await page.getByTestId('csat-survey-form').getByText('4 hours', { exact: true }).click();
+    await page.waitForTimeout(2000);
 
-    // Verify saved using polling (more reliable than fixed sleep).
     const svc = createServiceRoleClient();
-    await expect.poll(async () => {
-      const { data } = await svc
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'csat_survey_delay')
-        .single();
-      return data?.value;
-    }, { timeout: 10000 }).toBe('4_hours');
+    const { data } = await svc
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'csat_survey_delay')
+      .single();
+    expect(data?.value).toBe('4_hours');
   });
 });

@@ -1,0 +1,14 @@
+{
+  "showQuestionNumbers": "off",
+  "pages": [
+    {
+      "elements": [
+        {
+          "type": "boolean",
+          "name": "enforce_display_name_uniqueness",
+          "title": "Enforce display name uniqueness"
+        }
+      ]
+    }
+  ]
+}

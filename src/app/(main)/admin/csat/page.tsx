@@ -1,5 +1,6 @@
 import { createServerClient } from '@/lib/supabase/server';
-import { CsatSettingsForm } from './CsatSettingsForm';
+import 'survey-core/survey-core.min.css';
+import { CsatSettingsSurveyForm } from './CsatSettingsSurveyForm';
 
 export default async function AdminCsatPage() {
   const supabase = await createServerClient();
@@ -26,7 +27,7 @@ export default async function AdminCsatPage() {
   return (
     <div>
       <h1 className="text-2xl font-semibold text-gray-900 mb-6">CSAT Settings</h1>
-      <CsatSettingsForm
+      <CsatSettingsSurveyForm
         enabled={csatEnabled}
         delay={csatDelay}
         emailVerified={emailVerified}

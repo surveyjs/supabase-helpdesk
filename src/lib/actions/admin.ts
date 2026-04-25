@@ -3,6 +3,11 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createServerClient, createServiceRoleClient } from '@/lib/supabase/server';
+import {
+  DEFAULT_AGENT_DASHBOARD_SURVEY_CONFIG,
+  DEFAULT_TICKET_DETAIL_AGENT_CONFIG,
+  DEFAULT_TICKET_DETAIL_USER_CONFIG,
+} from '@/lib/constants/survey-ui-config';
 
 async function requireAdminRole() {
   const supabase = await createServerClient();
@@ -1230,6 +1235,120 @@ export async function updateDefaultNotificationPreferences(formData: FormData): 
   } catch {
     return;
   }
+}
+
+// ============================================================
+// Survey UI Config JSON Storage
+// ============================================================
+
+const SURVEY_UI_SETTING_KEYS = [
+  'survey_agent_dashboard_config',
+  'survey_ticket_detail_agent_config',
+  'survey_ticket_detail_user_config',
+] as const;
+
+type SurveyUiSettingKey = (typeof SURVEY_UI_SETTING_KEYS)[number];
+
+function isSurveyUiSettingKey(value: string): value is SurveyUiSettingKey {
+  return SURVEY_UI_SETTING_KEYS.includes(value as SurveyUiSettingKey);
+}
+
+function setDeepValue(target: Record<string, unknown>, path: string, value: unknown) {
+  const parts = path.split('.');
+  let cursor: Record<string, unknown> = target;
+  for (let i = 0; i < parts.length - 1; i += 1) {
+    const key = parts[i];
+    if (typeof cursor[key] !== 'object' || cursor[key] === null || Array.isArray(cursor[key])) {
+      cursor[key] = {};
+    }
+    cursor = cursor[key] as Record<string, unknown>;
+  }
+  cursor[parts[parts.length - 1]] = value;
+}
+
+function normalizeSurveyUiPayload(raw: unknown): Record<string, unknown> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+
+  const payload = raw as Record<string, unknown>;
+  const normalized: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(payload)) {
+    if (key.includes('.')) {
+      setDeepValue(normalized, key, value);
+    } else {
+      normalized[key] = value;
+    }
+  }
+
+  const tierControlRules = normalized.tierControlRules;
+  if (tierControlRules && typeof tierControlRules === 'object' && !Array.isArray(tierControlRules)) {
+    const rules = tierControlRules as Record<string, unknown>;
+    for (const [key, value] of Object.entries(rules)) {
+      if (typeof value === 'string') {
+        rules[key] = value
+          .split(',')
+          .map((part) => part.trim())
+          .filter(Boolean);
+      }
+    }
+  }
+
+  return normalized;
+}
+
+function getSurveyUiDefaultValue(settingKey: SurveyUiSettingKey): Record<string, unknown> {
+  if (settingKey === 'survey_agent_dashboard_config') return DEFAULT_AGENT_DASHBOARD_SURVEY_CONFIG;
+  if (settingKey === 'survey_ticket_detail_agent_config') return DEFAULT_TICKET_DETAIL_AGENT_CONFIG;
+  return DEFAULT_TICKET_DETAIL_USER_CONFIG;
+}
+
+export async function updateSurveyUiConfig(formData: FormData): Promise<void> {
+  const { supabase, profile: adminProfile } = await requireAdminRole();
+
+  const settingKey = (formData.get('setting_key') as string) ?? '';
+  const configJson = (formData.get('config_json') as string) ?? '';
+  if (!isSurveyUiSettingKey(settingKey) || !configJson) return;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(configJson);
+  } catch {
+    return;
+  }
+
+  const normalized = normalizeSurveyUiPayload(parsed);
+
+  await supabase
+    .from('app_settings')
+    .update({ value: JSON.stringify(normalized) })
+    .eq('key', settingKey);
+
+  await logAudit(supabase, adminProfile.id, 'update_survey_ui_config', 'app_settings', settingKey, {
+    setting_key: settingKey,
+  });
+
+  revalidatePath('/admin/survey-ui');
+  revalidatePath('/agent');
+}
+
+export async function resetSurveyUiConfig(formData: FormData): Promise<void> {
+  const { supabase, profile: adminProfile } = await requireAdminRole();
+  const settingKey = (formData.get('setting_key') as string) ?? '';
+  if (!isSurveyUiSettingKey(settingKey)) return;
+
+  const defaultValue = getSurveyUiDefaultValue(settingKey);
+
+  await supabase
+    .from('app_settings')
+    .update({ value: JSON.stringify(defaultValue) })
+    .eq('key', settingKey);
+
+  await logAudit(supabase, adminProfile.id, 'reset_survey_ui_config', 'app_settings', settingKey, {
+    setting_key: settingKey,
+  });
+
+  revalidatePath('/admin/survey-ui');
+  revalidatePath('/agent');
 }
 
 // ============================================================

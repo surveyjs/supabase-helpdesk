@@ -126,12 +126,12 @@ test.describe('Tickets', () => {
 
     await expect(page.getByRole('heading', { name: 'E2E Test Ticket' })).toBeVisible();
 
-    // Check metadata — now in the sidebar
+    // Check metadata — now in the sidebar (rendered either as static <dd> or via SurveyJS controls)
     const sidebar = page.getByTestId('ticket-sidebar');
     await expect(sidebar.getByText('Type')).toBeVisible();
-    await expect(sidebar.locator('dd').filter({ hasText: 'Issue' }).first()).toBeVisible();
+    await expect(sidebar.getByText('Issue').first()).toBeVisible();
     await expect(sidebar.getByText('Urgency')).toBeVisible();
-    await expect(sidebar.locator('dd').filter({ hasText: 'High' }).first()).toBeVisible();
+    await expect(sidebar.getByText('High').first()).toBeVisible();
 
     // Check original post
     await expect(page.getByText('This is a test ticket created by E2E test.')).toBeVisible();

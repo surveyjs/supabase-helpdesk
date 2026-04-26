@@ -869,6 +869,10 @@ export default async function TicketDetailPage({
               <Badge variant="status" value={ticket.status} />
             </div>
 
+            {ticket.merged_into_id && (
+              <p className="mb-3 text-xs text-gray-500 italic">Read-only (merged)</p>
+            )}
+
             {/* Editable info via SurveyJS (per-tier configurable) */}
             {hasAnySidebarSurveyField && (
               <div className="mb-3">

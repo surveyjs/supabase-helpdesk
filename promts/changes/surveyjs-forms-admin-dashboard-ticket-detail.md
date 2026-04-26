@@ -67,6 +67,12 @@ Tier-sensitive behavior:
 - Existing capability checks still apply (capabilities are the base gate).
 - Config allow-list narrows access further when specified.
 
+Implementation notes:
+- The editable info widgets in the ticket detail right sidebar are rendered as a single SurveyJS autosave form by `src/app/(main)/tickets/[id]/[slug]/TicketSidebarSurvey.tsx`.
+- The form's effective schema is computed server-side in `page.tsx` (`sidebarSurveyFields`) by combining role + tier capabilities + the relevant config (`survey_ticket_detail_agent_config` for agents, `survey_ticket_detail_user_config` for users). Each field flag (`status`, `urgency`, `severity`, `type`, `category`, `assigned`, `visibility`, `tags`, `follow`) gates whether the corresponding SurveyJS question is added to the schema.
+- The form persists each changed value through dedicated server actions (`changeTicketStatus`, `changeUrgency`, `changeSeverity`, `changeType`, `changeCategory`, `assignAgent`/`reassignAgent`/`unassignAgent`, `addTagToTicket`/`removeTagFromTicket`, `toggleTicketPrivacy`, `followTicket`/`unfollowTicket`) on `onValueChanged`, with an aria-live status indicator (`data-testid="ticket-sidebar-survey-status"`).
+- Read-only metadata (created by, created/updated timestamps, source article, advanced/Mark-as-Duplicate/Merge, SLA, CSAT, custom fields, KB Article, Delete) remains rendered as plain JSX in the surrounding `<dl>`. The colored tag chip list and follower count badges remain as visual references next to the SurveyJS form.
+
 ### 5. Database
 
 Add migration to seed missing app settings keys for the three Survey UI configs with defaults.

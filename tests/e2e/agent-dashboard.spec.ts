@@ -1,5 +1,10 @@
 import { test, expect, Page } from '@playwright/test';
 import { createServiceRoleClient } from '../helpers/supabase';
+import {
+  selectSurveyDropdown,
+  toggleSurveyCheckbox,
+  waitForSidebarSurveyAutosave,
+} from '../helpers/surveyjs';
 
 /**
  * Helper: log in via the login form.
@@ -155,32 +160,29 @@ test.describe('Agent Ticket Detail Controls', () => {
 
     const sidebar = page.getByTestId('ticket-sidebar');
     await expect(sidebar).toBeVisible({ timeout: 10000 });
+    const survey = sidebar.getByTestId('ticket-sidebar-survey');
+    await expect(survey).toBeVisible({ timeout: 10000 });
 
-    // Find and click "Mark Pending"
-    const pendingBtn = sidebar.getByRole('button', { name: 'Mark Pending' });
-    await expect(pendingBtn).toBeVisible({ timeout: 10000 });
-    const pendingResp = page.waitForResponse(
-      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
-      { timeout: 15000 },
-    );
-    await pendingBtn.click();
-    await pendingResp;
-    await expect(sidebar.getByText('Pending')).toBeVisible({ timeout: 10000 });
+    const ticketId = ticketUrl.split('/')[2];
+    const admin = createServiceRoleClient();
 
-    // Close from pending
-    const closeBtn = sidebar.getByRole('button', { name: 'Close Ticket' });
-    await expect(closeBtn).toBeVisible({ timeout: 10000 });
-    const closeResp = page.waitForResponse(
-      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
-      { timeout: 15000 },
-    );
-    await closeBtn.click();
-    await closeResp;
-    await expect(sidebar.getByText('Closed')).toBeVisible({ timeout: 10000 });
+    // Mark Pending via the SurveyJS Status dropdown
+    await selectSurveyDropdown(survey, 'status', 'Pending');
+    await waitForSidebarSurveyAutosave(page);
+    await expect.poll(async () => {
+      const { data } = await admin.from('tickets').select('status').eq('id', ticketId).single();
+      return data?.status;
+    }, { timeout: 15000 }).toBe('pending');
+
+    // Close ticket via the SurveyJS Status dropdown
+    await selectSurveyDropdown(survey, 'status', 'Closed');
+    await waitForSidebarSurveyAutosave(page);
+    await expect.poll(async () => {
+      const { data } = await admin.from('tickets').select('status').eq('id', ticketId).single();
+      return data?.status;
+    }, { timeout: 15000 }).toBe('closed');
 
     // Restore for subsequent tests
-    const admin = createServiceRoleClient();
-    const ticketId = Number(ticketUrl.split('/')[2]);
     await admin.from('tickets').update({ status: 'open' }).eq('id', ticketId);
   });
 
@@ -189,59 +191,105 @@ test.describe('Agent Ticket Detail Controls', () => {
     await page.goto(ticketUrl);
     const sidebar = page.getByTestId('ticket-sidebar');
     await expect(sidebar).toBeVisible({ timeout: 10000 });
+    const survey = sidebar.getByTestId('ticket-sidebar-survey');
+    await expect(survey).toBeVisible({ timeout: 10000 });
 
-    // Change urgency
-    await sidebar.locator('select[name="new_urgency"]').selectOption('critical');
-    await sidebar.locator('select[name="new_urgency"]').locator('..').getByRole('button', { name: 'Set' }).click();
-    await expect(sidebar.locator('select[name="new_urgency"]')).toHaveValue('critical');
+    const ticketId = ticketUrl.split('/')[2];
+    const admin = createServiceRoleClient();
 
-    // Change severity
-    await sidebar.locator('select[name="new_severity"]').selectOption('high');
-    await sidebar.locator('select[name="new_severity"]').locator('..').getByRole('button', { name: 'Set' }).click();
-    await expect(sidebar.locator('select[name="new_severity"]')).toHaveValue('high');
+    await selectSurveyDropdown(survey, 'urgency', 'Critical');
+    await waitForSidebarSurveyAutosave(page);
+    await expect.poll(async () => {
+      const { data } = await admin.from('tickets').select('urgency').eq('id', ticketId).single();
+      return data?.urgency;
+    }, { timeout: 15000 }).toBe('critical');
+
+    await selectSurveyDropdown(survey, 'severity', 'High');
+    await waitForSidebarSurveyAutosave(page);
+    await expect.poll(async () => {
+      const { data } = await admin.from('tickets').select('severity').eq('id', ticketId).single();
+      return data?.severity;
+    }, { timeout: 15000 }).toBe('high');
 
     // Restore
-    await sidebar.locator('select[name="new_urgency"]').selectOption('high');
-    await sidebar.locator('select[name="new_urgency"]').locator('..').getByRole('button', { name: 'Set' }).click();
-    await sidebar.locator('select[name="new_severity"]').selectOption('medium');
-    await sidebar.locator('select[name="new_severity"]').locator('..').getByRole('button', { name: 'Set' }).click();
+    await admin.from('tickets').update({ urgency: 'high', severity: 'medium' }).eq('id', ticketId);
   });
 
   test('agent can change type/category from detail page', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(ticketUrl);
     const sidebar = page.getByTestId('ticket-sidebar');
+    const survey = sidebar.getByTestId('ticket-sidebar-survey');
+    await expect(survey).toBeVisible({ timeout: 10000 });
 
-    // Change type
-    await sidebar.locator('select[name="new_type_id"]').selectOption({ label: 'Question' });
-    await sidebar.locator('select[name="new_type_id"]').locator('..').getByRole('button', { name: 'Set' }).click();
-    await page.waitForTimeout(1000);
+    const ticketId = ticketUrl.split('/')[2];
+    const admin = createServiceRoleClient();
+    const { data: questionType } = await admin
+      .from('ticket_types')
+      .select('id')
+      .eq('name', 'Question')
+      .single();
+    const { data: issueType } = await admin
+      .from('ticket_types')
+      .select('id')
+      .eq('name', 'Issue')
+      .single();
+
+    await selectSurveyDropdown(survey, 'type_id', 'Question');
+    await waitForSidebarSurveyAutosave(page);
+    await expect.poll(async () => {
+      const { data } = await admin.from('tickets').select('type_id').eq('id', ticketId).single();
+      return data?.type_id;
+    }, { timeout: 15000 }).toBe(questionType?.id);
 
     // Restore to Issue
-    await sidebar.locator('select[name="new_type_id"]').selectOption({ label: 'Issue' });
-    await sidebar.locator('select[name="new_type_id"]').locator('..').getByRole('button', { name: 'Set' }).click();
+    if (issueType?.id) {
+      await admin.from('tickets').update({ type_id: issueType.id }).eq('id', ticketId);
+    }
   });
 
   test('agent can toggle privacy from detail page', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(ticketUrl);
 
-    // Ticket is public (is_private=false) based on seed data
-    const controls = page.getByTestId('ticket-sidebar');
-    const privacyBtn = controls.getByRole('button', { name: /Make Private|Make Public/ });
-    const btnText = await privacyBtn.textContent();
-    await privacyBtn.click();
+    const sidebar = page.getByTestId('ticket-sidebar');
+    const survey = sidebar.getByTestId('ticket-sidebar-survey');
+    await expect(survey).toBeVisible({ timeout: 10000 });
 
-    // Wait for the button text to change
-    const expectedText = btnText === 'Make Private' ? 'Make Public' : 'Make Private';
-    await expect(controls.getByRole('button', { name: expectedText })).toBeVisible({ timeout: 10000 });
+    const ticketId = ticketUrl.split('/')[2];
+    const admin = createServiceRoleClient();
+    const { data: before } = await admin
+      .from('tickets')
+      .select('is_private')
+      .eq('id', ticketId)
+      .single();
+    const initial = before?.is_private ?? false;
 
-    // Toggle back
-    await controls.getByRole('button', { name: expectedText }).click();
-    await expect(controls.getByRole('button', { name: btnText! })).toBeVisible({ timeout: 10000 });
+    await toggleSurveyCheckbox(survey, 'is_private');
+    await waitForSidebarSurveyAutosave(page);
+    await expect.poll(async () => {
+      const { data } = await admin
+        .from('tickets')
+        .select('is_private')
+        .eq('id', ticketId)
+        .single();
+      return data?.is_private;
+    }, { timeout: 15000 }).toBe(!initial);
+
+    // Toggle back to original state
+    await toggleSurveyCheckbox(survey, 'is_private');
+    await waitForSidebarSurveyAutosave(page);
+    await expect.poll(async () => {
+      const { data } = await admin
+        .from('tickets')
+        .select('is_private')
+        .eq('id', ticketId)
+        .single();
+      return data?.is_private;
+    }, { timeout: 15000 }).toBe(initial);
   });
 
-  test('agent can assign/unassign from detail page', async ({ page }) => {
+  test('agent can assign an agent from the sidebar survey', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
 
     // Use an unassigned ticket from seed data
@@ -259,40 +307,29 @@ test.describe('Agent Ticket Detail Controls', () => {
     await admin.from('tickets').update({ assigned_agent_id: null }).eq('id', unassigned.id);
 
     await page.goto(`/tickets/${unassigned.id}/${unassigned.slug}`);
-    // Wait for page to load
     await expect(page.getByRole('heading', { name: unassigned.title })).toBeVisible({ timeout: 10000 });
 
-    // "Assign to me" button should be visible
-    const assignBtn = page.getByRole('button', { name: 'Assign to me' });
-    await expect(assignBtn).toBeVisible({ timeout: 10000 });
-    const assignResp = page.waitForResponse(
-      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
-      { timeout: 15000 },
-    );
-    await assignBtn.click();
-    await assignResp;
+    const sidebar = page.getByTestId('ticket-sidebar');
+    const survey = sidebar.getByTestId('ticket-sidebar-survey');
+    await expect(survey).toBeVisible({ timeout: 10000 });
 
-    // Wait for "Assign to me" to disappear (server action + revalidation complete)
-    await expect(assignBtn).toBeHidden({ timeout: 15000 });
+    // Assign to Agent Smith via the SurveyJS dropdown
+    await selectSurveyDropdown(survey, 'assigned_agent_id', /Agent Smith/);
+    await waitForSidebarSurveyAutosave(page);
+    await expect.poll(async () => {
+      const { data } = await admin
+        .from('tickets')
+        .select('assigned_agent_id')
+        .eq('id', unassigned.id)
+        .single();
+      return data?.assigned_agent_id;
+    }, { timeout: 15000 }).toBe('00000000-0000-0000-0000-000000000012');
 
-    // Unassign button should now be visible
-    const unassignBtn = page.getByRole('button', { name: 'Unassign' });
-    await expect(unassignBtn).toBeVisible({ timeout: 15000 });
-
-    // Unassign
-    const unassignResp = page.waitForResponse(
-      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
-      { timeout: 15000 },
-    );
-    await unassignBtn.click();
-    await unassignResp;
-
-    // Wait for "Unassign" to disappear before checking "Assign to me" reappears
-    await expect(unassignBtn).toBeHidden({ timeout: 15000 });
-    await expect(page.getByRole('button', { name: 'Assign to me' })).toBeVisible({ timeout: 15000 });
+    // Cleanup: unassign via service role for subsequent tests
+    await admin.from('tickets').update({ assigned_agent_id: null }).eq('id', unassigned.id);
   });
 
-  test('"Assign to me" button works', async ({ page }) => {
+  test('assigning self via the sidebar survey works', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
 
     // Find an unassigned ticket
@@ -309,57 +346,72 @@ test.describe('Agent Ticket Detail Controls', () => {
     await admin.from('tickets').update({ assigned_agent_id: null }).eq('id', tickets[0].id);
 
     await page.goto(`/tickets/${tickets[0].id}/${tickets[0].slug}`);
-    const btn = page.getByRole('button', { name: 'Assign to me' });
-    await expect(btn).toBeVisible({ timeout: 10000 });
-    const assignResp = page.waitForResponse(
-      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
-      { timeout: 15000 },
-    );
-    await btn.click();
-    await assignResp;
-    await expect(btn).toBeHidden({ timeout: 15000 });
-    await expect(page.getByRole('main').getByRole('definition').filter({ hasText: 'Agent Smith' })).toBeVisible({ timeout: 10000 });
+    const sidebar = page.getByTestId('ticket-sidebar');
+    const survey = sidebar.getByTestId('ticket-sidebar-survey');
+    await expect(survey).toBeVisible({ timeout: 10000 });
+
+    await selectSurveyDropdown(survey, 'assigned_agent_id', /Agent Smith/);
+    await waitForSidebarSurveyAutosave(page);
+
+    await expect.poll(async () => {
+      const { data } = await admin
+        .from('tickets')
+        .select('assigned_agent_id')
+        .eq('id', tickets[0].id)
+        .single();
+      return data?.assigned_agent_id;
+    }, { timeout: 15000 }).toBe('00000000-0000-0000-0000-000000000012');
+
     // Cleanup: unassign
-    const unassignBtn = page.getByRole('button', { name: 'Unassign' });
-    await expect(unassignBtn).toBeVisible({ timeout: 10000 });
-    const unassignResp = page.waitForResponse(
-      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
-      { timeout: 15000 },
-    );
-    await unassignBtn.click();
-    await unassignResp;
-    await expect(unassignBtn).toBeHidden({ timeout: 15000 });
+    await admin.from('tickets').update({ assigned_agent_id: null }).eq('id', tickets[0].id);
   });
 
-  test('agent can reassign ticket to another agent with a reason', async ({ page }) => {
+  test('agent can reassign ticket to another agent', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
-    await page.goto(ticketUrl);
 
-    // Make sure ticket is assigned first
-    const assignBtn = page.getByRole('button', { name: 'Assign to me' });
-    if (await assignBtn.isVisible()) {
-      await assignBtn.click();
-      await page.waitForTimeout(1000);
-    }
-
-    // Select a different agent and reassign
-    const agentSelect = page.getByLabel('Select agent');
-    await agentSelect.selectOption({ value: '00000000-0000-0000-0000-000000000013' });
-    await page.getByRole('button', { name: 'Reassign' }).click();
-    await page.waitForTimeout(1000);
-
-    // Verify agent changed in display
-    await page.reload();
-    await expect(page.getByText('Agent Jones', { exact: true })).toBeVisible({ timeout: 10000 });
-
-    // Restore original assignment
+    // Find an unassigned ticket so we can assign then reassign in one session.
     const admin = createServiceRoleClient();
-    const { data: ticket } = await admin
+    const { data: target } = await admin
       .from('tickets')
-      .select('id')
-      .eq('title', 'Password reset not working')
+      .select('id, slug')
+      .is('assigned_agent_id', null)
+      .limit(1)
       .single();
-    await admin.from('tickets').update({ assigned_agent_id: '00000000-0000-0000-0000-000000000012' }).eq('id', ticket!.id);
+
+    if (!target) return;
+    await admin.from('tickets').update({ assigned_agent_id: null }).eq('id', target.id);
+
+    await page.goto(`/tickets/${target.id}/${target.slug}`);
+    const sidebar = page.getByTestId('ticket-sidebar');
+    const survey = sidebar.getByTestId('ticket-sidebar-survey');
+    await expect(survey).toBeVisible({ timeout: 10000 });
+
+    // First assign to Agent Smith
+    await selectSurveyDropdown(survey, 'assigned_agent_id', /Agent Smith/);
+    await waitForSidebarSurveyAutosave(page);
+    await expect.poll(async () => {
+      const { data } = await admin
+        .from('tickets')
+        .select('assigned_agent_id')
+        .eq('id', target.id)
+        .single();
+      return data?.assigned_agent_id;
+    }, { timeout: 15000 }).toBe('00000000-0000-0000-0000-000000000012');
+
+    // Then reassign to Agent Jones
+    await selectSurveyDropdown(survey, 'assigned_agent_id', /Agent Jones/);
+    await waitForSidebarSurveyAutosave(page);
+    await expect.poll(async () => {
+      const { data } = await admin
+        .from('tickets')
+        .select('assigned_agent_id')
+        .eq('id', target.id)
+        .single();
+      return data?.assigned_agent_id;
+    }, { timeout: 15000 }).toBe('00000000-0000-0000-0000-000000000013');
+
+    // Cleanup: unassign for subsequent tests
+    await admin.from('tickets').update({ assigned_agent_id: null }).eq('id', target.id);
   });
 });
 

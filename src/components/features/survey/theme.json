@@ -5,7 +5,8 @@
   "cssVariables": {
     "--sjs-font-family": "Arial, Helvetica, sans-serif",
     "--sjs-corner-radius": "6px",
-    "--sjs-base-unit": "8px",
+    "--sjs-base-unit": "6px",
+    "--sjs-font-size": "13px",
 
     "--sjs-primary-backcolor": "#2563eb",
     "--sjs-primary-backcolor-light": "rgba(37, 99, 235, 0.1)",
@@ -65,33 +66,33 @@
     "--sjs-font-questiontitle-family": "Arial, Helvetica, sans-serif",
     "--sjs-font-questiontitle-weight": "500",
     "--sjs-font-questiontitle-color": "#111827",
-    "--sjs-font-questiontitle-size": "14px",
+    "--sjs-font-questiontitle-size": "13px",
 
     "--sjs-font-questiondescription-family": "Arial, Helvetica, sans-serif",
     "--sjs-font-questiondescription-weight": "400",
     "--sjs-font-questiondescription-color": "#6b7280",
-    "--sjs-font-questiondescription-size": "13px",
+    "--sjs-font-questiondescription-size": "12px",
 
     "--sjs-font-editorfont-family": "Arial, Helvetica, sans-serif",
     "--sjs-font-editorfont-weight": "400",
     "--sjs-font-editorfont-color": "#111827",
     "--sjs-font-editorfont-placeholdercolor": "#9ca3af",
-    "--sjs-font-editorfont-size": "14px",
+    "--sjs-font-editorfont-size": "13px",
 
     "--sjs-font-pagetitle-family": "Arial, Helvetica, sans-serif",
     "--sjs-font-pagetitle-weight": "600",
     "--sjs-font-pagetitle-color": "#111827",
-    "--sjs-font-pagetitle-size": "16px",
+    "--sjs-font-pagetitle-size": "14px",
 
     "--sjs-font-pagedescription-family": "Arial, Helvetica, sans-serif",
     "--sjs-font-pagedescription-weight": "400",
     "--sjs-font-pagedescription-color": "#6b7280",
-    "--sjs-font-pagedescription-size": "13px",
+    "--sjs-font-pagedescription-size": "12px",
 
     "--sjs-font-surveytitle-family": "Arial, Helvetica, sans-serif",
     "--sjs-font-surveytitle-weight": "700",
     "--sjs-font-surveytitle-color": "#111827",
-    "--sjs-font-surveytitle-size": "20px",
+    "--sjs-font-surveytitle-size": "16px",
 
     "--sjs-questionpanel-backcolor": "transparent",
     "--sjs-questionpanel-hovercolor": "transparent",

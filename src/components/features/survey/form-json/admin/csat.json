@@ -1,0 +1,37 @@
+{
+  "showQuestionNumbers": "off",
+  "pages": [
+    {
+      "elements": [
+        {
+          "type": "boolean",
+          "name": "csat_enabled",
+          "title": "Enable CSAT surveys"
+        },
+        {
+          "type": "radiogroup",
+          "name": "csat_survey_delay",
+          "title": "Survey delay after ticket closure",
+          "choices": [
+            {
+              "value": "immediately",
+              "text": "Immediately"
+            },
+            {
+              "value": "1_hour",
+              "text": "1 hour (default)"
+            },
+            {
+              "value": "4_hours",
+              "text": "4 hours"
+            },
+            {
+              "value": "24_hours",
+              "text": "24 hours"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

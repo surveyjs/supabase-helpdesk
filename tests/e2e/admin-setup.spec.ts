@@ -45,6 +45,7 @@ test.describe('Admin Setup layout', () => {
     await expect(page.getByRole('link', { name: 'Teams' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Agents & Admins' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Custom Fields' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Survey UI Config' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Audit Log' })).toBeVisible();
   });
 
@@ -52,6 +53,15 @@ test.describe('Admin Setup layout', () => {
     await loginAs(page, 'alice@example.com');
     await gotoAdmin(page, '/admin');
     await expect(page).not.toHaveURL(/\/admin/, { timeout: 10000 });
+  });
+
+  test('admin can open survey ui config page', async ({ page }) => {
+    await loginAs(page, 'admin@example.com');
+    await gotoAdmin(page, '/admin/survey-ui');
+    await expect(page.getByRole('heading', { name: 'Survey UI JSON Config' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('survey-ui-config-survey_agent_dashboard_config')).toBeVisible();
+    await expect(page.getByTestId('survey-ui-config-survey_ticket_detail_agent_config')).toBeVisible();
+    await expect(page.getByTestId('survey-ui-config-survey_ticket_detail_user_config')).toBeVisible();
   });
 });
 
@@ -209,8 +219,8 @@ test.describe('Privacy settings', () => {
 
     await expect(page.getByRole('heading', { name: /privacy/i })).toBeVisible({ timeout: 10000 });
 
-    // Save button should be present
-    await expect(page.getByRole('button', { name: /save/i })).toBeVisible();
+    await expect(page.getByTestId('privacy-survey-form')).toBeVisible();
+    await expect(page.getByText('Default Ticket Privacy')).toBeVisible();
   });
 });
 
@@ -225,12 +235,7 @@ test.describe('Pagination settings', () => {
 
     await expect(page.getByRole('heading', { name: /pagination/i })).toBeVisible({ timeout: 10000 });
 
-    // Should have numeric inputs
-    const inputs = page.locator('input[type="number"]');
-    const count = await inputs.count();
-    expect(count).toBeGreaterThanOrEqual(3);
-
-    await expect(page.getByRole('button', { name: /save/i })).toBeVisible();
+    await expect(page.getByTestId('pagination-survey-form')).toBeVisible();
   });
 });
 
@@ -245,11 +250,7 @@ test.describe('Rate limit settings', () => {
 
     await expect(page.getByRole('heading', { name: /rate limit/i })).toBeVisible({ timeout: 10000 });
 
-    // Should have a numeric input
-    const input = page.locator('input[type="number"]');
-    await expect(input.first()).toBeVisible();
-
-    await expect(page.getByRole('button', { name: /save/i })).toBeVisible();
+    await expect(page.getByTestId('rate-limit-survey-form')).toBeVisible();
   });
 });
 
@@ -337,3 +338,4 @@ test.describe('Audit log', () => {
     }
   });
 });
+

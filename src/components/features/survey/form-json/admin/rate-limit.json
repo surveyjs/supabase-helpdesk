@@ -1,0 +1,15 @@
+{
+  "showQuestionNumbers": "off",
+  "pages": [
+    {
+      "elements": [
+        {
+          "type": "text",
+          "name": "ticket_creation_rate_limit",
+          "title": "Tickets per 24 hours (0 = unlimited)",
+          "inputType": "number"
+        }
+      ]
+    }
+  ]
+}

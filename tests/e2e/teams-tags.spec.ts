@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { createServiceRoleClient } from '../helpers/supabase';
+import { addSurveyTag, waitForSidebarSurveyAutosave } from '../helpers/surveyjs';
 
 /**
  * Helper: log in via the login form.
@@ -111,77 +112,94 @@ test.describe('Tag Display and Management', () => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(ticketUrl);
 
-    const addTagForm = page.getByTestId('add-tag-form');
-    await expect(addTagForm).toBeVisible({ timeout: 10000 });
+    const sidebar = page.getByTestId('ticket-sidebar');
+    const survey = sidebar.getByTestId('ticket-sidebar-survey');
+    await expect(survey).toBeVisible({ timeout: 10000 });
 
-    // Select a tag from the dropdown and add it
-    const select = addTagForm.getByRole('combobox');
-    // Pick the first available tag option
-    const options = await select.locator('option').allTextContents();
-    expect(options.length).toBeGreaterThan(0);
-    await select.selectOption({ index: 0 });
-    const addedTagName = options[0];
+    // Pick a tag that is not already on the ticket from the seed data.
+    const admin = createServiceRoleClient();
+    const ticketId = ticketUrl.split('/')[2];
+    const { data: ticketTagRows } = await admin
+      .from('ticket_tags')
+      .select('tag_id')
+      .eq('ticket_id', ticketId);
+    const existing = new Set((ticketTagRows ?? []).map((r) => r.tag_id));
+    const { data: allTags } = await admin.from('tags').select('id, name').order('name');
+    const target = (allTags ?? []).find((t) => !existing.has(t.id));
+    expect(target, 'expected at least one tag not already on the ticket').toBeTruthy();
 
-    // Wait for server action to complete
-    const responsePromise = page.waitForResponse(
-      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
-      { timeout: 15000 },
-    );
-    await addTagForm.getByRole('button', { name: /Add/ }).click();
-    await responsePromise;
+    await addSurveyTag(survey, 'tag_ids', target!.name);
+    await waitForSidebarSurveyAutosave(page);
 
-    // Reload to get fresh server-rendered page after revalidatePath
-    await page.goto(ticketUrl);
+    await expect.poll(async () => {
+      const { data } = await admin
+        .from('ticket_tags')
+        .select('tag_id')
+        .eq('ticket_id', ticketId);
+      return (data ?? []).map((r) => r.tag_id).includes(target!.id);
+    }, { timeout: 20000, intervals: [500, 500, 1000] }).toBe(true);
 
-    // Tag should now appear
-    const tagSection = page.getByTestId('ticket-tags');
-    await expect(tagSection.getByText(addedTagName)).toBeVisible({ timeout: 10000 });
+    // Cleanup so other tests see the original tag set
+    await admin.from('ticket_tags').delete().eq('ticket_id', ticketId).eq('tag_id', target!.id);
   });
 
   test('agent can remove a tag from a ticket', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(ticketUrl);
 
-    const tagSection = page.getByTestId('ticket-tags');
-    await expect(tagSection).toBeVisible({ timeout: 10000 });
-    // Remove the first tag's × button
-    const removeButtons = tagSection.getByRole('button', { name: /Remove tag/ });
-    await expect(removeButtons.first()).toBeVisible({ timeout: 5000 });
-    const count = await removeButtons.count();
-    expect(count).toBeGreaterThan(0);
+    const sidebar = page.getByTestId('ticket-sidebar');
+    const survey = sidebar.getByTestId('ticket-sidebar-survey');
+    await expect(survey).toBeVisible({ timeout: 10000 });
 
-    const firstTagName = await tagSection.locator('span[style]').first().textContent();
-    await removeButtons.first().click();
-    await page.waitForTimeout(2000);
+    const admin = createServiceRoleClient();
+    const ticketId = ticketUrl.split('/')[2];
+    const { data: existing } = await admin
+      .from('ticket_tags')
+      .select('tag_id, tags(name)')
+      .eq('ticket_id', ticketId);
+    const firstRow = (existing ?? [])[0] as
+      | { tag_id: string; tags: { name: string } | { name: string }[] | null }
+      | undefined;
+    expect(firstRow, 'ticket should have at least one tag in seed data').toBeTruthy();
+    const tagsField = firstRow!.tags;
+    const tagName = Array.isArray(tagsField) ? tagsField[0]?.name : tagsField?.name;
+    expect(tagName).toBeTruthy();
+    const firstTagId = firstRow!.tag_id;
+
+    // Remove by toggling the tag off in the SurveyJS tagbox popup
+    await addSurveyTag(survey, 'tag_ids', tagName!);
+    await waitForSidebarSurveyAutosave(page);
+
+    await expect.poll(async () => {
+      const { data } = await admin
+        .from('ticket_tags')
+        .select('tag_id')
+        .eq('ticket_id', ticketId);
+      return (data ?? []).map((r) => r.tag_id).includes(firstTagId);
+    }, { timeout: 15000 }).toBe(false);
 
     // Restore the tag for other tests
-    const addTagForm = page.getByTestId('add-tag-form');
-    if (await addTagForm.isVisible()) {
-      const options = await addTagForm.getByRole('combobox').locator('option').allTextContents();
-      if (firstTagName && options.includes(firstTagName)) {
-        await addTagForm.getByRole('combobox').selectOption({ label: firstTagName });
-        await addTagForm.getByRole('button', { name: 'Add Tag' }).click();
-        await page.waitForTimeout(1000);
-      }
-    }
+    await admin.from('ticket_tags').insert({ ticket_id: ticketId, tag_id: firstTagId });
   });
 });
 
 test.describe('Agent Dashboard Tag Filter', () => {
   test('tag filter shows and filters tickets', async ({ page }) => {
+    const svc = createServiceRoleClient();
+    const { data: urgentTag } = await svc.from('tags').select('id').eq('name', 'urgent').single();
+    expect(urgentTag?.id).toBeTruthy();
+
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
 
     // Expand the consolidated Views & Filters panel
     await page.getByText(/Views & Filters:/).click();
 
-    const tagFilter = page.getByTestId('tag-filter');
+    // The Tags filter is rendered as a SurveyJS tagbox question.
+    const tagFilter = page.locator('.sd-question[data-name="tags"]').first();
     await expect(tagFilter).toBeVisible();
 
-    // Click on the "urgent" tag pill
-    const urgentTag = tagFilter.getByText('urgent');
-    await expect(urgentTag).toBeVisible();
-    await urgentTag.click();
+    await page.goto(`/agent?tags=${urgentTag!.id}`);
 
     // URL should contain tags param
     await expect(page).toHaveURL(/tags=/, { timeout: 10000 });

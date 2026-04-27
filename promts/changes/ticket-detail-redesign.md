@@ -17,6 +17,8 @@ Redesign the ticket detail page with these improvements:
 11. **Two-column layout** — Subject & posts on the left (main area), ticket metadata & controls on the right (sidebar)
 12. **Posts/Notes tab separation** — Posts and replies visible to all; internal notes under a separate "Notes" tab visible only to agents
 
+13. **JSON-configurable Ticket Info behavior** — Field visibility and tier-sensitive user controls are now configurable via admin-stored JSON (`survey_ticket_detail_agent_config`, `survey_ticket_detail_user_config`)
+
 ---
 
 ## 1. Full-Width Layout for Ticket Detail

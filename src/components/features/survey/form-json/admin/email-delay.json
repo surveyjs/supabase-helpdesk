@@ -1,0 +1,18 @@
+{
+  "showQuestionNumbers": "off",
+  "pages": [
+    {
+      "elements": [
+        {
+          "type": "text",
+          "name": "delay_minutes",
+          "title": "Delay (minutes)",
+          "inputType": "number",
+          "isRequired": true,
+          "min": 0,
+          "max": 15
+        }
+      ]
+    }
+  ]
+}

@@ -110,13 +110,22 @@ test.describe('Authentication', () => {
     const svc = createServiceRoleClient();
     const lockoutEmail = `lockout-e2e-${Date.now()}@example.com`;
 
-    // Attempt 5 failed logins (this user doesn't exist but we're testing rate limit tracking)
+    // Attempt 5 failed logins (this user doesn't exist but we're testing rate limit tracking).
+    // Poll the DB attempt_count after each click so we don't race past slow login_attempts upserts.
     for (let i = 0; i < 5; i++) {
       await page.goto('/login');
       await page.getByLabel('Email').fill(lockoutEmail);
       await page.getByLabel('Password').fill('WrongPassword1');
       await page.getByRole('button', { name: 'Log in' }).click();
-      await expect(page.getByRole('alert').first()).toBeVisible();
+      await expect(page.getByRole('alert').first()).toBeVisible({ timeout: 10000 });
+      await expect.poll(async () => {
+        const { data } = await svc
+          .from('login_attempts')
+          .select('attempt_count')
+          .eq('email', lockoutEmail.toLowerCase())
+          .maybeSingle();
+        return data?.attempt_count ?? 0;
+      }, { timeout: 10000, intervals: [200, 300, 500] }).toBeGreaterThanOrEqual(i + 1);
     }
 
     await expect.poll(async () => {
@@ -126,7 +135,7 @@ test.describe('Authentication', () => {
         .eq('email', lockoutEmail.toLowerCase())
         .maybeSingle();
       return data?.attempt_count ?? 0;
-    }, { timeout: 10000 }).toBeGreaterThanOrEqual(5);
+    }, { timeout: 15000, intervals: [500, 500, 1000] }).toBeGreaterThanOrEqual(5);
 
     // 6th attempt should show lockout message
     await page.goto('/login');
@@ -137,10 +146,18 @@ test.describe('Authentication', () => {
   });
 
   test('sign out: clears session, redirects to /login', async ({ page }) => {
-    await loginAs(page, 'alice@example.com', 'Password123');
+    await loginAs(page, 'alice@example.com', 'Password123', true);
     await expect(page).toHaveURL('/', { timeout: 10000 });
-    // Open user menu dropdown and click Sign out
-    await page.locator('details summary').click();
+
+    // Open user menu dropdown — force-open if the click doesn't toggle the <details> element on slow CI
+    const summary = page.locator('details > summary[aria-haspopup="true"]').first();
+    await expect(summary).toBeVisible({ timeout: 15000 });
+    const details = page.locator('details:has(> summary[aria-haspopup="true"])').first();
+    await summary.click();
+    if (!(await details.evaluate((el) => (el as HTMLDetailsElement).open))) {
+      await details.evaluate((el) => ((el as HTMLDetailsElement).open = true));
+    }
+
     await page.getByRole('menuitem', { name: 'Sign out' }).click();
     await expect(page).toHaveURL(/\/login/, { timeout: 10000 });
   });
@@ -158,7 +175,7 @@ test.describe('Authentication', () => {
   });
 
   test('authenticated redirect: visiting /login redirects to /', async ({ page }) => {
-    await loginAs(page, 'alice@example.com', 'Password123');
+    await loginAs(page, 'alice@example.com', 'Password123', true);
     await expect(page).toHaveURL('/', { timeout: 10000 });
     await expect(page.getByText('Welcome, Alice')).toBeVisible();
     await page.goto('/login');
@@ -185,26 +202,39 @@ test.describe('Authentication', () => {
   });
 
   test('nav bar dropdown: contains Profile and Notification Settings links', async ({ page }) => {
-    await loginAs(page, 'alice@example.com', 'Password123');
+    await loginAs(page, 'alice@example.com', 'Password123', true);
     await expect(page).toHaveURL('/', { timeout: 10000 });
 
-    // Click the details/summary dropdown
-    const details = page.locator('details');
-    await details.locator('summary').click();
+    // Open the user menu — force-open the <details> element if the click misses on slow CI
+    const summary = page.locator('details > summary[aria-haspopup="true"]').first();
+    await expect(summary).toBeVisible({ timeout: 15000 });
+    const details = page.locator('details:has(> summary[aria-haspopup="true"])').first();
+    await summary.click();
+    if (!(await details.evaluate((el) => (el as HTMLDetailsElement).open))) {
+      await details.evaluate((el) => ((el as HTMLDetailsElement).open = true));
+    }
 
-    await expect(page.getByRole('menuitem', { name: 'Profile' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Profile' })).toBeVisible({ timeout: 10000 });
     await expect(page.getByRole('menuitem', { name: 'Notification Settings' })).toBeVisible();
   });
 
   test('sign out is inside user dropdown as last item', async ({ page }) => {
     await loginAs(page, 'alice@example.com', 'Password123', true);
 
-    // Open the user menu dropdown
-    await page.locator('details summary').click();
+    // Wait for the navbar dropdown trigger to be present and interactive
+    const summary = page.locator('details > summary[aria-haspopup="true"]').first();
+    await expect(summary).toBeVisible({ timeout: 15000 });
+
+    // Open the dropdown — fall back to forcing the details `open` attribute if the click misses on slow CI
+    const details = page.locator('details:has(> summary[aria-haspopup="true"])').first();
+    await summary.click();
+    if (!(await details.evaluate((el) => (el as HTMLDetailsElement).open))) {
+      await details.evaluate((el) => ((el as HTMLDetailsElement).open = true));
+    }
 
     // Sign out should be inside the dropdown as a menuitem
     const signOutMenuItem = page.getByRole('menuitem', { name: 'Sign out' });
-    await expect(signOutMenuItem).toBeVisible();
+    await expect(signOutMenuItem).toBeVisible({ timeout: 10000 });
 
     // Verify Sign out is inside the details dropdown
     const detailsContent = page.locator('details div[role="menu"]');

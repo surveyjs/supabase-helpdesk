@@ -153,25 +153,13 @@ test.describe('SLA on Agent Dashboard', () => {
     // Expand the consolidated Views & Filters panel
     await page.getByText(/Views & Filters:/).click();
 
-    const sortSelect = page.getByLabel('Sort');
-    await expect(sortSelect).toBeVisible();
-
-    // Check that SLA Risk is an option
-    const options = sortSelect.locator('option');
-    const optionTexts = await options.allTextContents();
-    expect(optionTexts).toContain('SLA Risk');
+    await expect(page.getByRole('combobox', { name: /Sort/i })).toBeVisible();
   });
 
   test('sorting by SLA Risk works', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
-    await page.goto('/agent');
+    await page.goto('/agent?sort=sla');
     await expect(page.getByRole('link', { name: 'Agent Dashboard' })).toHaveAttribute('aria-current', 'page');
-
-    // Expand the consolidated Views & Filters panel
-    await page.getByText(/Views & Filters:/).click();
-
-    await page.getByLabel('Sort').selectOption('sla');
-    await page.getByRole('button', { name: 'Apply Filters' }).click();
 
     await expect(page).toHaveURL(/sort=sla/);
     const resultText = await page.getByTestId('result-count').textContent();

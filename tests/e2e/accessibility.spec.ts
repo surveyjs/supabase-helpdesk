@@ -77,7 +77,10 @@ test.describe('Accessibility', () => {
     for (const pg of userPages) {
       test(`${pg.name} has no critical accessibility violations`, async ({ page }) => {
         await page.goto(pg.path);
+        await page.waitForLoadState('domcontentloaded');
         await page.waitForLoadState('networkidle');
+        // Ensure the page <main> has rendered before scanning to avoid mid-hydration violations
+        await page.locator('main').first().waitFor({ state: 'visible', timeout: 15000 });
         const results = await new AxeBuilder({ page })
           .withTags(['wcag2a', 'wcag2aa'])
           .analyze();

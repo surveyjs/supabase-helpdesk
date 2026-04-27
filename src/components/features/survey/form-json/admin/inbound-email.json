@@ -1,0 +1,21 @@
+{
+  "showQuestionNumbers": "off",
+  "pages": [
+    {
+      "elements": [
+        {
+          "type": "boolean",
+          "name": "inbound_email_enabled",
+          "title": "Enable inbound email processing"
+        },
+        {
+          "type": "text",
+          "name": "reply_to_address",
+          "title": "Reply-To Address",
+          "inputType": "email",
+          "placeholder": "support@example.com"
+        }
+      ]
+    }
+  ]
+}

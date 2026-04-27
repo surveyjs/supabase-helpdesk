@@ -270,7 +270,8 @@ test.describe('File Attachments', () => {
   test('file sidebar link visible in admin nav', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin');
+    await page.waitForLoadState('networkidle');
 
-    await expect(page.getByRole('link', { name: 'File Uploads' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('link', { name: 'File Uploads' })).toBeVisible({ timeout: 15000 });
   });
 });

@@ -26,6 +26,7 @@ const SECTIONS = [
   { label: 'AI Configuration', href: '/admin/ai' },
   { label: 'Subscription Tiers', href: '/admin/tiers' },
   { label: 'Authentication', href: '/admin/auth' },
+  { label: 'Survey UI Config', href: '/admin/survey-ui' },
   { label: 'Audit Log', href: '/admin/audit-log' },
 ];
 

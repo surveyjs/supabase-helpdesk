@@ -1,0 +1,39 @@
+{
+  "showQuestionNumbers": "off",
+  "pages": [
+    {
+      "elements": [
+        {
+          "type": "text",
+          "name": "user_page_size",
+          "title": "User ticket list page size (5-100)",
+          "inputType": "number"
+        },
+        {
+          "type": "text",
+          "name": "agent_dashboard_page_size",
+          "title": "Agent dashboard page size (5-100)",
+          "inputType": "number"
+        },
+        {
+          "type": "text",
+          "name": "other_lists_page_size",
+          "title": "Other lists page size (5-100)",
+          "inputType": "number"
+        },
+        {
+          "type": "text",
+          "name": "visible_posts_threshold",
+          "title": "Visible posts threshold (3-50)",
+          "inputType": "number"
+        },
+        {
+          "type": "text",
+          "name": "visible_comments_threshold",
+          "title": "Visible comments threshold (1-20)",
+          "inputType": "number"
+        }
+      ]
+    }
+  ]
+}

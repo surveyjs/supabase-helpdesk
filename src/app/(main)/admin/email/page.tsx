@@ -1,3 +1,4 @@
+import 'survey-core/survey-core.min.css';
 import { createServerClient } from '@/lib/supabase/server';
 import { EmailConfigForm } from './EmailConfigForm';
 

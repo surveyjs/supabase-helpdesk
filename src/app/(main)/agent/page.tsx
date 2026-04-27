@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import 'survey-core/survey-core.min.css';
 import { createServerClient } from '@/lib/supabase/server';
 import { requireAgent } from '@/lib/supabase/auth';
 import {
@@ -18,29 +19,8 @@ import { RealtimeDashboard } from '@/components/features/agent/RealtimeDashboard
 import { BulkSelectProvider } from '@/components/features/bulk-actions/BulkSelectProvider';
 import { TicketCheckbox, SelectAllCheckbox } from '@/components/features/bulk-actions/TicketCheckbox';
 import { BulkActionToolbar } from '@/components/features/bulk-actions/BulkActionToolbar';
-
-function getContrastColor(hex: string): string {
-  const c = hex.replace('#', '');
-  const srgb = [0, 2, 4].map((i) => {
-    const v = parseInt(c.substring(i, i + 2), 16) / 255;
-    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
-  });
-  const L = 0.2126 * srgb[0] + 0.7152 * srgb[1] + 0.0722 * srgb[2];
-  const ratioWhite = 1.05 / (L + 0.05);
-  const ratioDark = (L + 0.05) / 0.05;
-  return ratioWhite >= ratioDark ? '#FFFFFF' : '#000000';
-}
-
-function buildTagFilterUrl(filters: Record<string, string | undefined>, newTags: string): string {
-  const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(filters)) {
-    if (value && value !== 'all' && value !== '1' && key !== 'page' && key !== 'tags') {
-      params.set(key, value);
-    }
-  }
-  if (newTags) params.set('tags', newTags);
-  return params.toString();
-}
+import { AgentFiltersSurvey } from './AgentFiltersSurvey';
+import { parseAgentDashboardSurveyConfig } from '@/lib/constants/survey-ui-config';
 
 export default async function AgentDashboardPage({
   searchParams,
@@ -76,6 +56,17 @@ export default async function AgentDashboardPage({
     sort: (params.sort as string) ?? '',
     page: (params.page as string) ?? '1',
   };
+
+  const { data: surveyUiSetting } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'survey_agent_dashboard_config')
+    .maybeSingle();
+
+  const surveyFilterConfig = parseAgentDashboardSurveyConfig(surveyUiSetting?.value);
+  if (!filters.sort && surveyFilterConfig.defaultSort) {
+    filters.sort = surveyFilterConfig.defaultSort;
+  }
 
   const [{ tickets, total, pageSize }, filterOptions, savedViews, stats] =
     await Promise.all([
@@ -243,235 +234,11 @@ export default async function AgentDashboardPage({
 
           {/* Filter Controls Section */}
           <div className="pt-4 border-t border-gray-200">
-            <form method="get" action="/agent">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
-          {/* Search */}
-          <div>
-            <label htmlFor="filter-q" className="block text-xs font-medium text-gray-500 mb-1">Search</label>
-            <input
-              id="filter-q"
-              type="search"
-              name="q"
-              defaultValue={filters.q}
-              placeholder="Search title & all posts…"
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            <AgentFiltersSurvey
+              filters={filters}
+              filterOptions={filterOptions}
+              config={surveyFilterConfig}
             />
-          </div>
-
-          {/* Submitter email */}
-          <div>
-            <label htmlFor="filter-email" className="block text-xs font-medium text-gray-500 mb-1">Submitter Email</label>
-            <input
-              id="filter-email"
-              type="text"
-              name="email"
-              defaultValue={filters.email}
-              placeholder="email@…"
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-            />
-          </div>
-
-          {/* Status */}
-          <div>
-            <label htmlFor="filter-status" className="block text-xs font-medium text-gray-500 mb-1">Status</label>
-            <select
-              id="filter-status"
-              name="status"
-              defaultValue={filters.status}
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-            >
-              <option value="all">All</option>
-              <option value="active">Active</option>
-              <option value="closed">Closed</option>
-            </select>
-          </div>
-
-          {/* Sort */}
-          <div>
-            <label htmlFor="filter-sort" className="block text-xs font-medium text-gray-500 mb-1">Sort By</label>
-            <select
-              id="filter-sort"
-              name="sort"
-              defaultValue={filters.sort}
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-            >
-              <option value="">Last Modified</option>
-              <option value="created">Created Date</option>
-              <option value="sla">SLA Risk</option>
-            </select>
-          </div>
-
-          {/* Urgency */}
-          <div>
-            <label htmlFor="filter-urgency" className="block text-xs font-medium text-gray-500 mb-1">Urgency</label>
-            <select
-              id="filter-urgency"
-              name="urgency"
-              defaultValue={filters.urgency}
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-            >
-              <option value="">All</option>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-              <option value="critical">Critical</option>
-            </select>
-          </div>
-
-          {/* Severity */}
-          <div>
-            <label htmlFor="filter-severity" className="block text-xs font-medium text-gray-500 mb-1">Severity</label>
-            <select
-              id="filter-severity"
-              name="severity"
-              defaultValue={filters.severity}
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-            >
-              <option value="">All</option>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-              <option value="critical">Critical</option>
-            </select>
-          </div>
-
-          {/* Type */}
-          <div>
-            <label htmlFor="filter-type" className="block text-xs font-medium text-gray-500 mb-1">Type</label>
-            <select
-              id="filter-type"
-              name="type"
-              defaultValue={filters.type}
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-            >
-              <option value="">All</option>
-              {filterOptions.types.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Category (only if categories exist) */}
-          {filterOptions.categories.length > 0 && (
-            <div>
-              <label htmlFor="filter-category" className="block text-xs font-medium text-gray-500 mb-1">Category</label>
-              <select
-                id="filter-category"
-                name="category"
-                defaultValue={filters.category}
-                className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-              >
-                <option value="">All</option>
-                {filterOptions.categories.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Assigned Agent */}
-          <div>
-            <label htmlFor="filter-agent" className="block text-xs font-medium text-gray-500 mb-1">Assigned Agent</label>
-            <select
-              id="filter-agent"
-              name="agent"
-              defaultValue={filters.agent}
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-            >
-              <option value="">All</option>
-              <option value="unassigned">Unassigned</option>
-              {filterOptions.agents.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.display_name ?? 'Agent'} ({a.email})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Team */}
-          <div>
-            <label htmlFor="filter-team" className="block text-xs font-medium text-gray-500 mb-1">Team</label>
-            <select
-              id="filter-team"
-              name="team"
-              defaultValue={filters.team}
-              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-            >
-              <option value="">All</option>
-              <option value="none">No team</option>
-              {filterOptions.teams.map((team) => (
-                <option key={team.id} value={team.id}>{team.name}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Tier (only show when tiers are defined) */}
-          {filterOptions.tiers.length > 0 && (
-            <div>
-              <label htmlFor="filter-tier" className="block text-xs font-medium text-gray-500 mb-1">Tier</label>
-              <select
-                id="filter-tier"
-                name="tier"
-                defaultValue={filters.tier}
-                className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-              >
-                <option value="">All</option>
-                <option value="none">No tier</option>
-                {filterOptions.tiers.map((t) => (
-                  <option key={t.key} value={t.key}>{t.display_name}</option>
-                ))}
-              </select>
-            </div>
-          )}
-        </div>
-
-        {/* Tag filter (multi-select pills) */}
-        {filterOptions.tags.length > 0 && (
-          <div className="mt-3" data-testid="tag-filter">
-            <span className="block text-xs font-medium text-gray-500 mb-1">Tags</span>
-            <div className="flex flex-wrap gap-1">
-              {filterOptions.tags.map((tag) => {
-                const selectedTagIds = filters.tags ? filters.tags.split(',').filter(Boolean) : [];
-                const isSelected = selectedTagIds.includes(tag.id);
-                const newTags = isSelected
-                  ? selectedTagIds.filter((t) => t !== tag.id).join(',')
-                  : [...selectedTagIds, tag.id].join(',');
-                const textColor = getContrastColor(tag.color);
-                return (
-                  <a
-                    key={tag.id}
-                    href={`/agent?${buildTagFilterUrl(filters, newTags)}`}
-                    className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border ${
-                      isSelected ? 'ring-2 ring-offset-1 ring-blue-500' : 'hover:ring-1 hover:ring-gray-300'
-                    }`}
-                    style={{ backgroundColor: tag.color, color: textColor }}
-                  >
-                    {tag.name}
-                  </a>
-                );
-              })}
-            </div>
-            {filters.tags && (
-              <input type="hidden" name="tags" value={filters.tags} />
-            )}
-          </div>
-        )}
-
-        <div className="flex items-center gap-2 mt-3">
-          <button
-            type="submit"
-            className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 font-medium min-h-[44px] focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
-          >
-            Apply Filters
-          </button>
-          <Link
-            href="/agent"
-            className="px-4 py-1.5 text-sm text-gray-600 hover:text-gray-800 min-h-[44px] inline-flex items-center"
-          >
-            Clear All
-          </Link>
-        </div>
-            </form>
           </div>
         </div>
         </details>

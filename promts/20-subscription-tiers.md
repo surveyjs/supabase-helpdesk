@@ -319,6 +319,17 @@ Similarly update RLS policies on `ticket_tags` for the `add_remove_tags` capabil
 
 **`src/components/ui/TierBadge.tsx`** (new component):
 
+## Change Update — Tier Rules in Ticket Detail JSON Config
+
+Ticket detail UI now supports additional config-based tier gating via
+`app_settings.survey_ticket_detail_user_config`.
+
+Rules:
+- Existing capability checks remain mandatory (`user_has_tier_capability(...)`).
+- JSON tier allow-lists are an extra restriction layer for specific controls (status, severity, type, tags, visibility).
+- If an allow-list is empty, any tier with the required capability may use the control.
+- If an allow-list is non-empty, only listed tier keys may use the control, even if capability is true.
+
 - Props: `tierKey: string`, `displayName: string`, `color: string`, `icon?: string`
 - Renders a colored pill (similar to status badges): `[icon] displayName`
 - Color maps to Tailwind classes (e.g., gray → `bg-gray-100 text-gray-700`, blue → `bg-blue-100 text-blue-700`, purple → `bg-purple-100 text-purple-700`)

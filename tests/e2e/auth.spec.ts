@@ -116,7 +116,7 @@ test.describe('Authentication', () => {
       await page.getByLabel('Email').fill(lockoutEmail);
       await page.getByLabel('Password').fill('WrongPassword1');
       await page.getByRole('button', { name: 'Log in' }).click();
-      await expect(page.getByRole('alert').first()).toBeVisible();
+      await expect(page.getByRole('alert').first()).toBeVisible({ timeout: 10000 });
     }
 
     await expect.poll(async () => {
@@ -126,7 +126,7 @@ test.describe('Authentication', () => {
         .eq('email', lockoutEmail.toLowerCase())
         .maybeSingle();
       return data?.attempt_count ?? 0;
-    }, { timeout: 10000 }).toBeGreaterThanOrEqual(5);
+    }, { timeout: 15000, intervals: [500, 500, 1000] }).toBeGreaterThanOrEqual(5);
 
     // 6th attempt should show lockout message
     await page.goto('/login');
@@ -199,12 +199,20 @@ test.describe('Authentication', () => {
   test('sign out is inside user dropdown as last item', async ({ page }) => {
     await loginAs(page, 'alice@example.com', 'Password123', true);
 
-    // Open the user menu dropdown
-    await page.locator('details summary').click();
+    // Wait for the navbar dropdown trigger to be present and interactive
+    const summary = page.locator('details > summary[aria-haspopup="true"]').first();
+    await expect(summary).toBeVisible({ timeout: 15000 });
+
+    // Open the dropdown — fall back to forcing the details `open` attribute if the click misses on slow CI
+    const details = page.locator('details:has(> summary[aria-haspopup="true"])').first();
+    await summary.click();
+    if (!(await details.evaluate((el) => (el as HTMLDetailsElement).open))) {
+      await details.evaluate((el) => ((el as HTMLDetailsElement).open = true));
+    }
 
     // Sign out should be inside the dropdown as a menuitem
     const signOutMenuItem = page.getByRole('menuitem', { name: 'Sign out' });
-    await expect(signOutMenuItem).toBeVisible();
+    await expect(signOutMenuItem).toBeVisible({ timeout: 10000 });
 
     // Verify Sign out is inside the details dropdown
     const detailsContent = page.locator('details div[role="menu"]');

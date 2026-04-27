@@ -606,27 +606,31 @@ test.describe('Consolidated Views & Filters Panel', () => {
 
   test('browser back/forward preserves view and filter state', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
-    
+
     // Start at /agent
     await page.goto('/agent');
+    await page.waitForLoadState('networkidle');
 
     // Apply a filter via URL (SurveyJS dropdown is not a native select)
     await page.goto('/agent?status=closed');
     await page.waitForURL(/status=closed/, { timeout: 10000 });
+    await page.waitForLoadState('networkidle');
 
     // Verify filter applied
     await expect(page).toHaveURL(/status=closed/);
-    
-    // Navigate to a ticket and back
+
+    // Navigate to a ticket and back (only when tickets are present)
     const tickets = page.locator('table tbody tr');
     if (await tickets.count() > 0) {
       const firstLink = tickets.first().getByRole('link').first();
       await firstLink.click();
       await page.waitForURL(/\/tickets\//, { timeout: 10000 });
+      await page.waitForLoadState('networkidle');
 
       // Go back
       await page.goBack();
       await page.waitForURL(/status=closed/, { timeout: 10000 });
+      await page.waitForLoadState('networkidle');
 
       // Should still have status=closed in URL
       await expect(page).toHaveURL(/status=closed/);

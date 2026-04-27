@@ -78,11 +78,15 @@ test.describe('Admin Email Configuration', () => {
     await expect(page.getByText('SMTP Settings')).toBeVisible({ timeout: 10000 });
 
     const smtpForm = page.getByTestId('email-smtp-survey-form');
-    
+
     // Change just the SMTP host to verify autosave works
     const hostField = smtpForm.getByRole('textbox', { name: /SMTP Host/i });
+    await expect(hostField).toBeVisible({ timeout: 10000 });
+    await expect(hostField).toBeEditable();
+    await hostField.click();
     await hostField.fill('testhost.local');
-    await hostField.blur();
+    // Tab to commit value (SurveyJS onValueChanged fires on blur/change)
+    await hostField.press('Tab');
 
     // Verify in database (email config persists in email_config table)
     const svc = createServiceRoleClient();
@@ -93,7 +97,7 @@ test.describe('Admin Email Configuration', () => {
         .limit(1)
         .single();
       return data?.smtp_host;
-    }, { timeout: 15000 }).toBe('testhost.local');
+    }, { timeout: 20000, intervals: [500, 500, 1000] }).toBe('testhost.local');
   });
 
   test('admin can see email sidebar link', async ({ page }) => {

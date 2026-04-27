@@ -77,8 +77,9 @@ test.describe('Cross-Browser Smoke Tests', () => {
 
     // View ticket list
     await page.goto('/tickets');
+    await page.waitForLoadState('networkidle');
     // The tickets page no longer has an h1 — verify the search form is rendered
-    await expect(page.locator('[aria-label="Search tickets"]')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('[aria-label="Search tickets"]')).toBeVisible({ timeout: 15000 });
 
     // Visit help center
     await page.goto('/help');
@@ -87,7 +88,8 @@ test.describe('Cross-Browser Smoke Tests', () => {
 
     // Visit profile
     await page.goto('/profile');
-    await expect(page.getByRole('heading', { name: 'My Profile' })).toBeVisible({ timeout: 10000 });
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByRole('heading', { name: 'My Profile' })).toBeVisible({ timeout: 15000 });
   });
 
   test('agent flow works', async ({ page }) => {

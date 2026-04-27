@@ -65,7 +65,7 @@ test.describe('Realtime Notifications', () => {
     await expect(page.getByLabel('Notifications')).toBeVisible({ timeout: 10000 });
 
     // Badge (red circle) should now be visible
-    const badge = page.getByLabel('Notifications').locator('span.bg-red-500');
+    const badge = page.getByLabel('Notifications').locator('span.bg-red-600');
     await expect(badge).toBeVisible({ timeout: 10000 });
 
     // Clean up only this test's notification
@@ -119,7 +119,7 @@ test.describe('Realtime Notifications', () => {
     await page.waitForTimeout(1000);
     const bell = page.getByLabel('Notifications');
     // The badge span should not have text content > 0
-    const badge = bell.locator('span.bg-red-500');
+    const badge = bell.locator('span.bg-red-600');
     await expect(badge).not.toBeVisible({ timeout: 5000 });
 
     // Clean up

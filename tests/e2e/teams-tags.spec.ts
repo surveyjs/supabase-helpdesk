@@ -137,7 +137,7 @@ test.describe('Tag Display and Management', () => {
         .select('tag_id')
         .eq('ticket_id', ticketId);
       return (data ?? []).map((r) => r.tag_id).includes(target!.id);
-    }, { timeout: 15000 }).toBe(true);
+    }, { timeout: 20000, intervals: [500, 500, 1000] }).toBe(true);
 
     // Cleanup so other tests see the original tag set
     await admin.from('ticket_tags').delete().eq('ticket_id', ticketId).eq('tag_id', target!.id);

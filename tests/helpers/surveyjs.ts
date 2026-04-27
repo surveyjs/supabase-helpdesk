@@ -46,11 +46,11 @@ export async function selectSurveyDropdown(
 }
 
 /**
- * Add a value to a SurveyJS tagbox by selecting from the popup list.
- * Tagbox popups can render options outside the viewport, so we open the
- * dropdown manually and click via dispatchEvent to bypass actionability
- * checks. If clicking an already-selected option fails (toggle-off), retry
- * once after re-opening the popup.
+ * Add (toggle) a value in a SurveyJS tagbox by typing into the filter input
+ * and pressing Enter. This is far more reliable than clicking list items
+ * because it goes through SurveyJS's own keyboard handler and avoids
+ * popup/portal/visibility races. Falls back to a click on the matching list
+ * item if the keyboard path doesn't take.
  */
 export async function addSurveyTag(
   scope: Page | Locator,
@@ -59,22 +59,83 @@ export async function addSurveyTag(
 ): Promise<void> {
   const q = question(scope, name);
   const page = getPage(scope);
+  const optionString =
+    typeof optionText === 'string' ? optionText : optionText.source;
 
-  const openAndClick = async (): Promise<boolean> => {
+  const tryKeyboard = async (): Promise<boolean> => {
     await page.keyboard.press('Escape').catch(() => {});
+    await page.waitForTimeout(150);
 
-    const trigger = q
-      .locator('.sd-tagbox, .sd-dropdown, [role="combobox"]')
+    const filterInput = q
+      .locator('input.sd-tagbox__filter-string-input, input.sd-dropdown__filter-string-input')
       .first();
-    await trigger.waitFor({ state: 'visible', timeout: 10000 });
-    await trigger.scrollIntoViewIfNeeded().catch(() => {});
-    await trigger.click({ force: true });
+    if (!(await filterInput.count())) return false;
 
-    const popup = page.locator('.sv-popup__container').filter({ visible: true }).first();
-    await popup.waitFor({ state: 'visible', timeout: 10000 });
+    try {
+      await filterInput.scrollIntoViewIfNeeded().catch(() => {});
+      await filterInput.click({ force: true, timeout: 3000 });
+      await filterInput.fill('');
+      await filterInput.type(optionString, { delay: 30 });
+    } catch {
+      return false;
+    }
 
-    const option = popup.locator('.sv-list__item').filter({ hasText: optionText }).first();
-    await option.waitFor({ state: 'attached', timeout: 10000 });
+    // Wait for popup to filter the list down.
+    await page.waitForTimeout(300);
+
+    // If the option is highlighted/focused, Enter selects it. SurveyJS auto-
+    // focuses the first match.
+    try {
+      await filterInput.press('Enter');
+    } catch {
+      return false;
+    }
+    await page.waitForTimeout(150);
+    await page.keyboard.press('Escape').catch(() => {});
+    // Clear the filter so subsequent operations don't see lingering text.
+    try {
+      await filterInput.fill('');
+    } catch { /* ignore */ }
+    return true;
+  };
+
+  const tryClick = async (): Promise<boolean> => {
+    await page.keyboard.press('Escape').catch(() => {});
+    await page.waitForTimeout(150);
+
+    const chevron = q
+      .locator('.sd-dropdown_chevron-button, .sd-dropdown__chevron-button')
+      .first();
+    let opened = false;
+    if (await chevron.count()) {
+      try {
+        await chevron.scrollIntoViewIfNeeded().catch(() => {});
+        await chevron.click({ force: true, timeout: 3000 });
+        opened = true;
+      } catch { /* fall through */ }
+    }
+    if (!opened) {
+      const trigger = q
+        .locator('.sd-tagbox, .sd-dropdown, [role="combobox"]')
+        .first();
+      try {
+        await trigger.waitFor({ state: 'visible', timeout: 5000 });
+        await trigger.scrollIntoViewIfNeeded().catch(() => {});
+        await trigger.click({ force: true });
+      } catch {
+        return false;
+      }
+    }
+
+    const option = page
+      .locator('.sv-popup__container .sv-list__item')
+      .filter({ hasText: optionText, visible: true })
+      .first();
+    try {
+      await option.waitFor({ state: 'visible', timeout: 8000 });
+    } catch {
+      return false;
+    }
     await option
       .evaluate((el) => (el as HTMLElement).scrollIntoView({ block: 'center' }))
       .catch(() => {});
@@ -88,9 +149,15 @@ export async function addSurveyTag(
     }
   };
 
-  if (await openAndClick()) return;
-  // Retry once
-  if (await openAndClick()) return;
+  // Prefer keyboard path; fall back to click. Each path is retried.
+  for (let i = 0; i < 3; i++) {
+    try {
+      if (await tryKeyboard()) return;
+    } catch { /* swallow */ }
+    try {
+      if (await tryClick()) return;
+    } catch { /* swallow */ }
+  }
   throw new Error(`Failed to toggle tagbox option "${optionText}" on field "${name}"`);
 }
 

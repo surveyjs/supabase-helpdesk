@@ -79,7 +79,19 @@ test.describe('Admin Email Configuration', () => {
 
     const smtpForm = page.getByTestId('email-smtp-survey-form');
 
-    // Change just the SMTP host to verify autosave works
+    // The server action requires both smtp_host and sender_email to be present.
+    // On a fresh DB the seed row leaves sender_email empty, so fill it too to
+    // ensure the autosave is accepted.
+    const senderField = smtpForm.getByRole('textbox', { name: /Sender Email/i });
+    await expect(senderField).toBeVisible({ timeout: 10000 });
+    await expect(senderField).toBeEditable();
+    if (!(await senderField.inputValue())) {
+      await senderField.click();
+      await senderField.fill('admin@example.com');
+      await senderField.press('Tab');
+    }
+
+    // Change the SMTP host to verify autosave works
     const hostField = smtpForm.getByRole('textbox', { name: /SMTP Host/i });
     await expect(hostField).toBeVisible({ timeout: 10000 });
     await expect(hostField).toBeEditable();

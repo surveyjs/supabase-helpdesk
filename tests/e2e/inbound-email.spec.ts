@@ -96,22 +96,28 @@ test.describe('Inbound Email Admin Configuration', () => {
   });
 
   test('toggle inbound email on/off', async ({ page }) => {
+    // Reset to a known-disabled state so the click below is guaranteed to enable.
+    const svc = createServiceRoleClient();
+    await svc.from('app_settings').update({ value: 'false' }).eq('key', 'inbound_email_enabled');
+    await svc.from('app_settings').update({ value: '' }).eq('key', 'inbound_email_reply_to_address');
+
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/inbound-email');
 
     // Set reply-to address first (required when enabling)
     const form = page.getByTestId('inbound-email-survey-form');
     const replyToInput = form.getByRole('textbox', { name: /Reply-To Address/i });
+    await expect(replyToInput).toBeVisible({ timeout: 10000 });
+    await replyToInput.click();
     await replyToInput.fill('support@test-helpdesk.com');
-    await replyToInput.blur();
+    await replyToInput.press('Tab');
 
     // Enable - use force click to bypass pointer interception
     const checkbox = form.locator('input[name="inbound_email_enabled"]');
     await checkbox.click({ force: true });
-    
+
     // Wait for autosave (no button to click in autosave mode)
     // Verify saved in DB by polling
-    const svc = createServiceRoleClient();
     await expect.poll(async () => {
       const { data } = await svc
         .from('app_settings')
@@ -119,7 +125,7 @@ test.describe('Inbound Email Admin Configuration', () => {
         .eq('key', 'inbound_email_enabled')
         .single();
       return data?.value;
-    }, { timeout: 20000 }).toBe('true');
+    }, { timeout: 20000, intervals: [500, 500, 1000] }).toBe('true');
 
     // Reload and verify persisted
     await page.reload();

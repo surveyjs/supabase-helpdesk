@@ -198,6 +198,8 @@ test.describe('CSAT on Ticket Detail', () => {
 
   test.beforeAll(async () => {
     const svc = createServiceRoleClient();
+    // Ensure CSAT is enabled — the rate-ticket link only appears when csat_enabled=true.
+    await svc.from('app_settings').update({ value: 'true' }).eq('key', 'csat_enabled');
 
     // Pre-cleanup: remove any stale ticket left over from a prior interrupted run.
     const { data: stale } = await svc
@@ -269,7 +271,8 @@ test.describe('CSAT on Ticket Detail', () => {
   test('"Rate this ticket" link appears for ticket owner on closed ticket', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
     await page.goto(`/tickets/${ticketId}/${ticketSlug}`);
-    await expect(page.getByTestId('rate-ticket-link')).toBeVisible();
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByTestId('rate-ticket-link')).toBeVisible({ timeout: 10000 });
   });
 
   test('agent cannot see "Rate this ticket" link', async ({ page }) => {
@@ -348,15 +351,14 @@ test.describe('CSAT Admin Settings', () => {
   });
 
   test('CSAT toggle disabled when email not configured', async ({ page }) => {
-    // Check if email is NOT verified — the toggle should be disabled
+    // Ensure email is not verified for a deterministic assertion.
     const svc = createServiceRoleClient();
-    const { data: emailConfig } = await svc.from('email_config').select('is_verified').limit(1).single();
+    await svc.from('email_config').update({ is_verified: false }).neq('id', '00000000-0000-0000-0000-000000000000');
 
-    if (!emailConfig?.is_verified) {
-      await loginAs(page, 'admin@example.com');
-      await gotoAdmin(page, '/admin/csat');
-      await expect(page.getByTestId('csat-email-warning')).toBeVisible({ timeout: 10000 });
-    }
+    await loginAs(page, 'admin@example.com');
+    await gotoAdmin(page, '/admin/csat');
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByTestId('csat-email-warning')).toBeVisible({ timeout: 10000 });
   });
 
   test('change delay setting', async ({ page }) => {

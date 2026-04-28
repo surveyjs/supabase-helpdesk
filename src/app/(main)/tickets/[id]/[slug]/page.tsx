@@ -7,7 +7,7 @@ import { renderMarkdown } from '@/lib/utils/markdown';
 import { formatRelativeTime } from '@/lib/utils/time';
 import { Badge } from '@/components/ui/Badge';
 import { DisplayName } from '@/components/features/users/DisplayName';
-import { ReplyForm } from './ReplyForm';
+import { MainReplyToggle } from './MainReplyToggle';
 import { EditablePost } from './EditablePost';
 import { EditableTitle } from './EditableTitle';
 import { ReplyToggle } from './ReplyToggle';
@@ -26,7 +26,6 @@ import { getSlaStatus, type SlaTimer, type SlaIndicatorStatus } from '@/lib/util
 import { updateCustomFieldValue } from '@/lib/actions/admin';
 import { removeDuplicateLink } from '@/lib/actions/duplicate';
 import { DeleteTicketButton } from './DeleteTicketButton';
-import { SuggestReplyButton } from './SuggestReplyButton';
 import { AiTicketSummary } from './AiTicketSummary';
 import { GenerateKbArticleButton } from './GenerateKbArticleButton';
 import { TicketTabs } from './TicketTabs';
@@ -190,7 +189,7 @@ export default async function TicketDetailPage({
     .from('activity_log')
     .select('id, action, details, created_at, actor:profiles!activity_log_actor_id_fkey(id, display_name)')
     .eq('ticket_id', ticket.id)
-    .order('created_at', { ascending: true });
+    .order('created_at', { ascending: false });
 
   // Fetch timeline thresholds and AI settings in a single batch
   const { data: allSettings } = await supabase
@@ -267,43 +266,33 @@ export default async function TicketDetailPage({
     }
   }
 
-  // Build interleaved timeline of root posts + activity entries
-  type TimelineItem =
-    | { kind: 'post'; data: (typeof renderedPosts)[number] }
-    | { kind: 'activity'; data: NonNullable<typeof activityLog>[number] };
-
-  const timelineItems: TimelineItem[] = [];
-  for (const p of rootPosts) {
-    timelineItems.push({ kind: 'post', data: p });
-  }
-  for (const a of activityLog ?? []) {
-    // Filter agent-only activity from non-agents
-    if (!isAgent && (a.action === 'draft_published' || a.action === 'post_privacy_changed')) continue;
-    timelineItems.push({ kind: 'activity', data: a });
-  }
-  timelineItems.sort((a, b) => {
-    const aDate = a.kind === 'post' ? a.data.created_at : a.data.created_at;
-    const bDate = b.kind === 'post' ? b.data.created_at : b.data.created_at;
-    return new Date(aDate).getTime() - new Date(bDate).getTime();
+  // Separate activity log entries visible to this viewer
+  const visibleActivityEntries = (activityLog ?? []).filter((a) => {
+    if (!isAgent && (a.action === 'draft_published' || a.action === 'post_privacy_changed')) return false;
+    return true;
   });
 
-  // Collapsible: determine hidden vs visible
-  const postItemsCount = timelineItems.filter((i) => i.kind === 'post').length;
+  // Thread items: only root posts (non-original), sorted by date
+  type ThreadItem = { kind: 'post'; data: (typeof renderedPosts)[number] };
+  const threadItems: ThreadItem[] = rootPosts
+    .slice()
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+    .map((p) => ({ kind: 'post' as const, data: p }));
+
+  // Collapsible: determine hidden vs visible thread items
+  const postItemsCount = threadItems.length;
   const shouldCollapse = postItemsCount > visiblePostsThreshold;
-  let hiddenItems: TimelineItem[] = [];
-  let visibleItems: TimelineItem[] = timelineItems;
+  let hiddenItems: ThreadItem[] = [];
+  let visibleItems: ThreadItem[] = threadItems;
   if (shouldCollapse) {
-    // Find the cutoff: keep the last N post-items and any activity entries between them
-    const postIndices: number[] = [];
-    timelineItems.forEach((item, i) => {
-      if (item.kind === 'post') postIndices.push(i);
-    });
-    const cutoffIndex = postIndices[postIndices.length - visiblePostsThreshold];
-    hiddenItems = timelineItems.slice(0, cutoffIndex);
-    visibleItems = timelineItems.slice(cutoffIndex);
+    hiddenItems = threadItems.slice(0, threadItems.length - visiblePostsThreshold);
+    visibleItems = threadItems.slice(threadItems.length - visiblePostsThreshold);
   }
 
-  const hiddenPostCount = hiddenItems.filter((i) => i.kind === 'post').length;
+  const hiddenPostCount = hiddenItems.length;
+
+  // Keep old type alias for renderTimelineItems compatibility
+  type TimelineItem = ThreadItem;
 
   function formatTime(dateStr: string) {
     const d = new Date(dateStr);
@@ -561,10 +550,7 @@ export default async function TicketDetailPage({
   }
 
   function renderTimelineItems(items: TimelineItem[]) {
-    return items.map((item) => {
-      if (item.kind === 'post') return renderPostCard(item.data, 0);
-      return renderActivityEntry(item.data);
-    });
+    return items.map((item) => renderPostCard(item.data, 0));
   }
 
   // Fetch agent-specific data only if agent
@@ -798,66 +784,53 @@ export default async function TicketDetailPage({
             </div>
           </div>
 
-          {/* Posts / Notes tabs (agents see two tabs, users see only posts) */}
-          {isAgent ? (
-            <TicketTabs
-              postsContent={
-                <div className="space-y-4">
-                  {originalPost && renderPostCard(originalPost, 0)}
-                  {shouldCollapse && hiddenPostCount > 0 && (
-                    <CollapsibleTimeline hiddenCount={hiddenPostCount}>
-                      {renderTimelineItems(hiddenItems)}
-                    </CollapsibleTimeline>
-                  )}
-                  {renderTimelineItems(visibleItems)}
-                  {canReply && !ticket.merged_into_id && (
-                    <div className="bg-white rounded-lg border border-gray-200 p-6">
-                      <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-lg font-medium text-gray-900">Reply</h2>
-                        {aiSuggestedReplyEnabled && (
-                          <SuggestReplyButton ticketId={ticket.id} />
-                        )}
-                      </div>
-                      <ReplyForm
-                        ticketId={ticket.id}
-                        isAgent={isAgent}
-                        editorViewMode={ticketDetailEditorViewMode}
-                      />
-                    </div>
-                  )}
-                </div>
-              }
-              notesContent={
-                <div className="space-y-4">
-                  {notePosts.length > 0 ? (
-                    notePosts.map((note) => renderPostCard(note, 0))
-                  ) : (
-                    <p className="text-sm text-gray-500 italic">No internal notes yet.</p>
-                  )}
-                  {!ticket.merged_into_id && (
-                    <NoteForm ticketId={ticket.id} editorViewMode={ticketDetailEditorViewMode} />
-                  )}
-                </div>
-              }
-              noteCount={noteCount}
-            />
-          ) : (
-            <div className="space-y-4">
-              {originalPost && renderPostCard(originalPost, 0)}
-              {shouldCollapse && hiddenPostCount > 0 && (
-                <CollapsibleTimeline hiddenCount={hiddenPostCount}>
-                  {renderTimelineItems(hiddenItems)}
-                </CollapsibleTimeline>
-              )}
-              {renderTimelineItems(visibleItems)}
-              {canReply && !ticket.merged_into_id && (
-                <div className="bg-white rounded-lg border border-gray-200 p-6">
-                  <h2 className="text-lg font-medium text-gray-900 mb-4">Reply</h2>
-                  <ReplyForm ticketId={ticket.id} isAgent={isAgent} editorViewMode={ticketDetailEditorViewMode} />
-                </div>
-              )}
+          {/* Original post — always visible above tabs */}
+          {originalPost && (
+            <div className="mb-4">
+              {renderPostCard(originalPost, 0)}
             </div>
           )}
+
+          {/* Thread / Notes / Logs tabs */}
+          <TicketTabs
+            threadContent={
+              <div className="space-y-4">
+                {shouldCollapse && hiddenPostCount > 0 && (
+                  <CollapsibleTimeline hiddenCount={hiddenPostCount}>
+                    {renderTimelineItems(hiddenItems)}
+                  </CollapsibleTimeline>
+                )}
+                {renderTimelineItems(visibleItems)}
+                {canReply && !ticket.merged_into_id && (
+                  <MainReplyToggle
+                    ticketId={ticket.id}
+                    isAgent={isAgent}
+                    editorViewMode={ticketDetailEditorViewMode}
+                    aiSuggestedReplyEnabled={aiSuggestedReplyEnabled}
+                  />
+                )}
+              </div>
+            }
+            notesContent={isAgent ? (
+              <div className="space-y-4">
+                {notePosts.length > 0 ? (
+                  notePosts.map((note) => renderPostCard(note, 0))
+                ) : (
+                  <p className="text-sm text-gray-500 italic">No internal notes yet.</p>
+                )}
+                {!ticket.merged_into_id && (
+                  <NoteForm ticketId={ticket.id} editorViewMode={ticketDetailEditorViewMode} />
+                )}
+              </div>
+            ) : undefined}
+            logsContent={visibleActivityEntries.length > 0 ? (
+              <div className="space-y-1">
+                {visibleActivityEntries.map((entry) => renderActivityEntry(entry))}
+              </div>
+            ) : undefined}
+            noteCount={isAgent ? noteCount : undefined}
+            logCount={visibleActivityEntries.length}
+          />
         </div>
 
         {/* RIGHT: Sidebar */}

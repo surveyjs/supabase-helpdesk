@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
 import { CommentForm } from './CommentForm';
+import { ComposerToggle } from './ComposerToggle';
 
 export function ReplyToggle({
   parentPostId,
@@ -12,35 +12,21 @@ export function ReplyToggle({
   parentCommentId?: string;
   editorViewMode?: 'both' | 'preview' | 'editor';
 }) {
-  const [open, setOpen] = useState(false);
-
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="text-xs text-blue-600 hover:text-blue-800"
-        data-testid="reply-btn"
-      >
-        Reply
-      </button>
-    );
-  }
-
   return (
-    <div>
-      <CommentForm
-        parentPostId={parentPostId}
-        parentCommentId={parentCommentId}
-        editorViewMode={editorViewMode}
-      />
-      <button
-        type="button"
-        onClick={() => setOpen(false)}
-        className="mt-1 text-xs text-gray-500 hover:text-gray-700"
-      >
-        Cancel
-      </button>
-    </div>
+    <ComposerToggle
+      triggerLabel="Add a comment"
+      triggerTestId="add-comment-btn"
+      triggerClassName="px-3 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700"
+    >
+      {({ close }) => (
+        <CommentForm
+          parentPostId={parentPostId}
+          parentCommentId={parentCommentId}
+          editorViewMode={editorViewMode}
+          submitLabel="Add a comment"
+          onCancel={close}
+        />
+      )}
+    </ComposerToggle>
   );
 }

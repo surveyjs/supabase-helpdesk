@@ -10,10 +10,14 @@ export function ReplyForm({
   ticketId,
   isAgent = false,
   editorViewMode = 'both',
+  submitLabel = 'Add a reply',
+  onCancel,
 }: {
   ticketId: number;
   isAgent?: boolean;
   editorViewMode?: 'both' | 'preview' | 'editor';
+  submitLabel?: string;
+  onCancel?: () => void;
 }) {
   const [state, formAction, pending] = useActionState(replyToTicket, initialState);
   const [body, setBody] = useState('');
@@ -39,13 +43,25 @@ export function ReplyForm({
         viewMode={editorViewMode}
         extraToolbarPlugins={isAgent ? ['canned-response'] : undefined}
       />
-      <button
-        type="submit"
-        disabled={pending}
-        className="bg-blue-600 text-white rounded px-4 py-2 text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
-      >
-        {pending ? 'Sending…' : 'Reply'}
-      </button>
+      <div className="flex gap-2">
+        <button
+          type="submit"
+          disabled={pending}
+          className="px-3 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          {pending ? 'Sending…' : submitLabel}
+        </button>
+        {onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-3 py-1 text-xs rounded bg-gray-100 text-gray-700 hover:bg-gray-200"
+            data-testid="cancel-reply-btn"
+          >
+            Cancel
+          </button>
+        )}
+      </div>
     </form>
   );
 }

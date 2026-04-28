@@ -10,10 +10,14 @@ export function CommentForm({
   parentPostId,
   parentCommentId,
   editorViewMode = 'both',
+  submitLabel = 'Add a comment',
+  onCancel,
 }: {
   parentPostId: string;
   parentCommentId?: string;
   editorViewMode?: 'both' | 'preview' | 'editor';
+  submitLabel?: string;
+  onCancel?: () => void;
 }) {
   const [state, formAction, pending] = useActionState(addComment, initialState);
 
@@ -36,13 +40,24 @@ export function CommentForm({
         compact
         viewMode={editorViewMode}
       />
-      <button
-        type="submit"
-        disabled={pending}
-        className="px-3 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-      >
-        {pending ? 'Posting…' : 'Comment'}
-      </button>
+      <div className="flex gap-2">
+        <button
+          type="submit"
+          disabled={pending}
+          className="px-3 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+        >
+          {pending ? 'Posting…' : submitLabel}
+        </button>
+        {onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-3 py-1 text-xs rounded bg-gray-100 text-gray-700 hover:bg-gray-200"
+          >
+            Cancel
+          </button>
+        )}
+      </div>
     </form>
   );
 }

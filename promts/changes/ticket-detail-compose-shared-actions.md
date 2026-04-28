@@ -27,7 +27,7 @@ Added `ComposerToggle.tsx` to encapsulate common open/close behavior for compose
 
 Responsibilities:
 - Render trigger button when closed
-- Render compose panel and Cancel button when open
+- Render compose panel when open and pass a `close()` callback to the child form
 - Hide trigger while open (for the active composer only)
 
 ### 2. Root reply flow

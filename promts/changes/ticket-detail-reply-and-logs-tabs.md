@@ -81,7 +81,7 @@ Extended to support an optional `logsContent` / `logCount` pair:
 - `src/app/(main)/tickets/[id]/[slug]/page.tsx` — main ticket detail page
 - `src/app/(main)/tickets/[id]/[slug]/TicketTabs.tsx` — tab bar component
 - `src/app/(main)/tickets/[id]/[slug]/MainReplyToggle.tsx` — new toggle component
-- `src/app/(main)/tickets/[id]/[slug]/ReplyForm.tsx` — unchanged
+- `src/app/(main)/tickets/[id]/[slug]/ReplyForm.tsx` — updated to support submit/cancel compose actions
 - `tests/e2e/posts-comments.spec.ts` — E2E tests updated
 
 ---
@@ -93,7 +93,7 @@ Extended to support an optional `logsContent` / `logCount` pair:
 - **`add a reply to the ticket`**: click the **Add a reply** button first to open the form, then submit.
 - **`activity log entries display inline`** → renamed to **`activity log entries display in Logs tab`**: navigate to Logs tab, verify entries visible there.
 - **`agent sees Posts and Notes tabs`** → updated to check for `thread-tab`, `notes-tab`, and `logs-tab` (logs tab only if logs exist).
-- **`regular user does not see tab bar`** → updated to check for absence of `ticket-tabs` when no visible log entries exist for the test ticket.
+- **`regular user`** → updated to cover the regular-user reply flow: verify compose is hidden by default and opened via **Add a reply**.
 - New test: **`Reply button opens compose form`** — verifies the `ReplyForm` is hidden initially and appears after clicking Add a reply.
 
 ### Follow-up update

@@ -18,7 +18,7 @@ export function TicketTabs({
   logCount?: number;
 }) {
   const hasNotes = !!notesContent;
-  const hasLogs = !!logsContent && (logCount ?? 0) > 0;
+  const hasLogs = !!logsContent;
 
   // Always call useState at top level (React Hooks Rule)
   const [activeTab, setActiveTab] = useState<TabId>('thread');
@@ -81,7 +81,7 @@ export function TicketTabs({
           >
             Logs
             <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-              {logCount}
+              {logCount ?? 0}
             </span>
           </button>
         )}

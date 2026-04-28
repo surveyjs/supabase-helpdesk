@@ -100,15 +100,8 @@ test.describe('Posts, Comments & Notes', () => {
     await page.getByRole('button', { name: 'Create Ticket' }).click();
 
     const createdUrlPattern = /\/tickets\/\d+\/e2e-posts-test-ticket/;
-    try {
-      await expect(page).toHaveURL(createdUrlPattern, { timeout: 15000 });
-      ticketUrl = page.url();
-    } catch {
-      // Fallback for occasional slow create redirect in CI: ensure a ticket exists and continue.
-      ticketUrl = await resolveTicketUrl();
-      await page.goto(ticketUrl);
-      await expect(page).toHaveURL(createdUrlPattern, { timeout: 10000 });
-    }
+    await expect(page).toHaveURL(createdUrlPattern, { timeout: 30000 });
+    ticketUrl = page.url();
   });
 
   test('Reply button opens compose form and submits reply', async ({ page }) => {

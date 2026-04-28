@@ -162,13 +162,23 @@ export async function addSurveyTag(
 }
 
 /**
- * Toggle a SurveyJS boolean question rendered as a checkbox.
+ * Toggle a SurveyJS boolean question rendered as a checkbox. The real
+ * `<input type="checkbox">` is visually hidden and a styled decorator span
+ * intercepts pointer events, so click the wrapping `<label>` instead.
  */
 export async function toggleSurveyCheckbox(
   scope: Page | Locator,
   name: string,
 ): Promise<void> {
-  await question(scope, name).locator('input[type="checkbox"]').first().click();
+  const q = question(scope, name);
+  const label = q.locator('label.sd-checkbox__label, label.sd-selectbase__label, label').first();
+  if (await label.count()) {
+    await label.scrollIntoViewIfNeeded().catch(() => {});
+    await label.click();
+    return;
+  }
+  // Fallback: force-click the hidden input.
+  await q.locator('input[type="checkbox"]').first().click({ force: true });
 }
 
 /**

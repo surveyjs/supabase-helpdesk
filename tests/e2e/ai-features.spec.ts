@@ -220,8 +220,13 @@ test.describe('Ticket detail AI features', () => {
       await firstTicket.click();
       await page.waitForTimeout(2000);
 
+      // Suggest button is rendered inside the reply composer panel.
+      await page.getByTestId('main-reply-btn').click();
+      const replyPanel = page.getByTestId('main-reply-panel');
+      await expect(replyPanel).toBeVisible({ timeout: 10000 });
+
       // Agent should see suggest reply button
-      await expect(page.getByTestId('suggest-reply-btn')).toBeVisible();
+      await expect(replyPanel.getByTestId('suggest-reply-btn')).toBeVisible();
     }
 
     // Disable the feature
@@ -241,7 +246,11 @@ test.describe('Ticket detail AI features', () => {
     await firstTicket.click();
     await page.waitForLoadState('networkidle');
 
-    await expect(page.getByTestId('suggest-reply-btn')).not.toBeVisible();
+    await page.getByTestId('main-reply-btn').click();
+    const replyPanel = page.getByTestId('main-reply-panel');
+    await expect(replyPanel).toBeVisible({ timeout: 10000 });
+
+    await expect(replyPanel.getByTestId('suggest-reply-btn')).not.toBeVisible();
   });
 });
 

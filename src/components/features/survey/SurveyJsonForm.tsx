@@ -4,6 +4,7 @@ import { useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { Model } from 'survey-core';
 import surveyTheme from './theme.json';
+import 'survey-core/survey-core.min.css';
 import './survey-overrides.css';
 
 const Survey = dynamic(() => import('survey-react-ui').then((mod) => mod.Survey), { ssr: false });

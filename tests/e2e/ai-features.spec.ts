@@ -48,26 +48,22 @@ test.describe('Admin AI Configuration', () => {
     await expect(page.getByRole('link', { name: 'AI Configuration' })).toBeVisible();
   });
 
-  test('provider dropdown shows correct options', async ({ page }) => {
+  test('provider radio shows correct options', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/ai');
 
-    const providerSelect = page.locator('#ai_provider');
-    await expect(providerSelect).toBeVisible();
-
-    const options = providerSelect.locator('option');
-    const optionTexts = await options.allTextContents();
-    expect(optionTexts).toContain('None (unconfigured)');
-    expect(optionTexts).toContain('OpenAI');
-    expect(optionTexts).toContain('Anthropic');
-    expect(optionTexts).toContain('Custom (OpenAI-compatible)');
+    const form = page.getByTestId('ai-config-survey-form');
+    await expect(form.getByText('None (unconfigured)', { exact: true })).toBeVisible();
+    await expect(form.getByText('OpenAI', { exact: true })).toBeVisible();
+    await expect(form.getByText('Anthropic', { exact: true })).toBeVisible();
+    await expect(form.getByText('Custom (OpenAI-compatible)', { exact: true })).toBeVisible();
   });
 
   test('API key field masks input', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/ai');
 
-    const apiKeyInput = page.locator('#ai_api_key');
+    const apiKeyInput = page.getByLabel('API Key');
     await expect(apiKeyInput).toBeVisible();
     await expect(apiKeyInput).toHaveAttribute('type', 'password');
   });
@@ -84,36 +80,39 @@ test.describe('Admin AI Configuration', () => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/ai');
 
-    // Check all feature toggle checkboxes exist
-    await expect(page.locator('#ai_auto_categorize_enabled')).toBeVisible();
-    await expect(page.locator('#ai_duplicate_detection_enabled')).toBeVisible();
-    await expect(page.locator('#ai_suggested_reply_enabled')).toBeVisible();
-    await expect(page.locator('#ai_ticket_summary_enabled')).toBeVisible();
-    await expect(page.locator('#ai_generate_kb_article_enabled')).toBeVisible();
+    // Check all feature toggle checkboxes exist by their question titles
+    await expect(page.getByText('Auto-categorize tickets', { exact: true })).toBeVisible();
+    await expect(page.getByText('Duplicate ticket detection', { exact: true })).toBeVisible();
+    await expect(page.getByText('Suggested reply for agents', { exact: true })).toBeVisible();
+    await expect(page.getByText('Ticket summary', { exact: true })).toBeVisible();
+    await expect(page.getByText('Generate KB article from ticket', { exact: true })).toBeVisible();
   });
 
   test('settings persist after save', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/ai');
 
-    // Select OpenAI provider
-    await page.locator('#ai_provider').selectOption('openai');
-    await page.locator('#ai_model').fill('gpt-4o-test');
-    await page.locator('#ai_request_timeout').fill('30');
+    const form = page.getByTestId('ai-config-survey-form');
 
-    // Enable auto-categorize
-    await page.locator('#ai_auto_categorize_enabled').check();
+    // Select OpenAI provider via radiogroup, fill model + timeout, enable auto-categorize.
+    await form.getByText('OpenAI', { exact: true }).click();
+    await page.getByLabel('Model').fill('gpt-4o-test');
+    await page.getByLabel('Request Timeout (seconds)').fill('30');
+    await form.getByText('Auto-categorize tickets', { exact: true }).click();
 
-    // Save
-    await page.getByTestId('save-ai-settings-btn').click();
-    await page.waitForTimeout(2000);
+    // Trigger flush of debounced autosave and wait for the request.
+    const savePromise = page.waitForResponse(
+      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
+      { timeout: 15000 },
+    );
+    await page.getByLabel('Request Timeout (seconds)').blur();
+    await savePromise;
+    await page.waitForTimeout(500);
 
     // Reload page and verify persistence
     await page.reload();
-    await expect(page.locator('#ai_provider')).toHaveValue('openai');
-    await expect(page.locator('#ai_model')).toHaveValue('gpt-4o-test');
-    await expect(page.locator('#ai_request_timeout')).toHaveValue('30');
-    await expect(page.locator('#ai_auto_categorize_enabled')).toBeChecked();
+    await expect(page.getByLabel('Model')).toHaveValue('gpt-4o-test');
+    await expect(page.getByLabel('Request Timeout (seconds)')).toHaveValue('30');
 
     // Reset settings
     const svc = createServiceRoleClient();
@@ -137,18 +136,20 @@ test.describe('Admin AI Configuration', () => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/ai');
 
-    // Not visible with default (none)
-    await expect(page.locator('#ai_custom_endpoint_url')).not.toBeVisible();
+    const form = page.getByTestId('ai-config-survey-form');
 
-    // Select custom
-    await page.locator('#ai_provider').selectOption('custom');
+    // Not visible with default (none)
+    await expect(page.getByLabel('Custom Endpoint URL')).not.toBeVisible();
+
+    // Select custom provider
+    await form.getByText('Custom (OpenAI-compatible)', { exact: true }).click();
 
     // Now visible
-    await expect(page.locator('#ai_custom_endpoint_url')).toBeVisible();
+    await expect(page.getByLabel('Custom Endpoint URL')).toBeVisible();
 
-    // Switch to openai - hidden again
-    await page.locator('#ai_provider').selectOption('openai');
-    await expect(page.locator('#ai_custom_endpoint_url')).not.toBeVisible();
+    // Switch to OpenAI - hidden again
+    await form.getByText('OpenAI', { exact: true }).click();
+    await expect(page.getByLabel('Custom Endpoint URL')).not.toBeVisible();
   });
 });
 

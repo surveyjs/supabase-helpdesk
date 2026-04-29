@@ -1,0 +1,98 @@
+{
+  "showQuestionNumbers": "off",
+  "pages": [
+    {
+      "elements": [
+        {
+          "type": "dropdown",
+          "name": "timezone",
+          "title": "Timezone",
+          "choices": [
+            "UTC",
+            "America/New_York",
+            "America/Chicago",
+            "America/Denver",
+            "America/Los_Angeles",
+            "Europe/London",
+            "Europe/Paris",
+            "Europe/Berlin",
+            "Asia/Tokyo",
+            "Asia/Shanghai",
+            "Asia/Kolkata",
+            "Australia/Sydney",
+            "Pacific/Auckland"
+          ]
+        },
+        {
+          "type": "panel",
+          "name": "schedule",
+          "title": "Weekly Schedule",
+          "elements": [
+            {
+              "type": "boolean",
+              "name": "monday_enabled",
+              "title": "Monday",
+              "renderAs": "checkbox"
+            },
+            { "type": "text", "name": "monday_start", "title": "Start", "inputType": "time", "startWithNewLine": false, "visibleIf": "{monday_enabled} = true" },
+            { "type": "text", "name": "monday_end", "title": "End", "inputType": "time", "startWithNewLine": false, "visibleIf": "{monday_enabled} = true" },
+
+            {
+              "type": "boolean",
+              "name": "tuesday_enabled",
+              "title": "Tuesday",
+              "renderAs": "checkbox"
+            },
+            { "type": "text", "name": "tuesday_start", "title": "Start", "inputType": "time", "startWithNewLine": false, "visibleIf": "{tuesday_enabled} = true" },
+            { "type": "text", "name": "tuesday_end", "title": "End", "inputType": "time", "startWithNewLine": false, "visibleIf": "{tuesday_enabled} = true" },
+
+            {
+              "type": "boolean",
+              "name": "wednesday_enabled",
+              "title": "Wednesday",
+              "renderAs": "checkbox"
+            },
+            { "type": "text", "name": "wednesday_start", "title": "Start", "inputType": "time", "startWithNewLine": false, "visibleIf": "{wednesday_enabled} = true" },
+            { "type": "text", "name": "wednesday_end", "title": "End", "inputType": "time", "startWithNewLine": false, "visibleIf": "{wednesday_enabled} = true" },
+
+            {
+              "type": "boolean",
+              "name": "thursday_enabled",
+              "title": "Thursday",
+              "renderAs": "checkbox"
+            },
+            { "type": "text", "name": "thursday_start", "title": "Start", "inputType": "time", "startWithNewLine": false, "visibleIf": "{thursday_enabled} = true" },
+            { "type": "text", "name": "thursday_end", "title": "End", "inputType": "time", "startWithNewLine": false, "visibleIf": "{thursday_enabled} = true" },
+
+            {
+              "type": "boolean",
+              "name": "friday_enabled",
+              "title": "Friday",
+              "renderAs": "checkbox"
+            },
+            { "type": "text", "name": "friday_start", "title": "Start", "inputType": "time", "startWithNewLine": false, "visibleIf": "{friday_enabled} = true" },
+            { "type": "text", "name": "friday_end", "title": "End", "inputType": "time", "startWithNewLine": false, "visibleIf": "{friday_enabled} = true" },
+
+            {
+              "type": "boolean",
+              "name": "saturday_enabled",
+              "title": "Saturday",
+              "renderAs": "checkbox"
+            },
+            { "type": "text", "name": "saturday_start", "title": "Start", "inputType": "time", "startWithNewLine": false, "visibleIf": "{saturday_enabled} = true" },
+            { "type": "text", "name": "saturday_end", "title": "End", "inputType": "time", "startWithNewLine": false, "visibleIf": "{saturday_enabled} = true" },
+
+            {
+              "type": "boolean",
+              "name": "sunday_enabled",
+              "title": "Sunday",
+              "renderAs": "checkbox"
+            },
+            { "type": "text", "name": "sunday_start", "title": "Start", "inputType": "time", "startWithNewLine": false, "visibleIf": "{sunday_enabled} = true" },
+            { "type": "text", "name": "sunday_end", "title": "End", "inputType": "time", "startWithNewLine": false, "visibleIf": "{sunday_enabled} = true" }
+          ]
+        }
+      ]
+    }
+  ]
+}

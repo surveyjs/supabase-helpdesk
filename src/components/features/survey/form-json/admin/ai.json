@@ -1,0 +1,141 @@
+{
+  "showQuestionNumbers": "off",
+  "pages": [
+    {
+      "elements": [
+        {
+          "type": "panel",
+          "name": "connection",
+          "title": "Connection Settings",
+          "elements": [
+            {
+              "type": "radiogroup",
+              "name": "ai_provider",
+              "title": "AI Provider",
+              "choices": [
+                { "value": "", "text": "None (unconfigured)" },
+                { "value": "openai", "text": "OpenAI" },
+                { "value": "anthropic", "text": "Anthropic" },
+                { "value": "custom", "text": "Custom (OpenAI-compatible)" }
+              ]
+            },
+            {
+              "type": "text",
+              "name": "ai_api_key",
+              "title": "API Key",
+              "inputType": "password",
+              "description": "Stored encrypted in Supabase Vault. Leave blank to keep existing key."
+            },
+            {
+              "type": "text",
+              "name": "ai_custom_endpoint_url",
+              "title": "Custom Endpoint URL",
+              "inputType": "url",
+              "placeholder": "https://your-api.example.com/v1/chat/completions",
+              "visibleIf": "{ai_provider} = 'custom'"
+            },
+            {
+              "type": "text",
+              "name": "ai_model",
+              "title": "Model"
+            },
+            {
+              "type": "text",
+              "name": "ai_request_timeout",
+              "title": "Request Timeout (seconds)",
+              "inputType": "number",
+              "min": 10,
+              "max": 300
+            }
+          ]
+        },
+        {
+          "type": "panel",
+          "name": "feature_toggles",
+          "title": "Feature Toggles",
+          "elements": [
+            {
+              "type": "boolean",
+              "name": "ai_auto_categorize_enabled",
+              "title": "Auto-categorize tickets",
+              "renderAs": "checkbox"
+            },
+            {
+              "type": "text",
+              "name": "ai_auto_categorize_min_body_length",
+              "title": "Minimum body length",
+              "inputType": "number",
+              "min": 10,
+              "startWithNewLine": false,
+              "visibleIf": "{ai_auto_categorize_enabled} = true"
+            },
+            {
+              "type": "boolean",
+              "name": "ai_duplicate_detection_enabled",
+              "title": "Duplicate ticket detection",
+              "renderAs": "checkbox"
+            },
+            {
+              "type": "radiogroup",
+              "name": "ai_duplicate_detection_threshold",
+              "title": "Similarity threshold",
+              "choices": [
+                { "value": "low", "text": "Low" },
+                { "value": "medium", "text": "Medium" },
+                { "value": "high", "text": "High" }
+              ],
+              "startWithNewLine": false,
+              "visibleIf": "{ai_duplicate_detection_enabled} = true"
+            },
+            {
+              "type": "boolean",
+              "name": "ai_suggested_reply_enabled",
+              "title": "Suggested reply for agents",
+              "renderAs": "checkbox"
+            },
+            {
+              "type": "text",
+              "name": "ai_suggested_reply_context_window",
+              "title": "Context window (posts)",
+              "inputType": "number",
+              "min": 5,
+              "max": 50,
+              "startWithNewLine": false,
+              "visibleIf": "{ai_suggested_reply_enabled} = true"
+            },
+            {
+              "type": "text",
+              "name": "ai_suggested_reply_rate_limit",
+              "title": "Rate limit (per agent/hour, 0 = unlimited)",
+              "inputType": "number",
+              "min": 0,
+              "startWithNewLine": false,
+              "visibleIf": "{ai_suggested_reply_enabled} = true"
+            },
+            {
+              "type": "boolean",
+              "name": "ai_ticket_summary_enabled",
+              "title": "Ticket summary",
+              "renderAs": "checkbox"
+            },
+            {
+              "type": "text",
+              "name": "ai_ticket_summary_min_posts",
+              "title": "Minimum post count",
+              "inputType": "number",
+              "min": 5,
+              "startWithNewLine": false,
+              "visibleIf": "{ai_ticket_summary_enabled} = true"
+            },
+            {
+              "type": "boolean",
+              "name": "ai_generate_kb_article_enabled",
+              "title": "Generate KB article from ticket",
+              "renderAs": "checkbox"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

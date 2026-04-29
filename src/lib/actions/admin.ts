@@ -1459,7 +1459,7 @@ export async function updateBusinessHours(formData: FormData): Promise<void> {
   const schedule: Record<string, { start: string; end: string } | null> = {};
 
   for (const day of days) {
-    const enabled = formData.get(`${day}_enabled`) === 'true';
+    const enabled = formData.get(`${day}_enabled`) === 'on';
     if (enabled) {
       const start = (formData.get(`${day}_start`) as string) || '09:00';
       const end = (formData.get(`${day}_end`) as string) || '17:00';

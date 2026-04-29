@@ -210,6 +210,7 @@ test.describe('File Attachments', () => {
     await gotoAdmin(page, '/admin/file-settings');
 
     await expect(page.getByRole('heading', { name: 'File Uploads' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('file-settings-survey-form')).toBeVisible();
     await expect(page.getByLabel('Maximum file size (MB)')).toBeVisible();
     await expect(page.getByLabel('Maximum files per post')).toBeVisible();
   });
@@ -219,16 +220,15 @@ test.describe('File Attachments', () => {
     await gotoAdmin(page, '/admin/file-settings');
     await expect(page.getByRole('heading', { name: 'File Uploads' })).toBeVisible({ timeout: 10000 });
 
-    // Update max file size to 15
+    // Autosave: change value and blur to flush the debounced save.
     const maxSizeInput = page.getByLabel('Maximum file size (MB)');
     await maxSizeInput.fill('15');
 
-    // Save and wait for server action to complete
     const savePromise = page.waitForResponse(
       (resp) => resp.request().method() === 'POST' && resp.status() < 400,
       { timeout: 15000 },
     );
-    await page.getByRole('button', { name: 'Save' }).click();
+    await maxSizeInput.blur();
     await savePromise;
 
     // Verify it was saved by loading a fresh page
@@ -242,7 +242,7 @@ test.describe('File Attachments', () => {
       (resp) => resp.request().method() === 'POST' && resp.status() < 400,
       { timeout: 15000 },
     );
-    await page.getByRole('button', { name: 'Save' }).click();
+    await maxSizeInput.blur();
     await resetPromise;
   });
 

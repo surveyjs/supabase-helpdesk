@@ -1,0 +1,61 @@
+{
+  "showQuestionNumbers": "off",
+  "pages": [
+    {
+      "elements": [
+        {
+          "type": "matrixdynamic",
+          "name": "fields",
+          "title": "Custom Fields",
+          "titleLocation": "hidden",
+          "keyName": "id",
+          "rowCount": 0,
+          "addRowText": "Add Field",
+          "removeRowText": "Delete",
+          "confirmDelete": false,
+          "allowRowsDragAndDrop": true,
+          "columns": [
+            {
+              "name": "name",
+              "title": "Name",
+              "cellType": "text",
+              "isRequired": true
+            },
+            {
+              "name": "field_type",
+              "title": "Type",
+              "cellType": "dropdown",
+              "renderAs": "select",
+              "isRequired": true,
+              "defaultValue": "text",
+              "choices": [
+                { "value": "text", "text": "Text" },
+                { "value": "number", "text": "Number" },
+                { "value": "dropdown", "text": "Dropdown" },
+                { "value": "checkbox", "text": "Checkbox" },
+                { "value": "date", "text": "Date" }
+              ]
+            },
+            {
+              "name": "is_required",
+              "title": "Required",
+              "cellType": "boolean",
+              "renderAs": "checkbox"
+            },
+            {
+              "name": "default_value",
+              "title": "Default",
+              "cellType": "text"
+            },
+            {
+              "name": "options",
+              "title": "Options (comma-separated)",
+              "cellType": "text",
+              "visibleIf": "{row.field_type} = 'dropdown'"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

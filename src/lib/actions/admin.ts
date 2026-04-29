@@ -256,6 +256,192 @@ export async function saveKbCategories(
 }
 
 // ============================================================
+// Custom Fields (bulk save)
+// ============================================================
+
+const SUPPORTED_FIELD_TYPES = ['text', 'number', 'dropdown', 'checkbox', 'date'] as const;
+type SupportedFieldType = (typeof SUPPORTED_FIELD_TYPES)[number];
+
+type CustomFieldInputRow = {
+  id?: string;
+  name?: unknown;
+  field_type?: unknown;
+  is_required?: unknown;
+  default_value?: unknown;
+  options?: unknown;
+};
+
+type CustomFieldDbRow = {
+  id?: string;
+  name: string;
+  field_type: SupportedFieldType;
+  is_required: boolean;
+  default_value: string | null;
+  options: string[] | null;
+  display_order: number;
+};
+
+export async function saveCustomFields(
+  formData: FormData,
+): Promise<{ message?: string; error?: string }> {
+  const { supabase } = await requireAdminRole();
+
+  const raw = formData.get('fields');
+  if (typeof raw !== 'string') {
+    return { error: 'Invalid request: missing fields.' };
+  }
+  let parsed: CustomFieldInputRow[];
+  try {
+    const json = JSON.parse(raw);
+    if (!Array.isArray(json)) throw new Error('fields must be an array');
+    parsed = json as CustomFieldInputRow[];
+  } catch (e) {
+    return { error: `Invalid fields JSON: ${e instanceof Error ? e.message : 'unknown'}` };
+  }
+
+  const cleanRows: CustomFieldDbRow[] = [];
+  const seenNames = new Set<string>();
+
+  for (let i = 0; i < parsed.length; i++) {
+    const row = parsed[i];
+    const name = typeof row.name === 'string' ? row.name.trim() : '';
+    if (!name || name.length > 100) {
+      return { error: `Invalid field name: ${JSON.stringify(row.name)}` };
+    }
+    const lower = name.toLowerCase();
+    if (seenNames.has(lower)) {
+      return { error: `Duplicate field name: ${name}` };
+    }
+    seenNames.add(lower);
+
+    const fieldType = typeof row.field_type === 'string' ? row.field_type : '';
+    if (!SUPPORTED_FIELD_TYPES.includes(fieldType as SupportedFieldType)) {
+      return { error: `Invalid field_type for "${name}": ${JSON.stringify(row.field_type)}` };
+    }
+
+    const isRequired = row.is_required === true;
+    const defaultValueRaw =
+      typeof row.default_value === 'string' ? row.default_value.trim() : '';
+    const defaultValue = defaultValueRaw.length > 0 ? defaultValueRaw : null;
+
+    if (isRequired && !defaultValue && fieldType !== 'checkbox') {
+      return { error: `"${name}" is required but has no default value.` };
+    }
+
+    let options: string[] | null = null;
+    if (fieldType === 'dropdown') {
+      const optionsRaw = typeof row.options === 'string' ? row.options : '';
+      const items = optionsRaw
+        .split(',')
+        .map((o) => o.trim())
+        .filter(Boolean);
+      if (items.length === 0) {
+        return { error: `"${name}" is a dropdown but has no options.` };
+      }
+      const seenOpts = new Set<string>();
+      for (const item of items) {
+        if (seenOpts.has(item)) {
+          return { error: `"${name}" has duplicate option: ${item}` };
+        }
+        seenOpts.add(item);
+      }
+      if (defaultValue && !items.includes(defaultValue)) {
+        return { error: `"${name}" default value "${defaultValue}" is not one of the options.` };
+      }
+      options = items;
+    }
+
+    cleanRows.push({
+      id: typeof row.id === 'string' ? row.id : undefined,
+      name,
+      field_type: fieldType as SupportedFieldType,
+      is_required: isRequired,
+      default_value: defaultValue,
+      options,
+      display_order: i,
+    });
+  }
+
+  // Capture pre-save state to maintain ticket JSONB integrity for renames/deletes.
+  const { data: existingFields } = await supabase
+    .from('custom_fields')
+    .select('id, name');
+  const existingNameById = new Map<string, string>();
+  for (const f of existingFields ?? []) {
+    existingNameById.set(f.id as string, f.name as string);
+  }
+
+  const { diffAndSave } = await import('./admin-crud');
+  let result;
+  try {
+    result = await diffAndSave({
+      table: 'custom_fields',
+      rows: cleanRows,
+      columns: ['name', 'field_type', 'is_required', 'default_value', 'options', 'display_order'],
+      auditAction: 'update_custom_fields_bulk',
+    });
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Failed to save custom fields.' };
+  }
+
+  // Apply ticket JSONB key migrations for renames / deletions.
+  const incomingIds = new Set(cleanRows.map((r) => r.id).filter((x): x is string => !!x));
+  const renames: { from: string; to: string }[] = [];
+  const deletedNames: string[] = [];
+  for (const [id, oldName] of existingNameById) {
+    if (!incomingIds.has(id)) {
+      deletedNames.push(oldName);
+      continue;
+    }
+    const newRow = cleanRows.find((r) => r.id === id);
+    if (newRow && newRow.name !== oldName) {
+      renames.push({ from: oldName, to: newRow.name });
+    }
+  }
+
+  if (renames.length > 0 || deletedNames.length > 0) {
+    const serviceClient = createServiceRoleClient();
+    const { data: tickets } = await serviceClient
+      .from('tickets')
+      .select('id, custom_fields')
+      .not('custom_fields', 'is', null);
+
+    if (tickets) {
+      for (const ticket of tickets) {
+        const cf = ticket.custom_fields as Record<string, unknown> | null;
+        if (!cf) continue;
+        let changed = false;
+        const next: Record<string, unknown> = { ...cf };
+        for (const { from, to } of renames) {
+          if (from in next) {
+            next[to] = next[from];
+            delete next[from];
+            changed = true;
+          }
+        }
+        for (const dropped of deletedNames) {
+          if (dropped in next) {
+            delete next[dropped];
+            changed = true;
+          }
+        }
+        if (changed) {
+          await serviceClient
+            .from('tickets')
+            .update({ custom_fields: next })
+            .eq('id', ticket.id);
+        }
+      }
+    }
+  }
+
+  revalidatePath('/admin/custom-fields');
+  return {
+    message: `Custom fields saved (${result.added} added, ${result.updated} updated, ${result.removed} removed).`,
+  };
+}
+
+// ============================================================
 // Teams
 // ============================================================
 
@@ -465,215 +651,7 @@ export async function searchUserByEmail(formData: FormData) {
 // ============================================================
 // Custom Fields Management (§16.14)
 // ============================================================
-
-export async function createCustomField(formData: FormData): Promise<void> {
-  const { supabase, profile: adminProfile } = await requireAdminRole();
-
-  const name = (formData.get('name') as string)?.trim();
-  const fieldType = formData.get('field_type') as string;
-  const isRequired = formData.get('is_required') === 'on';
-  const defaultValue = (formData.get('default_value') as string)?.trim() || null;
-  const optionsRaw = (formData.get('options') as string)?.trim();
-
-  if (!name || name.length > 100) return;
-  if (!['text', 'number', 'dropdown', 'checkbox', 'date'].includes(fieldType)) return;
-  if (isRequired && !defaultValue && fieldType !== 'checkbox') return;
-  if (fieldType === 'dropdown' && !optionsRaw) return;
-
-  const options = fieldType === 'dropdown'
-    ? optionsRaw!.split('\n').map((o) => o.trim()).filter(Boolean)
-    : null;
-
-  if (fieldType === 'dropdown' && options && defaultValue && !options.includes(defaultValue)) return;
-
-  // Get max display_order
-  const { data: maxField } = await supabase
-    .from('custom_fields')
-    .select('display_order')
-    .order('display_order', { ascending: false })
-    .limit(1)
-    .single();
-
-  const nextOrder = (maxField?.display_order ?? -1) + 1;
-
-  const { data: field, error } = await supabase
-    .from('custom_fields')
-    .insert({
-      name,
-      field_type: fieldType,
-      is_required: isRequired,
-      default_value: defaultValue,
-      options,
-      display_order: nextOrder,
-    })
-    .select('id')
-    .single();
-
-  if (error) return;
-
-  await logAudit(supabase, adminProfile.id, 'create_custom_field', 'custom_field', field?.id, {
-    name,
-    field_type: fieldType,
-  });
-
-  revalidatePath('/admin/custom-fields');
-}
-
-export async function updateCustomField(formData: FormData): Promise<void> {
-  const { supabase, profile: adminProfile } = await requireAdminRole();
-
-  const fieldId = formData.get('field_id') as string;
-  const name = (formData.get('name') as string)?.trim();
-  const fieldType = formData.get('field_type') as string;
-  const isRequired = formData.get('is_required') === 'on';
-  const defaultValue = (formData.get('default_value') as string)?.trim() || null;
-  const optionsRaw = (formData.get('options') as string)?.trim();
-
-  if (!fieldId || !name || name.length > 100) return;
-  if (!['text', 'number', 'dropdown', 'checkbox', 'date'].includes(fieldType)) return;
-  if (isRequired && !defaultValue && fieldType !== 'checkbox') return;
-  if (fieldType === 'dropdown' && !optionsRaw) return;
-
-  const options = fieldType === 'dropdown'
-    ? optionsRaw!.split('\n').map((o) => o.trim()).filter(Boolean)
-    : null;
-
-  if (fieldType === 'dropdown' && options && defaultValue && !options.includes(defaultValue)) return;
-
-  // Get old field for rename tracking
-  const { data: oldField } = await supabase
-    .from('custom_fields')
-    .select('name')
-    .eq('id', fieldId)
-    .single();
-
-  const { error } = await supabase
-    .from('custom_fields')
-    .update({
-      name,
-      field_type: fieldType,
-      is_required: isRequired,
-      default_value: defaultValue,
-      options,
-    })
-    .eq('id', fieldId);
-
-  if (error) return;
-
-  // If name changed, update all tickets' custom_fields JSONB keys
-  if (oldField && oldField.name !== name) {
-    const serviceClient = createServiceRoleClient();
-    const { data: tickets } = await serviceClient
-      .from('tickets')
-      .select('id, custom_fields')
-      .not('custom_fields', 'is', null);
-
-    if (tickets) {
-      for (const ticket of tickets) {
-        const cf = ticket.custom_fields as Record<string, unknown>;
-        if (cf && oldField.name in cf) {
-          const newCf = { ...cf };
-          newCf[name] = newCf[oldField.name];
-          delete newCf[oldField.name];
-          await serviceClient
-            .from('tickets')
-            .update({ custom_fields: newCf })
-            .eq('id', ticket.id);
-        }
-      }
-    }
-  }
-
-  await logAudit(supabase, adminProfile.id, 'update_custom_field', 'custom_field', fieldId, {
-    name,
-    field_type: fieldType,
-  });
-
-  revalidatePath('/admin/custom-fields');
-}
-
-export async function deleteCustomField(formData: FormData): Promise<void> {
-  const { supabase, profile: adminProfile } = await requireAdminRole();
-
-  const fieldId = formData.get('field_id') as string;
-  if (!fieldId) return;
-
-  const { data: field } = await supabase
-    .from('custom_fields')
-    .select('name')
-    .eq('id', fieldId)
-    .single();
-  if (!field) return;
-
-  // Remove field key from all tickets' custom_fields JSONB
-  const serviceClient = createServiceRoleClient();
-  const { data: tickets } = await serviceClient
-    .from('tickets')
-    .select('id, custom_fields')
-    .not('custom_fields', 'is', null);
-
-  if (tickets) {
-    for (const ticket of tickets) {
-      const cf = ticket.custom_fields as Record<string, unknown>;
-      if (cf && field.name in cf) {
-        const newCf = { ...cf };
-        delete newCf[field.name];
-        await serviceClient
-          .from('tickets')
-          .update({ custom_fields: newCf })
-          .eq('id', ticket.id);
-      }
-    }
-  }
-
-  const { error } = await supabase
-    .from('custom_fields')
-    .delete()
-    .eq('id', fieldId);
-  if (error) return;
-
-  await logAudit(supabase, adminProfile.id, 'delete_custom_field', 'custom_field', fieldId, {
-    name: field.name,
-  });
-
-  revalidatePath('/admin/custom-fields');
-}
-
-export async function reorderCustomField(formData: FormData): Promise<void> {
-  const { supabase } = await requireAdminRole();
-
-  const fieldId = formData.get('field_id') as string;
-  const direction = formData.get('direction') as string;
-  if (!fieldId || !['up', 'down'].includes(direction)) return;
-
-  const { data: fields } = await supabase
-    .from('custom_fields')
-    .select('id, display_order')
-    .order('display_order');
-
-  if (!fields) return;
-
-  const idx = fields.findIndex((f) => f.id === fieldId);
-  if (idx === -1) return;
-
-  const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
-  if (swapIdx < 0 || swapIdx >= fields.length) return;
-
-  const currentOrder = fields[idx].display_order;
-  const swapOrder = fields[swapIdx].display_order;
-
-  await supabase
-    .from('custom_fields')
-    .update({ display_order: swapOrder })
-    .eq('id', fields[idx].id);
-
-  await supabase
-    .from('custom_fields')
-    .update({ display_order: currentOrder })
-    .eq('id', fields[swapIdx].id);
-
-  revalidatePath('/admin/custom-fields');
-}
+// Per-row CRUD actions removed in favour of bulk `saveCustomFields`.
 
 // ============================================================
 // Privacy Settings (§16.10)

@@ -1,6 +1,5 @@
 'use client';
 
-import { useMemo } from 'react';
 import Link from 'next/link';
 import { updateInboundEmailSettings } from '@/lib/actions/admin';
 import { AdminSurveyForm } from '@/components/features/survey/AdminSurveyForm';
@@ -20,25 +19,10 @@ export function InboundEmailForm({
   replyToAddress: string;
   autoReplyTemplates: AutoReplyTemplate[];
 }) {
-  const data = useMemo(
-    () => ({
-      inbound_email_enabled: enabled,
-      reply_to_address: replyToAddress,
-    }),
-    [enabled, replyToAddress],
-  );
-
-  const toFormData = useMemo(
-    () => (surveyData: Record<string, unknown>) => {
-      const fd = new FormData();
-      if (surveyData.inbound_email_enabled === true) {
-        fd.set('inbound_email_enabled', 'on');
-      }
-      fd.set('reply_to_address', String(surveyData.reply_to_address ?? '').trim());
-      return fd;
-    },
-    [],
-  );
+  const data = {
+    inbound_email_enabled: enabled,
+    reply_to_address: replyToAddress,
+  };
 
   const templateLabels: Record<string, string> = {
     auto_reply_unknown_sender: 'Unknown Sender',
@@ -62,7 +46,6 @@ export function InboundEmailForm({
           mode="autosave"
           debounceMs={700}
           saveAction={updateInboundEmailSettings}
-          toFormData={toFormData}
           successMessage="Settings saved."
         />
         <p className="text-xs text-gray-500 mt-1">

@@ -46,29 +46,6 @@ export function EmailConfigForm({
     [coalescingDelay],
   );
 
-  const toSmtpFormData = useMemo(
-    () => (surveyData: Record<string, unknown>) => {
-      const fd = new FormData();
-      fd.set('smtp_host', String(surveyData.smtp_host ?? '').trim());
-      fd.set('smtp_port', String(surveyData.smtp_port ?? '587'));
-      fd.set('smtp_username', String(surveyData.smtp_username ?? '').trim());
-      fd.set('smtp_password', String(surveyData.smtp_password ?? '').trim());
-      fd.set('sender_email', String(surveyData.sender_email ?? '').trim());
-      fd.set('sender_name', String(surveyData.sender_name ?? 'HelpDesk').trim());
-      return fd;
-    },
-    [],
-  );
-
-  const toDelayFormData = useMemo(
-    () => (surveyData: Record<string, unknown>) => {
-      const fd = new FormData();
-      fd.set('delay_minutes', String(surveyData.delay_minutes ?? '2'));
-      return fd;
-    },
-    [],
-  );
-
   const handleTestEmail = () => {
     setTestMessage('');
     setTestSuccess(false);
@@ -99,7 +76,6 @@ export function EmailConfigForm({
           mode="autosave"
           debounceMs={700}
           saveAction={updateEmailConfig}
-          toFormData={toSmtpFormData}
           successMessage="Email configuration saved."
         />
       </div>
@@ -139,7 +115,6 @@ export function EmailConfigForm({
           mode="autosave"
           debounceMs={700}
           saveAction={updateCoalescingDelay}
-          toFormData={toDelayFormData}
           successMessage="Coalescing delay saved."
         />
 

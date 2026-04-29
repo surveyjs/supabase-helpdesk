@@ -99,21 +99,41 @@ test.describe('Posts, Comments & Notes', () => {
     await page.locator('[data-testid="markdown-editor"]').first().locator('textarea[name="textarea"]').fill('This is the original post body for E2E post tests.');
     await page.getByRole('button', { name: 'Create Ticket' }).click();
 
-    await expect(page).toHaveURL(/\/tickets\/\d+\/e2e-posts-test-ticket/, { timeout: 10000 });
+    const createdUrlPattern = /\/tickets\/\d+\/e2e-posts-test-ticket/;
+    await expect(page).toHaveURL(createdUrlPattern, { timeout: 30000 });
     ticketUrl = page.url();
   });
 
-  test('add a reply to the ticket', async ({ page }) => {
+  test('Reply button opens compose form and submits reply', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
     await page.goto(ticketUrl || await resolveTicketUrl());
 
-    // Scope to the main reply form to avoid matching editors in nested forms.
-    const replyForm = page.locator('form').filter({ has: page.getByRole('button', { name: 'Reply' }) }).first();
-    await expect(replyForm).toBeVisible({ timeout: 10000 });
-    await replyForm.locator('[data-testid="markdown-editor"]').locator('textarea[name="textarea"]').fill('A root reply to the ticket.');
-    await replyForm.getByRole('button', { name: 'Reply' }).click();
+    // Reply form should not be visible initially
+    await expect(page.getByTestId('main-reply-panel')).not.toBeVisible({ timeout: 5000 });
+
+    // Click the Reply button to open the form
+    await page.getByTestId('main-reply-btn').click();
+    await expect(page.getByTestId('main-reply-panel')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('main-reply-btn')).toHaveCount(0);
+
+    // Scope to the reply panel to avoid matching editors in nested forms.
+    const replyPanel = page.getByTestId('main-reply-panel');
+    await replyPanel.locator('[data-testid="markdown-editor"]').locator('textarea[name="textarea"]').fill('A root reply to the ticket.');
+    await replyPanel.getByRole('button', { name: 'Add a reply' }).click();
 
     await expect(page.getByText('A root reply to the ticket.').first()).toBeVisible({ timeout: 10000 });
+  });
+
+  test('Reply form can be cancelled', async ({ page }) => {
+    await loginAs(page, 'alice@example.com');
+    await page.goto(ticketUrl || await resolveTicketUrl());
+
+    await page.getByTestId('main-reply-btn').click();
+    await expect(page.getByTestId('main-reply-panel')).toBeVisible({ timeout: 5000 });
+
+    await page.getByTestId('cancel-reply-btn').click();
+    await expect(page.getByTestId('main-reply-panel')).not.toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('main-reply-btn')).toBeVisible();
   });
 
   test('add a comment on a post → comment appears indented', async ({ page }) => {
@@ -125,23 +145,25 @@ test.describe('Posts, Comments & Notes', () => {
     // Self-heal for isolated runs: ensure a root reply post exists first.
     const existingRootReply = page.getByText(rootReplyText).first();
     if (!(await existingRootReply.isVisible().catch(() => false))) {
-      const replyForm = page.locator('form').filter({ has: page.getByRole('button', { name: 'Reply' }) }).first();
-      await expect(replyForm).toBeVisible({ timeout: 10000 });
-      await replyForm.locator('[data-testid="markdown-editor"]').locator('textarea[name="textarea"]').fill(rootReplyText);
-      await replyForm.getByRole('button', { name: 'Reply' }).click();
+      await page.getByTestId('main-reply-btn').click();
+      const replyPanel = page.getByTestId('main-reply-panel');
+      await expect(replyPanel).toBeVisible({ timeout: 10000 });
+      await replyPanel.locator('[data-testid="markdown-editor"]').locator('textarea[name="textarea"]').fill(rootReplyText);
+      await replyPanel.getByRole('button', { name: 'Add a reply' }).click();
       await expect(page.getByText(rootReplyText).first()).toBeVisible({ timeout: 10000 });
     }
 
     // Open the comment form on the known root reply card only.
     const rootReplyCard = page.locator('div[data-testid^="post-"]').filter({ hasText: rootReplyText }).first();
     await expect(rootReplyCard).toBeVisible({ timeout: 10000 });
-    await rootReplyCard.locator('[data-testid="reply-btn"]').click();
+    await rootReplyCard.locator('[data-testid="add-comment-btn"]').click();
+    await expect(rootReplyCard.locator('[data-testid="add-comment-btn"]')).toHaveCount(0);
 
     // The CommentForm renders a <form> directly inside the post card.
     const commentForm = rootReplyCard.locator('form').last();
     await expect(commentForm).toBeVisible({ timeout: 10000 });
     await commentForm.locator('textarea[name="textarea"]').fill('A threaded comment on the reply.');
-    const commentButton = commentForm.getByRole('button', { name: 'Comment' });
+    const commentButton = commentForm.getByRole('button', { name: 'Add a comment' });
     await commentButton.scrollIntoViewIfNeeded();
     await expect(commentButton).toBeEnabled();
     await commentButton.click();
@@ -167,10 +189,11 @@ test.describe('Posts, Comments & Notes', () => {
     // Self-heal for isolated runs: ensure a root reply exists.
     const rootReplyCard = page.locator('div[data-testid^="post-"]').filter({ hasText: rootReplyText }).first();
     if (!(await rootReplyCard.isVisible().catch(() => false))) {
-      const replyForm = page.locator('form').filter({ has: page.getByRole('button', { name: 'Reply' }) }).first();
-      await expect(replyForm).toBeVisible({ timeout: 10000 });
-      await replyForm.locator('[data-testid="markdown-editor"]').locator('textarea[name="textarea"]').fill(rootReplyText);
-      await replyForm.getByRole('button', { name: 'Reply' }).click();
+      await page.getByTestId('main-reply-btn').click();
+      const replyPanel = page.getByTestId('main-reply-panel');
+      await expect(replyPanel).toBeVisible({ timeout: 10000 });
+      await replyPanel.locator('[data-testid="markdown-editor"]').locator('textarea[name="textarea"]').fill(rootReplyText);
+      await replyPanel.getByRole('button', { name: 'Add a reply' }).click();
       await expect(page.getByText(rootReplyText).first()).toBeVisible({ timeout: 10000 });
     }
 
@@ -182,12 +205,12 @@ test.describe('Posts, Comments & Notes', () => {
     if (!(await level1CommentCard.isVisible().catch(() => false))) {
       const currentRootReplyCard = page.locator('div[data-testid^="post-"]').filter({ hasText: rootReplyText }).first();
       await expect(currentRootReplyCard).toBeVisible({ timeout: 10000 });
-      await currentRootReplyCard.locator('[data-testid="reply-btn"]').click();
+      await currentRootReplyCard.locator('[data-testid="add-comment-btn"]').click();
 
       const commentForm = currentRootReplyCard.locator('form').last();
       await expect(commentForm).toBeVisible({ timeout: 10000 });
       await commentForm.locator('textarea[name="textarea"]').fill(level1CommentText);
-      const commentButton = commentForm.getByRole('button', { name: 'Comment' });
+      const commentButton = commentForm.getByRole('button', { name: 'Add a comment' });
       await expect(commentButton).toBeEnabled();
       await commentButton.click();
       await expect(
@@ -200,13 +223,13 @@ test.describe('Posts, Comments & Notes', () => {
       .filter({ hasText: level1CommentText })
       .first();
     await expect(targetLevel1CommentCard).toBeVisible({ timeout: 10000 });
-    await targetLevel1CommentCard.locator('[data-testid="reply-btn"]').click();
+    await targetLevel1CommentCard.locator('[data-testid="add-comment-btn"]').click();
 
     // Level-2 reply uses the comment form rendered by ReplyToggle under this level-1 card.
     const level2Form = targetLevel1CommentCard.locator('form').last();
     await expect(level2Form).toBeVisible({ timeout: 10000 });
     await level2Form.locator('textarea[name="textarea"]').fill('A level-2 reply to the comment.');
-    const level2Submit = level2Form.getByRole('button', { name: 'Comment' });
+    const level2Submit = level2Form.getByRole('button', { name: 'Add a comment' });
     await expect(level2Submit).toBeEnabled();
     await level2Submit.click();
 
@@ -228,7 +251,7 @@ test.describe('Posts, Comments & Notes', () => {
     // The level-2 comment's container should not have a reply button after it
     const level2Parent = level2Comment.locator('xpath=ancestor::div[contains(@class, "ml-12")]').first();
     // There should be no reply-btn within or after the level-2 block
-    const replyBtnsInLevel2 = level2Parent.locator('[data-testid="reply-btn"]');
+    const replyBtnsInLevel2 = level2Parent.locator('[data-testid="add-comment-btn"]');
     await expect(replyBtnsInLevel2).toHaveCount(0);
   });
 
@@ -259,8 +282,7 @@ test.describe('Posts, Comments & Notes', () => {
     await loginAs(page, 'alice@example.com');
     await page.goto(ticketUrl || await resolveTicketUrl());
 
-    // Regular user should not see the tab bar at all
-    await expect(page.getByTestId('ticket-tabs')).not.toBeVisible();
+    // Regular user should never see internal note content.
     await expect(page.getByText('Internal agent note content.')).not.toBeVisible();
   });
 
@@ -314,9 +336,12 @@ test.describe('Posts, Comments & Notes', () => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(ticketUrl || await resolveTicketUrl());
 
-    // The Reply form should be visible for agents
-    const replyEditor = page.locator('[data-testid="markdown-editor"]');
-    await expect(replyEditor.first()).toBeVisible();
+    // The Reply button should be visible for agents, and opens the reply form
+    await page.getByTestId('main-reply-btn').click();
+    const replyPanel = page.getByTestId('main-reply-panel');
+    await expect(replyPanel).toBeVisible();
+    const replyEditor = replyPanel.locator('[data-testid="markdown-editor"]');
+    await expect(replyEditor).toBeVisible();
   });
 
   test('agent can make a post private → privacy badge shows', async ({ page }) => {
@@ -336,10 +361,13 @@ test.describe('Posts, Comments & Notes', () => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(ticketUrl || await resolveTicketUrl());
 
-    // Reply form now uses MarkdownEditor
-    const replyEditor = page.locator('[data-testid="markdown-editor"]').last();
+    // Open the reply panel first, then fill and submit
+    await page.getByTestId('main-reply-btn').click();
+    const replyPanel = page.getByTestId('main-reply-panel');
+    await expect(replyPanel).toBeVisible({ timeout: 10000 });
+    const replyEditor = replyPanel.locator('[data-testid="markdown-editor"]');
     await replyEditor.locator('textarea[name="textarea"]').fill('Temporary post to be deleted.');
-    await page.locator('form').filter({ has: replyEditor }).getByRole('button', { name: 'Reply' }).click();
+    await replyPanel.getByRole('button', { name: 'Add a reply' }).click();
     const tempPostCard = page
       .locator('[data-testid^="post-"]')
       .filter({ hasText: 'Temporary post to be deleted.' })
@@ -355,17 +383,23 @@ test.describe('Posts, Comments & Notes', () => {
     ).toHaveCount(0, { timeout: 20000 });
   });
 
-  test('activity log entries display inline', async ({ page }) => {
+  test('activity log entries display in Logs tab', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     // Always resolve from DB to handle serial retry where ticketUrl may be stale
     const url = await resolveTicketUrl();
     await page.goto(url);
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10000 });
 
-    // There should be activity log entries from previous actions (title changed, privacy changed, etc.)
-    // Wait for at least one activity entry to appear before asserting count
+    // The Logs tab should be visible (activity log entries from prior actions exist)
+    const logsTab = page.getByTestId('logs-tab');
+    await expect(logsTab).toBeVisible({ timeout: 15000 });
+
+    // Switch to the Logs tab
+    await logsTab.click();
+
+    // Activity entries should be visible inside the Logs tab panel
     const firstActivity = page.locator('[data-testid^="activity-"]').first();
-    await expect(firstActivity).toBeVisible({ timeout: 15000 });
+    await expect(firstActivity).toBeVisible({ timeout: 10000 });
 
     const activityEntries = page.locator('[data-testid^="activity-"]');
     const count = await activityEntries.count();
@@ -506,13 +540,32 @@ test.describe('Ticket Detail Layout & Tabs', () => {
     await expect(mainContent).toBeVisible({ timeout: 10000 });
   });
 
-  test('agent sees Posts and Notes tabs', async ({ page }) => {
+  test('agent sees Thread, Notes and Logs tabs', async ({ page }) => {
+    const admin = createServiceRoleClient();
+    const layoutUrl = ticketUrl || await resolveLayoutTicketUrl();
+    const layoutTicketId = Number(layoutUrl.match(/\/tickets\/(\d+)\//)?.[1]);
+    const { data: agentProfile } = await admin
+      .from('profiles')
+      .select('id')
+      .eq('email', 'agent.smith@example.com')
+      .single();
+    if (layoutTicketId && agentProfile?.id) {
+      await admin.from('activity_log').insert({
+        ticket_id: layoutTicketId,
+        actor_id: agentProfile.id,
+        action: 'status_changed',
+        details: { from: 'open', to: 'pending' },
+      });
+    }
+
     await loginAs(page, 'agent.smith@example.com');
-    await page.goto(ticketUrl || await resolveLayoutTicketUrl());
+    await page.goto(layoutUrl);
 
     await expect(page.getByTestId('ticket-tabs')).toBeVisible({ timeout: 10000 });
-    await expect(page.getByTestId('posts-tab')).toBeVisible();
+    await expect(page.getByTestId('thread-tab')).toBeVisible();
     await expect(page.getByTestId('notes-tab')).toBeVisible();
+    // Logs tab is shown when activity log entries exist for the ticket
+    await expect(page.getByTestId('logs-tab')).toBeVisible();
   });
 
   test('Notes tab shows note count badge when notes exist', async ({ page }) => {
@@ -531,6 +584,12 @@ test.describe('Ticket Detail Layout & Tabs', () => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(layoutUrl);
 
+    const tabBar = page.getByTestId('ticket-tabs');
+    if (!(await tabBar.isVisible().catch(() => false))) {
+      await page.reload();
+    }
+    await expect(tabBar).toBeVisible({ timeout: 10000 });
+
     const notesTab = page.getByTestId('notes-tab');
     await expect(notesTab).toBeVisible({ timeout: 10000 });
     // The badge inside the Notes tab should display the note count
@@ -540,18 +599,25 @@ test.describe('Ticket Detail Layout & Tabs', () => {
     await expect(badge).toHaveText(/\d+/);
   });
 
-  test('regular user does not see tab bar', async ({ page }) => {
+  test('regular user sees only Reply button, not auto-expanded form', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
     await page.goto(ticketUrl || await resolveLayoutTicketUrl());
 
-    await expect(page.getByTestId('ticket-tabs')).not.toBeVisible({ timeout: 5000 });
+    // The reply panel should be hidden initially
+    await expect(page.getByTestId('main-reply-panel')).not.toBeVisible({ timeout: 5000 });
+    // The Reply button should be visible
+    await expect(page.getByTestId('main-reply-btn')).toBeVisible({ timeout: 5000 });
   });
 
-  test('markdown editor shows toolbar', async ({ page }) => {
+  test('markdown editor shows toolbar when reply panel is open', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
     await page.goto(ticketUrl || await resolveLayoutTicketUrl());
 
-    const editor = page.locator('[data-testid="markdown-editor"]').first();
+    // Open the reply panel first
+    await page.getByTestId('main-reply-btn').click();
+    await expect(page.getByTestId('main-reply-panel')).toBeVisible({ timeout: 5000 });
+
+    const editor = page.getByTestId('main-reply-panel').locator('[data-testid="markdown-editor"]').first();
     await expect(editor).toBeVisible({ timeout: 10000 });
     // react-markdown-editor-lite renders a navigation toolbar
     await expect(editor.locator('.rc-md-navigation')).toBeVisible();

@@ -157,14 +157,15 @@ test.describe('Tickets', () => {
     await loginAs(page, 'alice@example.com');
     await page.goto(await resolveTicketUrl());
 
-    // Wait for the reply form to be ready — now uses MarkdownEditor
-    const replyEditor = page.locator('[data-testid="markdown-editor"]').last();
-    await expect(replyEditor).toBeVisible({ timeout: 10000 });
+    // Click the Reply button to open the compose form
+    await page.getByTestId('main-reply-btn').click();
+    const replyPanel = page.getByTestId('main-reply-panel');
+    await expect(replyPanel).toBeVisible({ timeout: 10000 });
 
     // Fill reply via the editor's textarea
+    const replyEditor = replyPanel.locator('[data-testid="markdown-editor"]');
     await replyEditor.locator('textarea[name="textarea"]').fill('This is a test reply from E2E.');
-    const replyForm = page.locator('form').filter({ has: replyEditor });
-    const replyButton = replyForm.getByRole('button', { name: 'Reply' });
+    const replyButton = replyPanel.getByRole('button', { name: 'Add a reply' });
 
     // Wait for submission to settle before checking for rendered reply text.
     await replyButton.click({ force: true });

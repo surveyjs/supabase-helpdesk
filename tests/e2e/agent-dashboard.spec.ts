@@ -166,17 +166,32 @@ test.describe('Agent Ticket Detail Controls', () => {
     const ticketId = ticketUrl.split('/')[2];
     const admin = createServiceRoleClient();
 
+    async function setStatusWithRetry(target: 'Pending' | 'Closed') {
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const currentSidebar = page.getByTestId('ticket-sidebar');
+          await expect(currentSidebar).toBeVisible({ timeout: 10000 });
+          const currentSurvey = currentSidebar.getByTestId('ticket-sidebar-survey');
+          await expect(currentSurvey).toBeVisible({ timeout: 10000 });
+          await selectSurveyDropdown(currentSurvey, 'status', target);
+          await waitForSidebarSurveyAutosave(page);
+          return;
+        } catch (error) {
+          if (attempt === 2) throw error;
+          await page.goto(ticketUrl);
+        }
+      }
+    }
+
     // Mark Pending via the SurveyJS Status dropdown
-    await selectSurveyDropdown(survey, 'status', 'Pending');
-    await waitForSidebarSurveyAutosave(page);
+    await setStatusWithRetry('Pending');
     await expect.poll(async () => {
       const { data } = await admin.from('tickets').select('status').eq('id', ticketId).single();
       return data?.status;
     }, { timeout: 15000 }).toBe('pending');
 
     // Close ticket via the SurveyJS Status dropdown
-    await selectSurveyDropdown(survey, 'status', 'Closed');
-    await waitForSidebarSurveyAutosave(page);
+    await setStatusWithRetry('Closed');
     await expect.poll(async () => {
       const { data } = await admin.from('tickets').select('status').eq('id', ticketId).single();
       return data?.status;

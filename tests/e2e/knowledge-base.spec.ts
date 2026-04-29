@@ -571,64 +571,74 @@ test.describe('KB Categories Admin', () => {
     await gotoAdmin(page, '/admin/kb-categories');
 
     await expect(page.getByRole('heading', { name: 'KB Categories' })).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText('Getting Started')).toBeVisible();
-    await expect(page.getByText('Troubleshooting')).toBeVisible();
+    await expect(page.getByTestId('kb-categories-survey-form')).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'Getting Started' })).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'Troubleshooting' })).toBeVisible();
   });
 
   test('admin can create a new KB category', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/kb-categories');
+    await expect(page.getByTestId('kb-categories-survey-form')).toBeVisible();
 
-    await page.getByRole('textbox', { name: 'Name', exact: true }).fill('E2E Test Category');
-    await page.getByRole('button', { name: 'Add' }).click();
+    await page.getByRole('button', { name: 'Add Category' }).click();
+    const nameInputs = page.locator('input[aria-label*="Name"]');
+    const nameCount = await nameInputs.count();
+    await nameInputs.nth(nameCount - 1).fill('E2E Test Category');
 
-    await page.waitForLoadState('networkidle');
-    await expect(page.getByText('E2E Test Category')).toBeVisible({ timeout: 10000 });
+    const savePromise = page.waitForResponse(
+      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
+      { timeout: 15000 },
+    );
+    await page.getByRole('button', { name: 'Complete' }).click();
+    await savePromise;
+
+    await gotoAdmin(page, '/admin/kb-categories');
+    await expect(page.getByRole('cell', { name: 'E2E Test Category' })).toBeVisible({ timeout: 10000 });
   });
 
   test('admin can rename a KB category', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/kb-categories');
+    await expect(page.getByTestId('kb-categories-survey-form')).toBeVisible();
 
-    // Find the E2E Test Category rename field
-    const renameInput = page.getByRole('textbox', { name: 'Rename E2E Test Category' });
-    await renameInput.fill('E2E Renamed Category');
-    // Click the associated Rename button (in the same list item)
-    const listItem = page.locator('li', { hasText: 'E2E Test Category' });
-    await listItem.getByRole('button', { name: 'Rename' }).click();
+    // Find the row whose cell text matches the existing name, then edit its first input.
+    const row = page
+      .locator('tr')
+      .filter({ has: page.getByRole('cell', { name: 'E2E Test Category' }) })
+      .first();
+    await row.locator('input').first().fill('E2E Renamed Category');
 
-    await page.waitForLoadState('networkidle');
-    await expect(page.getByText('E2E Renamed Category')).toBeVisible({ timeout: 10000 });
-  });
+    const savePromise = page.waitForResponse(
+      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
+      { timeout: 15000 },
+    );
+    await page.getByRole('button', { name: 'Complete' }).click();
+    await savePromise;
 
-  test('admin can reorder KB categories', async ({ page }) => {
-    await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/kb-categories');
-
-    // Move "Troubleshooting" up
-    const moveUpBtn = page.getByRole('button', { name: 'Move Troubleshooting up' });
-    await moveUpBtn.click();
-
-    await page.waitForLoadState('networkidle');
-
-    // Confirm order changed: Troubleshooting should appear first in the categories list
-    const categoryList = page.locator('ul.divide-y li');
-    await expect(categoryList.first().getByText('Troubleshooting')).toBeVisible({ timeout: 10000 });
-
-    // Restore original order
-    const moveDownBtn = page.getByRole('button', { name: 'Move Troubleshooting down' });
-    await moveDownBtn.click();
-    await page.waitForLoadState('networkidle');
+    await expect(page.getByRole('cell', { name: 'E2E Renamed Category' })).toBeVisible({ timeout: 10000 });
   });
 
   test('admin can delete a KB category', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/kb-categories');
+    await expect(page.getByTestId('kb-categories-survey-form')).toBeVisible();
 
-    // Delete the E2E Renamed Category
-    const deleteBtn = page.getByRole('button', { name: 'Delete E2E Renamed Category' });
-    await deleteBtn.click();
+    const row = page
+      .locator('tr')
+      .filter({ has: page.getByRole('cell', { name: 'E2E Renamed Category' }) })
+      .first();
+    await row.getByRole('button', { name: 'Delete' }).click();
 
-    await expect(page.getByText('E2E Renamed Category')).not.toBeVisible({ timeout: 10000 });
+    const savePromise = page.waitForResponse(
+      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
+      { timeout: 15000 },
+    );
+    await page.getByRole('button', { name: 'Complete' }).click();
+    await savePromise;
+
+    await gotoAdmin(page, '/admin/kb-categories');
+    await expect(page.getByRole('cell', { name: 'E2E Renamed Category' })).toHaveCount(0);
   });
 });

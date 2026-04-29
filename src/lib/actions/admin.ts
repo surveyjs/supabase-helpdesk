@@ -15,61 +15,6 @@ import {
 // Ticket Types
 // ============================================================
 
-export async function createTicketType(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
-
-  const name = (formData.get('name') as string)?.trim();
-  if (!name || name.length > 100) return;
-
-  const { data: created, error } = await supabase
-    .from('ticket_types')
-    .insert({ name })
-    .select('id')
-    .single();
-
-  if (error) return;
-
-  await logAudit(supabase, profile.id, 'create_ticket_type', 'ticket_type', created?.id, { name });
-  revalidatePath('/admin/types');
-}
-
-export async function renameTicketType(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
-
-  const typeId = formData.get('type_id') as string;
-  const newName = (formData.get('name') as string)?.trim();
-  if (!typeId || !newName || newName.length > 100) return;
-
-  const { error } = await supabase
-    .from('ticket_types')
-    .update({ name: newName })
-    .eq('id', typeId);
-
-  if (error) return;
-
-  await logAudit(supabase, profile.id, 'rename_ticket_type', 'ticket_type', typeId, { name: newName });
-  revalidatePath('/admin/types');
-}
-
-export async function deleteTicketType(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
-
-  const typeId = formData.get('type_id') as string;
-  if (!typeId) return;
-
-  const { data: existing } = await supabase.from('ticket_types').select('name').eq('id', typeId).single();
-
-  const { error } = await supabase
-    .from('ticket_types')
-    .delete()
-    .eq('id', typeId);
-
-  if (error) return;
-
-  await logAudit(supabase, profile.id, 'delete_ticket_type', 'ticket_type', typeId, { name: existing?.name });
-  revalidatePath('/admin/types');
-}
-
 export async function setDefaultTicketType(formData: FormData): Promise<void> {
   const { supabase, profile } = await requireAdminRole();
 
@@ -97,149 +42,10 @@ export async function setDefaultTicketType(formData: FormData): Promise<void> {
 }
 
 // ============================================================
-// Categories
-// ============================================================
-
-export async function createCategory(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
-
-  const name = (formData.get('name') as string)?.trim();
-  if (!name || name.length > 100) return;
-
-  const { data: created, error } = await supabase
-    .from('categories')
-    .insert({ name })
-    .select('id')
-    .single();
-
-  if (error) return;
-
-  await logAudit(supabase, profile.id, 'create_category', 'category', created?.id, { name });
-  revalidatePath('/admin/categories');
-}
-
-export async function renameCategory(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
-
-  const categoryId = formData.get('category_id') as string;
-  const newName = (formData.get('name') as string)?.trim();
-  if (!categoryId || !newName || newName.length > 100) return;
-
-  const { error } = await supabase
-    .from('categories')
-    .update({ name: newName })
-    .eq('id', categoryId);
-
-  if (error) return;
-
-  await logAudit(supabase, profile.id, 'rename_category', 'category', categoryId, { name: newName });
-  revalidatePath('/admin/categories');
-}
-
-export async function deleteCategory(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
-
-  const categoryId = formData.get('category_id') as string;
-  if (!categoryId) return;
-
-  const { data: existing } = await supabase.from('categories').select('name').eq('id', categoryId).single();
-
-  const { error } = await supabase
-    .from('categories')
-    .delete()
-    .eq('id', categoryId);
-
-  if (error) return;
-
-  await logAudit(supabase, profile.id, 'delete_category', 'category', categoryId, { name: existing?.name });
-  revalidatePath('/admin/categories');
-}
-
-// ============================================================
 // Tags
 // ============================================================
 
-const HEX_COLOR_RE = /^#[0-9a-fA-F]{3,8}$/;
 const HEX_COLOR_STRICT_RE = /^#[0-9a-fA-F]{6}$/;
-
-/** @deprecated Use {@link saveTags} (bulk diff/save). Retained for legacy callers. */
-export async function createTag(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
-
-  const name = (formData.get('name') as string)?.trim();
-  const color = (formData.get('color') as string)?.trim();
-  if (!name || name.length > 50) return;
-  if (!color || color.length > 20 || !HEX_COLOR_RE.test(color)) return;
-
-  const { data: created, error } = await supabase
-    .from('tags')
-    .insert({ name, color })
-    .select('id')
-    .single();
-
-  if (error) return;
-
-  await logAudit(supabase, profile.id, 'create_tag', 'tag', created?.id, { name, color });
-  revalidatePath('/admin/tags');
-}
-
-/** @deprecated Use {@link saveTags} (bulk diff/save). Retained for legacy callers. */
-export async function renameTag(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
-
-  const tagId = formData.get('tag_id') as string;
-  const newName = (formData.get('name') as string)?.trim();
-  if (!tagId || !newName || newName.length > 50) return;
-
-  const { error } = await supabase
-    .from('tags')
-    .update({ name: newName })
-    .eq('id', tagId);
-
-  if (error) return;
-
-  await logAudit(supabase, profile.id, 'rename_tag', 'tag', tagId, { name: newName });
-  revalidatePath('/admin/tags');
-}
-
-/** @deprecated Use {@link saveTags} (bulk diff/save). Retained for legacy callers. */
-export async function updateTagColor(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
-
-  const tagId = formData.get('tag_id') as string;
-  const newColor = (formData.get('color') as string)?.trim();
-  if (!tagId || !newColor || newColor.length > 20 || !HEX_COLOR_RE.test(newColor)) return;
-
-  const { error } = await supabase
-    .from('tags')
-    .update({ color: newColor })
-    .eq('id', tagId);
-
-  if (error) return;
-
-  await logAudit(supabase, profile.id, 'update_tag_color', 'tag', tagId, { color: newColor });
-  revalidatePath('/admin/tags');
-}
-
-/** @deprecated Use {@link saveTags} (bulk diff/save). Retained for legacy callers. */
-export async function deleteTag(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
-
-  const tagId = formData.get('tag_id') as string;
-  if (!tagId) return;
-
-  const { data: existing } = await supabase.from('tags').select('name').eq('id', tagId).single();
-
-  const { error } = await supabase
-    .from('tags')
-    .delete()
-    .eq('id', tagId);
-
-  if (error) return;
-
-  await logAudit(supabase, profile.id, 'delete_tag', 'tag', tagId, { name: existing?.name });
-  revalidatePath('/admin/tags');
-}
 
 type TagRowInput = { id?: string; name?: unknown; color?: unknown };
 
@@ -291,71 +97,167 @@ export async function saveTags(formData: FormData): Promise<{ message?: string; 
 }
 
 // ============================================================
-// Teams
+// Bulk save actions for Categories / Types / Teams / KB Categories
 // ============================================================
 
-export async function createTeam(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
+type GenericRow = { id?: string; name?: unknown };
 
-  const name = (formData.get('name') as string)?.trim();
-  if (!name || name.length > 100) return;
-
-  const { data: created, error } = await supabase
-    .from('teams')
-    .insert({ name })
-    .select('id')
-    .single();
-
-  if (error) return;
-
-  await logAudit(supabase, profile.id, 'create_team', 'team', created?.id, { name });
-  revalidatePath('/admin/teams');
+function parseNamedRows(formData: FormData, opts: { maxLen: number; label: string }): {
+  rows?: { id?: string; name: string }[];
+  error?: string;
+} {
+  const raw = formData.get('rows');
+  if (typeof raw !== 'string') {
+    return { error: 'Invalid request: missing rows.' };
+  }
+  let parsed: GenericRow[];
+  try {
+    const json = JSON.parse(raw);
+    if (!Array.isArray(json)) throw new Error('rows must be an array');
+    parsed = json as GenericRow[];
+  } catch (e) {
+    return { error: `Invalid rows JSON: ${e instanceof Error ? e.message : 'unknown'}` };
+  }
+  const cleanRows: { id?: string; name: string }[] = [];
+  const seen = new Set<string>();
+  for (const row of parsed) {
+    const name = typeof row.name === 'string' ? row.name.trim() : '';
+    if (!name || name.length > opts.maxLen) {
+      return { error: `Invalid ${opts.label} name: ${JSON.stringify(row.name)}` };
+    }
+    const lower = name.toLowerCase();
+    if (seen.has(lower)) {
+      return { error: `Duplicate ${opts.label} name: ${name}` };
+    }
+    seen.add(lower);
+    cleanRows.push({ id: typeof row.id === 'string' ? row.id : undefined, name });
+  }
+  return { rows: cleanRows };
 }
 
-export async function renameTeam(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
-
-  const teamId = formData.get('team_id') as string;
-  const newName = (formData.get('name') as string)?.trim();
-  if (!teamId || !newName || newName.length > 100) return;
-
-  const { error } = await supabase
-    .from('teams')
-    .update({ name: newName })
-    .eq('id', teamId);
-
-  if (error) return;
-
-  await logAudit(supabase, profile.id, 'rename_team', 'team', teamId, { name: newName });
-  revalidatePath('/admin/teams');
+export async function saveCategories(
+  formData: FormData,
+): Promise<{ message?: string; error?: string }> {
+  await requireAdminRole();
+  const parsed = parseNamedRows(formData, { maxLen: 100, label: 'category' });
+  if (parsed.error || !parsed.rows) return { error: parsed.error };
+  const { diffAndSave } = await import('./admin-crud');
+  try {
+    const result = await diffAndSave({
+      table: 'categories',
+      rows: parsed.rows,
+      columns: ['name'],
+      auditAction: 'update_categories_bulk',
+    });
+    revalidatePath('/admin/categories');
+    return {
+      message: `Categories saved (${result.added} added, ${result.updated} updated, ${result.removed} removed).`,
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Failed to save categories.' };
+  }
 }
 
-export async function deleteTeam(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
-
-  const teamId = formData.get('team_id') as string;
-  if (!teamId) return;
-
-  const { data: existing } = await supabase.from('teams').select('name').eq('id', teamId).single();
-
-  // Check for members
-  const { count } = await supabase
-    .from('profiles')
-    .select('id', { count: 'exact', head: true })
-    .eq('team_id', teamId);
-
-  if (count && count > 0) return;
-
-  const { error } = await supabase
-    .from('teams')
-    .delete()
-    .eq('id', teamId);
-
-  if (error) return;
-
-  await logAudit(supabase, profile.id, 'delete_team', 'team', teamId, { name: existing?.name });
-  revalidatePath('/admin/teams');
+export async function saveTicketTypes(
+  formData: FormData,
+): Promise<{ message?: string; error?: string }> {
+  await requireAdminRole();
+  const parsed = parseNamedRows(formData, { maxLen: 100, label: 'ticket type' });
+  if (parsed.error || !parsed.rows) return { error: parsed.error };
+  const { diffAndSave } = await import('./admin-crud');
+  try {
+    const result = await diffAndSave({
+      table: 'ticket_types',
+      rows: parsed.rows,
+      columns: ['name'],
+      auditAction: 'update_ticket_types_bulk',
+    });
+    revalidatePath('/admin/types');
+    return {
+      message: `Ticket types saved (${result.added} added, ${result.updated} updated, ${result.removed} removed).`,
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Failed to save ticket types.' };
+  }
 }
+
+export async function saveTeams(
+  formData: FormData,
+): Promise<{ message?: string; error?: string }> {
+  const { supabase } = await requireAdminRole();
+  const parsed = parseNamedRows(formData, { maxLen: 100, label: 'team' });
+  if (parsed.error || !parsed.rows) return { error: parsed.error };
+
+  // Pre-check: refuse to delete teams that still have members.
+  const incomingIds = new Set(parsed.rows.map((r) => r.id).filter((x): x is string => !!x));
+  const { data: existing } = await supabase.from('teams').select('id, name');
+  const candidatesForDeletion = (existing ?? []).filter((t) => !incomingIds.has(t.id as string));
+  if (candidatesForDeletion.length > 0) {
+    const ids = candidatesForDeletion.map((t) => t.id as string);
+    const { data: members } = await supabase
+      .from('profiles')
+      .select('team_id')
+      .in('team_id', ids);
+    const blockedIds = new Set((members ?? []).map((m) => m.team_id as string));
+    const blocked = candidatesForDeletion.filter((t) => blockedIds.has(t.id as string));
+    if (blocked.length > 0) {
+      return {
+        error: `Cannot delete team(s) with members: ${blocked.map((t) => t.name).join(', ')}`,
+      };
+    }
+  }
+
+  const { diffAndSave } = await import('./admin-crud');
+  try {
+    const result = await diffAndSave({
+      table: 'teams',
+      rows: parsed.rows,
+      columns: ['name'],
+      auditAction: 'update_teams_bulk',
+    });
+    revalidatePath('/admin/teams');
+    return {
+      message: `Teams saved (${result.added} added, ${result.updated} updated, ${result.removed} removed).`,
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Failed to save teams.' };
+  }
+}
+
+export async function saveKbCategories(
+  formData: FormData,
+): Promise<{ message?: string; error?: string }> {
+  await requireAdminRole();
+  const parsed = parseNamedRows(formData, { maxLen: 100, label: 'KB category' });
+  if (parsed.error || !parsed.rows) return { error: parsed.error };
+
+  // Derive display_order from row index (1-based to match existing data).
+  const rowsWithOrder = parsed.rows.map((r, i) => ({
+    id: r.id,
+    name: r.name,
+    display_order: i + 1,
+  }));
+
+  const { diffAndSave } = await import('./admin-crud');
+  try {
+    const result = await diffAndSave({
+      table: 'kb_categories',
+      rows: rowsWithOrder,
+      columns: ['name', 'display_order'],
+      auditAction: 'update_kb_categories_bulk',
+    });
+    revalidatePath('/admin/kb-categories');
+    return {
+      message: `KB categories saved (${result.added} added, ${result.updated} updated, ${result.removed} removed).`,
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Failed to save KB categories.' };
+  }
+}
+
+// ============================================================
+// Teams
+// ============================================================
 
 export async function addTeamMember(formData: FormData): Promise<void> {
   const { supabase, profile } = await requireAdminRole();
@@ -1579,101 +1481,6 @@ export async function updateSlaThreshold(formData: FormData): Promise<void> {
   await logAudit(supabase, adminProfile.id, 'update_sla_threshold', 'app_settings', null, { threshold });
 
   revalidatePath('/admin/sla');
-}
-
-// ============================================================
-// KB Categories (§19)
-// ============================================================
-
-export async function createKbCategory(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
-
-  const name = (formData.get('name') as string)?.trim();
-  if (!name || name.length > 100) return;
-
-  // Determine next display_order
-  const { data: maxRow } = await supabase
-    .from('kb_categories')
-    .select('display_order')
-    .order('display_order', { ascending: false })
-    .limit(1)
-    .single();
-
-  const nextOrder = (maxRow?.display_order ?? 0) + 1;
-
-  const { data: created, error } = await supabase
-    .from('kb_categories')
-    .insert({ name, display_order: nextOrder })
-    .select('id')
-    .single();
-
-  if (error) return;
-
-  await logAudit(supabase, profile.id, 'create_kb_category', 'kb_category', created?.id, { name });
-  revalidatePath('/admin/kb-categories');
-}
-
-export async function renameKbCategory(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
-
-  const categoryId = formData.get('category_id') as string;
-  const newName = (formData.get('name') as string)?.trim();
-  if (!categoryId || !newName || newName.length > 100) return;
-
-  const { error } = await supabase
-    .from('kb_categories')
-    .update({ name: newName })
-    .eq('id', categoryId);
-
-  if (error) return;
-
-  await logAudit(supabase, profile.id, 'rename_kb_category', 'kb_category', categoryId, { name: newName });
-  revalidatePath('/admin/kb-categories');
-}
-
-export async function reorderKbCategories(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
-
-  const orderedIdsRaw = formData.get('ordered_ids') as string;
-  if (!orderedIdsRaw) return;
-
-  let orderedIds: string[];
-  try {
-    orderedIds = JSON.parse(orderedIdsRaw);
-  } catch {
-    return;
-  }
-
-  if (!Array.isArray(orderedIds) || orderedIds.length === 0) return;
-
-  for (let i = 0; i < orderedIds.length; i++) {
-    await supabase
-      .from('kb_categories')
-      .update({ display_order: i + 1 })
-      .eq('id', orderedIds[i]);
-  }
-
-  await logAudit(supabase, profile.id, 'reorder_kb_categories', 'kb_category', null, { orderedIds });
-  revalidatePath('/admin/kb-categories');
-}
-
-export async function deleteKbCategory(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
-
-  const categoryId = formData.get('category_id') as string;
-  if (!categoryId) return;
-
-  const { data: existing } = await supabase.from('kb_categories').select('name').eq('id', categoryId).single();
-
-  const { error } = await supabase
-    .from('kb_categories')
-    .delete()
-    .eq('id', categoryId);
-
-  if (error) return;
-
-  await logAudit(supabase, profile.id, 'delete_kb_category', 'kb_category', categoryId, { name: existing?.name });
-  revalidatePath('/admin/kb-categories');
 }
 
 // ============================================================

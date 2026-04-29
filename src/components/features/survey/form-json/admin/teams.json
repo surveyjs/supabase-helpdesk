@@ -1,0 +1,28 @@
+{
+  "showQuestionNumbers": "off",
+  "pages": [
+    {
+      "elements": [
+        {
+          "type": "matrixdynamic",
+          "name": "rows",
+          "title": "Teams",
+          "titleLocation": "hidden",
+          "keyName": "id",
+          "rowCount": 0,
+          "addRowText": "Add Team",
+          "removeRowText": "Delete",
+          "confirmDelete": false,
+          "columns": [
+            {
+              "name": "name",
+              "title": "Name",
+              "cellType": "text",
+              "isRequired": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

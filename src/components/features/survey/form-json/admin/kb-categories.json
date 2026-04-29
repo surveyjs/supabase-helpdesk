@@ -1,0 +1,29 @@
+{
+  "showQuestionNumbers": "off",
+  "pages": [
+    {
+      "elements": [
+        {
+          "type": "matrixdynamic",
+          "name": "rows",
+          "title": "KB Categories",
+          "titleLocation": "hidden",
+          "keyName": "id",
+          "rowCount": 0,
+          "allowRowsDragAndDrop": true,
+          "addRowText": "Add Category",
+          "removeRowText": "Delete",
+          "confirmDelete": false,
+          "columns": [
+            {
+              "name": "name",
+              "title": "Name",
+              "cellType": "text",
+              "isRequired": true
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

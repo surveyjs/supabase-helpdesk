@@ -15,10 +15,14 @@ const DAVE_ID = '00000000-0000-0000-0000-000000000017';
 const EVE_ID = '00000000-0000-0000-0000-000000000018';
 const TEAM_ID = '00000000-0000-0000-0000-000000000110';
 
-// Trigger test users (created/deleted within tests)
-const TRIGGER_TEST_ID_1 = '00000000-0000-0000-0000-000000000201';
-const TRIGGER_TEST_ID_2 = '00000000-0000-0000-0000-000000000202';
-const TRIGGER_TEST_ID_3 = '00000000-0000-0000-0000-000000000203';
+// Trigger test users (created/deleted within tests).
+// Use random UUIDs to avoid collisions with seed data or other test files
+// (e.g. CSAT tests historically used 0202/0203/0204 which clashed with the
+// previous fixed IDs 0201/0202/0203 and produced misleading
+// "Database error creating new user" failures from auth.admin.createUser).
+const TRIGGER_TEST_ID_1 = crypto.randomUUID();
+const TRIGGER_TEST_ID_2 = crypto.randomUUID();
+const TRIGGER_TEST_ID_3 = crypto.randomUUID();
 
 beforeAll(() => {
   svc = createServiceRoleClient();
@@ -150,6 +154,27 @@ describe('login_attempts', () => {
 // handle_new_user trigger tests
 // ---------------------------------------------------------------------------
 describe('handle_new_user trigger', () => {
+  // Clear orphan rows from any previously failed run so the
+  // auth.admin.createUser calls below don't hit a unique-email conflict
+  // (which surfaces as a generic "Database error creating new user").
+  beforeAll(async () => {
+    const emails = [
+      'trigger-test-1@example.com',
+      'trigger-test-2@example.com',
+      'trigger-test-3@example.com',
+    ];
+    for (const email of emails) {
+      const { data } = await svc
+        .from('profiles')
+        .select('id')
+        .eq('email', email);
+      for (const row of data ?? []) {
+        await svc.from('profiles').delete().eq('id', row.id);
+        await svc.auth.admin.deleteUser(row.id).catch(() => {});
+      }
+    }
+  });
+
   it('should auto-create profile with display_name from user_metadata', async () => {
     const { error } = await svc.auth.admin.createUser({
       id: TRIGGER_TEST_ID_1,

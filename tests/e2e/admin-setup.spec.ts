@@ -266,8 +266,8 @@ test.describe('Templates', () => {
     await expect(page.getByRole('heading', { name: /templates/i })).toBeVisible({ timeout: 10000 });
 
     // Should show template event types
-    await expect(page.getByText('new_post')).toBeVisible();
-    await expect(page.getByText('status_changed')).toBeVisible();
+    await expect(page.getByText('new_post').first()).toBeVisible();
+    await expect(page.getByText('status_changed').first()).toBeVisible();
   });
 
   test('admin can edit and reset a template', async ({ page }) => {
@@ -275,34 +275,38 @@ test.describe('Templates', () => {
     await gotoAdmin(page, '/admin/templates');
 
     await expect(page.getByRole('heading', { name: /templates/i })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('templates-survey-form')).toBeVisible({ timeout: 10000 });
 
-    // Click the first "Edit Template" summary to expand
-    const editLink = page.getByText('Edit Template').first();
-    await expect(editLink).toBeVisible();
-    await editLink.click();
-    await page.waitForTimeout(500);
-
-    // The subject input should now be visible — scope to the template card containing the opened details
-    const openDetails = page.locator('details[open]').first();
-    const subjectInput = openDetails.locator('input[name="subject"]');
+    // SurveyJS matrixdynamic preserves column `name`. The first row's subject input
+    // matches `input[name="subject"]` inside the matrix question.
+    const subjectInput = page.locator('table input[type="text"][aria-label*="Subject"], input[name="subject"]').first();
     await expect(subjectInput).toBeVisible({ timeout: 5000 });
 
+    const original = await subjectInput.inputValue();
     await subjectInput.fill('E2E Modified Subject');
 
-    // Save
-    await openDetails.getByRole('button', { name: /save/i }).click();
-    await page.waitForTimeout(2000);
-
-    // After save, the page reloads. Re-open to reset.
-    const editLinkAfter = page.getByText('Edit Template').first();
-    await editLinkAfter.click();
+    // Click the SurveyJS complete ("Apply") button.
+    const savePromise = page.waitForResponse(
+      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
+      { timeout: 15000 },
+    );
+    await page.getByRole('button', { name: 'Complete' }).click();
+    await savePromise;
     await page.waitForTimeout(500);
 
-    const openDetailsAfter = page.locator('details[open]').first();
-    const resetBtn = openDetailsAfter.getByRole('button', { name: /reset/i });
-    if (await resetBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await resetBtn.click();
-      await page.waitForTimeout(2000);
+    // Trigger a per-row reset on the first template row using the plain form button.
+    const resetButtons = page.locator('[data-testid^="reset-template-"]');
+    await expect(resetButtons.first()).toBeVisible();
+    const resetPromise = page.waitForResponse(
+      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
+      { timeout: 15000 },
+    );
+    await resetButtons.first().click();
+    await resetPromise;
+
+    // Restore original subject deterministically (best-effort), so other tests are unaffected.
+    if (original) {
+      await page.reload();
     }
   });
 });

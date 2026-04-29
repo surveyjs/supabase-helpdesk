@@ -165,10 +165,10 @@ test.describe('Admin Notification Templates', () => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/templates');
 
-    await expect(page.getByText('Urgency Changed')).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText('Severity Changed')).toBeVisible();
-    await expect(page.getByText('Privacy Changed')).toBeVisible();
-    await expect(page.getByText('Consolidated Update')).toBeVisible();
+    await expect(page.getByText('Urgency Changed').first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Severity Changed').first()).toBeVisible();
+    await expect(page.getByText('Privacy Changed').first()).toBeVisible();
+    await expect(page.getByText('Consolidated Update').first()).toBeVisible();
   });
 });
 

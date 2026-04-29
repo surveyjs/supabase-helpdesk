@@ -3,26 +3,13 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createServerClient, createServiceRoleClient } from '@/lib/supabase/server';
+import { requireAdminRole, logAudit } from './_admin-helpers';
 import {
   DEFAULT_AGENT_DASHBOARD_SURVEY_CONFIG,
   DEFAULT_TICKET_DETAIL_AGENT_CONFIG,
   DEFAULT_TICKET_DETAIL_USER_CONFIG,
 } from '@/lib/constants/survey-ui-config';
 
-async function requireAdminRole() {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('id, role')
-    .eq('id', user.id)
-    .single();
-  if (!profile || profile.role !== 'admin') {
-    throw new Error('Forbidden');
-  }
-  return { supabase, user, profile };
-}
 
 // ============================================================
 // Ticket Types
@@ -173,7 +160,9 @@ export async function deleteCategory(formData: FormData): Promise<void> {
 // ============================================================
 
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{3,8}$/;
+const HEX_COLOR_STRICT_RE = /^#[0-9a-fA-F]{6}$/;
 
+/** @deprecated Use {@link saveTags} (bulk diff/save). Retained for legacy callers. */
 export async function createTag(formData: FormData): Promise<void> {
   const { supabase, profile } = await requireAdminRole();
 
@@ -194,6 +183,7 @@ export async function createTag(formData: FormData): Promise<void> {
   revalidatePath('/admin/tags');
 }
 
+/** @deprecated Use {@link saveTags} (bulk diff/save). Retained for legacy callers. */
 export async function renameTag(formData: FormData): Promise<void> {
   const { supabase, profile } = await requireAdminRole();
 
@@ -212,6 +202,7 @@ export async function renameTag(formData: FormData): Promise<void> {
   revalidatePath('/admin/tags');
 }
 
+/** @deprecated Use {@link saveTags} (bulk diff/save). Retained for legacy callers. */
 export async function updateTagColor(formData: FormData): Promise<void> {
   const { supabase, profile } = await requireAdminRole();
 
@@ -230,6 +221,7 @@ export async function updateTagColor(formData: FormData): Promise<void> {
   revalidatePath('/admin/tags');
 }
 
+/** @deprecated Use {@link saveTags} (bulk diff/save). Retained for legacy callers. */
 export async function deleteTag(formData: FormData): Promise<void> {
   const { supabase, profile } = await requireAdminRole();
 
@@ -247,6 +239,55 @@ export async function deleteTag(formData: FormData): Promise<void> {
 
   await logAudit(supabase, profile.id, 'delete_tag', 'tag', tagId, { name: existing?.name });
   revalidatePath('/admin/tags');
+}
+
+type TagRowInput = { id?: string; name?: unknown; color?: unknown };
+
+export async function saveTags(formData: FormData): Promise<{ message?: string; error?: string }> {
+  await requireAdminRole();
+
+  const raw = formData.get('rows');
+  if (typeof raw !== 'string') {
+    return { error: 'Invalid request: missing rows.' };
+  }
+
+  let parsed: TagRowInput[];
+  try {
+    const json = JSON.parse(raw);
+    if (!Array.isArray(json)) throw new Error('rows must be an array');
+    parsed = json as TagRowInput[];
+  } catch (e) {
+    return { error: `Invalid rows JSON: ${e instanceof Error ? e.message : 'unknown'}` };
+  }
+
+  const cleanRows: { id?: string; name: string; color: string }[] = [];
+  for (const row of parsed) {
+    const name = typeof row.name === 'string' ? row.name.trim() : '';
+    const color = typeof row.color === 'string' ? row.color.trim() : '';
+    if (!name || name.length > 50) {
+      return { error: `Invalid tag name: ${JSON.stringify(row.name)}` };
+    }
+    if (!HEX_COLOR_STRICT_RE.test(color)) {
+      return { error: `Invalid tag color (must be #RRGGBB): ${JSON.stringify(row.color)}` };
+    }
+    cleanRows.push({ id: typeof row.id === 'string' ? row.id : undefined, name, color });
+  }
+
+  const { diffAndSave } = await import('./admin-crud');
+  try {
+    const result = await diffAndSave({
+      table: 'tags',
+      rows: cleanRows,
+      columns: ['name', 'color'],
+      auditAction: 'update_tags_bulk',
+    });
+    revalidatePath('/admin/tags');
+    return {
+      message: `Tags saved (${result.added} added, ${result.updated} updated, ${result.removed} removed).`,
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Failed to save tags.' };
+  }
 }
 
 // ============================================================
@@ -368,23 +409,7 @@ export async function removeTeamMember(formData: FormData): Promise<void> {
 // ============================================================
 // Audit Log Helper
 // ============================================================
-
-async function logAudit(
-  supabase: Awaited<ReturnType<typeof createServerClient>>,
-  adminId: string,
-  action: string,
-  targetType: string,
-  targetId?: string | null,
-  details?: Record<string, unknown>,
-) {
-  await supabase.from('admin_audit_log').insert({
-    admin_id: adminId,
-    action,
-    target_type: targetType,
-    target_id: targetId ?? null,
-    details: details ?? {},
-  });
-}
+// (Moved to ./_admin-helpers)
 
 // ============================================================
 // Agent & Admin Management (§16.6)
@@ -889,6 +914,65 @@ export async function resetNotificationTemplate(formData: FormData): Promise<voi
 
   revalidatePath('/admin/templates');
   revalidatePath('/admin/duplicate-template');
+}
+
+export async function saveNotificationTemplates(formData: FormData): Promise<{ message?: string }> {
+  const { supabase, profile: adminProfile } = await requireAdminRole();
+  const { DEFAULT_TEMPLATES } = await import('@/lib/constants/notification-templates');
+
+  const raw = formData.get('templates');
+  if (typeof raw !== 'string' || raw.length === 0) {
+    return { message: 'No templates submitted.' };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { message: 'Invalid templates payload.' };
+  }
+  if (!Array.isArray(parsed)) {
+    return { message: 'Invalid templates payload.' };
+  }
+
+  type Row = { event_type: string; subject: string; body: string };
+  const rows: Row[] = [];
+  for (const entry of parsed) {
+    if (!entry || typeof entry !== 'object') continue;
+    const r = entry as Record<string, unknown>;
+    const eventType = typeof r.event_type === 'string' ? r.event_type : '';
+    const subject = typeof r.subject === 'string' ? r.subject.trim() : '';
+    const body = typeof r.body === 'string' ? r.body.trim() : '';
+    if (!eventType || !DEFAULT_TEMPLATES[eventType]) continue;
+    if (!subject || !body) continue;
+    rows.push({ event_type: eventType, subject, body });
+  }
+
+  if (rows.length === 0) {
+    return { message: 'No valid templates to save.' };
+  }
+
+  const updatedAt = new Date().toISOString();
+  for (const row of rows) {
+    await supabase
+      .from('notification_templates')
+      .update({ subject: row.subject, body: row.body, is_customized: true, updated_at: updatedAt })
+      .eq('event_type', row.event_type);
+  }
+
+  await logAudit(
+    supabase,
+    adminProfile.id,
+    'update_notification_templates_bulk',
+    'notification_template',
+    null,
+    { count: rows.length },
+  );
+
+  revalidatePath('/admin/templates');
+  revalidatePath('/admin/duplicate-template');
+
+  return { message: 'Templates saved.' };
 }
 
 // ============================================================

@@ -1,0 +1,36 @@
+{
+  "showQuestionNumbers": "off",
+  "pages": [
+    {
+      "elements": [
+        {
+          "type": "matrixdynamic",
+          "name": "rows",
+          "title": "Tags",
+          "titleLocation": "hidden",
+          "keyName": "id",
+          "rowCount": 0,
+          "addRowText": "Add Tag",
+          "removeRowText": "Delete",
+          "confirmDelete": false,
+          "columns": [
+            {
+              "name": "name",
+              "title": "Name",
+              "cellType": "text",
+              "isRequired": true
+            },
+            {
+              "name": "color",
+              "title": "Color",
+              "cellType": "text",
+              "inputType": "color",
+              "isRequired": true,
+              "defaultValue": "#6B7280"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

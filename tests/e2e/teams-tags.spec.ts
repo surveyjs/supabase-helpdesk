@@ -319,27 +319,58 @@ test.describe('Admin Tags Management', () => {
     await gotoAdmin(page, '/admin/tags');
 
     await expect(page.getByRole('heading', { name: 'Manage Tags' })).toBeVisible();
-    await expect(page.getByText('urgent')).toBeVisible();
-    await expect(page.getByText('bug')).toBeVisible();
+    await expect(page.getByTestId('tags-survey-form')).toBeVisible();
+    // Existing seed tags appear as readable text in matrix cells.
+    await expect(page.getByRole('cell', { name: 'urgent' })).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'bug' })).toBeVisible();
   });
 
   test('admin can create a tag with color and delete it', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/tags');
 
-    await page.locator('#new-tag-name').fill('e2e-test-tag');
-    // Color input — just submit with default
+    await expect(page.getByTestId('tags-survey-form')).toBeVisible();
+
+    // Add a row via SurveyJS matrixdynamic.
     await page.getByRole('button', { name: 'Add Tag' }).click();
-    await page.waitForTimeout(2000);
 
-    await expect(page.getByText('e2e-test-tag')).toBeVisible();
+    // Fill the new (last) row's Name cell. SurveyJS labels cells by row index.
+    const nameInputs = page.locator('input[aria-label*="Name"]');
+    const nameCount = await nameInputs.count();
+    await nameInputs.nth(nameCount - 1).fill('e2e-test-tag');
 
-    // Delete it
-    const row = page.locator('li').filter({ hasText: 'e2e-test-tag' });
-    await row.getByRole('button', { name: /Delete/ }).click();
-    await page.waitForTimeout(2000);
+    // Set color on the new row to a valid #RRGGBB hex.
+    const colorInputs = page.locator('input[type="color"]');
+    const colorCount = await colorInputs.count();
+    await colorInputs.nth(colorCount - 1).fill('#123456');
 
-    await expect(page.getByText('e2e-test-tag')).not.toBeVisible();
+    // Save by clicking the SurveyJS Complete button.
+    let savePromise = page.waitForResponse(
+      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
+      { timeout: 15000 },
+    );
+    await page.getByRole('button', { name: 'Complete' }).click();
+    await savePromise;
+
+    await gotoAdmin(page, '/admin/tags');
+    await expect(page.getByRole('cell', { name: 'e2e-test-tag' })).toBeVisible({ timeout: 10000 });
+
+    // Delete via the matrix's row Remove button. SurveyJS uses 'Delete' as removeRowText.
+    const row = page
+      .locator('tr')
+      .filter({ has: page.getByRole('cell', { name: 'e2e-test-tag' }) })
+      .first();
+    await row.getByRole('button', { name: 'Delete' }).click();
+
+    savePromise = page.waitForResponse(
+      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
+      { timeout: 15000 },
+    );
+    await page.getByRole('button', { name: 'Complete' }).click();
+    await savePromise;
+
+    await gotoAdmin(page, '/admin/tags');
+    await expect(page.getByRole('cell', { name: 'e2e-test-tag' })).toHaveCount(0);
   });
 });
 

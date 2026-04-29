@@ -1,0 +1,41 @@
+{
+  "showQuestionNumbers": "off",
+  "pages": [
+    {
+      "elements": [
+        {
+          "type": "matrixdynamic",
+          "name": "templates",
+          "title": "Notification Templates",
+          "titleLocation": "hidden",
+          "allowAddRows": false,
+          "allowRemoveRows": false,
+          "keyName": "event_type",
+          "rowCount": 0,
+          "columns": [
+            {
+              "name": "event_type",
+              "title": "Event",
+              "cellType": "text",
+              "readOnly": true,
+              "width": "180px"
+            },
+            {
+              "name": "subject",
+              "title": "Subject",
+              "cellType": "text",
+              "isRequired": true
+            },
+            {
+              "name": "body",
+              "title": "Body (Markdown)",
+              "cellType": "comment",
+              "isRequired": true,
+              "rows": 4
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

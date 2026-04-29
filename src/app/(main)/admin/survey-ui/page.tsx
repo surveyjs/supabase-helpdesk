@@ -11,6 +11,21 @@ import {
 import { resetSurveyUiConfig, updateSurveyUiConfig } from '@/lib/actions/admin';
 import { SurveyUiConfigEditor } from './SurveyUiConfigEditor';
 
+function flatten(obj: Record<string, unknown>, prefix = ''): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    const key = prefix ? `${prefix}.${k}` : k;
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      Object.assign(out, flatten(v as Record<string, unknown>, key));
+    } else if (Array.isArray(v)) {
+      out[key] = v.join(', ');
+    } else {
+      out[key] = v;
+    }
+  }
+  return out;
+}
+
 const AGENT_DASHBOARD_SCHEMA = {
   pages: [
     {
@@ -135,58 +150,9 @@ export default async function AdminSurveyUiPage() {
   const detailAgentConfig = parseTicketDetailAgentConfig(values.get('survey_ticket_detail_agent_config'));
   const detailUserConfig = parseTicketDetailUserConfig(values.get('survey_ticket_detail_user_config'));
 
-  const dashboardEditorData = {
-    'enabledFilters.q': dashboardConfig.enabledFilters.q,
-    'enabledFilters.email': dashboardConfig.enabledFilters.email,
-    'enabledFilters.status': dashboardConfig.enabledFilters.status,
-    'enabledFilters.sort': dashboardConfig.enabledFilters.sort,
-    'enabledFilters.urgency': dashboardConfig.enabledFilters.urgency,
-    'enabledFilters.severity': dashboardConfig.enabledFilters.severity,
-    'enabledFilters.type': dashboardConfig.enabledFilters.type,
-    'enabledFilters.category': dashboardConfig.enabledFilters.category,
-    'enabledFilters.agent': dashboardConfig.enabledFilters.agent,
-    'enabledFilters.team': dashboardConfig.enabledFilters.team,
-    'enabledFilters.tier': dashboardConfig.enabledFilters.tier,
-    'enabledFilters.tags': dashboardConfig.enabledFilters.tags,
-    defaultSort: dashboardConfig.defaultSort,
-  };
-
-  const detailAgentEditorData = {
-    'fields.status': detailAgentConfig.fields.status,
-    'fields.urgency': detailAgentConfig.fields.urgency,
-    'fields.severity': detailAgentConfig.fields.severity,
-    'fields.type': detailAgentConfig.fields.type,
-    'fields.category': detailAgentConfig.fields.category,
-    'fields.assigned': detailAgentConfig.fields.assigned,
-    'fields.createdBy': detailAgentConfig.fields.createdBy,
-    'fields.createdAt': detailAgentConfig.fields.createdAt,
-    'fields.updatedAt': detailAgentConfig.fields.updatedAt,
-    'fields.visibility': detailAgentConfig.fields.visibility,
-    'fields.tags': detailAgentConfig.fields.tags,
-    'fields.customFields': detailAgentConfig.fields.customFields,
-    'fields.follow': detailAgentConfig.fields.follow,
-  };
-
-  const detailUserEditorData = {
-    'fields.status': detailUserConfig.fields.status,
-    'fields.urgency': detailUserConfig.fields.urgency,
-    'fields.severity': detailUserConfig.fields.severity,
-    'fields.type': detailUserConfig.fields.type,
-    'fields.category': detailUserConfig.fields.category,
-    'fields.assigned': detailUserConfig.fields.assigned,
-    'fields.createdBy': detailUserConfig.fields.createdBy,
-    'fields.createdAt': detailUserConfig.fields.createdAt,
-    'fields.updatedAt': detailUserConfig.fields.updatedAt,
-    'fields.visibility': detailUserConfig.fields.visibility,
-    'fields.tags': detailUserConfig.fields.tags,
-    'fields.customFields': detailUserConfig.fields.customFields,
-    'fields.follow': detailUserConfig.fields.follow,
-    'tierControlRules.statusAllowedTiers': detailUserConfig.tierControlRules.statusAllowedTiers.join(', '),
-    'tierControlRules.severityAllowedTiers': detailUserConfig.tierControlRules.severityAllowedTiers.join(', '),
-    'tierControlRules.typeAllowedTiers': detailUserConfig.tierControlRules.typeAllowedTiers.join(', '),
-    'tierControlRules.tagsAllowedTiers': detailUserConfig.tierControlRules.tagsAllowedTiers.join(', '),
-    'tierControlRules.visibilityAllowedTiers': detailUserConfig.tierControlRules.visibilityAllowedTiers.join(', '),
-  };
+  const dashboardEditorData = flatten(dashboardConfig);
+  const detailAgentEditorData = flatten(detailAgentConfig);
+  const detailUserEditorData = flatten(detailUserConfig);
 
   const userSchemaDefault = {
     ...DETAIL_USER_SCHEMA,

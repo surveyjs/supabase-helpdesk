@@ -11,10 +11,35 @@ type AdminSurveyFormProps = {
   mode?: 'complete' | 'autosave';
   debounceMs?: number;
   saveAction: (formData: FormData) => Promise<SaveResponse>;
-  toFormData: (data: Record<string, unknown>) => FormData;
+  toFormData?: (data: Record<string, unknown>) => FormData;
   successMessage?: string;
   className?: string;
 };
+
+function defaultToFormData(data: Record<string, unknown>): FormData {
+  const fd = new FormData();
+  for (const [key, value] of Object.entries(data)) {
+    if (value === undefined || value === null) continue;
+    if (typeof value === 'boolean') {
+      if (value) fd.set(key, 'on');
+      continue;
+    }
+    if (typeof value === 'string') {
+      fd.set(key, value.trim());
+      continue;
+    }
+    if (typeof value === 'number') {
+      fd.set(key, String(value));
+      continue;
+    }
+    if (Array.isArray(value)) {
+      fd.set(key, value.join(','));
+      continue;
+    }
+    fd.set(key, String(value));
+  }
+  return fd;
+}
 
 export function AdminSurveyForm({
   schema,
@@ -53,7 +78,7 @@ export function AdminSurveyForm({
 
     setMessage('');
     startTransition(async () => {
-      const formData = toFormData(nextData);
+      const formData = (toFormData ?? defaultToFormData)(nextData);
       const result = await saveAction(formData);
       lastSavedSnapshotRef.current = snapshot;
       setMessage(result?.message ?? successMessage);

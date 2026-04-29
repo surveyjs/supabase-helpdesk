@@ -83,3 +83,27 @@ Update E2E coverage to include:
 - New admin sidebar item and page availability.
 - Existing agent filtering behavior after SurveyJS migration.
 - Ticket detail behavior remains role/capability-correct with tier constraints.
+
+## Follow-up
+
+The original implementation duplicated form-mapping boilerplate across every
+admin SurveyJS wrapper (a `useMemo` data block plus a `toFormData` callback
+per form) and used two parallel `if (fields.X)` ladders inside
+`TicketSidebarSurvey`. That duplication is removed in
+[`surveyjs-form-deduplication.md`](./surveyjs-form-deduplication.md):
+
+- `AdminSurveyForm` now owns a default `toFormData` that converts SurveyJS
+  data into `FormData` using the standard HTML conventions
+  (`true` → `'on'`, `false` → omit, strings trimmed). Per-form `toFormData`
+  callbacks were removed.
+- `updateCsatSettings` was aligned to the same `'on'` checkbox convention.
+- `TicketSidebarSurvey` was refactored to a single declarative
+  `fieldEntries` table that drives both schema generation and the
+  `onValueChanged` dispatch.
+- The three flatten blocks in `admin/survey-ui/page.tsx` were replaced
+  with one `flatten(obj, prefix)` helper.
+
+SurveyJS question `name` values are intentionally chosen to match the
+corresponding server-action `formData.get(...)` keys (and, for
+`app_settings`-backed forms, the underlying setting keys), so no per-form
+mapping layer is required.

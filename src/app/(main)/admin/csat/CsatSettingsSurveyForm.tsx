@@ -1,6 +1,5 @@
 'use client';
 
-import { useMemo } from 'react';
 import { updateCsatSettings } from '@/lib/actions/admin';
 import { AdminSurveyForm } from '@/components/features/survey/AdminSurveyForm';
 import csatSchema from '@/components/features/survey/form-json/admin/csat.json';
@@ -12,23 +11,10 @@ type CsatSettingsSurveyFormProps = {
 };
 
 export function CsatSettingsSurveyForm({ enabled, delay, emailVerified }: CsatSettingsSurveyFormProps) {
-  const data = useMemo(
-    () => ({
-      csat_enabled: enabled,
-      csat_survey_delay: delay || '1_hour',
-    }),
-    [enabled, delay],
-  );
-
-  const toFormData = useMemo(
-    () => (surveyData: Record<string, unknown>) => {
-      const fd = new FormData();
-      fd.set('csat_enabled', surveyData.csat_enabled === true ? 'true' : 'false');
-      fd.set('csat_survey_delay', String(surveyData.csat_survey_delay ?? '1_hour'));
-      return fd;
-    },
-    [],
-  );
+  const data = {
+    csat_enabled: enabled,
+    csat_survey_delay: delay || '1_hour',
+  };
 
   return (
     <div className="space-y-3 max-w-2xl" data-testid="csat-survey-form">
@@ -46,7 +32,6 @@ export function CsatSettingsSurveyForm({ enabled, delay, emailVerified }: CsatSe
         mode="autosave"
         debounceMs={700}
         saveAction={updateCsatSettings}
-        toFormData={toFormData}
         successMessage="Settings saved."
       />
     </div>

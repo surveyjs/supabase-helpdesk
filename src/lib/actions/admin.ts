@@ -921,7 +921,7 @@ const VALID_CSAT_DELAYS = ['immediately', '1_hour', '4_hours', '24_hours'];
 export async function updateCsatSettings(formData: FormData): Promise<void> {
   const { supabase, profile: adminProfile } = await requireAdminRole();
 
-  const enabled = formData.get('csat_enabled') === 'true';
+  const enabled = formData.get('csat_enabled') === 'on';
   const delay = formData.get('csat_survey_delay') as string;
 
   if (!VALID_CSAT_DELAYS.includes(delay)) return;

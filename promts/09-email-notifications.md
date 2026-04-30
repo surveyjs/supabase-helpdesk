@@ -290,9 +290,8 @@ Reorder sidebar to have a logical flow:
 10. File Uploads
 11. Email
 12. Templates
-13. Duplicate Template
-14. User Settings
-15. Audit Log
+13. User Settings
+14. Audit Log
 
 ### 11. Tests
 

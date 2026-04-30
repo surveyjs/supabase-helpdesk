@@ -23,7 +23,6 @@ Run this prompt before phases 2–6 in `promts/changes/admin-forms/`.
 | `/admin/sla` | `SlaSettingsSurveyForm.tsx` | existing SLA-update action(s) in `lib/actions/admin.ts` |
 | `/admin/file-settings` | `FileSettingsSurveyForm.tsx` | `updateFileSettings` (or current handler in `admin.ts`) |
 | `/admin/ai` | `AiConfigSurveyForm.tsx` | `saveAiSettings` |
-| `/admin/duplicate-template` | `DuplicateTemplateSurveyForm.tsx` | `updateNotificationTemplate` (single template) |
 
 ## Requirements
 
@@ -32,7 +31,6 @@ Run this prompt before phases 2–6 in `promts/changes/admin-forms/`.
    - `sla.json`
    - `file-settings.json`
    - `ai.json`
-   - `duplicate-template.json`
 2. Question `name`s **must** equal the keys the existing server action
    reads via `formData.get(...)`. Verify by grepping `admin.ts` (and
    any related action file).
@@ -69,7 +67,7 @@ on the literal wire value.
 ## Tests
 
 - All existing E2E specs covering `/admin/sla`, `/admin/file-settings`,
-  `/admin/ai`, `/admin/duplicate-template` must pass without changes,
+  `/admin/ai` must pass without changes,
   except where they assert on a literal HTML control that no longer
   exists. SurveyJS-rendered inputs preserve the `name` attribute, so
   selectors like `input[name="..."]` continue to work.

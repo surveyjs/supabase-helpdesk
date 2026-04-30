@@ -17,7 +17,6 @@ const SECTIONS = [
   { label: 'Email', href: '/admin/email' },
   { label: 'Inbound Email', href: '/admin/inbound-email' },
   { label: 'Templates', href: '/admin/templates' },
-  { label: 'Duplicate Template', href: '/admin/duplicate-template' },
   { label: 'User Settings', href: '/admin/user-settings' },
   { label: 'CSAT Settings', href: '/admin/csat' },
   { label: 'SLA Policies', href: '/admin/sla' },

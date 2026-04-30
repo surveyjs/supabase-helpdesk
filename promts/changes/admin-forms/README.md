@@ -6,7 +6,7 @@ merged and its E2E specs passing.
 
 | # | Prompt | Scope |
 |---|---|---|
-| 1 | [1-easy-single-forms.md](./1-easy-single-forms.md) | SLA, File Settings, AI, Duplicate Template — drop-in `AdminSurveyForm`. |
+| 1 | [1-easy-single-forms.md](./1-easy-single-forms.md) | SLA, File Settings, AI — drop-in `AdminSurveyForm`. |
 | 2 | [2-templates-matrixdynamic.md](./2-templates-matrixdynamic.md) | Notification templates → fixed-row `matrixdynamic`; introduces JSON-payload convention. |
 | 3 | [3-crud-helper-tags-pilot.md](./3-crud-helper-tags-pilot.md) | Add `diffAndSave` helper; pilot it on `/admin/tags`. |
 | 4 | [4-crud-rest-pages.md](./4-crud-rest-pages.md) | Categories, Types, Teams, KB Categories using `diffAndSave`. |

@@ -132,9 +132,8 @@ ON CONFLICT (key) DO NOTHING;
   8. Pagination (`/admin/pagination`)
   9. Rate Limit (`/admin/rate-limit`)
   10. Templates (`/admin/templates`)
-  11. Duplicate Template (`/admin/duplicate-template`)
-  12. User Settings (`/admin/user-settings`)
-  13. Audit Log (`/admin/audit-log`)
+  11. User Settings (`/admin/user-settings`)
+  12. Audit Log (`/admin/audit-log`)
 - Active section highlighted in sidebar
 - The sidebar is a Server Component using the current route path to determine the active item
 
@@ -254,23 +253,16 @@ Update `src/lib/actions/tickets.ts`:
 - `updateNotificationTemplate(eventType, subject, body)` — require admin, update, set `is_customized = true`, log audit, revalidate
 - `resetNotificationTemplate(eventType)` — require admin, restore default subject/body, set `is_customized = false`, log audit, revalidate
 
-### 11. Duplicate Ticket Template (§16.5)
+Note: the `duplicate_post` template (used when a ticket is marked as a duplicate, supporting the `{{ticketId}}` placeholder) is edited inline alongside the other templates on this page — it does not have a dedicated route.
 
-**`src/app/(main)/admin/duplicate-template/page.tsx`**:
-- Markdown editor for the duplicate post template
-- Supports `{{ticketId}}` placeholder
-- "Save" and "Reset to Default" buttons
-- Default: *"This ticket has been closed as a duplicate of [#{{ticketId}}](/tickets/{{ticketId}})."*
-- Stored in `notification_templates` with event_type `'duplicate_post'`
-
-### 12. User Settings Defaults (§16.26)
+### 11. User Settings Defaults (§16.26)
 
 **`src/app/(main)/admin/user-settings/page.tsx`**:
 - **Display name uniqueness** toggle (reads/writes `app_settings.enforce_display_name_uniqueness`)
 - **Default notification preferences** table (for now, show a placeholder table: "Notification preferences will be configurable after email notifications are implemented in Phase 9". The actual data model for user preferences is built in Phase 9.)
 - Log changes to admin audit log
 
-### 13. Admin Audit Log (§16.24)
+### 12. Admin Audit Log (§16.24)
 
 **`src/app/(main)/admin/audit-log/page.tsx`**:
 - Paginated list of admin audit log entries, newest first
@@ -281,7 +273,7 @@ Update `src/lib/actions/tickets.ts`:
   - Date range (start/end date inputs)
 - Filters are URL-based
 
-### 14. Audit Log Integration
+### 13. Audit Log Integration
 
 Update all existing admin Server Actions (from Phase 5 and this phase) to log to `admin_audit_log`:
 - Ticket type CRUD + default change
@@ -303,12 +295,12 @@ Each audit log entry includes:
 - `target_id`: the ID of the affected entity (optional)
 - `details`: JSONB with old/new values where applicable
 
-### 15. NavBar Update
+### 14. NavBar Update
 
 Update `src/components/layout/NavBar.tsx`:
 - Change the "Setup" link (added in Phase 5) to point to `/admin` (which redirects to `/admin/types`). The "Setup" link is inside the user menu dropdown as the first item for admins.
 
-### 16. Tests
+### 15. Tests
 
 **`tests/db/007-admin.test.ts`** (new file):
 - Admin audit log: admin can insert and read entries

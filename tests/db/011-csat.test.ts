@@ -598,6 +598,13 @@ describe('CSAT (Customer Satisfaction)', () => {
   // ==================== app_settings (CSAT) ====================
 
   describe('CSAT app_settings', () => {
+    // Reset CSAT settings to their migration defaults in case prior tests
+    // (e.g. e2e suites) mutated them and left the database in a non-default state.
+    beforeAll(async () => {
+      await svc.from('app_settings').update({ value: 'false' }).eq('key', 'csat_enabled');
+      await svc.from('app_settings').update({ value: '1_hour' }).eq('key', 'csat_survey_delay');
+    });
+
     it('csat_enabled setting exists and defaults to false', async () => {
       const { data } = await svc
         .from('app_settings')

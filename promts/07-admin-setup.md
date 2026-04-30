@@ -137,6 +137,8 @@ ON CONFLICT (key) DO NOTHING;
 - Active section highlighted in sidebar
 - The sidebar is a Server Component using the current route path to determine the active item
 
+**Important Change:** The flat sidebar list above has been reorganized into 8 task-oriented groups with section headings and a client-side filter input. The sidebar is now a Client Component (`'use client'`) to support the filter state. See `promts/changes/admin-sidebar-grouping.md` for the full grouping, UI spec, and acceptance criteria. All routes listed above remain valid; only their visual organization changed.
+
 **`src/app/(main)/admin/page.tsx`**:
 - Redirect to `/admin/types` (first section)
 
@@ -348,7 +350,7 @@ Guidelines:
 ## Implementation Notes
 
 - All admin pages are Server Components with `<form>` + Server Actions
-- The admin layout sidebar is a simple `<nav>` with `<Link>` elements
+- The admin layout sidebar is a `'use client'` `<nav>` with `<Link>` elements, organized into grouped `<section>`s with a filter input (see `promts/changes/admin-sidebar-grouping.md`)
 - Audit log formatting: create a helper function that converts `action` + `details` JSONB into a human-readable description (e.g., "Created tag 'urgent' with color #EF4444")
 - Custom fields JSONB storage: the `tickets.custom_fields` column stores `{ "fieldName": value }`. When a custom field is renamed, update all existing tickets' JSONB keys to match. When deleted, remove the key from all tickets.
 - For the notification templates, store defaults in code (a constants file) so they can be reset. The DB stores only customized versions.

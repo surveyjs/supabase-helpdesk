@@ -897,7 +897,6 @@ export async function updateNotificationTemplate(formData: FormData): Promise<vo
   });
 
   revalidatePath('/admin/templates');
-  revalidatePath('/admin/duplicate-template');
 }
 
 export async function resetNotificationTemplate(formData: FormData): Promise<void> {
@@ -924,7 +923,6 @@ export async function resetNotificationTemplate(formData: FormData): Promise<voi
   await logAudit(supabase, adminProfile.id, 'reset_template', 'notification_template', eventType, {});
 
   revalidatePath('/admin/templates');
-  revalidatePath('/admin/duplicate-template');
 }
 
 export async function saveNotificationTemplates(formData: FormData): Promise<{ message?: string }> {
@@ -981,7 +979,6 @@ export async function saveNotificationTemplates(formData: FormData): Promise<{ m
   );
 
   revalidatePath('/admin/templates');
-  revalidatePath('/admin/duplicate-template');
 
   return { message: 'Templates saved.' };
 }

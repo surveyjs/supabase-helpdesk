@@ -1,0 +1,26 @@
+{
+  "showQuestionNumbers": "off",
+  "pages": [
+    {
+      "elements": [
+        {
+          "type": "text",
+          "name": "event_type",
+          "visible": false
+        },
+        {
+          "type": "text",
+          "name": "subject",
+          "visible": false
+        },
+        {
+          "type": "comment",
+          "name": "body",
+          "title": "Template Body (Markdown)",
+          "isRequired": true,
+          "rows": 4
+        }
+      ]
+    }
+  ]
+}

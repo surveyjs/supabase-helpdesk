@@ -1,0 +1,52 @@
+{
+  "showQuestionNumbers": "off",
+  "pages": [
+    {
+      "elements": [
+        {
+          "type": "panel",
+          "name": "external_provider_panel",
+          "elements": [
+            {
+              "type": "text",
+              "name": "provider_name",
+              "title": "Provider Name",
+              "description": "Display name shown on the login button."
+            },
+            {
+              "type": "text",
+              "name": "client_id",
+              "title": "Client ID"
+            },
+            {
+              "type": "text",
+              "name": "client_secret",
+              "title": "Client Secret",
+              "inputType": "password"
+            },
+            {
+              "type": "text",
+              "name": "issuer_url",
+              "title": "Issuer URL",
+              "inputType": "url",
+              "description": "OIDC discovery URL. Must support /.well-known/openid-configuration."
+            },
+            {
+              "type": "text",
+              "name": "scopes",
+              "title": "Scopes",
+              "description": "Space-separated list of OAuth scopes."
+            },
+            {
+              "type": "boolean",
+              "name": "auto_redirect",
+              "title": "Auto-redirect to external provider",
+              "renderAs": "checkbox",
+              "description": "When enabled, unauthenticated users are automatically redirected to the external login page. Access /login?no_redirect=true to bypass."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

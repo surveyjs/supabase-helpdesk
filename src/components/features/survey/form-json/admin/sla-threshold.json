@@ -1,0 +1,19 @@
+{
+  "showQuestionNumbers": "off",
+  "pages": [
+    {
+      "elements": [
+        {
+          "type": "text",
+          "name": "threshold",
+          "title": "Threshold (%)",
+          "description": "Notifications are sent when this percentage of the SLA target time has elapsed (50–95%).",
+          "inputType": "number",
+          "min": 50,
+          "max": 95,
+          "isRequired": true
+        }
+      ]
+    }
+  ]
+}

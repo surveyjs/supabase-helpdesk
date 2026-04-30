@@ -1,0 +1,65 @@
+{
+  "showQuestionNumbers": "off",
+  "pages": [
+    {
+      "elements": [
+        {
+          "type": "matrixdynamic",
+          "name": "rows",
+          "title": "Subscription Tiers",
+          "titleLocation": "hidden",
+          "keyName": "id",
+          "rowCount": 0,
+          "addRowText": "Add Tier",
+          "removeRowText": "Delete",
+          "confirmDelete": false,
+          "allowRowsDragAndDrop": true,
+          "columns": [
+            {
+              "name": "key",
+              "title": "Key",
+              "cellType": "text",
+              "isRequired": true
+            },
+            {
+              "name": "display_name",
+              "title": "Display Name",
+              "cellType": "text",
+              "isRequired": true
+            },
+            {
+              "name": "cap_change_visibility",
+              "title": "Visibility",
+              "cellType": "boolean",
+              "renderAs": "checkbox"
+            },
+            {
+              "name": "cap_set_severity",
+              "title": "Severity",
+              "cellType": "boolean",
+              "renderAs": "checkbox"
+            },
+            {
+              "name": "cap_change_status",
+              "title": "Status",
+              "cellType": "boolean",
+              "renderAs": "checkbox"
+            },
+            {
+              "name": "cap_change_type",
+              "title": "Type",
+              "cellType": "boolean",
+              "renderAs": "checkbox"
+            },
+            {
+              "name": "cap_add_remove_tags",
+              "title": "Tags",
+              "cellType": "boolean",
+              "renderAs": "checkbox"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

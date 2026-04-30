@@ -1,0 +1,37 @@
+{
+  "showQuestionNumbers": "off",
+  "pages": [
+    {
+      "elements": [
+        {
+          "type": "comment",
+          "name": "allowed_file_types",
+          "title": "Allowed file types",
+          "description": "Comma-separated list of file extensions (without dots).",
+          "isRequired": true,
+          "rows": 3
+        },
+        {
+          "type": "text",
+          "name": "max_file_size_mb",
+          "title": "Maximum file size (MB)",
+          "description": "Between 1 and 50 MB.",
+          "inputType": "number",
+          "isRequired": true,
+          "min": 1,
+          "max": 50
+        },
+        {
+          "type": "text",
+          "name": "max_files_per_post",
+          "title": "Maximum files per post",
+          "description": "Between 1 and 20.",
+          "inputType": "number",
+          "isRequired": true,
+          "min": 1,
+          "max": 20
+        }
+      ]
+    }
+  ]
+}

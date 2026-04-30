@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { SurveyJsonForm } from '@/components/features/survey/SurveyJsonForm';
 
-type SaveResponse = { message?: string } | void;
+type SaveResponse = { message?: string; error?: string } | void;
 
 type AdminSurveyFormProps = {
   schema: Record<string, unknown>;
@@ -53,6 +53,7 @@ export function AdminSurveyForm({
 }: AdminSurveyFormProps) {
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState('');
+  const [isError, setIsError] = useState(false);
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingDataRef = useRef<Record<string, unknown> | null>(null);
@@ -77,10 +78,18 @@ export function AdminSurveyForm({
     }
 
     setMessage('');
+    setIsError(false);
     startTransition(async () => {
       const formData = (toFormData ?? defaultToFormData)(nextData);
       const result = await saveAction(formData);
+      if (result?.error) {
+        // Don't advance the saved snapshot so the next change re-attempts the save.
+        setIsError(true);
+        setMessage(`Error: ${result.error}`);
+        return;
+      }
       lastSavedSnapshotRef.current = snapshot;
+      setIsError(false);
       setMessage(result?.message ?? successMessage);
     });
   }, [saveAction, successMessage, toFormData]);
@@ -126,7 +135,11 @@ export function AdminSurveyForm({
   return (
     <>
       {content}
-      <p className="text-xs text-gray-500" aria-live="polite">
+      <p
+        className={`text-xs ${isError && !isPending ? 'text-red-600' : 'text-gray-500'}`}
+        aria-live="polite"
+        role={isError && !isPending ? 'alert' : undefined}
+      >
         {isPending ? 'Saving...' : message}
       </p>
     </>

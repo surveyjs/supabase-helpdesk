@@ -1,6 +1,12 @@
 import { test, expect, Page } from '@playwright/test';
 import { createServiceRoleClient } from '../helpers/supabase';
 
+// Multiple describes in this file mutate the same `app_settings` rows
+// (`inbound_email_enabled`, `inbound_email_reply_to_address`). Under
+// `fullyParallel: true` they race across workers, so force file-level
+// serial execution.
+test.describe.configure({ mode: 'serial' });
+
 /**
  * Helper: log in via the login form.
  */

@@ -3,85 +3,17 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createServerClient, createServiceRoleClient } from '@/lib/supabase/server';
+import { requireAdminRole, logAudit } from './_admin-helpers';
 import {
   DEFAULT_AGENT_DASHBOARD_SURVEY_CONFIG,
   DEFAULT_TICKET_DETAIL_AGENT_CONFIG,
   DEFAULT_TICKET_DETAIL_USER_CONFIG,
 } from '@/lib/constants/survey-ui-config';
 
-async function requireAdminRole() {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('id, role')
-    .eq('id', user.id)
-    .single();
-  if (!profile || profile.role !== 'admin') {
-    throw new Error('Forbidden');
-  }
-  return { supabase, user, profile };
-}
 
 // ============================================================
 // Ticket Types
 // ============================================================
-
-export async function createTicketType(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
-
-  const name = (formData.get('name') as string)?.trim();
-  if (!name || name.length > 100) return;
-
-  const { data: created, error } = await supabase
-    .from('ticket_types')
-    .insert({ name })
-    .select('id')
-    .single();
-
-  if (error) return;
-
-  await logAudit(supabase, profile.id, 'create_ticket_type', 'ticket_type', created?.id, { name });
-  revalidatePath('/admin/types');
-}
-
-export async function renameTicketType(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
-
-  const typeId = formData.get('type_id') as string;
-  const newName = (formData.get('name') as string)?.trim();
-  if (!typeId || !newName || newName.length > 100) return;
-
-  const { error } = await supabase
-    .from('ticket_types')
-    .update({ name: newName })
-    .eq('id', typeId);
-
-  if (error) return;
-
-  await logAudit(supabase, profile.id, 'rename_ticket_type', 'ticket_type', typeId, { name: newName });
-  revalidatePath('/admin/types');
-}
-
-export async function deleteTicketType(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
-
-  const typeId = formData.get('type_id') as string;
-  if (!typeId) return;
-
-  const { data: existing } = await supabase.from('ticket_types').select('name').eq('id', typeId).single();
-
-  const { error } = await supabase
-    .from('ticket_types')
-    .delete()
-    .eq('id', typeId);
-
-  if (error) return;
-
-  await logAudit(supabase, profile.id, 'delete_ticket_type', 'ticket_type', typeId, { name: existing?.name });
-  revalidatePath('/admin/types');
-}
 
 export async function setDefaultTicketType(formData: FormData): Promise<void> {
   const { supabase, profile } = await requireAdminRole();
@@ -110,211 +42,539 @@ export async function setDefaultTicketType(formData: FormData): Promise<void> {
 }
 
 // ============================================================
-// Categories
-// ============================================================
-
-export async function createCategory(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
-
-  const name = (formData.get('name') as string)?.trim();
-  if (!name || name.length > 100) return;
-
-  const { data: created, error } = await supabase
-    .from('categories')
-    .insert({ name })
-    .select('id')
-    .single();
-
-  if (error) return;
-
-  await logAudit(supabase, profile.id, 'create_category', 'category', created?.id, { name });
-  revalidatePath('/admin/categories');
-}
-
-export async function renameCategory(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
-
-  const categoryId = formData.get('category_id') as string;
-  const newName = (formData.get('name') as string)?.trim();
-  if (!categoryId || !newName || newName.length > 100) return;
-
-  const { error } = await supabase
-    .from('categories')
-    .update({ name: newName })
-    .eq('id', categoryId);
-
-  if (error) return;
-
-  await logAudit(supabase, profile.id, 'rename_category', 'category', categoryId, { name: newName });
-  revalidatePath('/admin/categories');
-}
-
-export async function deleteCategory(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
-
-  const categoryId = formData.get('category_id') as string;
-  if (!categoryId) return;
-
-  const { data: existing } = await supabase.from('categories').select('name').eq('id', categoryId).single();
-
-  const { error } = await supabase
-    .from('categories')
-    .delete()
-    .eq('id', categoryId);
-
-  if (error) return;
-
-  await logAudit(supabase, profile.id, 'delete_category', 'category', categoryId, { name: existing?.name });
-  revalidatePath('/admin/categories');
-}
-
-// ============================================================
 // Tags
 // ============================================================
 
-const HEX_COLOR_RE = /^#[0-9a-fA-F]{3,8}$/;
+const HEX_COLOR_STRICT_RE = /^#[0-9a-fA-F]{6}$/;
 
-export async function createTag(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
+type TagRowInput = { id?: string; name?: unknown; color?: unknown };
 
-  const name = (formData.get('name') as string)?.trim();
-  const color = (formData.get('color') as string)?.trim();
-  if (!name || name.length > 50) return;
-  if (!color || color.length > 20 || !HEX_COLOR_RE.test(color)) return;
+export async function saveTags(formData: FormData): Promise<{ message?: string; error?: string }> {
+  await requireAdminRole();
 
-  const { data: created, error } = await supabase
-    .from('tags')
-    .insert({ name, color })
-    .select('id')
-    .single();
+  const raw = formData.get('rows');
+  if (typeof raw !== 'string') {
+    return { error: 'Invalid request: missing rows.' };
+  }
 
-  if (error) return;
+  let parsed: TagRowInput[];
+  try {
+    const json = JSON.parse(raw);
+    if (!Array.isArray(json)) throw new Error('rows must be an array');
+    parsed = json as TagRowInput[];
+  } catch (e) {
+    return { error: `Invalid rows JSON: ${e instanceof Error ? e.message : 'unknown'}` };
+  }
 
-  await logAudit(supabase, profile.id, 'create_tag', 'tag', created?.id, { name, color });
-  revalidatePath('/admin/tags');
+  const cleanRows: { id?: string; name: string; color: string }[] = [];
+  for (const row of parsed) {
+    const name = typeof row.name === 'string' ? row.name.trim() : '';
+    const color = typeof row.color === 'string' ? row.color.trim() : '';
+    if (!name || name.length > 50) {
+      return { error: `Invalid tag name: ${JSON.stringify(row.name)}` };
+    }
+    if (!HEX_COLOR_STRICT_RE.test(color)) {
+      return { error: `Invalid tag color (must be #RRGGBB): ${JSON.stringify(row.color)}` };
+    }
+    cleanRows.push({ id: typeof row.id === 'string' ? row.id : undefined, name, color });
+  }
+
+  const { diffAndSave } = await import('./admin-crud');
+  try {
+    const result = await diffAndSave({
+      table: 'tags',
+      rows: cleanRows,
+      columns: ['name', 'color'],
+      auditAction: 'update_tags_bulk',
+    });
+    revalidatePath('/admin/tags');
+    return {
+      message: `Tags saved (${result.added} added, ${result.updated} updated, ${result.removed} removed).`,
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Failed to save tags.' };
+  }
 }
 
-export async function renameTag(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
+// ============================================================
+// Bulk save actions for Categories / Types / Teams / KB Categories
+// ============================================================
 
-  const tagId = formData.get('tag_id') as string;
-  const newName = (formData.get('name') as string)?.trim();
-  if (!tagId || !newName || newName.length > 50) return;
+type GenericRow = { id?: string; name?: unknown };
 
-  const { error } = await supabase
-    .from('tags')
-    .update({ name: newName })
-    .eq('id', tagId);
-
-  if (error) return;
-
-  await logAudit(supabase, profile.id, 'rename_tag', 'tag', tagId, { name: newName });
-  revalidatePath('/admin/tags');
+function parseNamedRows(formData: FormData, opts: { maxLen: number; label: string }): {
+  rows?: { id?: string; name: string }[];
+  error?: string;
+} {
+  const raw = formData.get('rows');
+  if (typeof raw !== 'string') {
+    return { error: 'Invalid request: missing rows.' };
+  }
+  let parsed: GenericRow[];
+  try {
+    const json = JSON.parse(raw);
+    if (!Array.isArray(json)) throw new Error('rows must be an array');
+    parsed = json as GenericRow[];
+  } catch (e) {
+    return { error: `Invalid rows JSON: ${e instanceof Error ? e.message : 'unknown'}` };
+  }
+  const cleanRows: { id?: string; name: string }[] = [];
+  const seen = new Set<string>();
+  for (const row of parsed) {
+    const name = typeof row.name === 'string' ? row.name.trim() : '';
+    if (!name || name.length > opts.maxLen) {
+      return { error: `Invalid ${opts.label} name: ${JSON.stringify(row.name)}` };
+    }
+    const lower = name.toLowerCase();
+    if (seen.has(lower)) {
+      return { error: `Duplicate ${opts.label} name: ${name}` };
+    }
+    seen.add(lower);
+    cleanRows.push({ id: typeof row.id === 'string' ? row.id : undefined, name });
+  }
+  return { rows: cleanRows };
 }
 
-export async function updateTagColor(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
-
-  const tagId = formData.get('tag_id') as string;
-  const newColor = (formData.get('color') as string)?.trim();
-  if (!tagId || !newColor || newColor.length > 20 || !HEX_COLOR_RE.test(newColor)) return;
-
-  const { error } = await supabase
-    .from('tags')
-    .update({ color: newColor })
-    .eq('id', tagId);
-
-  if (error) return;
-
-  await logAudit(supabase, profile.id, 'update_tag_color', 'tag', tagId, { color: newColor });
-  revalidatePath('/admin/tags');
+export async function saveCategories(
+  formData: FormData,
+): Promise<{ message?: string; error?: string }> {
+  await requireAdminRole();
+  const parsed = parseNamedRows(formData, { maxLen: 100, label: 'category' });
+  if (parsed.error || !parsed.rows) return { error: parsed.error };
+  const { diffAndSave } = await import('./admin-crud');
+  try {
+    const result = await diffAndSave({
+      table: 'categories',
+      rows: parsed.rows,
+      columns: ['name'],
+      auditAction: 'update_categories_bulk',
+    });
+    revalidatePath('/admin/categories');
+    return {
+      message: `Categories saved (${result.added} added, ${result.updated} updated, ${result.removed} removed).`,
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Failed to save categories.' };
+  }
 }
 
-export async function deleteTag(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
+export async function saveTicketTypes(
+  formData: FormData,
+): Promise<{ message?: string; error?: string }> {
+  await requireAdminRole();
+  const parsed = parseNamedRows(formData, { maxLen: 100, label: 'ticket type' });
+  if (parsed.error || !parsed.rows) return { error: parsed.error };
+  const { diffAndSave } = await import('./admin-crud');
+  try {
+    const result = await diffAndSave({
+      table: 'ticket_types',
+      rows: parsed.rows,
+      columns: ['name'],
+      auditAction: 'update_ticket_types_bulk',
+    });
+    revalidatePath('/admin/types');
+    return {
+      message: `Ticket types saved (${result.added} added, ${result.updated} updated, ${result.removed} removed).`,
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Failed to save ticket types.' };
+  }
+}
 
-  const tagId = formData.get('tag_id') as string;
-  if (!tagId) return;
+export async function saveTeams(
+  formData: FormData,
+): Promise<{ message?: string; error?: string }> {
+  const { supabase } = await requireAdminRole();
+  const parsed = parseNamedRows(formData, { maxLen: 100, label: 'team' });
+  if (parsed.error || !parsed.rows) return { error: parsed.error };
 
-  const { data: existing } = await supabase.from('tags').select('name').eq('id', tagId).single();
+  // Pre-check: refuse to delete teams that still have members.
+  const incomingIds = new Set(parsed.rows.map((r) => r.id).filter((x): x is string => !!x));
+  const { data: existing } = await supabase.from('teams').select('id, name');
+  const candidatesForDeletion = (existing ?? []).filter((t) => !incomingIds.has(t.id as string));
+  if (candidatesForDeletion.length > 0) {
+    const ids = candidatesForDeletion.map((t) => t.id as string);
+    const { data: members } = await supabase
+      .from('profiles')
+      .select('team_id')
+      .in('team_id', ids);
+    const blockedIds = new Set((members ?? []).map((m) => m.team_id as string));
+    const blocked = candidatesForDeletion.filter((t) => blockedIds.has(t.id as string));
+    if (blocked.length > 0) {
+      return {
+        error: `Cannot delete team(s) with members: ${blocked.map((t) => t.name).join(', ')}`,
+      };
+    }
+  }
 
-  const { error } = await supabase
-    .from('tags')
-    .delete()
-    .eq('id', tagId);
+  const { diffAndSave } = await import('./admin-crud');
+  try {
+    const result = await diffAndSave({
+      table: 'teams',
+      rows: parsed.rows,
+      columns: ['name'],
+      auditAction: 'update_teams_bulk',
+    });
+    revalidatePath('/admin/teams');
+    return {
+      message: `Teams saved (${result.added} added, ${result.updated} updated, ${result.removed} removed).`,
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Failed to save teams.' };
+  }
+}
 
-  if (error) return;
+export async function saveKbCategories(
+  formData: FormData,
+): Promise<{ message?: string; error?: string }> {
+  await requireAdminRole();
+  const parsed = parseNamedRows(formData, { maxLen: 100, label: 'KB category' });
+  if (parsed.error || !parsed.rows) return { error: parsed.error };
 
-  await logAudit(supabase, profile.id, 'delete_tag', 'tag', tagId, { name: existing?.name });
-  revalidatePath('/admin/tags');
+  // Derive display_order from row index (1-based to match existing data).
+  const rowsWithOrder = parsed.rows.map((r, i) => ({
+    id: r.id,
+    name: r.name,
+    display_order: i + 1,
+  }));
+
+  const { diffAndSave } = await import('./admin-crud');
+  try {
+    const result = await diffAndSave({
+      table: 'kb_categories',
+      rows: rowsWithOrder,
+      columns: ['name', 'display_order'],
+      auditAction: 'update_kb_categories_bulk',
+    });
+    revalidatePath('/admin/kb-categories');
+    return {
+      message: `KB categories saved (${result.added} added, ${result.updated} updated, ${result.removed} removed).`,
+    };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Failed to save KB categories.' };
+  }
+}
+
+// ============================================================
+// Custom Fields (bulk save)
+// ============================================================
+
+const SUPPORTED_FIELD_TYPES = ['text', 'number', 'dropdown', 'checkbox', 'date'] as const;
+type SupportedFieldType = (typeof SUPPORTED_FIELD_TYPES)[number];
+
+type CustomFieldInputRow = {
+  id?: string;
+  name?: unknown;
+  field_type?: unknown;
+  is_required?: unknown;
+  default_value?: unknown;
+  options?: unknown;
+};
+
+type CustomFieldDbRow = {
+  id?: string;
+  name: string;
+  field_type: SupportedFieldType;
+  is_required: boolean;
+  default_value: string | null;
+  options: string[] | null;
+  display_order: number;
+};
+
+export async function saveCustomFields(
+  formData: FormData,
+): Promise<{ message?: string; error?: string }> {
+  const { supabase } = await requireAdminRole();
+
+  const raw = formData.get('fields');
+  if (typeof raw !== 'string') {
+    return { error: 'Invalid request: missing fields.' };
+  }
+  let parsed: CustomFieldInputRow[];
+  try {
+    const json = JSON.parse(raw);
+    if (!Array.isArray(json)) throw new Error('fields must be an array');
+    parsed = json as CustomFieldInputRow[];
+  } catch (e) {
+    return { error: `Invalid fields JSON: ${e instanceof Error ? e.message : 'unknown'}` };
+  }
+
+  const cleanRows: CustomFieldDbRow[] = [];
+  const seenNames = new Set<string>();
+
+  for (let i = 0; i < parsed.length; i++) {
+    const row = parsed[i];
+    const name = typeof row.name === 'string' ? row.name.trim() : '';
+    if (!name || name.length > 100) {
+      return { error: `Invalid field name: ${JSON.stringify(row.name)}` };
+    }
+    const lower = name.toLowerCase();
+    if (seenNames.has(lower)) {
+      return { error: `Duplicate field name: ${name}` };
+    }
+    seenNames.add(lower);
+
+    const fieldType = typeof row.field_type === 'string' ? row.field_type : '';
+    if (!SUPPORTED_FIELD_TYPES.includes(fieldType as SupportedFieldType)) {
+      return { error: `Invalid field_type for "${name}": ${JSON.stringify(row.field_type)}` };
+    }
+
+    const isRequired = row.is_required === true;
+    const defaultValueRaw =
+      typeof row.default_value === 'string' ? row.default_value.trim() : '';
+    const defaultValue = defaultValueRaw.length > 0 ? defaultValueRaw : null;
+
+    if (isRequired && !defaultValue && fieldType !== 'checkbox') {
+      return { error: `"${name}" is required but has no default value.` };
+    }
+
+    let options: string[] | null = null;
+    if (fieldType === 'dropdown') {
+      const optionsRaw = typeof row.options === 'string' ? row.options : '';
+      const items = optionsRaw
+        .split(',')
+        .map((o) => o.trim())
+        .filter(Boolean);
+      if (items.length === 0) {
+        return { error: `"${name}" is a dropdown but has no options.` };
+      }
+      const seenOpts = new Set<string>();
+      for (const item of items) {
+        if (seenOpts.has(item)) {
+          return { error: `"${name}" has duplicate option: ${item}` };
+        }
+        seenOpts.add(item);
+      }
+      if (defaultValue && !items.includes(defaultValue)) {
+        return { error: `"${name}" default value "${defaultValue}" is not one of the options.` };
+      }
+      options = items;
+    }
+
+    cleanRows.push({
+      id: typeof row.id === 'string' ? row.id : undefined,
+      name,
+      field_type: fieldType as SupportedFieldType,
+      is_required: isRequired,
+      default_value: defaultValue,
+      options,
+      display_order: i,
+    });
+  }
+
+  // Capture pre-save state to maintain ticket JSONB integrity for renames/deletes.
+  const { data: existingFields } = await supabase
+    .from('custom_fields')
+    .select('id, name');
+  const existingNameById = new Map<string, string>();
+  for (const f of existingFields ?? []) {
+    existingNameById.set(f.id as string, f.name as string);
+  }
+
+  const { diffAndSave } = await import('./admin-crud');
+  let result;
+  try {
+    result = await diffAndSave({
+      table: 'custom_fields',
+      rows: cleanRows,
+      columns: ['name', 'field_type', 'is_required', 'default_value', 'options', 'display_order'],
+      auditAction: 'update_custom_fields_bulk',
+    });
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'Failed to save custom fields.' };
+  }
+
+  // Apply ticket JSONB key migrations for renames / deletions.
+  const incomingIds = new Set(cleanRows.map((r) => r.id).filter((x): x is string => !!x));
+  const renames: { from: string; to: string }[] = [];
+  const deletedNames: string[] = [];
+  for (const [id, oldName] of existingNameById) {
+    if (!incomingIds.has(id)) {
+      deletedNames.push(oldName);
+      continue;
+    }
+    const newRow = cleanRows.find((r) => r.id === id);
+    if (newRow && newRow.name !== oldName) {
+      renames.push({ from: oldName, to: newRow.name });
+    }
+  }
+
+  if (renames.length > 0 || deletedNames.length > 0) {
+    const serviceClient = createServiceRoleClient();
+    const { data: tickets } = await serviceClient
+      .from('tickets')
+      .select('id, custom_fields')
+      .not('custom_fields', 'is', null);
+
+    if (tickets) {
+      for (const ticket of tickets) {
+        const cf = ticket.custom_fields as Record<string, unknown> | null;
+        if (!cf) continue;
+        let changed = false;
+        const next: Record<string, unknown> = { ...cf };
+        for (const { from, to } of renames) {
+          if (from in next) {
+            next[to] = next[from];
+            delete next[from];
+            changed = true;
+          }
+        }
+        for (const dropped of deletedNames) {
+          if (dropped in next) {
+            delete next[dropped];
+            changed = true;
+          }
+        }
+        if (changed) {
+          await serviceClient
+            .from('tickets')
+            .update({ custom_fields: next })
+            .eq('id', ticket.id);
+        }
+      }
+    }
+  }
+
+  revalidatePath('/admin/custom-fields');
+  return {
+    message: `Custom fields saved (${result.added} added, ${result.updated} updated, ${result.removed} removed).`,
+  };
+}
+
+// ============================================================
+// Subscription Tiers (bulk)
+// ============================================================
+
+const TIER_KEY_REGEX = /^[a-z0-9](-?[a-z0-9])*$/;
+
+const TIER_BOOLEAN_COLUMNS = [
+  'cap_change_visibility',
+  'cap_set_severity',
+  'cap_change_status',
+  'cap_change_type',
+  'cap_add_remove_tags',
+] as const;
+
+type TierBooleanCol = (typeof TIER_BOOLEAN_COLUMNS)[number];
+
+type TierInputRow = {
+  id?: string;
+  key?: unknown;
+  display_name?: unknown;
+} & Partial<Record<TierBooleanCol, unknown>>;
+
+type TierDbRow = {
+  id?: string;
+  key: string;
+  display_name: string;
+  sort_order: number;
+} & Record<TierBooleanCol, boolean>;
+
+export async function saveTiers(
+  formData: FormData,
+): Promise<{ message?: string; error?: string }> {
+  const { supabase } = await requireAdminRole();
+
+  const raw = formData.get('rows');
+  if (typeof raw !== 'string') {
+    return { message: 'Error: missing rows.', error: 'Invalid request: missing rows.' };
+  }
+  let parsed: TierInputRow[];
+  try {
+    const json = JSON.parse(raw);
+    if (!Array.isArray(json)) throw new Error('rows must be an array');
+    parsed = json as TierInputRow[];
+  } catch (e) {
+    const msg = `Invalid rows JSON: ${e instanceof Error ? e.message : 'unknown'}`;
+    return { message: `Error: ${msg}`, error: msg };
+  }
+
+  const cleanRows: TierDbRow[] = [];
+  const seenKeys = new Set<string>();
+
+  for (let i = 0; i < parsed.length; i++) {
+    const row = parsed[i];
+    const key = typeof row.key === 'string' ? row.key.trim() : '';
+    if (!key || !TIER_KEY_REGEX.test(key)) {
+      const msg = `Invalid tier key: ${JSON.stringify(row.key)}`;
+      return { message: `Error: ${msg}`, error: msg };
+    }
+    if (seenKeys.has(key)) {
+      const msg = `Duplicate tier key: ${key}`;
+      return { message: `Error: ${msg}`, error: msg };
+    }
+    seenKeys.add(key);
+
+    const displayName = typeof row.display_name === 'string' ? row.display_name.trim() : '';
+    if (!displayName || displayName.length > 100) {
+      const msg = `Invalid display_name for tier "${key}".`;
+      return { message: `Error: ${msg}`, error: msg };
+    }
+
+    const dbRow: TierDbRow = {
+      id: typeof row.id === 'string' ? row.id : undefined,
+      key,
+      display_name: displayName,
+      sort_order: i,
+      cap_change_visibility: row.cap_change_visibility === true,
+      cap_set_severity: row.cap_set_severity === true,
+      cap_change_status: row.cap_change_status === true,
+      cap_change_type: row.cap_change_type === true,
+      cap_add_remove_tags: row.cap_add_remove_tags === true,
+    };
+    cleanRows.push(dbRow);
+  }
+
+  // Defense-in-depth: reject any update that changes `key` for an existing row.
+  const existingIds = cleanRows
+    .map((r) => r.id)
+    .filter((x): x is string => !!x);
+  if (existingIds.length > 0) {
+    const { data: existing, error: loadErr } = await supabase
+      .from('subscription_tiers')
+      .select('id, key')
+      .in('id', existingIds);
+    if (loadErr) {
+      const msg = `Failed to load existing tiers: ${loadErr.message}`;
+      return { message: `Error: ${msg}`, error: msg };
+    }
+    const existingKeyById = new Map<string, string>();
+    for (const t of existing ?? []) {
+      existingKeyById.set(t.id as string, t.key as string);
+    }
+    for (const row of cleanRows) {
+      if (!row.id) continue;
+      const dbKey = existingKeyById.get(row.id);
+      if (dbKey !== undefined && dbKey !== row.key) {
+        const msg = `Tier key is immutable. "${dbKey}" cannot be renamed to "${row.key}".`;
+        return { message: `Error: ${msg}`, error: msg };
+      }
+    }
+  }
+
+  const { diffAndSave } = await import('./admin-crud');
+  let result;
+  try {
+    result = await diffAndSave({
+      table: 'subscription_tiers',
+      rows: cleanRows,
+      columns: ['key', 'display_name', 'sort_order', ...TIER_BOOLEAN_COLUMNS],
+      auditAction: 'update_tiers_bulk',
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Failed to save tiers.';
+    return { message: `Error: ${msg}`, error: msg };
+  }
+
+  revalidatePath('/admin/tiers');
+  return {
+    message: `Tiers saved (${result.added} added, ${result.updated} updated, ${result.removed} removed).`,
+  };
 }
 
 // ============================================================
 // Teams
 // ============================================================
-
-export async function createTeam(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
-
-  const name = (formData.get('name') as string)?.trim();
-  if (!name || name.length > 100) return;
-
-  const { data: created, error } = await supabase
-    .from('teams')
-    .insert({ name })
-    .select('id')
-    .single();
-
-  if (error) return;
-
-  await logAudit(supabase, profile.id, 'create_team', 'team', created?.id, { name });
-  revalidatePath('/admin/teams');
-}
-
-export async function renameTeam(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
-
-  const teamId = formData.get('team_id') as string;
-  const newName = (formData.get('name') as string)?.trim();
-  if (!teamId || !newName || newName.length > 100) return;
-
-  const { error } = await supabase
-    .from('teams')
-    .update({ name: newName })
-    .eq('id', teamId);
-
-  if (error) return;
-
-  await logAudit(supabase, profile.id, 'rename_team', 'team', teamId, { name: newName });
-  revalidatePath('/admin/teams');
-}
-
-export async function deleteTeam(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
-
-  const teamId = formData.get('team_id') as string;
-  if (!teamId) return;
-
-  const { data: existing } = await supabase.from('teams').select('name').eq('id', teamId).single();
-
-  // Check for members
-  const { count } = await supabase
-    .from('profiles')
-    .select('id', { count: 'exact', head: true })
-    .eq('team_id', teamId);
-
-  if (count && count > 0) return;
-
-  const { error } = await supabase
-    .from('teams')
-    .delete()
-    .eq('id', teamId);
-
-  if (error) return;
-
-  await logAudit(supabase, profile.id, 'delete_team', 'team', teamId, { name: existing?.name });
-  revalidatePath('/admin/teams');
-}
 
 export async function addTeamMember(formData: FormData): Promise<void> {
   const { supabase, profile } = await requireAdminRole();
@@ -368,23 +628,7 @@ export async function removeTeamMember(formData: FormData): Promise<void> {
 // ============================================================
 // Audit Log Helper
 // ============================================================
-
-async function logAudit(
-  supabase: Awaited<ReturnType<typeof createServerClient>>,
-  adminId: string,
-  action: string,
-  targetType: string,
-  targetId?: string | null,
-  details?: Record<string, unknown>,
-) {
-  await supabase.from('admin_audit_log').insert({
-    admin_id: adminId,
-    action,
-    target_type: targetType,
-    target_id: targetId ?? null,
-    details: details ?? {},
-  });
-}
+// (Moved to ./_admin-helpers)
 
 // ============================================================
 // Agent & Admin Management (§16.6)
@@ -538,215 +782,7 @@ export async function searchUserByEmail(formData: FormData) {
 // ============================================================
 // Custom Fields Management (§16.14)
 // ============================================================
-
-export async function createCustomField(formData: FormData): Promise<void> {
-  const { supabase, profile: adminProfile } = await requireAdminRole();
-
-  const name = (formData.get('name') as string)?.trim();
-  const fieldType = formData.get('field_type') as string;
-  const isRequired = formData.get('is_required') === 'on';
-  const defaultValue = (formData.get('default_value') as string)?.trim() || null;
-  const optionsRaw = (formData.get('options') as string)?.trim();
-
-  if (!name || name.length > 100) return;
-  if (!['text', 'number', 'dropdown', 'checkbox', 'date'].includes(fieldType)) return;
-  if (isRequired && !defaultValue && fieldType !== 'checkbox') return;
-  if (fieldType === 'dropdown' && !optionsRaw) return;
-
-  const options = fieldType === 'dropdown'
-    ? optionsRaw!.split('\n').map((o) => o.trim()).filter(Boolean)
-    : null;
-
-  if (fieldType === 'dropdown' && options && defaultValue && !options.includes(defaultValue)) return;
-
-  // Get max display_order
-  const { data: maxField } = await supabase
-    .from('custom_fields')
-    .select('display_order')
-    .order('display_order', { ascending: false })
-    .limit(1)
-    .single();
-
-  const nextOrder = (maxField?.display_order ?? -1) + 1;
-
-  const { data: field, error } = await supabase
-    .from('custom_fields')
-    .insert({
-      name,
-      field_type: fieldType,
-      is_required: isRequired,
-      default_value: defaultValue,
-      options,
-      display_order: nextOrder,
-    })
-    .select('id')
-    .single();
-
-  if (error) return;
-
-  await logAudit(supabase, adminProfile.id, 'create_custom_field', 'custom_field', field?.id, {
-    name,
-    field_type: fieldType,
-  });
-
-  revalidatePath('/admin/custom-fields');
-}
-
-export async function updateCustomField(formData: FormData): Promise<void> {
-  const { supabase, profile: adminProfile } = await requireAdminRole();
-
-  const fieldId = formData.get('field_id') as string;
-  const name = (formData.get('name') as string)?.trim();
-  const fieldType = formData.get('field_type') as string;
-  const isRequired = formData.get('is_required') === 'on';
-  const defaultValue = (formData.get('default_value') as string)?.trim() || null;
-  const optionsRaw = (formData.get('options') as string)?.trim();
-
-  if (!fieldId || !name || name.length > 100) return;
-  if (!['text', 'number', 'dropdown', 'checkbox', 'date'].includes(fieldType)) return;
-  if (isRequired && !defaultValue && fieldType !== 'checkbox') return;
-  if (fieldType === 'dropdown' && !optionsRaw) return;
-
-  const options = fieldType === 'dropdown'
-    ? optionsRaw!.split('\n').map((o) => o.trim()).filter(Boolean)
-    : null;
-
-  if (fieldType === 'dropdown' && options && defaultValue && !options.includes(defaultValue)) return;
-
-  // Get old field for rename tracking
-  const { data: oldField } = await supabase
-    .from('custom_fields')
-    .select('name')
-    .eq('id', fieldId)
-    .single();
-
-  const { error } = await supabase
-    .from('custom_fields')
-    .update({
-      name,
-      field_type: fieldType,
-      is_required: isRequired,
-      default_value: defaultValue,
-      options,
-    })
-    .eq('id', fieldId);
-
-  if (error) return;
-
-  // If name changed, update all tickets' custom_fields JSONB keys
-  if (oldField && oldField.name !== name) {
-    const serviceClient = createServiceRoleClient();
-    const { data: tickets } = await serviceClient
-      .from('tickets')
-      .select('id, custom_fields')
-      .not('custom_fields', 'is', null);
-
-    if (tickets) {
-      for (const ticket of tickets) {
-        const cf = ticket.custom_fields as Record<string, unknown>;
-        if (cf && oldField.name in cf) {
-          const newCf = { ...cf };
-          newCf[name] = newCf[oldField.name];
-          delete newCf[oldField.name];
-          await serviceClient
-            .from('tickets')
-            .update({ custom_fields: newCf })
-            .eq('id', ticket.id);
-        }
-      }
-    }
-  }
-
-  await logAudit(supabase, adminProfile.id, 'update_custom_field', 'custom_field', fieldId, {
-    name,
-    field_type: fieldType,
-  });
-
-  revalidatePath('/admin/custom-fields');
-}
-
-export async function deleteCustomField(formData: FormData): Promise<void> {
-  const { supabase, profile: adminProfile } = await requireAdminRole();
-
-  const fieldId = formData.get('field_id') as string;
-  if (!fieldId) return;
-
-  const { data: field } = await supabase
-    .from('custom_fields')
-    .select('name')
-    .eq('id', fieldId)
-    .single();
-  if (!field) return;
-
-  // Remove field key from all tickets' custom_fields JSONB
-  const serviceClient = createServiceRoleClient();
-  const { data: tickets } = await serviceClient
-    .from('tickets')
-    .select('id, custom_fields')
-    .not('custom_fields', 'is', null);
-
-  if (tickets) {
-    for (const ticket of tickets) {
-      const cf = ticket.custom_fields as Record<string, unknown>;
-      if (cf && field.name in cf) {
-        const newCf = { ...cf };
-        delete newCf[field.name];
-        await serviceClient
-          .from('tickets')
-          .update({ custom_fields: newCf })
-          .eq('id', ticket.id);
-      }
-    }
-  }
-
-  const { error } = await supabase
-    .from('custom_fields')
-    .delete()
-    .eq('id', fieldId);
-  if (error) return;
-
-  await logAudit(supabase, adminProfile.id, 'delete_custom_field', 'custom_field', fieldId, {
-    name: field.name,
-  });
-
-  revalidatePath('/admin/custom-fields');
-}
-
-export async function reorderCustomField(formData: FormData): Promise<void> {
-  const { supabase } = await requireAdminRole();
-
-  const fieldId = formData.get('field_id') as string;
-  const direction = formData.get('direction') as string;
-  if (!fieldId || !['up', 'down'].includes(direction)) return;
-
-  const { data: fields } = await supabase
-    .from('custom_fields')
-    .select('id, display_order')
-    .order('display_order');
-
-  if (!fields) return;
-
-  const idx = fields.findIndex((f) => f.id === fieldId);
-  if (idx === -1) return;
-
-  const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
-  if (swapIdx < 0 || swapIdx >= fields.length) return;
-
-  const currentOrder = fields[idx].display_order;
-  const swapOrder = fields[swapIdx].display_order;
-
-  await supabase
-    .from('custom_fields')
-    .update({ display_order: swapOrder })
-    .eq('id', fields[idx].id);
-
-  await supabase
-    .from('custom_fields')
-    .update({ display_order: currentOrder })
-    .eq('id', fields[swapIdx].id);
-
-  revalidatePath('/admin/custom-fields');
-}
+// Per-row CRUD actions removed in favour of bulk `saveCustomFields`.
 
 // ============================================================
 // Privacy Settings (§16.10)
@@ -889,6 +925,65 @@ export async function resetNotificationTemplate(formData: FormData): Promise<voi
 
   revalidatePath('/admin/templates');
   revalidatePath('/admin/duplicate-template');
+}
+
+export async function saveNotificationTemplates(formData: FormData): Promise<{ message?: string }> {
+  const { supabase, profile: adminProfile } = await requireAdminRole();
+  const { DEFAULT_TEMPLATES } = await import('@/lib/constants/notification-templates');
+
+  const raw = formData.get('templates');
+  if (typeof raw !== 'string' || raw.length === 0) {
+    return { message: 'No templates submitted.' };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { message: 'Invalid templates payload.' };
+  }
+  if (!Array.isArray(parsed)) {
+    return { message: 'Invalid templates payload.' };
+  }
+
+  type Row = { event_type: string; subject: string; body: string };
+  const rows: Row[] = [];
+  for (const entry of parsed) {
+    if (!entry || typeof entry !== 'object') continue;
+    const r = entry as Record<string, unknown>;
+    const eventType = typeof r.event_type === 'string' ? r.event_type : '';
+    const subject = typeof r.subject === 'string' ? r.subject.trim() : '';
+    const body = typeof r.body === 'string' ? r.body.trim() : '';
+    if (!eventType || !DEFAULT_TEMPLATES[eventType]) continue;
+    if (!subject || !body) continue;
+    rows.push({ event_type: eventType, subject, body });
+  }
+
+  if (rows.length === 0) {
+    return { message: 'No valid templates to save.' };
+  }
+
+  const updatedAt = new Date().toISOString();
+  for (const row of rows) {
+    await supabase
+      .from('notification_templates')
+      .update({ subject: row.subject, body: row.body, is_customized: true, updated_at: updatedAt })
+      .eq('event_type', row.event_type);
+  }
+
+  await logAudit(
+    supabase,
+    adminProfile.id,
+    'update_notification_templates_bulk',
+    'notification_template',
+    null,
+    { count: rows.length },
+  );
+
+  revalidatePath('/admin/templates');
+  revalidatePath('/admin/duplicate-template');
+
+  return { message: 'Templates saved.' };
 }
 
 // ============================================================
@@ -1459,7 +1554,7 @@ export async function updateBusinessHours(formData: FormData): Promise<void> {
   const schedule: Record<string, { start: string; end: string } | null> = {};
 
   for (const day of days) {
-    const enabled = formData.get(`${day}_enabled`) === 'true';
+    const enabled = formData.get(`${day}_enabled`) === 'on';
     if (enabled) {
       const start = (formData.get(`${day}_start`) as string) || '09:00';
       const end = (formData.get(`${day}_end`) as string) || '17:00';
@@ -1495,101 +1590,6 @@ export async function updateSlaThreshold(formData: FormData): Promise<void> {
   await logAudit(supabase, adminProfile.id, 'update_sla_threshold', 'app_settings', null, { threshold });
 
   revalidatePath('/admin/sla');
-}
-
-// ============================================================
-// KB Categories (§19)
-// ============================================================
-
-export async function createKbCategory(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
-
-  const name = (formData.get('name') as string)?.trim();
-  if (!name || name.length > 100) return;
-
-  // Determine next display_order
-  const { data: maxRow } = await supabase
-    .from('kb_categories')
-    .select('display_order')
-    .order('display_order', { ascending: false })
-    .limit(1)
-    .single();
-
-  const nextOrder = (maxRow?.display_order ?? 0) + 1;
-
-  const { data: created, error } = await supabase
-    .from('kb_categories')
-    .insert({ name, display_order: nextOrder })
-    .select('id')
-    .single();
-
-  if (error) return;
-
-  await logAudit(supabase, profile.id, 'create_kb_category', 'kb_category', created?.id, { name });
-  revalidatePath('/admin/kb-categories');
-}
-
-export async function renameKbCategory(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
-
-  const categoryId = formData.get('category_id') as string;
-  const newName = (formData.get('name') as string)?.trim();
-  if (!categoryId || !newName || newName.length > 100) return;
-
-  const { error } = await supabase
-    .from('kb_categories')
-    .update({ name: newName })
-    .eq('id', categoryId);
-
-  if (error) return;
-
-  await logAudit(supabase, profile.id, 'rename_kb_category', 'kb_category', categoryId, { name: newName });
-  revalidatePath('/admin/kb-categories');
-}
-
-export async function reorderKbCategories(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
-
-  const orderedIdsRaw = formData.get('ordered_ids') as string;
-  if (!orderedIdsRaw) return;
-
-  let orderedIds: string[];
-  try {
-    orderedIds = JSON.parse(orderedIdsRaw);
-  } catch {
-    return;
-  }
-
-  if (!Array.isArray(orderedIds) || orderedIds.length === 0) return;
-
-  for (let i = 0; i < orderedIds.length; i++) {
-    await supabase
-      .from('kb_categories')
-      .update({ display_order: i + 1 })
-      .eq('id', orderedIds[i]);
-  }
-
-  await logAudit(supabase, profile.id, 'reorder_kb_categories', 'kb_category', null, { orderedIds });
-  revalidatePath('/admin/kb-categories');
-}
-
-export async function deleteKbCategory(formData: FormData): Promise<void> {
-  const { supabase, profile } = await requireAdminRole();
-
-  const categoryId = formData.get('category_id') as string;
-  if (!categoryId) return;
-
-  const { data: existing } = await supabase.from('kb_categories').select('name').eq('id', categoryId).single();
-
-  const { error } = await supabase
-    .from('kb_categories')
-    .delete()
-    .eq('id', categoryId);
-
-  if (error) return;
-
-  await logAudit(supabase, profile.id, 'delete_kb_category', 'kb_category', categoryId, { name: existing?.name });
-  revalidatePath('/admin/kb-categories');
 }
 
 // ============================================================

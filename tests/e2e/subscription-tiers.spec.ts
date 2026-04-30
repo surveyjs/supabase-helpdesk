@@ -41,6 +41,16 @@ async function gotoAdmin(page: Page, path: string) {
 test.describe('Subscription Tiers', () => {
   test.describe.configure({ mode: 'serial' });
 
+  test.beforeAll(async () => {
+    const svc = createServiceRoleClient();
+    await svc.from('subscription_tiers').delete().ilike('key', 'e2e%');
+  });
+
+  test.afterAll(async () => {
+    const svc = createServiceRoleClient();
+    await svc.from('subscription_tiers').delete().ilike('key', 'e2e%');
+  });
+
   // ── Admin tiers page ────────────────────────────
 
   test('admin sees Subscription Tiers link in sidebar', async ({ page }) => {
@@ -55,46 +65,79 @@ test.describe('Subscription Tiers', () => {
     await expect(page.getByRole('heading', { name: 'Subscription Tiers' })).toBeVisible({ timeout: 10000 });
   });
 
-  test('admin sees seeded tiers in the table', async ({ page }) => {
+  test('admin sees seeded tiers in the matrix', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/tiers');
 
-    // The seeded tiers from seed.sql: free, licensed, enterprise
-    await expect(page.getByTestId('tier-row-free')).toBeVisible({ timeout: 10000 });
-    await expect(page.getByTestId('tier-row-licensed')).toBeVisible();
-    await expect(page.getByTestId('tier-row-enterprise')).toBeVisible();
+    const survey = page.getByTestId('tiers-survey-form');
+    await expect(survey).toBeVisible({ timeout: 10000 });
+    // The seeded tiers from seed.sql: free, licensed, enterprise.
+    // Use exact match to disambiguate from Display Name (Free vs free).
+    await expect(survey.getByRole('cell', { name: 'free', exact: true })).toBeVisible({ timeout: 10000 });
+    await expect(survey.getByRole('cell', { name: 'licensed', exact: true })).toBeVisible();
+    await expect(survey.getByRole('cell', { name: 'enterprise', exact: true })).toBeVisible();
   });
 
   test('admin can create a new tier', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/tiers');
 
-    await page.locator('#tier-key').fill('e2e-test-tier');
-    await page.locator('#tier-display-name').fill('E2E Test Tier');
-    await page.locator('#tier-color').selectOption('green');
-    await page.locator('#tier-icon').fill('🧪');
+    const survey = page.getByTestId('tiers-survey-form');
+    await expect(survey).toBeVisible({ timeout: 10000 });
 
-    // Enable one capability (scope to create form via its unique input)
-    const createForm = page.locator('form', { has: page.locator('#tier-key') });
-    await createForm.getByLabel('Change Visibility').check();
+    // Wait until existing seeded rows are rendered before snapshotting count.
+    await expect(survey.getByRole('cell', { name: 'free', exact: true })).toBeVisible({
+      timeout: 10000,
+    });
+    const textInputsBefore = await survey.locator('input[type="text"]').count();
+    await survey.getByText('Add Tier', { exact: true }).click();
+    // After Add Tier, two new text inputs (key + display_name) should appear.
+    await expect(survey.locator('input[type="text"]')).toHaveCount(textInputsBefore + 2, {
+      timeout: 5000,
+    });
 
-    await page.getByRole('button', { name: 'Create Tier' }).click();
+    const textInputs = survey.locator('input[type="text"]');
+    const total = await textInputs.count();
+    await textInputs.nth(total - 2).fill('e2e-test-tier');
+    await textInputs.nth(total - 1).fill('E2E Test Tier');
 
-    // New tier should appear
-    await expect(page.getByTestId('tier-row-e2e-test-tier')).toBeVisible({ timeout: 10000 });
+    await page.getByRole('button', { name: 'Complete' }).click();
+    // Wait for the success message rendered by AdminSurveyForm.
+    const liveMsg = page.getByText(/Tiers saved|Error:/);
+    await expect(liveMsg).toBeVisible({ timeout: 15000 });
+    const msgText = (await liveMsg.textContent()) ?? '';
+    if (msgText.startsWith('Error:')) {
+      throw new Error(`saveTiers returned an error: ${msgText}`);
+    }
+
+    await gotoAdmin(page, '/admin/tiers');
+    // After creation the matrix should have 4 remove buttons (3 seeded + 1 new).
+    await expect(
+      page.getByTestId('tiers-survey-form').locator('.sd-matrixdynamic__remove-btn'),
+    ).toHaveCount(4, { timeout: 10000 });
   });
 
   test('admin can delete the test tier', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/tiers');
 
-    // Wait for tier to be visible
-    await expect(page.getByTestId('tier-row-e2e-test-tier')).toBeVisible({ timeout: 10000 });
+    const survey = page.getByTestId('tiers-survey-form');
+    await expect(survey).toBeVisible({ timeout: 10000 });
 
-    await page.getByTestId('delete-tier-e2e-test-tier').click();
+    // Wait until tier rows are populated.
+    await expect(survey.locator('.sd-matrixdynamic__remove-btn')).toHaveCount(4, { timeout: 10000 });
 
-    // After page reload, tier should be gone
-    await expect(page.getByTestId('tier-row-e2e-test-tier')).not.toBeVisible({ timeout: 10000 });
+    // The e2e-test-tier was added last (highest sort_order). Remove the last row.
+    await survey.locator('.sd-matrixdynamic__remove-btn').last().click();
+
+    await page.getByRole('button', { name: 'Complete' }).click();
+    await expect(page.getByText(/Tiers saved|Error:/)).toBeVisible({ timeout: 15000 });
+
+    await gotoAdmin(page, '/admin/tiers');
+    // After deletion the matrix should have only 3 remove buttons (the seeded tiers).
+    await expect(
+      page.getByTestId('tiers-survey-form').locator('.sd-matrixdynamic__remove-btn'),
+    ).toHaveCount(3, { timeout: 10000 });
   });
 
   // ── External API settings ────────────────────────

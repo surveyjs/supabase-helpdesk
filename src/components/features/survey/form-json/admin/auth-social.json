@@ -1,0 +1,52 @@
+{
+  "showQuestionNumbers": "off",
+  "pages": [
+    {
+      "elements": [
+        {
+          "type": "panel",
+          "name": "social_provider_panel",
+          "elements": [
+            {
+              "type": "text",
+              "name": "provider",
+              "title": "Provider",
+              "isRequired": true,
+              "readOnly": true
+            },
+            {
+              "type": "boolean",
+              "name": "enabled",
+              "title": "Enabled",
+              "renderAs": "checkbox"
+            },
+            {
+              "type": "text",
+              "name": "client_id",
+              "title": "Client ID"
+            },
+            {
+              "type": "text",
+              "name": "client_secret",
+              "title": "Client Secret",
+              "inputType": "password"
+            },
+            {
+              "type": "text",
+              "name": "tenant_id",
+              "title": "Tenant ID",
+              "visibleIf": "{provider} = 'microsoft'"
+            },
+            {
+              "type": "text",
+              "name": "instance_url",
+              "title": "Instance URL (optional, for self-hosted)",
+              "inputType": "url",
+              "visibleIf": "{provider} = 'gitlab'"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -135,8 +135,10 @@ test.describe('Auth External', () => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/auth');
 
-    const secretInput = page.getByTestId('google-client-secret');
-    await expect(secretInput).toHaveAttribute('type', 'password');
+    // Within the google provider survey wrapper, the secret input has type=password.
+    const googleCard = page.getByTestId('social-provider-google');
+    const secretInput = googleCard.locator('input[type="password"]').first();
+    await expect(secretInput).toBeVisible();
   });
 
   test('switching to external mode shows confirmation', async ({ page }) => {
@@ -193,7 +195,10 @@ test.describe('Auth External', () => {
       await page.getByTestId('confirm-mode-switch').click();
     }
 
-    await expect(page.getByTestId('auto-redirect-toggle')).toBeVisible();
+    // SurveyJS renders the boolean question with the label "Auto-redirect to external provider".
+    await expect(
+      page.getByText('Auto-redirect to external provider'),
+    ).toBeVisible({ timeout: 10000 });
   });
 
   test('external client secret field masks input', async ({ page }) => {
@@ -206,8 +211,9 @@ test.describe('Auth External', () => {
       await page.getByTestId('confirm-mode-switch').click();
     }
 
-    const secretInput = page.getByTestId('external-client-secret');
-    await expect(secretInput).toHaveAttribute('type', 'password');
+    const survey = page.getByTestId('external-provider-survey');
+    const secretInput = survey.locator('input[type="password"]').first();
+    await expect(secretInput).toBeVisible();
   });
 
   test('test connection button is present for external provider', async ({ page }) => {

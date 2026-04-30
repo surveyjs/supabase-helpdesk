@@ -2,6 +2,11 @@ import { test, expect, Page } from '@playwright/test';
 import { createServiceRoleClient } from '../helpers/supabase';
 import crypto from 'crypto';
 
+// Multiple describes in this file mutate the same `app_settings` rows
+// (`csat_enabled`, `csat_survey_delay`). Under `fullyParallel: true` they
+// race across workers, so force file-level serial execution.
+test.describe.configure({ mode: 'serial' });
+
 /**
  * Helper: log in via the login form.
  */

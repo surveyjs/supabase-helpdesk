@@ -225,33 +225,48 @@ test.describe('Admin Types Management', () => {
     await gotoAdmin(page, '/admin/types');
 
     await expect(page.getByRole('heading', { name: 'Manage Ticket Types' })).toBeVisible();
-    await expect(page.getByText('Question')).toBeVisible();
-    await expect(page.getByText('Issue')).toBeVisible();
-    await expect(page.getByText('Suggestion')).toBeVisible();
+    await expect(page.getByTestId('types-survey-form')).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'Question' })).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'Issue' })).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'Suggestion' })).toBeVisible();
     await expect(page.getByText('(default)')).toBeVisible();
   });
 
-  test('admin can create a new ticket type', async ({ page }) => {
+  test('admin can create and delete a ticket type', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/types');
+    await expect(page.getByTestId('types-survey-form')).toBeVisible();
 
-    await page.locator('#new-type-name').fill('E2E Test Type');
     await page.getByRole('button', { name: 'Add Type' }).click();
-    await page.waitForTimeout(2000);
+    const nameInputs = page.locator('input[aria-label*="Name"]');
+    const nameCount = await nameInputs.count();
+    await nameInputs.nth(nameCount - 1).fill('E2E Test Type');
 
-    await expect(page.getByText('E2E Test Type')).toBeVisible();
-  });
+    let savePromise = page.waitForResponse(
+      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
+      { timeout: 15000 },
+    );
+    await page.getByRole('button', { name: 'Complete' }).click();
+    await savePromise;
 
-  test('admin can delete a type', async ({ page }) => {
-    await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/types');
+    await expect(page.getByRole('cell', { name: 'E2E Test Type' })).toBeVisible({ timeout: 10000 });
 
-    // Delete the E2E Test Type
-    const row = page.locator('li').filter({ hasText: 'E2E Test Type' });
-    await row.getByRole('button', { name: /Delete/ }).click();
-    await page.waitForTimeout(2000);
+    // Delete via matrix row Delete button.
+    const row = page
+      .locator('tr')
+      .filter({ has: page.getByRole('cell', { name: 'E2E Test Type' }) })
+      .first();
+    await row.getByRole('button', { name: 'Delete' }).click();
+    savePromise = page.waitForResponse(
+      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
+      { timeout: 15000 },
+    );
+    await page.getByRole('button', { name: 'Complete' }).click();
+    await savePromise;
 
-    await expect(page.getByText('E2E Test Type')).not.toBeVisible();
+    await gotoAdmin(page, '/admin/types');
+    await expect(page.getByRole('cell', { name: 'E2E Test Type' })).toHaveCount(0);
   });
 
   test('admin can set default type', async ({ page }) => {
@@ -259,23 +274,21 @@ test.describe('Admin Types Management', () => {
     await gotoAdmin(page, '/admin/types');
     await expect(page.getByRole('heading', { name: /Types/ })).toBeVisible({ timeout: 10000 });
 
-    // Issue should have a "Set Default" button
+    // Issue should have a "Set Default" button (rendered below the matrix in the Default Ticket Type card)
     const issueRow = page.locator('li').filter({ hasText: 'Issue' });
     const setDefaultBtn = issueRow.getByRole('button', { name: 'Set Default' });
     if (await setDefaultBtn.isVisible()) {
       await setDefaultBtn.click();
-      // Wait for the "Default" badge to appear confirming the action
-      await expect(issueRow.getByText('Default')).toBeVisible({ timeout: 10000 });
+      await expect(issueRow.getByText('(default)')).toBeVisible({ timeout: 10000 });
     }
 
     // Restore Question as default
     await gotoAdmin(page, '/admin/types');
-    await expect(page.getByRole('heading', { name: /Types/ })).toBeVisible({ timeout: 10000 });
     const questionRow = page.locator('li').filter({ hasText: 'Question' });
     const restoreBtn = questionRow.getByRole('button', { name: 'Set Default' });
     if (await restoreBtn.isVisible()) {
       await restoreBtn.click();
-      await expect(questionRow.getByText('Default')).toBeVisible({ timeout: 10000 });
+      await expect(questionRow.getByText('(default)')).toBeVisible({ timeout: 10000 });
     }
   });
 });
@@ -293,21 +306,38 @@ test.describe('Admin Categories Management', () => {
   test('admin can create and delete a category', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/categories');
+    await expect(page.getByTestId('categories-survey-form')).toBeVisible();
 
-    await expect(page.getByRole('heading', { name: 'Manage Categories' })).toBeVisible({ timeout: 10000 });
-
-    await page.locator('#new-category-name').fill('E2E Test Category');
     await page.getByRole('button', { name: 'Add Category' }).click();
-    await page.waitForTimeout(2000);
+    const nameInputs = page.locator('input[aria-label*="Name"]');
+    const nameCount = await nameInputs.count();
+    await nameInputs.nth(nameCount - 1).fill('E2E Test Category');
 
-    await expect(page.getByText('E2E Test Category')).toBeVisible();
+    let savePromise = page.waitForResponse(
+      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
+      { timeout: 15000 },
+    );
+    await page.getByRole('button', { name: 'Complete' }).click();
+    await savePromise;
 
-    // Delete it
-    const row = page.locator('li').filter({ hasText: 'E2E Test Category' });
-    await row.getByRole('button', { name: /Delete/ }).click();
-    await page.waitForTimeout(2000);
+    await gotoAdmin(page, '/admin/categories');
+    await expect(page.getByRole('cell', { name: 'E2E Test Category' })).toBeVisible({ timeout: 10000 });
 
-    await expect(page.getByText('E2E Test Category')).not.toBeVisible();
+    const row = page
+      .locator('tr')
+      .filter({ has: page.getByRole('cell', { name: 'E2E Test Category' }) })
+      .first();
+    await row.getByRole('button', { name: 'Delete' }).click();
+
+    savePromise = page.waitForResponse(
+      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
+      { timeout: 15000 },
+    );
+    await page.getByRole('button', { name: 'Complete' }).click();
+    await savePromise;
+
+    await gotoAdmin(page, '/admin/categories');
+    await expect(page.getByRole('cell', { name: 'E2E Test Category' })).toHaveCount(0);
   });
 });
 
@@ -319,27 +349,58 @@ test.describe('Admin Tags Management', () => {
     await gotoAdmin(page, '/admin/tags');
 
     await expect(page.getByRole('heading', { name: 'Manage Tags' })).toBeVisible();
-    await expect(page.getByText('urgent')).toBeVisible();
-    await expect(page.getByText('bug')).toBeVisible();
+    await expect(page.getByTestId('tags-survey-form')).toBeVisible();
+    // Existing seed tags appear as readable text in matrix cells.
+    await expect(page.getByRole('cell', { name: 'urgent' })).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'bug' })).toBeVisible();
   });
 
   test('admin can create a tag with color and delete it', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/tags');
 
-    await page.locator('#new-tag-name').fill('e2e-test-tag');
-    // Color input — just submit with default
+    await expect(page.getByTestId('tags-survey-form')).toBeVisible();
+
+    // Add a row via SurveyJS matrixdynamic.
     await page.getByRole('button', { name: 'Add Tag' }).click();
-    await page.waitForTimeout(2000);
 
-    await expect(page.getByText('e2e-test-tag')).toBeVisible();
+    // Fill the new (last) row's Name cell. SurveyJS labels cells by row index.
+    const nameInputs = page.locator('input[aria-label*="Name"]');
+    const nameCount = await nameInputs.count();
+    await nameInputs.nth(nameCount - 1).fill('e2e-test-tag');
 
-    // Delete it
-    const row = page.locator('li').filter({ hasText: 'e2e-test-tag' });
-    await row.getByRole('button', { name: /Delete/ }).click();
-    await page.waitForTimeout(2000);
+    // Set color on the new row to a valid #RRGGBB hex.
+    const colorInputs = page.locator('input[type="color"]');
+    const colorCount = await colorInputs.count();
+    await colorInputs.nth(colorCount - 1).fill('#123456');
 
-    await expect(page.getByText('e2e-test-tag')).not.toBeVisible();
+    // Save by clicking the SurveyJS Complete button.
+    let savePromise = page.waitForResponse(
+      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
+      { timeout: 15000 },
+    );
+    await page.getByRole('button', { name: 'Complete' }).click();
+    await savePromise;
+
+    await gotoAdmin(page, '/admin/tags');
+    await expect(page.getByRole('cell', { name: 'e2e-test-tag' })).toBeVisible({ timeout: 10000 });
+
+    // Delete via the matrix's row Remove button. SurveyJS uses 'Delete' as removeRowText.
+    const row = page
+      .locator('tr')
+      .filter({ has: page.getByRole('cell', { name: 'e2e-test-tag' }) })
+      .first();
+    await row.getByRole('button', { name: 'Delete' }).click();
+
+    savePromise = page.waitForResponse(
+      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
+      { timeout: 15000 },
+    );
+    await page.getByRole('button', { name: 'Complete' }).click();
+    await savePromise;
+
+    await gotoAdmin(page, '/admin/tags');
+    await expect(page.getByRole('cell', { name: 'e2e-test-tag' })).toHaveCount(0);
   });
 });
 
@@ -351,29 +412,29 @@ test.describe('Admin Teams Management', () => {
     await gotoAdmin(page, '/admin/teams');
 
     await expect(page.getByRole('heading', { name: 'Manage Teams' })).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText("Alice's Team")).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('teams-survey-form')).toBeVisible();
+    await expect(page.getByRole('cell', { name: "Alice's Team" })).toBeVisible({ timeout: 10000 });
   });
 
   test('admin can create a team', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/teams');
-    await expect(page.getByRole('heading', { name: /Teams/ })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('teams-survey-form')).toBeVisible();
 
-    // Wait for the form input to be ready
-    await expect(page.locator('#new-team-name')).toBeVisible({ timeout: 10000 });
-    await page.locator('#new-team-name').fill('E2E Test Team');
+    await page.getByRole('button', { name: 'Add Team' }).click();
+    const nameInputs = page.locator('input[aria-label*="Name"]');
+    const nameCount = await nameInputs.count();
+    await nameInputs.nth(nameCount - 1).fill('E2E Test Team');
 
-    // Wait for the server action to complete
     const responsePromise = page.waitForResponse(
       (resp) => resp.request().method() === 'POST' && resp.status() < 400,
       { timeout: 15000 },
     );
-    await page.getByRole('button', { name: 'Create Team' }).click();
+    await page.getByRole('button', { name: 'Complete' }).click();
     await responsePromise;
 
-    // Reload to get fresh server-rendered page after revalidatePath
     await gotoAdmin(page, '/admin/teams');
-    await expect(page.getByText('E2E Test Team')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('cell', { name: 'E2E Test Team' })).toBeVisible({ timeout: 10000 });
   });
 
   test('admin can add member to team', async ({ page }) => {
@@ -381,50 +442,70 @@ test.describe('Admin Teams Management', () => {
     await gotoAdmin(page, '/admin/teams');
     await expect(page.getByRole('heading', { name: 'Teams' })).toBeVisible({ timeout: 10000 });
 
-    // Find the E2E Test Team section and add Dave
-    const teamSection = page.locator('div.bg-white').filter({ hasText: 'E2E Test Team' });
+    // Find the E2E Test Team section in the Members area and add Dave
+    const teamSection = page.locator('div.bg-white').filter({ hasText: 'E2E Test Team' }).last();
     await teamSection.getByPlaceholder('user@example.com').fill('dave@example.com');
     await teamSection.getByRole('button', { name: 'Add' }).click();
 
-    // Wait for Dave to appear after the server action revalidates the page
     await expect(
-      page.locator('div.bg-white').filter({ hasText: 'E2E Test Team' }).getByText('Dave', { exact: true })
+      page.locator('div.bg-white').filter({ hasText: 'E2E Test Team' }).last().getByText('Dave', { exact: true })
     ).toBeVisible({ timeout: 15000 });
   });
 
   test('admin cannot delete team with members', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/teams');
-    await expect(page.getByText('E2E Test Team')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('cell', { name: 'E2E Test Team' })).toBeVisible({ timeout: 10000 });
 
-    const teamSection = page.locator('div.bg-white').filter({ hasText: 'E2E Test Team' });
-    const responsePromise = page.waitForResponse(resp => resp.request().method() === 'POST');
-    await teamSection.getByRole('button', { name: /Delete E2E/ }).click();
+    // Try to delete via matrix
+    const row = page
+      .locator('tr')
+      .filter({ has: page.getByRole('cell', { name: 'E2E Test Team' }) })
+      .first();
+    await row.getByRole('button', { name: 'Delete' }).click();
+
+    const responsePromise = page.waitForResponse(
+      (resp) => resp.request().method() === 'POST',
+      { timeout: 15000 },
+    );
+    await page.getByRole('button', { name: 'Complete' }).click();
     await responsePromise;
 
-    // Team should still be there (server action silently refuses to delete team with members)
-    await expect(page.getByText('E2E Test Team')).toBeVisible({ timeout: 10000 });
+    // Server action should refuse and the team should still be present after reload
+    await gotoAdmin(page, '/admin/teams');
+    await expect(page.getByRole('cell', { name: 'E2E Test Team' })).toBeVisible({ timeout: 10000 });
   });
 
   test('admin can remove member and delete empty team', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/teams');
 
-    const teamSection = page.locator('div.bg-white').filter({ hasText: 'E2E Test Team' });
+    const teamSection = page.locator('div.bg-white').filter({ hasText: 'E2E Test Team' }).last();
 
-    // Remove Dave — wait for the member to disappear
-    await teamSection.getByRole('button', { name: /Remove/ }).click();
+    // Remove Dave
+    await teamSection.getByRole('button', { name: /Remove Dave/ }).click();
     await expect(
-      page.locator('div.bg-white').filter({ hasText: 'E2E Test Team' }).getByText('Dave', { exact: true })
+      page.locator('div.bg-white').filter({ hasText: 'E2E Test Team' }).last().getByText('Dave', { exact: true })
     ).not.toBeVisible({ timeout: 10000 });
 
-    // Delete the now-empty team
+    // Now delete the now-empty team via the matrix.
     await gotoAdmin(page, '/admin/teams');
-    await expect(page.getByText('E2E Test Team')).toBeVisible({ timeout: 10000 });
-    const updatedTeamSection = page.locator('div.bg-white').filter({ hasText: 'E2E Test Team' });
-    await updatedTeamSection.getByRole('button', { name: /Delete E2E/ }).click();
+    await expect(page.getByRole('cell', { name: 'E2E Test Team' })).toBeVisible({ timeout: 10000 });
+    const row = page
+      .locator('tr')
+      .filter({ has: page.getByRole('cell', { name: 'E2E Test Team' }) })
+      .first();
+    await row.getByRole('button', { name: 'Delete' }).click();
 
-    await expect(page.getByText('E2E Test Team')).not.toBeVisible({ timeout: 10000 });
+    const savePromise = page.waitForResponse(
+      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
+      { timeout: 15000 },
+    );
+    await page.getByRole('button', { name: 'Complete' }).click();
+    await savePromise;
+
+    await gotoAdmin(page, '/admin/teams');
+    await expect(page.getByRole('cell', { name: 'E2E Test Team' })).toHaveCount(0);
   });
 });
 

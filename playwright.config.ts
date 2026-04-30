@@ -29,7 +29,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'node tests/e2e/run-server.js',
+    command: 'node tests/e2e/run-server.mjs',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     stdout: 'pipe',

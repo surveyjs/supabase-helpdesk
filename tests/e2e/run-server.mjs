@@ -5,10 +5,12 @@
  * `server.log` (in repo root) so we can post-mortem `next start` crashes
  * that happen mid-test-run. Playwright still sees the original stream.
  */
-const { spawn } = require('node:child_process');
-const fs = require('node:fs');
-const path = require('node:path');
+import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const logPath = path.resolve(__dirname, '..', '..', 'server.log');
 // Append so consecutive runs don't lose the previous run's tail.
 const logStream = fs.createWriteStream(logPath, { flags: 'a' });

@@ -193,7 +193,7 @@ export async function updateSocialProvider(formData: FormData): Promise<{ error?
     return { error: 'Invalid provider.' };
   }
 
-  const enabled = formData.get('enabled') === 'true';
+  const enabled = formData.get('enabled') === 'on';
   const clientId = (formData.get('client_id') as string ?? '').trim();
   const clientSecret = (formData.get('client_secret') as string ?? '').trim();
 
@@ -269,7 +269,7 @@ export async function updateExternalProvider(formData: FormData): Promise<{ erro
   const clientSecret = (formData.get('client_secret') as string ?? '').trim();
   const issuerUrl = (formData.get('issuer_url') as string ?? '').trim();
   const scopes = (formData.get('scopes') as string ?? '').trim() || 'openid email profile';
-  const autoRedirect = formData.get('auto_redirect') === 'true';
+  const autoRedirect = formData.get('auto_redirect') === 'on';
 
   // Validate issuer URL if provided
   if (issuerUrl) {

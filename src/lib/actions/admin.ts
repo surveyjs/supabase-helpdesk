@@ -442,6 +442,137 @@ export async function saveCustomFields(
 }
 
 // ============================================================
+// Subscription Tiers (bulk)
+// ============================================================
+
+const TIER_KEY_REGEX = /^[a-z0-9](-?[a-z0-9])*$/;
+
+const TIER_BOOLEAN_COLUMNS = [
+  'cap_change_visibility',
+  'cap_set_severity',
+  'cap_change_status',
+  'cap_change_type',
+  'cap_add_remove_tags',
+] as const;
+
+type TierBooleanCol = (typeof TIER_BOOLEAN_COLUMNS)[number];
+
+type TierInputRow = {
+  id?: string;
+  key?: unknown;
+  display_name?: unknown;
+} & Partial<Record<TierBooleanCol, unknown>>;
+
+type TierDbRow = {
+  id?: string;
+  key: string;
+  display_name: string;
+  sort_order: number;
+} & Record<TierBooleanCol, boolean>;
+
+export async function saveTiers(
+  formData: FormData,
+): Promise<{ message?: string; error?: string }> {
+  const { supabase } = await requireAdminRole();
+
+  const raw = formData.get('rows');
+  if (typeof raw !== 'string') {
+    return { message: 'Error: missing rows.', error: 'Invalid request: missing rows.' };
+  }
+  let parsed: TierInputRow[];
+  try {
+    const json = JSON.parse(raw);
+    if (!Array.isArray(json)) throw new Error('rows must be an array');
+    parsed = json as TierInputRow[];
+  } catch (e) {
+    const msg = `Invalid rows JSON: ${e instanceof Error ? e.message : 'unknown'}`;
+    return { message: `Error: ${msg}`, error: msg };
+  }
+
+  const cleanRows: TierDbRow[] = [];
+  const seenKeys = new Set<string>();
+
+  for (let i = 0; i < parsed.length; i++) {
+    const row = parsed[i];
+    const key = typeof row.key === 'string' ? row.key.trim() : '';
+    if (!key || !TIER_KEY_REGEX.test(key)) {
+      const msg = `Invalid tier key: ${JSON.stringify(row.key)}`;
+      return { message: `Error: ${msg}`, error: msg };
+    }
+    if (seenKeys.has(key)) {
+      const msg = `Duplicate tier key: ${key}`;
+      return { message: `Error: ${msg}`, error: msg };
+    }
+    seenKeys.add(key);
+
+    const displayName = typeof row.display_name === 'string' ? row.display_name.trim() : '';
+    if (!displayName || displayName.length > 100) {
+      const msg = `Invalid display_name for tier "${key}".`;
+      return { message: `Error: ${msg}`, error: msg };
+    }
+
+    const dbRow: TierDbRow = {
+      id: typeof row.id === 'string' ? row.id : undefined,
+      key,
+      display_name: displayName,
+      sort_order: i,
+      cap_change_visibility: row.cap_change_visibility === true,
+      cap_set_severity: row.cap_set_severity === true,
+      cap_change_status: row.cap_change_status === true,
+      cap_change_type: row.cap_change_type === true,
+      cap_add_remove_tags: row.cap_add_remove_tags === true,
+    };
+    cleanRows.push(dbRow);
+  }
+
+  // Defense-in-depth: reject any update that changes `key` for an existing row.
+  const existingIds = cleanRows
+    .map((r) => r.id)
+    .filter((x): x is string => !!x);
+  if (existingIds.length > 0) {
+    const { data: existing, error: loadErr } = await supabase
+      .from('subscription_tiers')
+      .select('id, key')
+      .in('id', existingIds);
+    if (loadErr) {
+      const msg = `Failed to load existing tiers: ${loadErr.message}`;
+      return { message: `Error: ${msg}`, error: msg };
+    }
+    const existingKeyById = new Map<string, string>();
+    for (const t of existing ?? []) {
+      existingKeyById.set(t.id as string, t.key as string);
+    }
+    for (const row of cleanRows) {
+      if (!row.id) continue;
+      const dbKey = existingKeyById.get(row.id);
+      if (dbKey !== undefined && dbKey !== row.key) {
+        const msg = `Tier key is immutable. "${dbKey}" cannot be renamed to "${row.key}".`;
+        return { message: `Error: ${msg}`, error: msg };
+      }
+    }
+  }
+
+  const { diffAndSave } = await import('./admin-crud');
+  let result;
+  try {
+    result = await diffAndSave({
+      table: 'subscription_tiers',
+      rows: cleanRows,
+      columns: ['key', 'display_name', 'sort_order', ...TIER_BOOLEAN_COLUMNS],
+      auditAction: 'update_tiers_bulk',
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Failed to save tiers.';
+    return { message: `Error: ${msg}`, error: msg };
+  }
+
+  revalidatePath('/admin/tiers');
+  return {
+    message: `Tiers saved (${result.added} added, ${result.updated} updated, ${result.removed} removed).`,
+  };
+}
+
+// ============================================================
 // Teams
 // ============================================================
 

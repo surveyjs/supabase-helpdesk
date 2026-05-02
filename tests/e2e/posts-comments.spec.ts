@@ -290,13 +290,18 @@ test.describe('Posts, Comments & Notes', () => {
     await loginAs(page, 'alice@example.com');
     await page.goto(ticketUrl || await resolveTicketUrl());
 
-    // Find the edit button on Alice's reply (the root reply post-card,
-    // not the original post — both are now editable).
-    const replyCard = page
+    // Find Alice's root reply card by its body text. Capture the stable
+    // data-testid BEFORE clicking Edit, because EditablePost swaps the body
+    // out of the DOM in edit mode and the hasText filter would no longer match.
+    const replyCardByText = page
       .locator('[data-testid^="post-"]')
       .filter({ hasText: 'A root reply to the ticket.' })
       .first();
-    await expect(replyCard).toBeVisible({ timeout: 10000 });
+    await expect(replyCardByText).toBeVisible({ timeout: 10000 });
+    const replyTestId = await replyCardByText.getAttribute('data-testid');
+    expect(replyTestId).toBeTruthy();
+    const replyCard = page.locator(`[data-testid="${replyTestId}"]`);
+
     await replyCard.locator('[data-testid="edit-post-btn"]').first().click();
 
     // Edit mode now renders MarkdownEditor inside the reply card
@@ -319,15 +324,20 @@ test.describe('Posts, Comments & Notes', () => {
     await loginAs(page, 'alice@example.com');
     await page.goto(ticketUrl || await resolveTicketUrl());
 
-    // Locate the original post card by its "(Original post)" label.
-    const originalCard = page
+    // Locate the original post card by its "(Original post)" label and capture
+    // the stable data-testid before clicking Edit (EditablePost swaps the body
+    // out of the DOM in edit mode; the "(Original post)" label remains stable).
+    const originalByLabel = page
       .locator('[data-testid^="post-"]')
       .filter({ hasText: '(Original post)' })
       .first();
-    await expect(originalCard).toBeVisible({ timeout: 10000 });
+    await expect(originalByLabel).toBeVisible({ timeout: 10000 });
+    const originalTestId = await originalByLabel.getAttribute('data-testid');
+    expect(originalTestId).toBeTruthy();
+    const originalCard = page.locator(`[data-testid="${originalTestId}"]`);
 
     // Creator (Alice) must see the Edit button on her own original post.
-    const editBtn = originalCard.locator('[data-testid="edit-post-btn"]');
+    const editBtn = originalCard.locator('[data-testid="edit-post-btn"]').first();
     await expect(editBtn).toBeVisible();
     await editBtn.click();
 
@@ -350,13 +360,16 @@ test.describe('Posts, Comments & Notes', () => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(ticketUrl || await resolveTicketUrl());
 
-    const originalCard = page
+    const originalByLabel = page
       .locator('[data-testid^="post-"]')
       .filter({ hasText: '(Original post)' })
       .first();
-    await expect(originalCard).toBeVisible({ timeout: 10000 });
+    await expect(originalByLabel).toBeVisible({ timeout: 10000 });
+    const originalTestId = await originalByLabel.getAttribute('data-testid');
+    expect(originalTestId).toBeTruthy();
+    const originalCard = page.locator(`[data-testid="${originalTestId}"]`);
 
-    const editBtn = originalCard.locator('[data-testid="edit-post-btn"]');
+    const editBtn = originalCard.locator('[data-testid="edit-post-btn"]').first();
     await expect(editBtn).toBeVisible();
     await editBtn.click();
 
@@ -375,10 +388,18 @@ test.describe('Posts, Comments & Notes', () => {
   });
 
   test('non-creator non-agent user cannot edit the original post', async ({ page }) => {
-    // Eve is a regular user who is neither the ticket creator nor an agent,
-    // and the test ticket is public so Eve can view it.
+    // Eve is a regular user who is neither the ticket creator nor an agent.
+    // Ensure the test ticket is public so Eve has read access (the create flow's
+    // default privacy depends on admin settings, which other suites may toggle).
+    const admin = createServiceRoleClient();
+    const url = ticketUrl || await resolveTicketUrl();
+    const m = url.match(/\/tickets\/(\d+)\//);
+    if (m) {
+      await admin.from('tickets').update({ is_private: false }).eq('id', Number(m[1]));
+    }
+
     await loginAs(page, 'eve@example.com');
-    await page.goto(ticketUrl || await resolveTicketUrl());
+    await page.goto(url);
 
     const originalCard = page
       .locator('[data-testid^="post-"]')

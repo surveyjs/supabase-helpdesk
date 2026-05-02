@@ -290,15 +290,20 @@ test.describe('Posts, Comments & Notes', () => {
     await loginAs(page, 'alice@example.com');
     await page.goto(ticketUrl || await resolveTicketUrl());
 
-    // Find the edit button on Alice's reply
-    const editBtns = page.locator('[data-testid="edit-post-btn"]');
-    await editBtns.first().click();
+    // Find the edit button on Alice's reply (the root reply post-card,
+    // not the original post — both are now editable).
+    const replyCard = page
+      .locator('[data-testid^="post-"]')
+      .filter({ hasText: 'A root reply to the ticket.' })
+      .first();
+    await expect(replyCard).toBeVisible({ timeout: 10000 });
+    await replyCard.locator('[data-testid="edit-post-btn"]').first().click();
 
-    // Edit mode now renders MarkdownEditor
-    const editEditor = page.locator('[data-testid="markdown-editor"]').first();
+    // Edit mode now renders MarkdownEditor inside the reply card
+    const editEditor = replyCard.locator('[data-testid="markdown-editor"]').first();
     await editEditor.locator('textarea[name="textarea"]').clear();
     await editEditor.locator('textarea[name="textarea"]').fill('Edited root reply content.');
-    await page.getByRole('button', { name: 'Save' }).first().click();
+    await replyCard.getByRole('button', { name: 'Save' }).first().click();
 
     // Scope to the rendered post-card to avoid strict-mode violation
     // (MarkdownEditor also holds the text in hidden + visible textareas).
@@ -308,6 +313,81 @@ test.describe('Posts, Comments & Notes', () => {
         .filter({ hasText: 'Edited root reply content.' })
         .first(),
     ).toBeVisible({ timeout: 10000 });
+  });
+
+  test('ticket creator can edit the original post → "(edited)" indicator shows', async ({ page }) => {
+    await loginAs(page, 'alice@example.com');
+    await page.goto(ticketUrl || await resolveTicketUrl());
+
+    // Locate the original post card by its "(Original post)" label.
+    const originalCard = page
+      .locator('[data-testid^="post-"]')
+      .filter({ hasText: '(Original post)' })
+      .first();
+    await expect(originalCard).toBeVisible({ timeout: 10000 });
+
+    // Creator (Alice) must see the Edit button on her own original post.
+    const editBtn = originalCard.locator('[data-testid="edit-post-btn"]');
+    await expect(editBtn).toBeVisible();
+    await editBtn.click();
+
+    const editEditor = originalCard.locator('[data-testid="markdown-editor"]').first();
+    await editEditor.locator('textarea[name="textarea"]').clear();
+    await editEditor.locator('textarea[name="textarea"]').fill('Original post edited by creator.');
+    await originalCard.getByRole('button', { name: 'Save' }).first().click();
+
+    // The original post card now shows the new body and the "(edited)" indicator.
+    const updatedOriginal = page
+      .locator('[data-testid^="post-"]')
+      .filter({ hasText: '(Original post)' })
+      .filter({ hasText: '(edited)' })
+      .filter({ hasText: 'Original post edited by creator.' })
+      .first();
+    await expect(updatedOriginal).toBeVisible({ timeout: 10000 });
+  });
+
+  test('agent can edit the original post', async ({ page }) => {
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto(ticketUrl || await resolveTicketUrl());
+
+    const originalCard = page
+      .locator('[data-testid^="post-"]')
+      .filter({ hasText: '(Original post)' })
+      .first();
+    await expect(originalCard).toBeVisible({ timeout: 10000 });
+
+    const editBtn = originalCard.locator('[data-testid="edit-post-btn"]');
+    await expect(editBtn).toBeVisible();
+    await editBtn.click();
+
+    const editEditor = originalCard.locator('[data-testid="markdown-editor"]').first();
+    await editEditor.locator('textarea[name="textarea"]').clear();
+    await editEditor.locator('textarea[name="textarea"]').fill('Original post edited by agent.');
+    await originalCard.getByRole('button', { name: 'Save' }).first().click();
+
+    const updatedOriginal = page
+      .locator('[data-testid^="post-"]')
+      .filter({ hasText: '(Original post)' })
+      .filter({ hasText: '(edited)' })
+      .filter({ hasText: 'Original post edited by agent.' })
+      .first();
+    await expect(updatedOriginal).toBeVisible({ timeout: 10000 });
+  });
+
+  test('non-creator non-agent user cannot edit the original post', async ({ page }) => {
+    // Eve is a regular user who is neither the ticket creator nor an agent,
+    // and the test ticket is public so Eve can view it.
+    await loginAs(page, 'eve@example.com');
+    await page.goto(ticketUrl || await resolveTicketUrl());
+
+    const originalCard = page
+      .locator('[data-testid^="post-"]')
+      .filter({ hasText: '(Original post)' })
+      .first();
+    await expect(originalCard).toBeVisible({ timeout: 10000 });
+
+    // No Edit button must be rendered on the original post for this viewer.
+    await expect(originalCard.locator('[data-testid="edit-post-btn"]')).toHaveCount(0);
   });
 
   test('edit title → URL redirects to new slug', async ({ page }) => {

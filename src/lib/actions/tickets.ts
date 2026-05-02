@@ -571,7 +571,6 @@ export async function editPost(
     .single();
 
   if (!post) return { error: 'Post not found.' };
-  if (post.is_original) return { error: 'The original post cannot be edited.' };
 
   const isAgent = profile.role === 'agent' || profile.role === 'admin';
 

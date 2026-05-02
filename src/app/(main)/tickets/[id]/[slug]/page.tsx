@@ -380,7 +380,9 @@ export default async function TicketDetailPage({
     const isOriginal = post.is_original;
 
     // Permission checks
-    const canEditPost = !isOriginal && (
+    // Editing the original post is allowed for the ticket creator (its author)
+    // and any agent. All other posts/comments follow the standard rules.
+    const canEditPost = (
       isCurrentUser
       || (isAgent && post.post_type !== 'note')
       || (isAgent && post.post_type === 'note' && isCurrentUser)

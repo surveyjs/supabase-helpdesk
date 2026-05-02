@@ -84,11 +84,10 @@ CREATE TRIGGER posts_draft_publish_timestamp
   - Validate: body required (max 50,000 chars), post_id required
   - Fetch the post
   - **Permission check:**
-    - The original post (`is_original = true`) cannot be edited (it's the ticket description — title editing is separate)
-    - Author can edit their own posts/comments
-    - Agents can edit any post or comment (regardless of authorship)
+    - Author can edit their own posts/comments — this includes the original post (the ticket creator is the original post's author and may therefore edit the ticket description)
+    - Agents can edit any post or comment (regardless of authorship), including the original post
     - Agents can only edit their **own** notes — not notes by other agents
-  - Update body and set `edited_at = now()`
+  - Update body and set `edited_at = now()`. The DB trigger `posts_update_ticket_search` keeps the ticket's `search_vector` in sync when the original post body changes
   - Revalidate page
 
 - `editTicketTitle(formData)`:

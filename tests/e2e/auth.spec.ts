@@ -9,7 +9,9 @@ const INBUCKET_URL = 'http://127.0.0.1:54324';
  */
 async function loginAs(page: Page, email: string, password: string, expectSuccess = false) {
   const { createServiceRoleClient } = await import('../helpers/supabase');
+  const { ensureBuiltInAuthMode } = await import('../helpers/auth');
   const svc = createServiceRoleClient();
+  await ensureBuiltInAuthMode();
   await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
 
   await page.goto('/login');
@@ -30,7 +32,14 @@ async function loginAs(page: Page, email: string, password: string, expectSucces
         await expect(page).toHaveURL('/', { timeout: 15000 });
       }
     }
-    await expect(page.locator('summary[aria-haspopup="true"]')).toBeVisible({ timeout: 15000 });
+    // The middleware can briefly redirect back to /login while the auth cookie
+    // settles after the form submit. Reload once if the NavBar isn't there.
+    try {
+      await expect(page.locator('summary[aria-haspopup="true"]')).toBeVisible({ timeout: 5000 });
+    } catch {
+      await page.goto('/');
+      await expect(page.locator('summary[aria-haspopup="true"]')).toBeVisible({ timeout: 15000 });
+    }
   }
 }
 

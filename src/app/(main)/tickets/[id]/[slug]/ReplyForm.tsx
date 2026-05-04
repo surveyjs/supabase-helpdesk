@@ -1,11 +1,10 @@
 'use client';
 
-import { useActionState, useState } from 'react';
-import { replyToTicket, type TicketActionState } from '@/lib/actions/tickets';
-import { MarkdownEditor } from '@/components/features/tickets/MarkdownEditor';
-import { uploadInlineImageFromEditor } from '@/components/features/tickets/inlineImageUpload';
-
-const initialState: TicketActionState = {};
+import { replyToTicket } from '@/lib/actions/tickets';
+import {
+  MarkdownActionForm,
+  type EditorViewMode,
+} from './MarkdownActionForm';
 
 export function ReplyForm({
   ticketId,
@@ -16,54 +15,23 @@ export function ReplyForm({
 }: {
   ticketId: number;
   isAgent?: boolean;
-  editorViewMode?: 'both' | 'preview' | 'editor';
+  editorViewMode?: EditorViewMode;
   submitLabel?: string;
   onCancel?: () => void;
 }) {
-  const [state, formAction, pending] = useActionState(replyToTicket, initialState);
-  const [body, setBody] = useState('');
-
   return (
-    <form action={formAction} className="space-y-4">
-      <input type="hidden" name="ticket_id" value={ticketId} />
-      {state.error && (
-        <div
-          role="alert"
-          className="p-3 rounded bg-red-50 border border-red-200 text-red-700 text-sm"
-        >
-          {state.error}
-        </div>
-      )}
-      <MarkdownEditor
-        name="body"
-        required
-        maxLength={50000}
-        placeholder="Write your reply… (Markdown supported)"
-        defaultValue={body}
-        onValueChange={setBody}
-        viewMode={editorViewMode}
-        onImageUpload={uploadInlineImageFromEditor}
-        extraToolbarPlugins={isAgent ? ['canned-response'] : undefined}
-      />
-      <div className="flex gap-2">
-        <button
-          type="submit"
-          disabled={pending}
-          className="px-3 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-        >
-          {pending ? 'Sending…' : submitLabel}
-        </button>
-        {onCancel && (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="px-3 py-1 text-xs rounded bg-gray-100 text-gray-700 hover:bg-gray-200"
-            data-testid="cancel-reply-btn"
-          >
-            Cancel
-          </button>
-        )}
-      </div>
-    </form>
+    <MarkdownActionForm
+      action={replyToTicket}
+      hiddenFields={<input type="hidden" name="ticket_id" value={ticketId} />}
+      placeholder="Write your reply… (Markdown supported)"
+      editorViewMode={editorViewMode}
+      extraToolbarPlugins={isAgent ? ['canned-response'] : undefined}
+      submitLabel={submitLabel}
+      pendingLabel="Sending…"
+      onCancel={onCancel}
+      cancelTestId="cancel-reply-btn"
+      formClassName="space-y-4"
+      errorClassName="p-3 rounded bg-red-50 border border-red-200 text-red-700 text-sm"
+    />
   );
 }

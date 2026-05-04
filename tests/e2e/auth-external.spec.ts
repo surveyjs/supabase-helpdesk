@@ -87,6 +87,12 @@ async function resetAuthMode() {
 test.describe('Auth External', () => {
   test.describe.configure({ mode: 'serial' });
 
+  test.beforeEach(async () => {
+    // If a previous run timed out before its afterAll could fire, app_settings
+    // can be left with auth_mode='external' and pollute every other spec.
+    await resetAuthMode();
+  });
+
   test.afterAll(async () => {
     await resetAuthMode();
   });

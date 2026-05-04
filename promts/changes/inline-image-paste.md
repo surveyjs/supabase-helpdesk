@@ -60,20 +60,24 @@ can temporarily live without a `post_id`:
    - Stores the file at `attachments/inline/{userId}/{uuid}-{filename}`.
    - Inserts an orphan `attachments` row (`post_id = NULL`,
      `uploader_id = user.id`).
-   - Returns a 24 h signed URL with the attachment id appended as
-     `&att=<uuid>`.
-4. The editor inserts `![filename](url)` at the cursor position
-   (the library's `uploadWithDataTransfer` already handles paste, drop
-   and the toolbar button; once `onImageUpload` is wired, all three work).
+   - Returns the **stable URL** `/attachments/<attachmentId>`.
+4. The editor inserts `![filename](/attachments/<id>)` at the cursor
+   position. Because the URL is a stable app route (not an expiring
+   signed URL) it remains valid for the lifetime of the attachment.
+5. The new route `src/app/attachments/[id]/route.ts` resolves the id,
+   lets RLS authorise the read, mints a 5-minute signed URL and
+   302-redirects the browser to it on every request.
 
 ### Claiming on save
 
 When the post is finally created or edited, the Server Action calls
 `claimInlineAttachments(postId, body)` which:
 
-- Scans `body` for `[?&]att=([0-9a-f-]{36})` substrings.
+- Scans `body` for `\/attachments\/([0-9a-f-]{36})` substrings.
 - Updates matching orphan rows owned by the current user, setting
   `post_id = postId`. RLS prevents claiming someone else's orphan.
+- Logs (does not throw) on update failure so the post save still
+  succeeds and issues remain observable.
 
 Hooks added in `src/lib/actions/tickets.ts`:
 
@@ -109,10 +113,13 @@ The shared client helper lives at
   validation, MIME / extension matching, and SVG sanitisation, so the
   inline path has the same guarantees as `uploadAttachments`.
 - Orphan rows are only readable / mutable by their uploader (RLS).
-- The signed URL has a 24-hour expiry — long enough to draft a post but
-  not indefinitely accessible. After the post is saved, the existing
-  `AttachmentList` regenerates a fresh signed URL for the (re-parented)
-  attachment.
+- Migration `024_inline_attachments_blocked_guard.sql` adds
+  `NOT is_blocked()` to the orphan branches of `attachments_insert` and
+  `attachments_delete` for defense-in-depth.
+- The persisted body URL is `/attachments/<id>` (stable). The route
+  re-checks RLS on every hit and mints a fresh 5-minute signed URL,
+  so revoking access (deleting the post, blocking the user, etc.) takes
+  effect immediately.
 - Storage objects use a UUID-prefixed safe filename to prevent
   collision and path-traversal.
 
@@ -138,6 +145,9 @@ The shared client helper lives at
 ## Related Files
 
 - `supabase/migrations/023_inline_image_attachments.sql` — schema + RLS
+- `supabase/migrations/024_inline_attachments_blocked_guard.sql` —
+  RLS hardening (`NOT is_blocked()` on orphan INSERT / DELETE)
+- `src/app/attachments/[id]/route.ts` — stable redirect endpoint
 - `src/lib/actions/attachments.ts` — `uploadInlineImage`,
   `claimInlineAttachments`
 - `src/lib/actions/tickets.ts` — capture post ids, call

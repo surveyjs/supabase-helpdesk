@@ -121,13 +121,14 @@ test.describe('Inline image paste in post editor', () => {
     // with the real Markdown image once the Promise resolves.
     await expect
       .poll(
-        async () => (await page.locator(editorTextarea).inputValue()).includes('att='),
-        { timeout: 15000, message: 'editor never received signed URL with att= id' },
+        async () =>
+          (await page.locator(editorTextarea).inputValue()).includes('/attachments/'),
+        { timeout: 15000, message: 'editor never received /attachments/<id> URL' },
       )
       .toBe(true);
 
     const bodyAfterPaste = await page.locator(editorTextarea).inputValue();
-    expect(bodyAfterPaste).toMatch(/!\[.*]\(https?:\/\/[^)]*att=[0-9a-f-]{36}\)/);
+    expect(bodyAfterPaste).toMatch(/!\[.*]\(\/attachments\/[0-9a-f-]{36}\)/);
 
     // Verify the orphan attachment row exists for alice.
     const admin = createServiceRoleClient();
@@ -206,7 +207,8 @@ test.describe('Inline image paste in post editor', () => {
 
     await expect
       .poll(
-        async () => (await page.locator(replyTextarea).inputValue()).includes('att='),
+        async () =>
+          (await page.locator(replyTextarea).inputValue()).includes('/attachments/'),
         { timeout: 15000 },
       )
       .toBe(true);

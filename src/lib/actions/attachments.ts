@@ -448,17 +448,11 @@ export async function uploadInlineImage(
     return { error: `Failed to record attachment: ${insertError?.message ?? 'unknown error'}` };
   }
 
-  const { data: signed } = await supabase.storage
-    .from('attachments')
-    .createSignedUrl(storagePath, 60 * 60 * 24); // 24h — long enough to draft
-  if (!signed?.signedUrl) {
-    return { error: 'Failed to generate signed URL.' };
-  }
-
-  // Embed the attachment id in the URL so claimInlineAttachments() can find
-  // and re-parent the row once the post is saved.
-  const sep = signed.signedUrl.includes('?') ? '&' : '?';
-  const url = `${signed.signedUrl}${sep}att=${inserted.id}`;
+  // Persist a stable URL pointing at /attachments/<id>; the route resolves it
+  // to a fresh signed URL on each request. Using an expiring signed URL here
+  // would break inline images once the signature expired (~24h), since the
+  // body Markdown is stored verbatim.
+  const url = `/attachments/${inserted.id}`;
 
   return { url, attachmentId: inserted.id };
 }
@@ -474,7 +468,8 @@ export async function claimInlineAttachments(
   body: string,
 ): Promise<void> {
   if (!body) return;
-  const matches = body.matchAll(/[?&]att=([0-9a-f-]{36})/gi);
+  // Match the stable inline URL format `/attachments/<uuid>`.
+  const matches = body.matchAll(/\/attachments\/([0-9a-f-]{36})/gi);
   const ids = Array.from(new Set(Array.from(matches, (m) => m[1])));
   if (ids.length === 0) return;
 
@@ -484,10 +479,20 @@ export async function claimInlineAttachments(
 
   // Only claim orphans that the current user uploaded. RLS already enforces
   // this for UPDATE, but the explicit predicate keeps the query small.
-  await supabase
+  const { error } = await supabase
     .from('attachments')
     .update({ post_id: postId })
     .in('id', ids)
     .is('post_id', null)
     .eq('uploader_id', user.id);
+
+  if (error) {
+    // Don't fail the post save — the orphan row is harmless and can be retried,
+    // but log so issues are observable.
+    console.error('[attachments] claimInlineAttachments failed', {
+      postId,
+      ids,
+      error: error.message,
+    });
+  }
 }

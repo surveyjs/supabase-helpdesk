@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { createServiceRoleClient } from '../helpers/supabase';
-import { ensureBuiltInAuthMode } from '../helpers/auth';
+import { ensureBuiltInAuthMode, gotoAuthed } from '../helpers/auth';
 
 async function loginAs(page: Page, email: string, password = 'Password123') {
   const svc = createServiceRoleClient();
@@ -361,13 +361,10 @@ test.describe('Posts, Comments & Notes', () => {
   test('agent can edit the original post', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     const url = ticketUrl || await resolveTicketUrl();
-    await page.goto(url);
     // Auth middleware can race with the freshly-set session cookie and bounce
-    // us back to /login on first navigation under load. Re-login and retry.
-    if (page.url().includes('/login')) {
-      await loginAs(page, 'agent.smith@example.com');
-      await page.goto(url);
-    }
+    // us back to /login on first navigation under load. gotoAuthed re-logs in
+    // and retries once if that happens.
+    await gotoAuthed(page, url, () => loginAs(page, 'agent.smith@example.com'));
 
     const originalByLabel = page
       .locator('[data-testid^="post-"]')

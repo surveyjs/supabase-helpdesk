@@ -243,11 +243,17 @@ test.describe('File Attachments', () => {
     await expect(page.getByRole('heading', { name: 'File Uploads' })).toBeVisible({ timeout: 10000 });
     await expect(maxSizeInput).toHaveValue(targetValue, { timeout: 10000 });
 
-    // Reset to 10 (always different from targetValue, so autosave will fire)
+    // Reset to 10 (always different from targetValue, so autosave will fire).
+    // First wait for the success message to confirm the save completed (the
+    // previous reload cleared any stale message), then reload and assert the
+    // persisted value to prove it really stuck.
     await maxSizeInput.click();
     await maxSizeInput.fill('10');
     await maxSizeInput.blur();
     await expect(page.getByText('File settings saved.')).toBeVisible({ timeout: 15000 });
+    await gotoAdmin(page, '/admin/file-settings');
+    await expect(page.getByRole('heading', { name: 'File Uploads' })).toBeVisible({ timeout: 10000 });
+    await expect(maxSizeInput).toHaveValue('10', { timeout: 10000 });
   });
 
   test('admin can reset file types to defaults', async ({ page }) => {

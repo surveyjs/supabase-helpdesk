@@ -6,6 +6,7 @@ import { getSuggestedArticles } from '@/lib/actions/kb';
 import { autoCategorizeTicket, detectDuplicateTickets, type AutoCategorizeResult, type DuplicateTicket } from '@/lib/actions/ai';
 import { generateSlug } from '@/lib/utils/slug';
 import { MarkdownEditor } from '@/components/features/tickets/MarkdownEditor';
+import { uploadInlineImageFromEditor } from '@/components/features/tickets/inlineImageUpload';
 import Link from 'next/link';
 
 const initialState: TicketActionState = {};
@@ -365,6 +366,7 @@ export function TicketForm({
           placeholder="Describe your issue in detail (Markdown supported)"
           onValueChange={handleBodyChange}
           viewMode={editorViewMode}
+          onImageUpload={uploadInlineImageFromEditor}
         />
         {state.fieldErrors?.body && (
           <p className="mt-1 text-sm text-red-600">{state.fieldErrors.body}</p>

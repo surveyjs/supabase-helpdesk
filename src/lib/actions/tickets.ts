@@ -7,6 +7,7 @@ import { generateSlug } from '@/lib/utils/slug';
 import { validateTitle, validateBody } from '@/lib/utils/validation';
 import { notifyTicketRecipients, notifyAgent } from '@/lib/email/notify';
 import { cancelCsatSurvey } from '@/lib/actions/csat';
+import { claimInlineAttachments } from '@/lib/actions/attachments';
 import { initializeSlaTimer, stopFirstResponseTimer, resumeSlaTimer } from '@/lib/utils/sla';
 
 export type TicketActionState = {
@@ -208,7 +209,7 @@ export async function createTicket(
   }
 
   // Insert original post
-  const { error: postError } = await supabase
+  const { data: originalPost, error: postError } = await supabase
     .from('posts')
     .insert({
       ticket_id: ticket.id,
@@ -216,13 +217,17 @@ export async function createTicket(
       body,
       is_original: true,
       post_type: 'post',
-    });
+    })
+    .select('id')
+    .single();
 
-  if (postError) {
+  if (postError || !originalPost) {
     // Cleanup: delete the ticket if post creation fails
     await supabase.from('tickets').delete().eq('id', ticket.id);
     return { error: 'Failed to create ticket. Please try again.' };
   }
+
+  await claimInlineAttachments(originalPost.id, body);
 
   // Auto-follow: insert ticket_followers row for creator
   await supabase
@@ -279,18 +284,22 @@ export async function replyToTicket(
   }
 
   // Insert new post
-  const { error: postError } = await supabase
+  const { data: newPost, error: postError } = await supabase
     .from('posts')
     .insert({
       ticket_id: ticket.id,
       author_id: user.id,
       body,
       post_type: 'post',
-    });
+    })
+    .select('id')
+    .single();
 
-  if (postError) {
+  if (postError || !newPost) {
     return { error: 'Failed to add reply. Please try again.' };
   }
+
+  await claimInlineAttachments(newPost.id, body);
 
   // If ticket is pending/closed and user is not agent: transition to 'open'
   let autoReopened = false;
@@ -426,7 +435,7 @@ export async function addComment(
   }
 
   // Insert comment
-  const { error: insertError } = await supabase
+  const { data: newComment, error: insertError } = await supabase
     .from('posts')
     .insert({
       ticket_id: ticket.id,
@@ -435,14 +444,18 @@ export async function addComment(
       post_type: 'comment',
       parent_post_id: parentPostId,
       parent_comment_id: parentCommentId,
-    });
+    })
+    .select('id')
+    .single();
 
-  if (insertError) {
-    if (insertError.message.includes('nested up to 2 levels')) {
+  if (insertError || !newComment) {
+    if (insertError?.message.includes('nested up to 2 levels')) {
       return { error: 'Comments can only be nested up to 2 levels.' };
     }
     return { error: 'Failed to add comment. Please try again.' };
   }
+
+  await claimInlineAttachments(newComment.id, body);
 
   // Auto-transition for non-agents
   if (!isAgent && (ticket.status === 'pending' || ticket.status === 'closed')) {
@@ -522,7 +535,7 @@ export async function addNote(
 
   if (!ticket) return { error: 'Ticket not found.' };
 
-  const { error: insertError } = await supabase
+  const { data: newNote, error: insertError } = await supabase
     .from('posts')
     .insert({
       ticket_id: ticket.id,
@@ -530,9 +543,13 @@ export async function addNote(
       body,
       post_type: 'note',
       is_private: true,
-    });
+    })
+    .select('id')
+    .single();
 
-  if (insertError) return { error: 'Failed to add note. Please try again.' };
+  if (insertError || !newNote) return { error: 'Failed to add note. Please try again.' };
+
+  await claimInlineAttachments(newNote.id, body);
 
   revalidatePath(`/tickets/${ticket.id}/${ticket.slug}`);
   return {};
@@ -586,6 +603,8 @@ export async function editPost(
     .eq('id', postId);
 
   if (updateError) return { error: 'Failed to edit post. Please try again.' };
+
+  await claimInlineAttachments(postId, body);
 
   const { data: ticket } = await supabase
     .from('tickets')
@@ -807,11 +826,15 @@ export async function saveDraft(
     insertData.is_private = true;
   }
 
-  const { error: insertError } = await supabase
+  const { data: newDraft, error: insertError } = await supabase
     .from('posts')
-    .insert(insertData);
+    .insert(insertData)
+    .select('id')
+    .single();
 
-  if (insertError) return { error: 'Failed to save draft. Please try again.' };
+  if (insertError || !newDraft) return { error: 'Failed to save draft. Please try again.' };
+
+  await claimInlineAttachments(newDraft.id, body);
 
   revalidatePath(`/tickets/${ticket.id}/${ticket.slug}`);
   return {};

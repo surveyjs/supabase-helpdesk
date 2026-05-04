@@ -322,6 +322,10 @@ Implement progressive disclosure for long tickets:
 - Email notifications for new posts — Phase 9
 - Realtime updates for new posts — Phase 10
 - Draft publish trigger for notifications — Phase 9 (notification coalescing)
+- Inline image paste in the Markdown editor — see
+  `promts/changes/inline-image-paste.md` (post-create / edit Server Actions
+  must invoke `claimInlineAttachments(postId, body)` after every insert /
+  update so orphan attachments get linked to the new post).
 
 ## Verification Checklist
 

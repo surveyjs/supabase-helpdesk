@@ -201,6 +201,7 @@ export async function uploadAttachments(
       .from('attachments')
       .insert({
         post_id: postId,
+        uploader_id: user.id,
         storage_path: storagePath,
         original_filename: file.name,
         file_size: file.size,
@@ -326,4 +327,167 @@ export async function getAttachmentUrl(attachmentId: string): Promise<string | n
     .createSignedUrl(attachment.storage_path, 3600);
 
   return data?.signedUrl ?? null;
+}
+
+// ===========================================================================
+// Inline image upload (paste / drop / toolbar inside the Markdown editor)
+// ---------------------------------------------------------------------------
+// Uploads a single image to Storage *before* the parent post exists,
+// recording an "orphan" attachment row (post_id IS NULL, uploader_id = user).
+// The returned URL embeds the attachment id as a query parameter (&att=...);
+// `claimInlineAttachments(postId, body)` later finds those ids in a saved
+// post body and links the rows to the new post.
+// ===========================================================================
+
+// Allowed image extensions for inline embedding. These are the file types the
+// Markdown editor can render via the <img> tag.
+const INLINE_IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'];
+
+export type InlineImageUploadResult =
+  | { url: string; attachmentId: string; error?: undefined }
+  | { error: string; url?: undefined; attachmentId?: undefined };
+
+export async function uploadInlineImage(
+  formData: FormData,
+): Promise<InlineImageUploadResult> {
+  const supabase = await createServerClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Not authenticated.' };
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id, role, is_blocked')
+    .eq('id', user.id)
+    .single();
+  if (!profile) return { error: 'Profile not found.' };
+  if (profile.is_blocked) return { error: 'Your account has been blocked.' };
+
+  const file = formData.get('file');
+  if (!(file instanceof File)) return { error: 'No file provided.' };
+
+  if (file.name.length > 255) {
+    return { error: 'Filename exceeds the 255-character limit.' };
+  }
+  const ext = getFileExtension(file.name);
+  if (!INLINE_IMAGE_EXTENSIONS.includes(ext)) {
+    return { error: `Only image files can be embedded (got .${ext || 'unknown'}).` };
+  }
+  if (!file.type.startsWith('image/')) {
+    return { error: `File "${file.name}" is not an image.` };
+  }
+  const expectedMimes = EXTENSION_MIME_MAP[ext];
+  if (expectedMimes && !expectedMimes.includes(file.type)) {
+    return { error: `File "${file.name}" has mismatched type (expected ${expectedMimes.join('/')}, got ${file.type}).` };
+  }
+
+  // Honour the configured max file size (with tier override) and a 50MB hard cap.
+  const { data: maxSizeRes } = await supabase
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'max_file_size_mb')
+    .single();
+  const parsedMaxSize = maxSizeRes ? parseInt(maxSizeRes.value, 10) : NaN;
+  let maxSizeMb = Number.isFinite(parsedMaxSize) && parsedMaxSize > 0 ? parsedMaxSize : 10;
+
+  const { data: tierProfile } = await supabase
+    .from('profiles')
+    .select('tier_id, tier_expires_at')
+    .eq('id', user.id)
+    .single();
+  if (tierProfile?.tier_id) {
+    const tierActive = !tierProfile.tier_expires_at || new Date(tierProfile.tier_expires_at) > new Date();
+    if (tierActive) {
+      const { data: tier } = await supabase
+        .from('subscription_tiers')
+        .select('limit_max_file_size')
+        .eq('id', tierProfile.tier_id)
+        .single();
+      if (tier?.limit_max_file_size != null) {
+        const tierMb = Math.min(tier.limit_max_file_size / (1024 * 1024), 50);
+        if (tierMb > maxSizeMb) maxSizeMb = tierMb;
+      }
+    }
+  }
+
+  const maxSizeBytes = maxSizeMb * 1024 * 1024;
+  if (file.size > maxSizeBytes) {
+    return { error: `Image "${file.name}" exceeds the ${maxSizeMb}MB limit.` };
+  }
+
+  const uuid = crypto.randomUUID();
+  const safeName = sanitizeFilename(file.name);
+  const storagePath = `inline/${user.id}/${uuid}-${safeName}`;
+
+  let fileBuffer: Uint8Array = new Uint8Array(await file.arrayBuffer());
+  if (ext === 'svg') {
+    fileBuffer = await sanitizeSvg(fileBuffer);
+  }
+
+  const { error: uploadError } = await supabase.storage
+    .from('attachments')
+    .upload(storagePath, fileBuffer, { contentType: file.type, upsert: false });
+  if (uploadError) {
+    return { error: `Failed to upload image: ${uploadError.message}` };
+  }
+
+  const { data: inserted, error: insertError } = await supabase
+    .from('attachments')
+    .insert({
+      post_id: null,
+      uploader_id: user.id,
+      storage_path: storagePath,
+      original_filename: file.name,
+      file_size: file.size,
+      mime_type: file.type,
+    })
+    .select('id')
+    .single();
+  if (insertError || !inserted) {
+    await supabase.storage.from('attachments').remove([storagePath]);
+    return { error: `Failed to record attachment: ${insertError?.message ?? 'unknown error'}` };
+  }
+
+  const { data: signed } = await supabase.storage
+    .from('attachments')
+    .createSignedUrl(storagePath, 60 * 60 * 24); // 24h — long enough to draft
+  if (!signed?.signedUrl) {
+    return { error: 'Failed to generate signed URL.' };
+  }
+
+  // Embed the attachment id in the URL so claimInlineAttachments() can find
+  // and re-parent the row once the post is saved.
+  const sep = signed.signedUrl.includes('?') ? '&' : '?';
+  const url = `${signed.signedUrl}${sep}att=${inserted.id}`;
+
+  return { url, attachmentId: inserted.id };
+}
+
+/**
+ * Find inline-image attachment ids referenced in `body` and re-parent the
+ * matching orphan rows onto `postId`. Safe to call after every post create or
+ * edit; rows owned by another user or already linked to a different post are
+ * ignored.
+ */
+export async function claimInlineAttachments(
+  postId: string,
+  body: string,
+): Promise<void> {
+  if (!body) return;
+  const matches = body.matchAll(/[?&]att=([0-9a-f-]{36})/gi);
+  const ids = Array.from(new Set(Array.from(matches, (m) => m[1])));
+  if (ids.length === 0) return;
+
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+
+  // Only claim orphans that the current user uploaded. RLS already enforces
+  // this for UPDATE, but the explicit predicate keeps the query small.
+  await supabase
+    .from('attachments')
+    .update({ post_id: postId })
+    .in('id', ids)
+    .is('post_id', null)
+    .eq('uploader_id', user.id);
 }

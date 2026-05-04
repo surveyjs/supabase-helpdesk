@@ -3,6 +3,7 @@
 import { useActionState } from 'react';
 import { addNote, type TicketActionState } from '@/lib/actions/tickets';
 import { MarkdownEditor } from '@/components/features/tickets/MarkdownEditor';
+import { uploadInlineImageFromEditor } from '@/components/features/tickets/inlineImageUpload';
 
 const initialState: TicketActionState = {};
 
@@ -32,6 +33,7 @@ export function NoteForm({
           placeholder="Write an internal note… (only visible to agents)"
           compact
           viewMode={editorViewMode}
+          onImageUpload={uploadInlineImageFromEditor}
         />
         <button
           type="submit"

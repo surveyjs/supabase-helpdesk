@@ -3,6 +3,7 @@
 import { useState, useActionState } from 'react';
 import { editPost, type TicketActionState } from '@/lib/actions/tickets';
 import { MarkdownEditor } from '@/components/features/tickets/MarkdownEditor';
+import { uploadInlineImageFromEditor } from '@/components/features/tickets/inlineImageUpload';
 
 const initialState: TicketActionState = {};
 
@@ -46,6 +47,7 @@ export function EditablePost({
           required
           maxLength={50000}
           viewMode={editorViewMode}
+          onImageUpload={uploadInlineImageFromEditor}
         />
         <div className="flex gap-2">
           <button

@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { createServiceRoleClient } from '../helpers/supabase';
+import { ensureBuiltInAuthMode } from '../helpers/auth';
 import { addSurveyTag, waitForSidebarSurveyAutosave } from '../helpers/surveyjs';
 
 /**
@@ -7,6 +8,7 @@ import { addSurveyTag, waitForSidebarSurveyAutosave } from '../helpers/surveyjs'
  */
 async function loginAs(page: Page, email: string, password = 'Password123') {
   const svc = createServiceRoleClient();
+  await ensureBuiltInAuthMode();
   await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
 
   await page.goto('/login');
@@ -146,6 +148,12 @@ test.describe('Tag Display and Management', () => {
   test('agent can remove a tag from a ticket', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(ticketUrl);
+    // Auth middleware can race with the freshly-set session cookie and bounce
+    // us back to /login on first navigation under load. Re-login and retry.
+    if (page.url().includes('/login')) {
+      await loginAs(page, 'agent.smith@example.com');
+      await page.goto(ticketUrl);
+    }
 
     const sidebar = page.getByTestId('ticket-sidebar');
     const survey = sidebar.getByTestId('ticket-sidebar-survey');

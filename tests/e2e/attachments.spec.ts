@@ -1,10 +1,12 @@
 import { test, expect, Page } from '@playwright/test';
 import { createServiceRoleClient } from '../helpers/supabase';
+import { ensureBuiltInAuthMode } from '../helpers/auth';
 import * as path from 'path';
 import * as fs from 'fs';
 
 async function loginAs(page: Page, email: string, password = 'Password123') {
   const svc = createServiceRoleClient();
+  await ensureBuiltInAuthMode();
   await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
 
   await page.goto('/login');
@@ -220,30 +222,32 @@ test.describe('File Attachments', () => {
     await gotoAdmin(page, '/admin/file-settings');
     await expect(page.getByRole('heading', { name: 'File Uploads' })).toBeVisible({ timeout: 10000 });
 
-    // Autosave: change value and blur to flush the debounced save.
+    // Autosave: change the value and wait for the success message rendered by
+    // AdminSurveyForm. This is more reliable than waiting for an arbitrary POST,
+    // which can race with the autosave debounce or attach after the response.
+    // Pick a target that differs from whatever is currently persisted, otherwise
+    // SurveyJS does not fire onValueChanged and no save is queued.
     const maxSizeInput = page.getByLabel('Maximum file size (MB)');
-    await maxSizeInput.fill('15');
+    const savedMessage = page.getByText('File settings saved.');
 
-    const savePromise = page.waitForResponse(
-      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
-      { timeout: 15000 },
-    );
+    const initialValue = await maxSizeInput.inputValue();
+    const targetValue = initialValue === '15' ? '20' : '15';
+
+    await maxSizeInput.click();
+    await maxSizeInput.fill(targetValue);
     await maxSizeInput.blur();
-    await savePromise;
+    await expect(savedMessage).toBeVisible({ timeout: 15000 });
 
     // Verify it was saved by loading a fresh page
     await gotoAdmin(page, '/admin/file-settings');
     await expect(page.getByRole('heading', { name: 'File Uploads' })).toBeVisible({ timeout: 10000 });
-    await expect(maxSizeInput).toHaveValue('15', { timeout: 10000 });
+    await expect(maxSizeInput).toHaveValue(targetValue, { timeout: 10000 });
 
-    // Reset to 10
+    // Reset to 10 (always different from targetValue, so autosave will fire)
+    await maxSizeInput.click();
     await maxSizeInput.fill('10');
-    const resetPromise = page.waitForResponse(
-      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
-      { timeout: 15000 },
-    );
     await maxSizeInput.blur();
-    await resetPromise;
+    await expect(page.getByText('File settings saved.')).toBeVisible({ timeout: 15000 });
   });
 
   test('admin can reset file types to defaults', async ({ page }) => {

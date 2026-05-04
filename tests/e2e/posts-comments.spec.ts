@@ -1,8 +1,10 @@
 import { test, expect, Page } from '@playwright/test';
 import { createServiceRoleClient } from '../helpers/supabase';
+import { ensureBuiltInAuthMode } from '../helpers/auth';
 
 async function loginAs(page: Page, email: string, password = 'Password123') {
   const svc = createServiceRoleClient();
+  await ensureBuiltInAuthMode();
   await svc.from('profiles').update({ editor_view_mode: 'both' }).eq('email', email.toLowerCase());
 
   await page.goto('/login');
@@ -358,7 +360,14 @@ test.describe('Posts, Comments & Notes', () => {
 
   test('agent can edit the original post', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
-    await page.goto(ticketUrl || await resolveTicketUrl());
+    const url = ticketUrl || await resolveTicketUrl();
+    await page.goto(url);
+    // Auth middleware can race with the freshly-set session cookie and bounce
+    // us back to /login on first navigation under load. Re-login and retry.
+    if (page.url().includes('/login')) {
+      await loginAs(page, 'agent.smith@example.com');
+      await page.goto(url);
+    }
 
     const originalByLabel = page
       .locator('[data-testid^="post-"]')

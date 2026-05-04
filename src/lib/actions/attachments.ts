@@ -181,7 +181,7 @@ export async function uploadAttachments(
 
     // SVG sanitization
     if (ext === 'svg') {
-      fileBuffer = sanitizeSvg(fileBuffer);
+      fileBuffer = await sanitizeSvg(fileBuffer);
     }
 
     // Upload to storage

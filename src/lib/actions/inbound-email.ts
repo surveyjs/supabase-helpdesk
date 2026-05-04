@@ -203,7 +203,7 @@ async function handleInboundAttachments(
 
       // SVG sanitization
       if (ext === 'svg') {
-        fileBuffer = sanitizeSvg(fileBuffer) as Uint8Array;
+        fileBuffer = (await sanitizeSvg(fileBuffer)) as Uint8Array;
       }
 
       const uuid = crypto.randomUUID();

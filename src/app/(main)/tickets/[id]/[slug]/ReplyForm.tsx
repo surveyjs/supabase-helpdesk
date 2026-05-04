@@ -3,6 +3,7 @@
 import { useActionState, useState } from 'react';
 import { replyToTicket, type TicketActionState } from '@/lib/actions/tickets';
 import { MarkdownEditor } from '@/components/features/tickets/MarkdownEditor';
+import { uploadInlineImageFromEditor } from '@/components/features/tickets/inlineImageUpload';
 
 const initialState: TicketActionState = {};
 
@@ -41,6 +42,7 @@ export function ReplyForm({
         defaultValue={body}
         onValueChange={setBody}
         viewMode={editorViewMode}
+        onImageUpload={uploadInlineImageFromEditor}
         extraToolbarPlugins={isAgent ? ['canned-response'] : undefined}
       />
       <div className="flex gap-2">

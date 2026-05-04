@@ -181,7 +181,10 @@ export function MarkdownEditor({
 - `viewMode` (`'both' | 'preview' | 'editor'`) — drives the `view` config from user preference
 - `extraToolbarPlugins` — allows injecting custom toolbar buttons (e.g., canned response)
 - `compact` — smaller height for comments and notes
-- `onImageUpload` — native drag-drop/paste/toolbar upload
+- `onImageUpload` — native drag-drop/paste/toolbar upload (wired to
+  `uploadInlineImageFromEditor`; see
+  `promts/changes/inline-image-paste.md` for the orphan-attachment +
+  `claimInlineAttachments` flow that backs this prop)
 - Hidden `<textarea>` for Server Action form compatibility
 
 ### Where the Editor Is Used

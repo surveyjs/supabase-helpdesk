@@ -3,6 +3,7 @@
 import { useActionState } from 'react';
 import { addComment, type TicketActionState } from '@/lib/actions/tickets';
 import { MarkdownEditor } from '@/components/features/tickets/MarkdownEditor';
+import { uploadInlineImageFromEditor } from '@/components/features/tickets/inlineImageUpload';
 
 const initialState: TicketActionState = {};
 
@@ -39,6 +40,7 @@ export function CommentForm({
         placeholder="Write a comment… (Markdown supported)"
         compact
         viewMode={editorViewMode}
+        onImageUpload={uploadInlineImageFromEditor}
       />
       <div className="flex gap-2">
         <button

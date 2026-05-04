@@ -222,6 +222,11 @@ Add a new section to the admin sidebar:
 
 - Inbound email attachment handling — Phase 18
 - Per-tier file size and count overrides — Phase 20
+- **Inline image paste in the Markdown editor** — see
+  `promts/changes/inline-image-paste.md`. Adds a nullable `post_id` +
+  `uploader_id` column to `attachments` (orphan rows), an
+  `uploadInlineImage` Server Action, and `claimInlineAttachments(postId,
+  body)` that links pasted/dropped images to the post once it is saved.
 
 ## Verification Checklist
 

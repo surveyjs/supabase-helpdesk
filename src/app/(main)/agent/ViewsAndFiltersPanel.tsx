@@ -72,7 +72,12 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
     m.addNavigationItem({
       id: 'sv-nav-clear-filtering',
       title: 'Clear All',
-      action: () => { m.data = {}; },
+      // "Clear All" means "no filters" — for the status checkbox that
+      // translates to all-selected (the only legal "no filter" state now
+      // that minSelectedChoices: 1 forbids an empty selection).
+      action: () => {
+        m.data = { status: ['open', 'pending', 'closed'] };
+      },
     });
 
     return m;
@@ -130,7 +135,11 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
         .catch((err) => { console.error('updateSavedViewDefinition failed', err); })
         .finally(() => {
           setBusy(false);
+          // URL is unchanged when re-applying to the same view, so a plain
+          // router.push is a no-op. router.refresh() forces the server
+          // component to re-run with the freshly persisted definition.
           router.push(buildUrlForData(data, activeViewId));
+          router.refresh();
         });
     } else {
       // sql is intentionally regenerated server-side; ignore client copy.

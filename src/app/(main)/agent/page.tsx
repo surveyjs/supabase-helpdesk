@@ -63,10 +63,28 @@ export default async function AgentDashboardPage({
 
   // Resolve the active filter definition.
   let activeView: { id: string | null; name: string; definition: TicketFilterDefinition };
+  let unsupportedViewType: TicketFilterDefinition['type'] | null = null;
   if (requestedViewId) {
     const found = savedViews.find((v) => v.id === requestedViewId);
     if (found) {
-      activeView = { id: found.id, name: found.name, definition: found.definition };
+      if (found.definition.type !== 'json') {
+        // Persisted view uses a generator we don't run yet (e.g. 'ai').
+        // Surface it explicitly instead of silently treating it as JSON,
+        // which would also overwrite the stored type on the next Apply.
+        unsupportedViewType = found.definition.type;
+        activeView = {
+          id: found.id,
+          name: found.name,
+          definition: {
+            name: found.name,
+            type: 'json',
+            data: EMPTY_FILTER_DATA,
+            sql: generateSqlFromJson(EMPTY_FILTER_DATA),
+          },
+        };
+      } else {
+        activeView = { id: found.id, name: found.name, definition: found.definition };
+      }
     } else {
       // Stale/unknown id — fall through to Default.
       activeView = {
@@ -196,6 +214,17 @@ export default async function AgentDashboardPage({
           />
         </div>
         </details>
+
+      {unsupportedViewType && (
+        <div
+          role="alert"
+          data-testid="unsupported-view-banner"
+          className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+        >
+          This saved view uses an unsupported filter type ({unsupportedViewType}). Showing all
+          tickets instead. Edit the view to switch it back to a JSON filter.
+        </div>
+      )}
 
       {/* Result count */}
       <p className="text-sm text-gray-600 mb-4" data-testid="result-count">

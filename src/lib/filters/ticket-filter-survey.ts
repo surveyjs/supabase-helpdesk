@@ -36,6 +36,10 @@ export function buildTicketFilterSurveyJson(
           name: 'status',
           title: 'Status',
           colCount: 0,
+          // SurveyJS enforces this in the UI, so it is impossible to submit
+          // an empty status set. Empty/undefined therefore unambiguously
+          // means "no status predicate" (i.e. all statuses).
+          minSelectedChoices: 1,
           choices: [
             { value: 'open', text: 'Active' },
             { value: 'pending', text: 'Pending' },

@@ -74,13 +74,13 @@ export function generateSqlFromJson(data: TicketFilterData): string {
     conditions.push(`creator_email ILIKE '%${escapeSqlString(data.email.trim())}%'`);
   }
 
-  if (data.status && !isAllStatusSelected(data.status)) {
-    if (data.status.length === 0) {
-      conditions.push('false /* no status selected */');
-    } else {
-      const list = data.status.map((s) => `'${s}'`).join(', ');
-      conditions.push(`status IN (${list})`);
-    }
+  // Status semantics: undefined or all-3 selected => no predicate.
+  // The SurveyJS checkbox enforces minSelectedChoices: 1, so empty is
+  // not reachable from the UI; if it shows up via a hand-crafted URL we
+  // treat it as "no filter" (consistent with undefined).
+  if (data.status && data.status.length > 0 && !isAllStatusSelected(data.status)) {
+    const list = data.status.map((s) => `'${s}'`).join(', ');
+    conditions.push(`status IN (${list})`);
   }
 
   if (data.urgency) conditions.push(`urgency = '${escapeSqlString(data.urgency)}'`);

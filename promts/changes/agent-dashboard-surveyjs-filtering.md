@@ -244,9 +244,18 @@ unset values produce no fragment.
 6. "Add new view" inline editor behaves per §3 (link ↔ input+OK/Cancel).
 7. `status` checkbox renders inline (`colCount: 0`) with all three options
    selected by default and "all selected" applies no status predicate.
+   `minSelectedChoices: 1` enforces that at least one option is always
+   selected — unchecking the last is impossible from the UI, so an
+   undefined/empty status payload unambiguously means "no filter".
 8. SurveyJS question names equal SQL filter keys (no mapping layer).
 9. `type: 'ai'` is accepted in storage but rejected by the SQL generator with
-   `Error('AI filter generation is not implemented')`.
+   `Error('AI filter generation is not implemented')`. The Agent Dashboard
+   page treats a non-`'json'` definition as unsupported: it shows an
+   `unsupported-view-banner` and falls back to empty filters instead of
+   silently re-saving the view as `'json'` on next Apply.
+10. Re-applying filters on an already-active saved view persists the new
+    definition and forces a server re-render via `router.refresh()` (the
+    URL is unchanged so a plain `router.push` is a no-op).
 
 ## Follow-up Tasks (perform after this prompt is executed)
 

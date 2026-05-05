@@ -158,6 +158,16 @@ Then:
 The two parallel `if (fields.X)` ladders must be gone; each field is defined in
 exactly one place.
 
+Each `schema` fragment in the table must also reflect the underlying database
+contract: when the question writes to a Supabase column that is `NOT NULL`
+with a `DEFAULT`, the schema fragment **must** declare a matching
+`defaultValue` and (for `dropdown` questions) set `allowClear: false`.
+`isRequired` is intentionally not set because the sidebar form does not
+render SurveyJS validation errors. See
+[`surveyjs-forms-admin-dashboard-ticket-detail.md`](./surveyjs-forms-admin-dashboard-ticket-detail.md)
+for the canonical mapping table (`status`, `urgency`, `severity`,
+`is_private`).
+
 ### 7. No behavioural changes
 
 - All server actions, validation, and authorization remain unchanged

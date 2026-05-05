@@ -230,6 +230,32 @@ test.describe('Agent Ticket Detail Controls', () => {
     await admin.from('tickets').update({ urgency: 'high', severity: 'medium' }).eq('id', ticketId);
   });
 
+  test('severity/urgency/status dropdowns mirror DB defaults and cannot be cleared', async ({ page }) => {
+    // SurveyJS questions whose Supabase column is NOT NULL with a DEFAULT
+    // must declare `defaultValue` and `allowClear: false` so users cannot
+    // blank the field via the SurveyJS clear (✕) button. `isRequired` is
+    // intentionally not set (the sidebar form doesn't surface validation).
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto(ticketUrl);
+    const sidebar = page.getByTestId('ticket-sidebar');
+    const survey = sidebar.getByTestId('ticket-sidebar-survey');
+    await expect(survey).toBeVisible({ timeout: 10000 });
+
+    for (const name of ['status', 'urgency', 'severity']) {
+      const q = survey.locator(`.sd-question[data-name="${name}"]`);
+      await expect(q).toBeVisible();
+      // No clear (✕) button is rendered on these dropdowns.
+      await expect(
+        q.locator('.sd-dropdown_clean-button, .sd-dropdown__clean-button'),
+      ).toHaveCount(0);
+      // The dropdown shows a non-empty selected value (defaultValue or DB value).
+      const valueText = (
+        await q.locator('.sd-dropdown__value, [role="combobox"]').first().textContent()
+      )?.trim();
+      expect(valueText && valueText.length > 0).toBeTruthy();
+    }
+  });
+
   test('agent can change type/category from detail page', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(ticketUrl);

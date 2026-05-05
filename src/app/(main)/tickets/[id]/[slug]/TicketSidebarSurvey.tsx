@@ -105,6 +105,10 @@ export function TicketSidebarSurvey({
           type: 'dropdown',
           name: 'status',
           title: 'Status',
+          // `tickets.status` is NOT NULL DEFAULT 'open' in Supabase, so the
+          // SurveyJS question mirrors that default and disallows clearing.
+          defaultValue: 'open',
+          allowClear: false,
           choices: [
             { value: 'pending', text: 'Pending' },
             { value: 'open', text: 'Open' },
@@ -126,6 +130,9 @@ export function TicketSidebarSurvey({
           type: 'dropdown',
           name: 'urgency',
           title: 'Urgency',
+          // `tickets.urgency` is NOT NULL DEFAULT 'medium' in Supabase.
+          defaultValue: 'medium',
+          allowClear: false,
           choices: [
             { value: 'low', text: 'Low' },
             { value: 'medium', text: 'Medium' },
@@ -148,6 +155,10 @@ export function TicketSidebarSurvey({
           type: 'dropdown',
           name: 'severity',
           title: 'Severity',
+          // `tickets.severity` is NOT NULL DEFAULT 'medium' in Supabase, so
+          // the SurveyJS question mirrors that default and disallows clearing.
+          defaultValue: 'medium',
+          allowClear: false,
           choices: [
             { value: 'low', text: 'Low' },
             { value: 'medium', text: 'Medium' },
@@ -256,6 +267,8 @@ export function TicketSidebarSurvey({
           name: 'is_private',
           title: 'Private ticket',
           renderAs: 'checkbox',
+          // `tickets.is_private` is NOT NULL DEFAULT true in Supabase.
+          defaultValue: true,
         },
         dispatch: (prev, data) => {
           const v = asBool(data.is_private);

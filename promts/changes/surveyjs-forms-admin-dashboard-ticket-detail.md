@@ -81,6 +81,44 @@ Implementation notes:
 - The form persists each changed value through dedicated server actions (`changeTicketStatus`, `changeUrgency`, `changeSeverity`, `changeType`, `changeCategory`, `assignAgent`/`reassignAgent`/`unassignAgent`, `addTagToTicket`/`removeTagFromTicket`, `toggleTicketPrivacy`, `followTicket`/`unfollowTicket`) on `onValueChanged`, with an aria-live status indicator (`data-testid="ticket-sidebar-survey-status"`).
 - Read-only metadata (created by, created/updated timestamps, source article, advanced/Mark-as-Duplicate/Merge, SLA, CSAT, custom fields, KB Article, Delete) remains rendered as plain JSX in the surrounding `<dl>`. The colored tag chip list and follower count badges remain as visual references next to the SurveyJS form.
 
+#### Required defaults for non-nullable columns
+
+Every SurveyJS question whose persisted value maps to a Supabase column that is
+**`NOT NULL` with a `DEFAULT`** must mirror the database contract in its
+schema:
+
+- Set `defaultValue` to the same value as the column's SQL `DEFAULT`.
+- For `dropdown` questions, also set `allowClear: false` so the user cannot
+  blank the value through the SurveyJS clear (✕) button — clearing such a
+  field would either be silently dropped by the autosave dispatch (because
+  the empty value is filtered out before calling the server action) or
+  rejected by the database constraint, and either outcome is confusing.
+
+Do **not** set `isRequired: true` on these questions: the ticket sidebar
+form is autosave-driven and does not surface SurveyJS validation errors,
+so a required marker would only add a visual asterisk without any error
+rendering. The combination of `defaultValue` + `allowClear: false` already
+guarantees the value can never be empty.
+
+In `TicketSidebarSurvey.tsx` this rule applies to:
+
+| Question (`name`)                  | Column                        | Default    |
+| ---------------------------------- | ----------------------------- | ---------- |
+| `status` (dropdown)                | `tickets.status`              | `'open'`   |
+| `urgency` (dropdown)               | `tickets.urgency`             | `'medium'` |
+| `severity` (dropdown)              | `tickets.severity`            | `'medium'` |
+| `is_private` (boolean / checkbox)  | `tickets.is_private`          | `true`     |
+
+Nullable columns (e.g. `category_id`, `assigned_agent_id`) keep their
+clearable dropdown with an explicit "None"/"Unassigned" option and **must
+not** receive `allowClear: false`. Columns that are `NOT NULL` but have no
+DB default (e.g. `type_id`) keep the dispatch guard as their only safety
+net and do not need a `defaultValue`.
+
+The same rule applies to any future SurveyJS form that edits Supabase data:
+when wiring a question to a `NOT NULL DEFAULT …` column, set `defaultValue`
+(+ `allowClear: false` for dropdowns).
+
 ### 5. Database
 
 Add migration to seed missing app settings keys for the three Survey UI configs with defaults.

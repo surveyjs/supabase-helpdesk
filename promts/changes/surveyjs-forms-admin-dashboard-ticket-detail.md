@@ -56,6 +56,14 @@ Behavior:
 - Keep saved views behavior unchanged.
 - Respect `survey_agent_dashboard_config` for enabled filter fields and default sort.
 
+> **Update — superseded by `agent-dashboard-surveyjs-filtering.md`:** The
+> filter form is now built by `src/lib/filters/ticket-filter-survey.ts` and
+> rendered by `ViewsAndFiltersPanel`. SurveyJS question names equal SQL
+> filter keys (no mapping layer). Status uses an inline checkbox
+> (`open/pending/closed`). Saved views store the full
+> `{ type: 'json' | 'ai', data, sql }` definition rather than a flat filter
+> map, and Apply Filters on a non-Default view persists into that view.
+
 ### 4. Ticket Detail Info (Tier-aware JSON)
 
 Use JSON configs for ticket detail info rendering:

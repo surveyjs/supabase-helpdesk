@@ -178,7 +178,11 @@ exactly one place.
 ## Out of scope
 
 - `AgentFiltersSurvey` (URL-param-driven, no `FormData`) is not part of this
-  change.
+  change. **Update:** As of
+  `promts/changes/agent-dashboard-surveyjs-filtering.md`, the agent dashboard
+  filter form has been replaced by `ViewsAndFiltersPanel` which builds its
+  SurveyJS schema from `src/lib/filters/ticket-filter-survey.ts`. It is still
+  intentionally outside of the `flatSurveyForm` deduplication scope.
 - Schema JSON files in `src/components/features/survey/form-json/admin/` are
   not modified.
 - The `SurveyJsonForm` low-level wrapper is not modified.

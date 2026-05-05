@@ -53,6 +53,12 @@ test.describe('Cross-Browser Smoke Tests', () => {
   });
 
   test('complete user flow works', async ({ page }) => {
+    // Ensure KB is enabled so the "Help Center" nav link renders and /help
+    // doesn't 404. Other specs may have left kb_visible='false'.
+    const { createServiceRoleClient } = await import('../helpers/supabase');
+    const svc = createServiceRoleClient();
+    await svc.from('app_settings').upsert({ key: 'kb_visible', value: 'true' });
+
     // Login as a regular user
     await loginAs(page, 'alice@example.com');
 

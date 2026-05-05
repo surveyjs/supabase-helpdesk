@@ -1,5 +1,14 @@
 # Change: Agent Dashboard View & Filtering Panel Consolidation
 
+> **Note (superseded in part):** The filter form layout (Search, Submitter
+> email, Status, Sort, Urgency, etc.), the Saved-Views row interaction
+> ("+ Add new view" inline editor, Default + per-view buttons with × delete),
+> and the storage shape for `saved_views.filters` have been replaced by the
+> SurveyJS-based design described in
+> `promts/changes/agent-dashboard-surveyjs-filtering.md`. The collapsible
+> panel structure and the "Views & Filters: [Name]" summary defined here
+> still apply.
+
 ## Summary
 
 Consolidate the **Saved Views** panel and **Filtering** panel into a single collapsible panel on the Agent Dashboard. The consolidated panel is collapsed by default and shows the currently selected view name when collapsed, or "Default" if no view is explicitly selected.

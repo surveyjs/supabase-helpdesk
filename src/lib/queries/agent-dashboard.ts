@@ -5,9 +5,20 @@ import {
   calculateBusinessMinutesElapsed,
   calculateSlaPercentage,
 } from '@/lib/utils/business-hours';
+import {
+  isAllStatusSelected,
+  normalizeStoredDefinition,
+  type TicketFilterData,
+  type TicketFilterDefinition,
+} from '@/lib/filters/ticket-filter';
 
+/**
+ * Filters consumed by `getAgentTickets`. `status` is the SurveyJS-style
+ * subset of `('open' | 'pending' | 'closed')`; an `undefined` or full
+ * 3-value array means "no status predicate".
+ */
 export type AgentTicketFilters = {
-  status?: string;
+  status?: string[];
   q?: string;
   email?: string;
   urgency?: string;
@@ -16,11 +27,33 @@ export type AgentTicketFilters = {
   type?: string;
   agent?: string;
   team?: string;
-  tags?: string;
+  tags?: string[];
   tier?: string;
   sort?: string;
   page?: string;
 };
+
+/** Convert a TicketFilterData into the query's filter shape. */
+export function filterDataToQueryFilters(
+  data: TicketFilterData,
+  page: string | undefined,
+): AgentTicketFilters {
+  return {
+    status: data.status,
+    q: data.q,
+    email: data.email,
+    urgency: data.urgency,
+    severity: data.severity,
+    category: data.category,
+    type: data.type,
+    agent: data.agent,
+    team: data.team,
+    tags: data.tags,
+    tier: data.tier,
+    sort: data.sort,
+    page,
+  };
+}
 
 export type AgentTicketRow = {
   id: number;
@@ -115,11 +148,10 @@ export async function getAgentTickets(filters: AgentTicketFilters): Promise<{
     query = query.in('id', matchingTicketIds);
   }
 
-  // Status filter
-  if (filters.status === 'active') {
-    query = query.in('status', ['open', 'pending']);
-  } else if (filters.status === 'closed') {
-    query = query.eq('status', 'closed');
+  // Status filter — SurveyJS checkbox subset semantics. All three statuses
+  // selected (or undefined/empty default) means "no predicate".
+  if (filters.status && filters.status.length > 0 && !isAllStatusSelected(filters.status as Parameters<typeof isAllStatusSelected>[0])) {
+    query = query.in('status', filters.status);
   }
 
   // Submitter email filter (partial match, server-side)
@@ -167,8 +199,8 @@ export async function getAgentTickets(filters: AgentTicketFilters): Promise<{
   }
 
   // Tag filter (OR logic: any of the selected tags)
-  if (filters.tags?.trim()) {
-    const tagIds = filters.tags.split(',').filter(Boolean);
+  if (filters.tags && filters.tags.length > 0) {
+    const tagIds = filters.tags.filter(Boolean);
     if (tagIds.length > 0) {
       const { data: taggedTickets } = await supabase
         .from('ticket_tags')
@@ -438,12 +470,24 @@ export async function getFilterOptions() {
   };
 }
 
-export async function getSavedViews(agentId: string) {
+export type SavedViewRecord = {
+  id: string;
+  name: string;
+  created_at: string;
+  definition: TicketFilterDefinition;
+};
+
+export async function getSavedViews(agentId: string): Promise<SavedViewRecord[]> {
   const supabase = await createServerClient();
   const { data } = await supabase
     .from('saved_views')
     .select('id, name, filters, created_at')
     .eq('agent_id', agentId)
     .order('created_at', { ascending: true });
-  return data ?? [];
+  return (data ?? []).map((row) => ({
+    id: row.id as string,
+    name: row.name as string,
+    created_at: row.created_at as string,
+    definition: normalizeStoredDefinition(row.name as string, row.filters),
+  }));
 }

@@ -461,28 +461,27 @@ test.describe('Consolidated Views & Filters Panel', () => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(`/agent?status=closed&q=${encodeURIComponent(token)}`);
 
-    // Create and apply a saved view
     // First, expand panel
     await page.getByText(/Views & Filters:/).click();
     await expect(page.getByLabel('Search', { exact: true })).toBeVisible();
 
-    // Save current view
-    const viewNameInput = page.getByLabel('Saved view name');
-    await viewNameInput.fill(viewName);
-    await page.getByRole('button', { name: 'Save View' }).click();
-    await page.waitForTimeout(1000);
-
-    // Click the view to apply it
-    await page.getByRole('link', { name: viewName }).click();
-    await page.waitForTimeout(500);
+    // Use the new "Add new view" inline editor
+    await page.getByRole('button', { name: '+ Add new view' }).click();
+    await page.getByLabel('New saved view name').fill(viewName);
+    await page.getByRole('button', { name: 'Confirm new view' }).click();
+    await page.waitForURL(/view=/, { timeout: 10000 });
 
     // Panel should now show the view name in summary
     const summary = page.getByText(`Views & Filters: ${viewName}`);
-    await expect(summary).toBeVisible();
+    await expect(summary).toBeVisible({ timeout: 10000 });
 
     // Cleanup: delete the view (need to expand first)
-    await page.getByText(/Views & Filters:/).click();
-    await page.getByLabel(`Delete saved view ${viewName}`).click();
+    const deleteBtn = page.getByLabel(`Delete saved view ${viewName}`);
+    if (!(await deleteBtn.isVisible())) {
+      await page.getByText(/Views & Filters:/).first().click();
+      await expect(deleteBtn).toBeVisible({ timeout: 5000 });
+    }
+    await deleteBtn.click();
     await page.waitForTimeout(1000);
   });
 
@@ -511,9 +510,9 @@ test.describe('Consolidated Views & Filters Panel', () => {
 
     // Expand panel
     await page.getByText(/Views & Filters:/).click();
-    
+
     // Default should be visible and highlighted if current
-    await expect(page.getByRole('link', { name: 'Default' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Default' })).toBeVisible();
   });
 
   test('create and apply saved view', async ({ page }) => {
@@ -525,26 +524,26 @@ test.describe('Consolidated Views & Filters Panel', () => {
     // Expand panel
     await page.getByText(/Views & Filters:/).click();
 
-    // Create saved view
-    await page.getByLabel('Saved view name').fill(viewName);
-    await page.getByRole('button', { name: 'Save View' }).click();
-    await page.waitForTimeout(1000);
+    // Create saved view via the inline "Add new view" affordance
+    await page.getByRole('button', { name: '+ Add new view' }).click();
+    await page.getByLabel('New saved view name').fill(viewName);
+    await page.getByRole('button', { name: 'Confirm new view' }).click();
+    await page.waitForURL(/view=/, { timeout: 10000 });
 
-    // View should appear in the list
-    await expect(page.getByRole('link', { name: viewName })).toBeVisible();
-
-    // Click it to apply
-    await page.getByRole('link', { name: viewName }).click();
-    await page.waitForTimeout(500);
-
-    // Summary should reflect the view
+    // Panel summary should reflect the newly-active view
     const summary = page.getByText(`Views & Filters: ${viewName}`);
-    await expect(summary).toBeVisible();
+    await expect(summary).toBeVisible({ timeout: 10000 });
 
     // Cleanup
-    await page.getByText(/Views & Filters:/).click();
-    await page.getByLabel(`Delete saved view ${viewName}`).click();
-    await page.waitForTimeout(1000);
+    {
+      const btn = page.getByLabel(`Delete saved view ${viewName}`);
+      if (!(await btn.isVisible())) {
+        await page.getByText(/Views & Filters:/).first().click();
+        await expect(btn).toBeVisible({ timeout: 5000 });
+      }
+      await btn.click();
+      await page.waitForTimeout(1000);
+    }
   });
 
   test('delete saved view (not Default)', async ({ page }) => {
@@ -557,20 +556,27 @@ test.describe('Consolidated Views & Filters Panel', () => {
     // Expand panel
     await page.getByText(/Views & Filters:/).click();
 
-    // Create a view with a unique name
-    await page.getByLabel('Saved view name').fill(viewName);
-    await page.getByRole('button', { name: 'Save View' }).click();
-    await page.waitForTimeout(1000);
+    // Create a view with a unique name via the new inline flow
+    await page.getByRole('button', { name: '+ Add new view' }).click();
+    await page.getByLabel('New saved view name').fill(viewName);
+    await page.getByRole('button', { name: 'Confirm new view' }).click();
+    await page.waitForURL(/view=/, { timeout: 10000 });
 
-    // View should exist
-    await expect(page.getByRole('link', { name: viewName })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(`Views & Filters: ${viewName}`)).toBeVisible({ timeout: 10000 });
 
-    // Delete it
-    await page.getByLabel(`Delete saved view ${viewName}`).click();
-    await page.waitForTimeout(1000);
+    // Re-expand panel and delete
+    {
+      const btn = page.getByLabel(`Delete saved view ${viewName}`);
+      if (!(await btn.isVisible())) {
+        await page.getByText(/Views & Filters:/).first().click();
+        await expect(btn).toBeVisible({ timeout: 5000 });
+      }
+      await btn.click();
+      await page.waitForTimeout(1000);
+    }
 
     // View should be gone
-    await expect(page.getByRole('link', { name: viewName })).not.toBeVisible();
+    await expect(page.getByRole('button', { name: viewName, exact: true })).not.toBeVisible();
   });
 
   test('cannot delete Default view (no delete button for Default)', async ({ page }) => {
@@ -580,8 +586,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
     // Expand panel
     await page.getByText(/Views & Filters:/).click();
 
-    // Default view should not have a delete button
-    await expect(page.getByRole('link', { name: 'Default' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Default' })).toBeVisible();
 
     // There must be no delete button labelled for the Default view
     await expect(page.getByLabel('Delete saved view Default')).toHaveCount(0);
@@ -607,9 +612,11 @@ test.describe('Consolidated Views & Filters Panel', () => {
     // Expand panel
     await page.getByText(/Views & Filters:/).click();
 
-    // Click Clear All
-    await page.getByRole('link', { name: 'Clear All' }).click();
-    await page.waitForTimeout(500);
+    // Click the SurveyJS "Clear All" navigation button
+    await page.getByRole('button', { name: 'Clear All' }).click();
+    // Then Apply Filters to commit the cleared state
+    await page.getByRole('button', { name: 'Apply Filters' }).click();
+    await page.waitForLoadState('networkidle');
 
     // Summary should show Default
     const summary = page.getByText('Views & Filters: Default');
@@ -663,28 +670,28 @@ test.describe('Consolidated Views & Filters Panel', () => {
     // Expand the consolidated panel
     await page.getByText(/Views & Filters:/).click();
 
-    // Create a saved view (captures current URL filters = {status: 'closed'})
-    await page.getByLabel('Saved view name').fill(viewName);
-    await page.getByRole('button', { name: 'Save View' }).click();
-    await page.waitForTimeout(1000);
+    // Create a saved view via the inline editor
+    await page.getByRole('button', { name: '+ Add new view' }).click();
+    await page.getByLabel('New saved view name').fill(viewName);
+    await page.getByRole('button', { name: 'Confirm new view' }).click();
+    await page.waitForURL(/view=/, { timeout: 10000 });
 
-    // View should appear
-    await expect(page.getByRole('link', { name: viewName })).toBeVisible({ timeout: 10000 });
-
-    // Click to apply
-    await page.getByRole('link', { name: viewName }).click();
-    await page.waitForTimeout(500);
-
-    // Panel summary should show the view name
-    await expect(page.getByText(`Views & Filters: ${viewName}`)).toBeVisible();
+    // Panel summary should show the view name (newly active)
+    await expect(page.getByText(`Views & Filters: ${viewName}`)).toBeVisible({ timeout: 10000 });
 
     // Delete the view (need to expand panel)
-    await page.getByText(/Views & Filters:/).click();
-    await page.getByLabel(`Delete saved view ${viewName}`).click();
-    await page.waitForTimeout(1000);
+    {
+      const btn = page.getByLabel(`Delete saved view ${viewName}`);
+      if (!(await btn.isVisible())) {
+        await page.getByText(/Views & Filters:/).first().click();
+        await expect(btn).toBeVisible({ timeout: 5000 });
+      }
+      await btn.click();
+      await page.waitForTimeout(1000);
+    }
 
     // View should be gone
-    await expect(page.getByRole('link', { name: viewName })).not.toBeVisible();
+    await expect(page.getByRole('button', { name: viewName, exact: true })).not.toBeVisible();
   });
 });
 

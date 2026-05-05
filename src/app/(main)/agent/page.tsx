@@ -8,19 +8,26 @@ import {
   getFilterOptions,
   getSavedViews,
   getAgentStats,
-  type AgentTicketFilters,
+  filterDataToQueryFilters,
 } from '@/lib/queries/agent-dashboard';
 import { Badge } from '@/components/ui/Badge';
 import { TierBadge } from '@/components/ui/TierBadge';
 import { DisplayName } from '@/components/features/users/DisplayName';
 import { Pagination } from '@/components/ui/Pagination';
-import { createSavedView, renameSavedView, deleteSavedView } from '@/lib/actions/saved-views';
 import { RealtimeDashboard } from '@/components/features/agent/RealtimeDashboard';
 import { BulkSelectProvider } from '@/components/features/bulk-actions/BulkSelectProvider';
 import { TicketCheckbox, SelectAllCheckbox } from '@/components/features/bulk-actions/TicketCheckbox';
 import { BulkActionToolbar } from '@/components/features/bulk-actions/BulkActionToolbar';
-import { AgentFiltersSurvey } from './AgentFiltersSurvey';
+import { ViewsAndFiltersPanel } from './ViewsAndFiltersPanel';
 import { parseAgentDashboardSurveyConfig } from '@/lib/constants/survey-ui-config';
+import {
+  DEFAULT_VIEW_NAME,
+  EMPTY_FILTER_DATA,
+  generateSqlFromJson,
+  urlParamsToData,
+  type TicketFilterData,
+  type TicketFilterDefinition,
+} from '@/lib/filters/ticket-filter';
 
 export default async function AgentDashboardPage({
   searchParams,
@@ -41,22 +48,6 @@ export default async function AgentDashboardPage({
 
   const params = await searchParams;
 
-  const filters: AgentTicketFilters = {
-    status: (params.status as string) ?? 'all',
-    q: (params.q as string) ?? '',
-    email: (params.email as string) ?? '',
-    urgency: (params.urgency as string) ?? '',
-    severity: (params.severity as string) ?? '',
-    category: (params.category as string) ?? '',
-    type: (params.type as string) ?? '',
-    agent: (params.agent as string) ?? '',
-    team: (params.team as string) ?? '',
-    tags: (params.tags as string) ?? '',
-    tier: (params.tier as string) ?? '',
-    sort: (params.sort as string) ?? '',
-    page: (params.page as string) ?? '1',
-  };
-
   const { data: surveyUiSetting } = await supabase
     .from('app_settings')
     .select('value')
@@ -64,44 +55,104 @@ export default async function AgentDashboardPage({
     .maybeSingle();
 
   const surveyFilterConfig = parseAgentDashboardSurveyConfig(surveyUiSetting?.value);
-  if (!filters.sort && surveyFilterConfig.defaultSort) {
-    filters.sort = surveyFilterConfig.defaultSort;
+
+  const requestedViewId = typeof params.view === 'string' ? params.view : null;
+  const pageParam = typeof params.page === 'string' ? params.page : '1';
+
+  const savedViews = await getSavedViews(user.id);
+
+  // Resolve the active filter definition.
+  let activeView: { id: string | null; name: string; definition: TicketFilterDefinition };
+  let unsupportedViewType: TicketFilterDefinition['type'] | null = null;
+  if (requestedViewId) {
+    const found = savedViews.find((v) => v.id === requestedViewId);
+    if (found) {
+      if (found.definition.type !== 'json') {
+        // Persisted view uses a generator we don't run yet (e.g. 'ai').
+        // Surface it explicitly instead of silently treating it as JSON,
+        // which would also overwrite the stored type on the next Apply.
+        unsupportedViewType = found.definition.type;
+        activeView = {
+          id: found.id,
+          name: found.name,
+          definition: {
+            name: found.name,
+            type: 'json',
+            data: EMPTY_FILTER_DATA,
+            sql: generateSqlFromJson(EMPTY_FILTER_DATA),
+          },
+        };
+      } else {
+        activeView = { id: found.id, name: found.name, definition: found.definition };
+      }
+    } else {
+      // Stale/unknown id — fall through to Default.
+      activeView = {
+        id: null,
+        name: DEFAULT_VIEW_NAME,
+        definition: {
+          name: DEFAULT_VIEW_NAME,
+          type: 'json',
+          data: EMPTY_FILTER_DATA,
+          sql: generateSqlFromJson(EMPTY_FILTER_DATA),
+        },
+      };
+    }
+  } else {
+    const data: TicketFilterData = urlParamsToData(params);
+    activeView = {
+      id: null,
+      name: DEFAULT_VIEW_NAME,
+      definition: {
+        name: DEFAULT_VIEW_NAME,
+        type: 'json',
+        data,
+        sql: generateSqlFromJson(data),
+      },
+    };
   }
 
-  const [{ tickets, total, pageSize }, filterOptions, savedViews, stats] =
+  const effectiveData: TicketFilterData = { ...activeView.definition.data };
+  if (!effectiveData.sort && surveyFilterConfig.defaultSort) {
+    effectiveData.sort = surveyFilterConfig.defaultSort;
+  }
+
+  const queryFilters = filterDataToQueryFilters(effectiveData, pageParam);
+
+  const [{ tickets, total, pageSize }, filterOptions, stats] =
     await Promise.all([
-      getAgentTickets(filters),
+      getAgentTickets(queryFilters),
       getFilterOptions(),
-      getSavedViews(user.id),
       getAgentStats(user.id),
     ]);
 
-  const currentPage = Math.max(1, parseInt(filters.page ?? '1', 10) || 1);
+  const currentPage = Math.max(1, parseInt(pageParam, 10) || 1);
   const totalPages = Math.ceil(total / pageSize);
 
-  // Build URL search params for pagination links (preserve all filters)
+  // Build URL search params for pagination links (preserve view OR active filters)
   const linkParams: Record<string, string> = {};
-  for (const [key, value] of Object.entries(filters)) {
-    if (value && value !== 'all' && value !== '1' && key !== 'page') {
-      linkParams[key] = value;
+  if (activeView.id) {
+    linkParams.view = activeView.id;
+  } else {
+    if (effectiveData.q) linkParams.q = effectiveData.q;
+    if (effectiveData.email) linkParams.email = effectiveData.email;
+    if (effectiveData.urgency) linkParams.urgency = effectiveData.urgency;
+    if (effectiveData.severity) linkParams.severity = effectiveData.severity;
+    if (effectiveData.category) linkParams.category = effectiveData.category;
+    if (effectiveData.type) linkParams.type = effectiveData.type;
+    if (effectiveData.agent) linkParams.agent = effectiveData.agent;
+    if (effectiveData.team) linkParams.team = effectiveData.team;
+    if (effectiveData.tier) linkParams.tier = effectiveData.tier;
+    if (effectiveData.sort) linkParams.sort = effectiveData.sort;
+    if (effectiveData.tags && effectiveData.tags.length > 0) {
+      linkParams.tags = effectiveData.tags.join(',');
+    }
+    if (effectiveData.status && effectiveData.status.length > 0 && effectiveData.status.length < 3) {
+      linkParams.status = effectiveData.status.join(',');
     }
   }
 
-  // Serialize current filters for saved view
-  const currentFiltersJson = JSON.stringify(linkParams);
-
-  // Determine current view name for consolidated panel summary
-  // Use exact match: the view's stored filters must have the same keys and values as the
-  // current linkParams (no extra or missing keys on either side).
-  const currentViewName = Object.keys(linkParams).length === 0
-    ? 'Default'
-    : (savedViews.find((view) => {
-      const viewFilters = (view.filters ?? {}) as Record<string, string>;
-      const viewKeys = Object.keys(viewFilters);
-      const linkKeys = Object.keys(linkParams);
-      if (viewKeys.length !== linkKeys.length) return false;
-      return viewKeys.every((key) => viewFilters[key] === linkParams[key]);
-    })?.name ?? 'Default');
+  const currentViewName = activeView.name;
 
   return (
     <div>
@@ -153,95 +204,27 @@ export default async function AgentDashboardPage({
         </summary>
 
         <div className="px-4 pt-4 pb-4 border-t border-gray-200">
-          {/* Saved Views Section */}
-          <div className="mb-4">
-            <div className="flex flex-wrap items-center gap-2 mb-3">
-              <span className="text-sm font-medium text-gray-700">Saved Views:</span>
-              {/* Default View */}
-              <a
-                href="/agent"
-                className={`text-sm px-2 py-0.5 rounded ${
-                  currentViewName === 'Default'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                Default
-              </a>
-              {/* Saved Views */}
-              {savedViews.length === 0 && (
-                <span className="text-sm text-gray-500">None yet</span>
-              )}
-              {savedViews.map((view) => {
-                const viewFilters = (view.filters ?? {}) as Record<string, string>;
-                const viewParams = new URLSearchParams(viewFilters);
-                const isActive = currentViewName === view.name;
-                return (
-                  <span key={view.id} className="inline-flex items-center gap-1">
-                    <a
-                      href={`/agent?${viewParams.toString()}`}
-                      className={`text-sm px-2 py-0.5 rounded ${
-                        isActive
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      {view.name}
-                    </a>
-                    <form action={renameSavedView} className="inline-flex items-center">
-                      <input type="hidden" name="view_id" value={view.id} />
-                      <input
-                        type="text"
-                        name="name"
-                        defaultValue={view.name}
-                        className="w-20 text-xs border border-gray-300 rounded px-1 py-0.5 hidden"
-                        aria-label={`Rename ${view.name}`}
-                      />
-                    </form>
-                    <form action={deleteSavedView}>
-                      <input type="hidden" name="view_id" value={view.id} />
-                      <button
-                        type="submit"
-                        className="text-xs text-red-500 hover:text-red-700"
-                        title={`Delete ${view.name}`}
-                        aria-label={`Delete saved view ${view.name}`}
-                      >
-                        ×
-                      </button>
-                    </form>
-                  </span>
-                );
-              })}
-            </div>
-            <form action={createSavedView} className="flex items-center gap-2">
-              <input type="hidden" name="filters" value={currentFiltersJson} />
-              <input
-                type="text"
-                name="name"
-                placeholder="View name…"
-                maxLength={100}
-                className="text-sm rounded border border-gray-300 px-2 py-1 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none flex-1"
-                aria-label="Saved view name"
-              />
-              <button
-                type="submit"
-                className="text-sm px-3 py-1 bg-gray-100 rounded hover:bg-gray-200 text-gray-700 whitespace-nowrap"
-              >
-                Save View
-              </button>
-            </form>
-          </div>
-
-          {/* Filter Controls Section */}
-          <div className="pt-4 border-t border-gray-200">
-            <AgentFiltersSurvey
-              filters={filters}
-              filterOptions={filterOptions}
-              config={surveyFilterConfig}
-            />
-          </div>
+          <ViewsAndFiltersPanel
+            filterOptions={filterOptions}
+            config={surveyFilterConfig}
+            savedViews={savedViews.map((v) => ({ id: v.id, name: v.name }))}
+            activeViewId={activeView.id}
+            activeViewName={activeView.name}
+            initialData={effectiveData}
+          />
         </div>
         </details>
+
+      {unsupportedViewType && (
+        <div
+          role="alert"
+          data-testid="unsupported-view-banner"
+          className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+        >
+          This saved view uses an unsupported filter type ({unsupportedViewType}). Showing all
+          tickets instead. Edit the view to switch it back to a JSON filter.
+        </div>
+      )}
 
       {/* Result count */}
       <p className="text-sm text-gray-600 mb-4" data-testid="result-count">

@@ -120,7 +120,7 @@ Add a collapsible "My Stats" panel at the top of the agent dashboard using `<det
 
 ### 3b. Consolidated Views & Filters Panel
 
-**Important Change:** The Saved Views section and Filter bar are now consolidated into a single collapsible panel (see `promts/changes/agent-dashboard-panel-consolidation.md` for full UI spec).
+**Important Change:** The Saved Views section and Filter bar are now consolidated into a single collapsible panel (see `promts/changes/agent-dashboard-panel-consolidation.md` for the original consolidation), and the filter form itself is now a SurveyJS-driven definition stored alongside each Saved View (see `promts/changes/agent-dashboard-surveyjs-filtering.md` for the authoritative spec)._
 
 **Panel Structure:**
 - Position: immediately below the "My Stats" panel
@@ -130,31 +130,33 @@ Add a collapsible "My Stats" panel at the top of the agent dashboard using `<det
   1. **Saved Views Section** (at top of expanded panel):
      - Label: `"Saved Views:"`
      - Special "Default" view: always present, non-removable, represents baseline ticket list with no special filters
-     - List saved views as clickable links/buttons that apply stored filter combinations
-     - Each saved view (except "Default") has a delete button
-     - Cannot delete the only non-default view if Default is selected
-     - Always at least one view is selected (Default or other)
+     - List saved views as clickable buttons that apply the stored filter definition (`?view=<id>`)
+     - Each saved view (except "Default") has a delete button (×)
+     - **"+ Add new view"** affordance always rendered at the end of the list. Clicking it hides the link and shows an inline text input plus OK / Cancel icon buttons. OK creates a new view seeded with the current SurveyJS data + generated SQL and selects it; Cancel restores the link.
+     - The "View name…" inline input, the "Save View" button, and the "None yet" placeholder are removed.
 
   2. **Filter Controls Section** (below Saved Views):
-     - Status toggle: All / Active / Closed
-     - Search by title/content (searches ALL posts, not just original — §8.14)
-     - Filter by submitter email
-     - Filter by urgency (dropdown)
-     - Filter by severity (dropdown)
-     - Filter by category (dropdown, only if categories exist)
-     - Filter by type (dropdown)
-     - Filter by assigned agent (dropdown: All / Unassigned / each agent by display name + email)
-     - Filter by team (dropdown: All / No team / each team name)
-     - Filter by tier (dropdown, only if tiers defined)
-     - Filter by tags (multi-select pills)
-     - Sort toggle: Last Modified / Created / SLA Risk
-     - Grid layout: `grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3`
-     - "Apply Filters" button and "Clear All" link
+     - Rendered as a SurveyJS form (`survey.json` built from a fixed schema with question names equal to the SQL filter / column keys).
+     - Status as a `colCount: 0` checkbox with options Active (`open`), Pending (`pending`), Closed (`closed`); default value all three selected. "All selected" applies no status predicate.
+     - All other filters remain (Search, Submitter Email, Sort, Urgency, Severity, Category, Type, Assigned Agent, Team, Tier, Tags).
+     - Navigation bar: `Apply Filters` (Complete button) and a custom `Clear All` navigation item that sets `survey.data = {}` (no submit).
+     - The previous standalone "Clear All" link is removed.
+
+**Saved View storage shape (`saved_views.filters` JSONB):**
+```ts
+{
+  type: 'json' | 'ai',  // only 'json' is implemented; 'ai' reserved
+  data: Record<string, unknown>,  // SurveyJS response JSON
+  sql:  string,                   // generated SQL (informational)
+}
+```
+Legacy flat rows are normalized on read.
 
 **Server Actions** (`src/lib/actions/saved-views.ts`):
-- Existing actions unchanged: `createSavedView(name, filters)`, `renameSavedView(viewId, newName)`, `deleteSavedView(viewId)`
-- All require agent role and validate ownership
-- All filters are serialized as JSONB in the `saved_views` table
+- `createSavedView({ name, type, data })` and `createSavedViewReturnId(...)` (used by inline "Add new view" client UI) — store `{ type, data, sql }` in `filters`.
+- `updateSavedViewDefinition({ view_id, type, data })` — invoked by Apply Filters on a non-Default view; replaces `data` and regenerates `sql`.
+- `renameSavedView`, `deleteSavedView` — unchanged.
+- All require agent role and validate ownership.
 
 **UI Behavior** (no `"use client"` needed — all CRUD via `<form>` + Server Actions):
 - Clicking a saved view link updates URL with stored filter params

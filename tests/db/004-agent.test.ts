@@ -600,4 +600,46 @@ describe('Saved views', () => {
       .single();
     expect(data).toBeNull();
   });
+
+  it('round-trips the new { type, data, sql } definition shape', async () => {
+    const agent = await clientForUser('agent@test.com');
+    const definition = {
+      type: 'json',
+      data: { status: ['open', 'pending'], urgency: 'high', tags: ['t1', 't2'] },
+      sql: "SELECT * FROM agent_tickets t WHERE status IN ('open','pending') AND urgency = 'high'",
+    };
+    const { data: inserted, error: insErr } = await agent
+      .from('saved_views')
+      .insert({
+        agent_id: AGENT_ID,
+        name: 'Definition Shape View',
+        filters: definition,
+      })
+      .select('id, filters')
+      .single();
+    expect(insErr).toBeNull();
+    expect(inserted!.filters).toEqual(definition);
+
+    await agent.from('saved_views').delete().eq('id', inserted!.id);
+  });
+
+  it('round-trips the legacy flat filters payload (back-compat)', async () => {
+    const agent = await clientForUser('agent@test.com');
+    const legacyPayload = { status: 'closed', urgency: 'high', tags: 'tag1,tag2' };
+    const { data: inserted, error: insErr } = await agent
+      .from('saved_views')
+      .insert({
+        agent_id: AGENT_ID,
+        name: 'Legacy Shape View',
+        filters: legacyPayload,
+      })
+      .select('id, filters')
+      .single();
+    expect(insErr).toBeNull();
+    // Storage layer must preserve legacy rows verbatim — the runtime
+    // normalizeStoredDefinition() rewrap happens on read in the app code.
+    expect(inserted!.filters).toEqual(legacyPayload);
+
+    await agent.from('saved_views').delete().eq('id', inserted!.id);
+  });
 });

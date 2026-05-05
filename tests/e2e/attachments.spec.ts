@@ -1,35 +1,11 @@
 import { test, expect, Page } from '@playwright/test';
 import { createServiceRoleClient } from '../helpers/supabase';
-import { ensureBuiltInAuthMode } from '../helpers/auth';
+import { loginViaForm } from '../helpers/auth';
 import * as path from 'path';
 import * as fs from 'fs';
 
 async function loginAs(page: Page, email: string, password = 'Password123') {
-  const svc = createServiceRoleClient();
-  await ensureBuiltInAuthMode();
-  await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
-
-  await page.goto('/login');
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Log in' }).click();
-
-  // Retry once on transient auth failure (rate-limit / timing)
-  try {
-    await expect(page).toHaveURL('/', { timeout: 10000 });
-  } catch {
-    // Only retry if we're actually on the login page (not already logged in)
-    if (page.url().includes('/login')) {
-      await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
-      await page.goto('/login');
-      await page.getByLabel('Email').fill(email);
-      await page.getByLabel('Password').fill(password);
-      await page.getByRole('button', { name: 'Log in' }).click();
-      await expect(page).toHaveURL('/', { timeout: 15000 });
-    }
-  }
-
-  await expect(page.locator('summary[aria-haspopup="true"]')).toBeVisible({ timeout: 15000 });
+  await loginViaForm(page, email, password);
 }
 
 /** Navigate to an admin page, retrying once if requireAdmin() redirect race occurs. */
@@ -222,20 +198,24 @@ test.describe('File Attachments', () => {
     await gotoAdmin(page, '/admin/file-settings');
     await expect(page.getByRole('heading', { name: 'File Uploads' })).toBeVisible({ timeout: 10000 });
 
-    // Autosave: change the value and wait for the success message rendered by
-    // AdminSurveyForm. This is more reliable than waiting for an arbitrary POST,
-    // which can race with the autosave debounce or attach after the response.
-    // Pick a target that differs from whatever is currently persisted, otherwise
-    // SurveyJS does not fire onValueChanged and no save is queued.
+    // Autosave: change the value and wait for both the network POST AND the
+    // success message rendered by AdminSurveyForm. Listening for the response
+    // alone is racy because the autosave debounce can swallow our edit; the
+    // visible message also lags briefly after the response. Wait for both.
     const maxSizeInput = page.getByLabel('Maximum file size (MB)');
     const savedMessage = page.getByText('File settings saved.');
 
     const initialValue = await maxSizeInput.inputValue();
     const targetValue = initialValue === '15' ? '20' : '15';
 
+    const firstSavePost = page.waitForResponse(
+      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
+      { timeout: 15000 },
+    );
     await maxSizeInput.click();
     await maxSizeInput.fill(targetValue);
     await maxSizeInput.blur();
+    await firstSavePost;
     await expect(savedMessage).toBeVisible({ timeout: 15000 });
 
     // Verify it was saved by loading a fresh page
@@ -244,12 +224,14 @@ test.describe('File Attachments', () => {
     await expect(maxSizeInput).toHaveValue(targetValue, { timeout: 10000 });
 
     // Reset to 10 (always different from targetValue, so autosave will fire).
-    // First wait for the success message to confirm the save completed (the
-    // previous reload cleared any stale message), then reload and assert the
-    // persisted value to prove it really stuck.
+    const secondSavePost = page.waitForResponse(
+      (resp) => resp.request().method() === 'POST' && resp.status() < 400,
+      { timeout: 15000 },
+    );
     await maxSizeInput.click();
     await maxSizeInput.fill('10');
     await maxSizeInput.blur();
+    await secondSavePost;
     await expect(page.getByText('File settings saved.')).toBeVisible({ timeout: 15000 });
     await gotoAdmin(page, '/admin/file-settings');
     await expect(page.getByRole('heading', { name: 'File Uploads' })).toBeVisible({ timeout: 10000 });

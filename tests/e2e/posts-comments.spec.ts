@@ -1,18 +1,11 @@
 import { test, expect, Page } from '@playwright/test';
 import { createServiceRoleClient } from '../helpers/supabase';
-import { ensureBuiltInAuthMode, gotoAuthed } from '../helpers/auth';
+import { gotoAuthed, loginViaForm } from '../helpers/auth';
 
 async function loginAs(page: Page, email: string, password = 'Password123') {
   const svc = createServiceRoleClient();
-  await ensureBuiltInAuthMode();
   await svc.from('profiles').update({ editor_view_mode: 'both' }).eq('email', email.toLowerCase());
-
-  await page.goto('/login');
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Log in' }).click();
-  await expect(page).toHaveURL('/', { timeout: 10000 });
-  await expect(page.locator('summary[aria-haspopup="true"]')).toBeVisible({ timeout: 10000 });
+  await loginViaForm(page, email, password);
 }
 
 /** Look up the posts-test ticket URL from DB (survives serial-retry context loss). */

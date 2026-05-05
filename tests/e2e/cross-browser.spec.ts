@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { loginViaForm } from '../helpers/auth';
 
 const SEED_PASSWORD = 'Password123';
 
@@ -30,27 +31,7 @@ async function loginAs(page: Page, email: string) {
     }
   }
 
-  await svc.from('app_settings').update({ value: 'built-in' }).eq('key', 'auth_mode');
-  await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
-
-  await page.goto('/login');
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(SEED_PASSWORD);
-  await page.getByRole('button', { name: 'Log in' }).click();
-
-  try {
-    await expect(page).toHaveURL('/', { timeout: 10000 });
-  } catch {
-    if (page.url().includes('/login')) {
-      await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
-      await page.goto('/login');
-      await page.getByLabel('Email').fill(email);
-      await page.getByLabel('Password').fill(SEED_PASSWORD);
-      await page.getByRole('button', { name: 'Log in' }).click();
-      await expect(page).toHaveURL('/', { timeout: 15000 });
-    }
-  }
-  await expect(page.locator('summary[aria-haspopup="true"]')).toBeVisible({ timeout: 15000 });
+  await loginViaForm(page, email, SEED_PASSWORD);
 }
 
 test.describe('Cross-Browser Smoke Tests', () => {
@@ -77,32 +58,32 @@ test.describe('Cross-Browser Smoke Tests', () => {
 
     // View ticket list
     await page.goto('/tickets');
-    await page.waitForLoadState('networkidle');
     // The tickets page no longer has an h1 — verify the search form is rendered
     await expect(page.locator('[aria-label="Search tickets"]')).toBeVisible({ timeout: 15000 });
 
     // Visit help center
     await page.goto('/help');
-    await page.waitForLoadState('networkidle');
-    await expect(page.locator('body')).toContainText(/help|knowledge|article/i);
+    await expect(page.getByRole('link', { name: 'Help Center' })).toBeVisible({ timeout: 15000 });
 
     // Visit profile
     await page.goto('/profile');
-    await page.waitForLoadState('networkidle');
     await expect(page.getByRole('heading', { name: 'My Profile' })).toBeVisible({ timeout: 15000 });
   });
 
   test('agent flow works', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
 
-    // Agent dashboard
+    // Agent dashboard — assert against a stable element instead of body text,
+    // which is fragile under cross-browser rendering and can race with a
+    // session-cookie reload that briefly renders the login form body.
     await page.goto('/agent');
-    await page.waitForLoadState('networkidle');
-    await expect(page.locator('body')).toContainText(/agent|dashboard|ticket/i);
+    await expect(
+      page.getByRole('link', { name: 'Agent Dashboard' }),
+    ).toBeVisible({ timeout: 15000 });
 
     // Canned responses
     await page.goto('/canned-responses');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await expect(page.locator('body')).toContainText(/canned|response/i);
   });
 

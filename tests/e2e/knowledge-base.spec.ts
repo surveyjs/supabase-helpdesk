@@ -1,34 +1,12 @@
 import { test, expect, Page } from '@playwright/test';
 import { createServiceRoleClient } from '../helpers/supabase';
+import { loginViaForm } from '../helpers/auth';
 
 /**
- * Helper: log in via the login form.
+ * Helper: log in via the login form (delegates to the shared, hardened helper).
  */
 async function loginAs(page: Page, email: string, password = 'Password123') {
-  const svc = createServiceRoleClient();
-  await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
-
-  await page.goto('/login');
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Log in' }).click();
-
-  // Retry once on transient auth failure (rate-limit / timing)
-  try {
-    await expect(page).toHaveURL('/', { timeout: 10000 });
-  } catch {
-    // Only retry if we're actually on the login page (not already logged in)
-    if (page.url().includes('/login')) {
-      await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
-      await page.goto('/login');
-      await page.getByLabel('Email').fill(email);
-      await page.getByLabel('Password').fill(password);
-      await page.getByRole('button', { name: 'Log in' }).click();
-      await expect(page).toHaveURL('/', { timeout: 15000 });
-    }
-  }
-
-  await expect(page.locator('summary[aria-haspopup="true"]')).toBeVisible({ timeout: 15000 });
+  await loginViaForm(page, email, password);
 }
 
 /** Navigate to an admin page, retrying once if requireAdmin() redirect race occurs. */

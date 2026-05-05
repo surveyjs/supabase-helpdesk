@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import { expect } from '@playwright/test';
 import { createServiceRoleClient } from './supabase';
 
 /**
@@ -21,6 +22,77 @@ export async function ensureBuiltInAuthMode(): Promise<void> {
     .from('app_settings')
     .update({ value: 'false' })
     .eq('key', 'auth_external_auto_redirect');
+}
+
+/**
+ * Robust email/password login used by every spec.
+ *
+ * Resilient to the four failure modes seen under parallel load:
+ *   1. `auth_mode` left as `external` by another worker (no Email field on
+ *      `/login`)  → ensureBuiltInAuthMode() before navigating.
+ *   2. `login_attempts` lockout from another worker that ran the same email
+ *      with a wrong password  → delete throttle rows for this email.
+ *   3. Stale cookies from a prior test in the same worker rendering `/`
+ *      already-authenticated  → clear page context cookies first so the
+ *      Email field is guaranteed to render.
+ *   4. Transient "Invalid email or password" alert (rare race against the
+ *      profile/login_attempts upserts)  → retry once with throttle re-cleared.
+ *
+ * Spec-level `loginAs(page, email)` should delegate to this helper instead
+ * of reimplementing the dance.
+ */
+export async function loginViaForm(
+  page: Page,
+  email: string,
+  password = 'Password123',
+): Promise<void> {
+  const svc = createServiceRoleClient();
+  await ensureBuiltInAuthMode();
+  await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
+  await page.context().clearCookies();
+
+  const submit = async (): Promise<boolean> => {
+    await page.goto('/login');
+    // Another worker (typically auth-external.spec.ts) can flip `auth_mode`
+    // back to `external` between our ensureBuiltInAuthMode() call above and
+    // this navigation, in which case `/login` renders only the SSO button
+    // and there is no Email field. Detect that and force built-in mode again.
+    try {
+      await expect(page.getByLabel('Email')).toBeVisible({ timeout: 5000 });
+    } catch {
+      await ensureBuiltInAuthMode();
+      await page.goto('/login');
+      await expect(page.getByLabel('Email')).toBeVisible({ timeout: 10000 });
+    }
+    await page.getByLabel('Email').fill(email);
+    await page.getByLabel('Password').fill(password);
+    await page.getByRole('button', { name: 'Log in' }).click();
+    // Race the success URL against the failure alert. Whichever fires first
+    // wins; we never block for the full 10s on a guaranteed failure.
+    const result = await Promise.race([
+      page
+        .waitForURL('/', { timeout: 10000 })
+        .then(() => 'ok' as const)
+        .catch(() => 'timeout' as const),
+      page
+        .getByRole('alert')
+        .waitFor({ state: 'visible', timeout: 10000 })
+        .then(() => 'alert' as const)
+        .catch(() => 'no-alert' as const),
+    ]);
+    return result === 'ok';
+  };
+
+  if (!(await submit())) {
+    // Re-clear the throttle and try once more.
+    await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
+    if (!(await submit())) {
+      // Final assertion provides the diagnostic in the test report.
+      await expect(page).toHaveURL('/', { timeout: 5000 });
+    }
+  }
+
+  await expect(page.locator('summary[aria-haspopup="true"]')).toBeVisible({ timeout: 15000 });
 }
 
 /**

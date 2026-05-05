@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { createClient } from '@supabase/supabase-js';
+import { loginViaForm } from '../helpers/auth';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'http://127.0.0.1:54321';
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -9,15 +10,10 @@ function svc() {
 }
 
 /**
- * Helper: log in via the login form.
+ * Helper: log in via the login form (delegates to the shared, hardened helper).
  */
 async function loginAs(page: Page, email: string, password = 'Password123') {
-  await page.goto('/login');
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Log in' }).click();
-  await expect(page).toHaveURL('/', { timeout: 10000 });
-  await expect(page.locator('summary[aria-haspopup="true"]')).toBeVisible({ timeout: 10000 });
+  await loginViaForm(page, email, password);
 }
 
 // ============================================================
@@ -189,15 +185,29 @@ test.describe('Ticket Detail Realtime', () => {
   test('ticket detail page loads successfully', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
 
-    // Create a ticket to verify realtime component is present
-    await page.goto('/tickets/new');
-    await page.getByLabel('Title').fill('Realtime Test Ticket');
-    await page.locator('[data-testid="markdown-editor"]').first().locator('textarea[name="textarea"]').fill('Testing realtime updates.');
+    // Create a ticket to verify realtime component is present.
+    // Submit can occasionally 500 under parallel load — retry the click once
+    // if the navigation to the new ticket does not happen.
+    const fillForm = async () => {
+      await page.goto('/tickets/new');
+      await page.getByLabel('Title').fill('Realtime Test Ticket');
+      await page
+        .locator('[data-testid="markdown-editor"]')
+        .first()
+        .locator('textarea[name="textarea"]')
+        .fill('Testing realtime updates.');
+    };
 
-    // Submit form
+    await fillForm();
     await page.getByRole('button', { name: /submit|create/i }).click();
+    try {
+      await page.waitForURL(/\/tickets\/[^/]+$/, { timeout: 15000 });
+    } catch {
+      await fillForm();
+      await page.getByRole('button', { name: /submit|create/i }).click();
+      await page.waitForURL(/\/tickets\/[^/]+$/, { timeout: 15000 });
+    }
 
-    // Should redirect to ticket detail
     await expect(page.getByText('Realtime Test Ticket')).toBeVisible({ timeout: 10000 });
   });
 });

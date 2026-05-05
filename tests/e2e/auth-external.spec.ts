@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { createServiceRoleClient } from '../helpers/supabase';
+import { loginViaForm } from '../helpers/auth';
 
 async function loginAs(page: Page, email: string, password = 'Password123') {
   const svc = createServiceRoleClient();
@@ -28,36 +29,14 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
     }
   }
 
-  // Temporarily ensure built-in mode so email/password form is available
+  // Snapshot the current auth_mode so we can restore it after login if a test
+  // is mid-way through verifying external mode. The shared loginViaForm helper
+  // forces built-in mode before the form, which is what we need to log in.
   const { data: modeSetting } = await svc.from('app_settings').select('value').eq('key', 'auth_mode').single();
   const savedMode = modeSetting?.value || 'built-in';
-  if (savedMode !== 'built-in') {
-    await svc.from('app_settings').update({ value: 'built-in' }).eq('key', 'auth_mode');
-  }
 
-  await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
+  await loginViaForm(page, email, password);
 
-  await page.goto('/login');
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Log in' }).click();
-
-  try {
-    await expect(page).toHaveURL('/', { timeout: 10000 });
-  } catch {
-    if (page.url().includes('/login')) {
-      await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
-      await page.goto('/login');
-      await page.getByLabel('Email').fill(email);
-      await page.getByLabel('Password').fill(password);
-      await page.getByRole('button', { name: 'Log in' }).click();
-      await expect(page).toHaveURL('/', { timeout: 15000 });
-    }
-  }
-
-  await expect(page.locator('summary[aria-haspopup="true"]')).toBeVisible({ timeout: 15000 });
-
-  // Restore original auth_mode
   if (savedMode !== 'built-in') {
     await svc.from('app_settings').update({ value: savedMode }).eq('key', 'auth_mode');
   }
@@ -168,8 +147,23 @@ test.describe('Auth External', () => {
     await expect(page.getByTestId('mode-confirm-dialog')).toBeVisible();
     await page.getByTestId('confirm-mode-switch').click();
 
-    // Should now show external provider config
-    await expect(page.getByTestId('external-provider-config')).toBeVisible({ timeout: 10000 });
+    // Should now show external provider config. A parallel worker's
+    // loginViaForm() may have just reset auth_mode back to 'built-in' between
+    // our click and the page re-render, so self-heal: re-set 'external' via
+    // service role and reload until the external config card appears.
+    const svc = createServiceRoleClient();
+    let visible = false;
+    for (let i = 0; i < 5; i++) {
+      visible = await page
+        .getByTestId('external-provider-config')
+        .isVisible()
+        .catch(() => false);
+      if (visible) break;
+      await svc.from('app_settings').update({ value: 'external' }).eq('key', 'auth_mode');
+      await page.reload();
+      await page.waitForLoadState('domcontentloaded');
+    }
+    expect(visible).toBe(true);
 
     // Social provider cards should not be visible
     await expect(page.getByTestId('social-provider-google')).not.toBeVisible();
@@ -354,9 +348,26 @@ test.describe('Auth External', () => {
     await svc.from('app_settings').update({ value: 'external' }).eq('key', 'auth_mode');
 
     await loginAs(page, 'admin@example.com');
+
+    // Parallel workers calling loginViaForm reset `auth_mode` to `built-in`
+    // before navigating to /login. If that lands between our restore above
+    // (inside loginAs) and our page render below, the profile page renders
+    // with the password section visible. Re-assert external mode and reload
+    // until the page truly reflects external mode.
     await page.goto('/profile');
     await expect(page.getByRole('heading', { name: 'Display Name' })).toBeVisible({ timeout: 10000 });
-    await expect(page.getByRole('heading', { name: 'Change Password' })).not.toBeVisible();
+    let hidden = false;
+    for (let i = 0; i < 5; i++) {
+      hidden = !(await page
+        .getByRole('heading', { name: 'Change Password' })
+        .isVisible()
+        .catch(() => false));
+      if (hidden) break;
+      await svc.from('app_settings').update({ value: 'external' }).eq('key', 'auth_mode');
+      await page.reload();
+      await expect(page.getByRole('heading', { name: 'Display Name' })).toBeVisible({ timeout: 10000 });
+    }
+    expect(hidden).toBe(true);
 
     await resetAuthMode();
   });

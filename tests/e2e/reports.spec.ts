@@ -1,12 +1,8 @@
 import { test, expect, Page } from '@playwright/test';
+import { loginViaForm } from '../helpers/auth';
 
 async function loginAs(page: Page, email: string, password = 'Password123') {
-  await page.goto('/login');
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Log in' }).click();
-  await expect(page).toHaveURL('/', { timeout: 10000 });
-  await expect(page.locator('summary[aria-haspopup="true"]')).toBeVisible({ timeout: 10000 });
+  await loginViaForm(page, email, password);
 }
 
 // ============================================================

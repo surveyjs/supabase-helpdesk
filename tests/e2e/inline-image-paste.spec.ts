@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { createServiceRoleClient } from '../helpers/supabase';
+import { loginViaForm } from '../helpers/auth';
 
 // Tiny 1×1 transparent PNG, base64-encoded. Reused by all tests to simulate a
 // clipboard image without touching the filesystem.
@@ -7,17 +8,7 @@ const PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Zy0ZuYAAAAASUVORK5CYII=';
 
 async function loginAs(page: Page, email: string, password = 'Password123') {
-  const svc = createServiceRoleClient();
-  await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
-
-  await page.goto('/login');
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Log in' }).click();
-  await expect(page).toHaveURL('/', { timeout: 10000 });
-  await expect(page.locator('summary[aria-haspopup="true"]')).toBeVisible({
-    timeout: 10000,
-  });
+  await loginViaForm(page, email, password);
 }
 
 /**

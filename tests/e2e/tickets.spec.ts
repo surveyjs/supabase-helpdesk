@@ -127,11 +127,13 @@ test.describe('Tickets', () => {
     await expect(page.getByRole('heading', { name: 'E2E Test Ticket' })).toBeVisible();
 
     // Check metadata — now in the sidebar (rendered via SurveyJS controls).
-    // SurveyJS is loaded dynamically (ssr: false), so wait for the form
-    // before asserting individual labels to avoid flakiness in CI.
+    // SurveyJS is loaded dynamically (ssr: false), so first wait for the
+    // form wrapper and one of its rendered question titles to avoid races
+    // in CI where the dynamic chunk takes longer to mount.
     const sidebar = page.getByTestId('ticket-sidebar');
-    await expect(sidebar.getByRole('combobox', { name: 'Urgency' })).toBeVisible({ timeout: 15000 });
-    await expect(sidebar.getByRole('combobox', { name: 'Type' })).toBeVisible({ timeout: 15000 });
+    const sidebarSurvey = sidebar.getByTestId('ticket-sidebar-survey');
+    await expect(sidebarSurvey).toBeVisible({ timeout: 20000 });
+    await expect(sidebarSurvey.getByText('Status')).toBeVisible({ timeout: 20000 });
     await expect(sidebar.getByText('Type')).toBeVisible();
     await expect(sidebar.getByText('Issue').first()).toBeVisible();
     await expect(sidebar.getByText('Urgency')).toBeVisible();

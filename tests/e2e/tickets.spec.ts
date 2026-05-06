@@ -47,9 +47,14 @@ test.describe('Tickets', () => {
       return ticketUrl;
     }
 
-    // Fallback for isolated/single-test runs.
+    // Fallback for isolated/single-test runs. Select the "Issue" type
+    // explicitly so downstream assertions match what the create test sets.
     const { data: alice } = await svc.from('profiles').select('id').eq('email', 'alice@example.com').single();
-    const { data: typeData } = await svc.from('ticket_types').select('id').limit(1).single();
+    const { data: typeData } = await svc
+      .from('ticket_types')
+      .select('id')
+      .eq('name', 'Issue')
+      .single();
     if (!alice || !typeData) throw new Error('Could not prepare fallback ticket');
 
     const { data: created } = await svc
@@ -126,8 +131,16 @@ test.describe('Tickets', () => {
 
     await expect(page.getByRole('heading', { name: 'E2E Test Ticket' })).toBeVisible();
 
-    // Check metadata — now in the sidebar (rendered either as static <dd> or via SurveyJS controls)
+    // Check metadata — now in the sidebar (rendered via SurveyJS controls).
+    // SurveyJS is loaded dynamically (ssr: false) and renders questions
+    // progressively, so use the stable .sd-question[data-name="..."] DOM
+    // hook instead of relying on label text, and give the dynamic chunk
+    // ample time to mount in CI.
     const sidebar = page.getByTestId('ticket-sidebar');
+    const sidebarSurvey = sidebar.getByTestId('ticket-sidebar-survey');
+    await expect(sidebarSurvey).toBeVisible({ timeout: 20000 });
+    await expect(sidebarSurvey.locator('.sd-question[data-name="urgency"]')).toBeVisible({ timeout: 20000 });
+    await expect(sidebarSurvey.locator('.sd-question[data-name="type_id"]')).toBeVisible({ timeout: 20000 });
     await expect(sidebar.getByText('Type')).toBeVisible();
     await expect(sidebar.getByText('Issue').first()).toBeVisible();
     await expect(sidebar.getByText('Urgency')).toBeVisible();

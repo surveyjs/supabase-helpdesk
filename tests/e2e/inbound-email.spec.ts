@@ -192,17 +192,15 @@ test.describe('Inbound Email Admin Configuration', () => {
     // Blur the field to trigger the change event in SurveyJS
     await replyToInput.blur();
 
-    // Wait for autosave to complete (debounce 700ms + server action)
-    await page.waitForTimeout(1500);
-
-    // Verify in DB
-    const { data } = await svc
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'inbound_email_reply_to_address')
-      .single();
-    
-    expect(data?.value).toBe('support@persist-test.com');
+    // Wait for autosave (debounce 700ms + server action) by polling DB.
+    await expect.poll(async () => {
+      const { data } = await svc
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'inbound_email_reply_to_address')
+        .single();
+      return data?.value;
+    }, { timeout: 20000, intervals: [500, 500, 1000] }).toBe('support@persist-test.com');
 
     // Reload and check UI reflects saved state
     await page.reload();

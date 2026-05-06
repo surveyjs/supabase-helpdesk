@@ -31,18 +31,65 @@ export async function selectSurveyDropdown(
     .locator('.sd-dropdown__chevron-button, .sd-dropdown_chevron-button, .sd-dropdown, [role="combobox"]')
     .first();
   await trigger.waitFor({ state: 'visible', timeout: 10000 });
-  await trigger.scrollIntoViewIfNeeded().catch(() => {});
-  await trigger.click({ force: true });
 
-  // Multiple popup containers exist (one per dropdown). Pick the visible one.
-  const visiblePopup = page.locator('.sv-popup__container').filter({ visible: true }).first();
-  await visiblePopup.waitFor({ state: 'visible', timeout: 10000 });
-  const option = visiblePopup.locator('.sv-list__item').filter({ hasText: optionText }).first();
-  await option.waitFor({ state: 'visible', timeout: 10000 });
-  await option.scrollIntoViewIfNeeded().catch(() => {});
-  await option.click({ force: true });
-  // Some popups stay open (tagbox); ensure subsequent reads aren't blocked by overlay.
-  await page.keyboard.press('Escape').catch(() => {});
+  // SurveyJS re-renders the option list when the underlying choices array
+  // updates (e.g. agent/team option queries refresh after the popup opens).
+  // The matching <li> can detach mid-click. Retry the open→click cycle a few
+  // times, verifying the selection actually took effect.
+  const optionRegex =
+    typeof optionText === 'string'
+      ? new RegExp(optionText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      : optionText;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      // Always close any existing popup first, then re-open from a known state.
+      await page.keyboard.press('Escape').catch(() => {});
+      await page.waitForTimeout(100);
+      await trigger.scrollIntoViewIfNeeded().catch(() => {});
+      await trigger.click({ force: true });
+
+      // Multiple popup containers exist (one per dropdown). Pick the visible one.
+      const visiblePopup = page.locator('.sv-popup__container').filter({ visible: true }).first();
+      await visiblePopup.waitFor({ state: 'visible', timeout: 10000 });
+
+      // Let async choicesByUrl populate / re-populate before clicking. We
+      // wait for two consecutive snapshots of the option count to match so
+      // we don't click a row that's about to be re-rendered.
+      const items = visiblePopup.locator('.sv-list__item');
+      let prev = -1;
+      for (let i = 0; i < 10; i++) {
+        const cur = await items.count();
+        if (cur > 0 && cur === prev) break;
+        prev = cur;
+        await page.waitForTimeout(120);
+      }
+
+      const option = items.filter({ hasText: optionText }).first();
+      await option.waitFor({ state: 'visible', timeout: 5000 });
+      await option.scrollIntoViewIfNeeded().catch(() => {});
+      await option.click({ force: true, timeout: 5000 });
+
+      // Verify the trigger now reflects the selection. If the popup re-rendered
+      // and our click landed on a stale <li> that detached, the trigger text
+      // won't have changed — fall through to retry.
+      await page.waitForTimeout(150);
+      const triggerText =
+        (await q.locator('.sd-dropdown__value, [role="combobox"]').first().textContent())?.trim() ?? '';
+      if (optionRegex.test(triggerText)) {
+        await page.keyboard.press('Escape').catch(() => {});
+        return;
+      }
+      lastError = new Error(
+        `selectSurveyDropdown(${name}): click did not update trigger text (got "${triggerText}")`,
+      );
+    } catch (err) {
+      lastError = err;
+      await page.keyboard.press('Escape').catch(() => {});
+      await page.waitForTimeout(200);
+    }
+  }
+  throw lastError;
 }
 
 /**

@@ -32,24 +32,13 @@ import { TicketTabs } from './TicketTabs';
 import { MarkAsDuplicateForm } from './MarkAsDuplicateForm';
 import { MergeTicketForm } from './MergeTicketForm';
 import { TicketSidebarSurvey } from './TicketSidebarSurvey';
+import { TicketTagChips } from './TicketTagChips';
 import {
   parseTicketDetailAgentTemplate,
   parseTicketDetailUserTemplate,
 } from '@/lib/constants/survey-ui-config';
 import { computeTicketDetailFieldPolicy } from '@/lib/tickets/ticket-detail-policy';
 import { applyTemplatePolicy, injectTemplateChoices } from '@/lib/tickets/apply-template-policy';
-
-function getContrastColor(hex: string): string {
-  const c = hex.replace('#', '');
-  const srgb = [0, 2, 4].map((i) => {
-    const v = parseInt(c.substring(i, i + 2), 16) / 255;
-    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
-  });
-  const L = 0.2126 * srgb[0] + 0.7152 * srgb[1] + 0.0722 * srgb[2];
-  const ratioWhite = 1.05 / (L + 0.05);
-  const ratioDark = (L + 0.05) / 0.05;
-  return ratioWhite >= ratioDark ? '#FFFFFF' : '#000000';
-}
 
 const SLA_DOT_COLORS: Record<SlaIndicatorStatus, string> = {
   on_track: 'bg-green-500',
@@ -93,9 +82,6 @@ export default async function TicketDetailPage({
       created_at, updated_at, duplicate_of_id, merged_into_id,
       creator_id, assigned_agent_id, type_id, category_id, custom_fields,
       source_article_id,
-      type:ticket_types(id, name),
-      category:categories(id, name),
-      assigned_agent:profiles!tickets_assigned_agent_id_fkey(id, display_name),
       creator:profiles!tickets_creator_id_fkey(id, display_name, team_id)
     `)
     .eq('id', id)
@@ -105,9 +91,6 @@ export default async function TicketDetailPage({
 
   // Extract FK relations (Supabase returns arrays for embedded selects)
   const creator = Array.isArray(ticket.creator) ? ticket.creator[0] : ticket.creator;
-  const assignedAgent = Array.isArray(ticket.assigned_agent) ? ticket.assigned_agent[0] : ticket.assigned_agent;
-  const ticketType = Array.isArray(ticket.type) ? ticket.type[0] : ticket.type;
-  const ticketCategory = Array.isArray(ticket.category) ? ticket.category[0] : ticket.category;
 
   // Slug redirect
   const correctSlug = generateSlug(ticket.title);
@@ -611,9 +594,6 @@ export default async function TicketDetailPage({
   }
 
   const creatorName = creator?.display_name ?? `User #${ticket.creator_id}`;
-  void assignedAgent;
-  void ticketType;
-  void ticketCategory;
 
   // Fetch source article if present (for agents)
   let sourceArticle: { id: number; title: string; slug: string; category_name: string | null } | null = null;
@@ -1000,25 +980,16 @@ export default async function TicketDetailPage({
               </div>
             )}
 
-            {/* Tags (chip list shown next to the SurveyJS tagbox so colors stay visible) */}
-            {ticketTags.length > 0 && (
-              <div className="mt-3 border-t border-gray-200 pt-3" data-testid="ticket-tags">
-                <div className="flex flex-wrap gap-1">
-                  {ticketTags.map((tag) => {
-                    const textColor = getContrastColor(tag.color);
-                    return (
-                      <span
-                        key={tag.id}
-                        className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium"
-                        style={{ backgroundColor: tag.color, color: textColor }}
-                      >
-                        {tag.name}
-                      </span>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+            {/* Tags (chip list shown next to the SurveyJS tagbox so colors stay visible).
+                Lives as a client component so the chips update live when the tagbox
+                writes back via TicketSidebarSurvey. */}
+            <TicketTagChips
+              ticketId={ticket.id}
+              initialTagIds={ticketTags.map((t) => t.id)}
+              tagsById={Object.fromEntries(
+                [...ticketTags, ...allTags].map((t) => [t.id, t]),
+              )}
+            />
 
             {/* Follow status (owner / blocked / agent counter — toggle is in the SurveyJS form) */}
             {(isTicketOwner || (isAgent && followers.length > 0)) && (

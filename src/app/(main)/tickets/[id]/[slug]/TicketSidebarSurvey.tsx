@@ -7,6 +7,7 @@ import surveyTheme from '@/components/features/survey/theme.json';
 import 'survey-core/survey-core.min.css';
 import '@/components/features/survey/survey-overrides.css';
 import { ticketDetailDispatch } from '@/lib/tickets/ticket-detail-dispatch';
+import { dispatchTicketDetailFieldChange } from '@/lib/tickets/ticket-detail-events';
 import type { SurveyJsonDefinition } from '@/lib/constants/survey-ui-config';
 
 const Survey = dynamic(() => import('survey-react-ui').then((m) => m.Survey), { ssr: false });
@@ -21,6 +22,9 @@ type FieldStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 export function TicketSidebarSurvey({ ticketId, templateJson, initial }: TicketSidebarSurveyProps) {
   const previousRef = useRef<Record<string, unknown>>({ ...initial });
+  // Names whose next onValueChanged is a programmatic revert and must not
+  // re-trigger the dispatcher.
+  const revertingRef = useRef<Set<string>>(new Set());
   const [fieldStatus, setFieldStatus] = useState<Record<string, FieldStatus>>({});
   const [generalError, setGeneralError] = useState<string | null>(null);
 
@@ -40,23 +44,44 @@ export function TicketSidebarSurvey({ ticketId, templateJson, initial }: TicketS
       _sender: Model,
       options: { name: string; value: unknown },
     ) => {
+      // Suppress dispatch for programmatic reverts triggered after a failed save.
+      if (revertingRef.current.has(options.name)) {
+        revertingRef.current.delete(options.name);
+        return;
+      }
+
       const dispatcher = ticketDetailDispatch[options.name];
       if (!dispatcher) return;
       const prev = previousRef.current[options.name];
       const tasks = dispatcher(ticketId, options.value, prev);
       if (tasks.length === 0) return;
 
-      previousRef.current = { ...previousRef.current, [options.name]: options.value };
-
       setFieldStatus((s) => ({ ...s, [options.name]: 'saving' }));
       Promise.all(tasks)
         .then(() => {
+          // Only advance the baseline after the DB confirms the change so a
+          // later failure cannot leave previousRef out of sync with the DB.
+          previousRef.current = {
+            ...previousRef.current,
+            [options.name]: options.value,
+          };
           setFieldStatus((s) => ({ ...s, [options.name]: 'saved' }));
           setGeneralError(null);
+          // Notify sibling UI (e.g. tag chip list) of the persisted change.
+          dispatchTicketDetailFieldChange({
+            ticketId,
+            name: options.name,
+            value: options.value,
+          });
         })
         .catch(() => {
           setFieldStatus((s) => ({ ...s, [options.name]: 'error' }));
           setGeneralError('Failed to save changes.');
+          // Revert the survey value back to the last-known-good baseline so
+          // the UI matches the DB and a subsequent edit recomputes the diff
+          // from the right starting point.
+          revertingRef.current.add(options.name);
+          model.setValue(options.name, prev);
         });
     };
 

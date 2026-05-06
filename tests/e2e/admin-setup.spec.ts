@@ -45,7 +45,7 @@ test.describe('Admin Setup layout', () => {
     await expect(page.getByRole('link', { name: 'Teams' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Agents & Admins' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Custom Fields' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Survey UI Config' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Survey Templates' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Audit Log' })).toBeVisible();
   });
 
@@ -55,17 +55,11 @@ test.describe('Admin Setup layout', () => {
     await expect(page).not.toHaveURL(/\/admin/, { timeout: 10000 });
   });
 
-  test('admin can open survey ui config page', async ({ page }) => {
-    await loginAs(page, 'admin@example.com');
-    await gotoAdmin(page, '/admin/survey-ui');
-    await expect(page.getByRole('heading', { name: 'Survey UI JSON Config' })).toBeVisible({ timeout: 10000 });
-    await expect(page.getByTestId('survey-ui-config-survey_agent_dashboard_config')).toBeVisible();
-  });
-
   test('admin can open survey templates page', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/survey-templates');
     await expect(page.getByRole('heading', { name: 'Survey Templates' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('survey-template-row-survey_agent_dashboard_template')).toBeVisible();
     await expect(page.getByTestId('survey-template-row-survey_ticket_detail_agent_template')).toBeVisible();
     await expect(page.getByTestId('survey-template-row-survey_ticket_detail_user_template')).toBeVisible();
   });

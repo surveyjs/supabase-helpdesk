@@ -3,13 +3,16 @@
 import { useActionState, useMemo, useRef, useState } from 'react';
 import { SurveyJsonForm } from '@/components/features/survey/SurveyJsonForm';
 import {
-  saveTicketDetailTemplate,
+  saveSurveyTemplate,
   resetSurveyUiConfig,
   type SurveyUiSaveResult,
 } from '@/lib/actions/admin';
 
 type SurveyTemplateEditorProps = {
-  settingKey: 'survey_ticket_detail_agent_template' | 'survey_ticket_detail_user_template';
+  settingKey:
+    | 'survey_agent_dashboard_template'
+    | 'survey_ticket_detail_agent_template'
+    | 'survey_ticket_detail_user_template';
   title: string;
   initialJson: string;
 };
@@ -37,7 +40,7 @@ export function SurveyTemplateEditor({
   initialJson,
 }: SurveyTemplateEditorProps) {
   const [state, saveAction, isSaving] = useActionState<SurveyUiSaveResult | null, FormData>(
-    saveTicketDetailTemplate,
+    saveSurveyTemplate,
     null,
   );
   const [clientError, setClientError] = useState<string | null>(null);

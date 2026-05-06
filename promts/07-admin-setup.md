@@ -313,26 +313,25 @@ Update `src/components/layout/NavBar.tsx`:
 - Notification templates: admin can read and update
 - Non-admin cannot read notification templates (RLS)
 
-## Change Update — Survey UI Config Tab
+## Change Update — Survey Templates Tab
 
-Add an additional admin section:
-- Sidebar item: `Survey UI Config`
-- Route: `/admin/survey-ui`
+Add an admin section:
+- Sidebar item: `Survey Templates`
+- Route: `/admin/survey-templates`
 
-This section stores and edits SurveyJS-related JSON settings in `app_settings`:
+This section stores and edits SurveyJS templates in `app_settings`:
 
-- Route `/admin/survey-ui` (Sidebar item `Survey UI Config`):
-  - `survey_agent_dashboard_config` — agent dashboard filter/sort settings.
 - Route `/admin/survey-templates` (Sidebar item `Survey Templates`):
+  - `survey_agent_dashboard_template` — SurveyJS template JSON for the Agent Dashboard "Views & Filters" panel. Question `name` values must equal the SQL filter / column keys: `q, email, status, sort, urgency, severity, type, category, agent, team, tier, tags`.
   - `survey_ticket_detail_agent_template` — SurveyJS template JSON for the ticket-detail editable sidebar shown to agents.
   - `survey_ticket_detail_user_template` — SurveyJS template JSON for the ticket-detail editable sidebar shown to non-agent users.
   - Templates are edited as raw JSON in a SurveyJS `comment` question (no SurveyJS Creator dependency).
-  - Question `name` values must equal Supabase columns: `status, urgency, severity, type_id, category_id, assigned_agent_id, is_private, tag_ids, is_following`.
+  - Ticket-detail question `name` values must equal Supabase columns: `status, urgency, severity, type_id, category_id, assigned_agent_id, is_private, tag_ids, is_following`.
 
 Guidelines:
 - Save/reset actions must be admin-only and audit-logged.
-- Stored JSON must be validated and normalized before persistence.
-- Changes should revalidate affected pages (`/admin/survey-ui`, `/agent`, ticket detail pages as needed).
+- Stored JSON must be validated (parsed + question-name allowlist) before persistence.
+- Changes should revalidate affected pages (`/admin/survey-templates`, `/agent`, ticket detail pages as needed).
 - Agent/admin management: promote user to agent, demote back
 - Last admin guard: cannot demote the only admin
 - App settings: admin can update privacy, pagination, rate limit settings

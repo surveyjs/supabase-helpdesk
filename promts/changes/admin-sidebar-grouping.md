@@ -58,7 +58,7 @@ How tickets enter and leave the system.
 - File Uploads → `/admin/file-settings`
 
 ### 7. Appearance & UX
-- Survey UI Config → `/admin/survey-ui`
+- Survey Templates → `/admin/survey-templates`
 - User Settings → `/admin/user-settings`
 
 ### 8. Audit & Compliance

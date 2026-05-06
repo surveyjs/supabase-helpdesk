@@ -1,23 +1,6 @@
 import agentTemplateJson from '@/components/features/survey/form-json/admin/ticket-detail-agent-template.json';
 import userTemplateJson from '@/components/features/survey/form-json/admin/ticket-detail-user-template.json';
-
-export type AgentDashboardSurveyConfig = {
-  enabledFilters: {
-    q: boolean;
-    email: boolean;
-    status: boolean;
-    sort: boolean;
-    urgency: boolean;
-    severity: boolean;
-    type: boolean;
-    category: boolean;
-    agent: boolean;
-    team: boolean;
-    tier: boolean;
-    tags: boolean;
-  };
-  defaultSort: '' | 'created' | 'sla';
-};
+import agentDashboardTemplateJson from '@/components/features/survey/form-json/admin/agent-dashboard-template.json';
 
 /**
  * Allowed SurveyJS question `name` values for ticket-detail templates.
@@ -54,23 +37,31 @@ export type TicketDetailTemplateWrapper = {
   tierControlRules: TicketDetailTierControlRules;
 };
 
-export const DEFAULT_AGENT_DASHBOARD_SURVEY_CONFIG: AgentDashboardSurveyConfig = {
-  enabledFilters: {
-    q: true,
-    email: true,
-    status: true,
-    sort: true,
-    urgency: true,
-    severity: true,
-    type: true,
-    category: true,
-    agent: true,
-    team: true,
-    tier: true,
-    tags: true,
-  },
-  defaultSort: '',
-};
+/**
+ * Allowed SurveyJS question `name` values for the agent dashboard filter
+ * template. Each name equals the SQL filter / column key consumed by
+ * `generateSqlFromJson`. No mapping layer.
+ */
+export const AGENT_DASHBOARD_ALLOWED_QUESTION_NAMES = [
+  'q',
+  'email',
+  'status',
+  'sort',
+  'urgency',
+  'severity',
+  'type',
+  'category',
+  'agent',
+  'team',
+  'tier',
+  'tags',
+] as const;
+
+export type AgentDashboardQuestionName =
+  (typeof AGENT_DASHBOARD_ALLOWED_QUESTION_NAMES)[number];
+
+export const DEFAULT_AGENT_DASHBOARD_TEMPLATE: SurveyJsonDefinition =
+  agentDashboardTemplateJson as SurveyJsonDefinition;
 
 export const DEFAULT_TICKET_DETAIL_TIER_CONTROL_RULES: TicketDetailTierControlRules = {
   statusAllowedTiers: [],
@@ -99,34 +90,29 @@ function asStringArray(value: unknown): string[] {
   return value.filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
 }
 
-export function parseAgentDashboardSurveyConfig(raw: string | null | undefined): AgentDashboardSurveyConfig {
-  if (!raw) return DEFAULT_AGENT_DASHBOARD_SURVEY_CONFIG;
+/**
+ * Parse the stored `survey_agent_dashboard_template` value into a SurveyJS
+ * JSON object. Falls back to the bundled default if the row is missing,
+ * empty, or unparseable.
+ */
+export function parseAgentDashboardTemplate(raw: string | null | undefined): SurveyJsonDefinition {
+  if (!raw) return DEFAULT_AGENT_DASHBOARD_TEMPLATE;
   try {
     const parsed = JSON.parse(raw) as unknown;
-    if (!isRecord(parsed)) return DEFAULT_AGENT_DASHBOARD_SURVEY_CONFIG;
-
-    const enabled = isRecord(parsed.enabledFilters) ? parsed.enabledFilters : {};
-
-    return {
-      enabledFilters: {
-        q: enabled.q !== false,
-        email: enabled.email !== false,
-        status: enabled.status !== false,
-        sort: enabled.sort !== false,
-        urgency: enabled.urgency !== false,
-        severity: enabled.severity !== false,
-        type: enabled.type !== false,
-        category: enabled.category !== false,
-        agent: enabled.agent !== false,
-        team: enabled.team !== false,
-        tier: enabled.tier !== false,
-        tags: enabled.tags !== false,
-      },
-      defaultSort: parsed.defaultSort === 'created' || parsed.defaultSort === 'sla' ? parsed.defaultSort : '',
-    };
+    if (!isRecord(parsed)) return DEFAULT_AGENT_DASHBOARD_TEMPLATE;
+    return parsed as SurveyJsonDefinition;
   } catch {
-    return DEFAULT_AGENT_DASHBOARD_SURVEY_CONFIG;
+    return DEFAULT_AGENT_DASHBOARD_TEMPLATE;
   }
+}
+
+/**
+ * Validate that every named element in an agent-dashboard template uses an
+ * allowed name. Returns the list of offending names (empty when valid).
+ */
+export function findInvalidAgentDashboardQuestionNames(template: unknown): string[] {
+  const allowed = new Set<string>(AGENT_DASHBOARD_ALLOWED_QUESTION_NAMES);
+  return collectQuestionNames(template).filter((name) => !allowed.has(name));
 }
 
 function parseTierControlRules(raw: unknown): TicketDetailTierControlRules {

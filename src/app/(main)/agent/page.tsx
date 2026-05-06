@@ -19,7 +19,7 @@ import { BulkSelectProvider } from '@/components/features/bulk-actions/BulkSelec
 import { TicketCheckbox, SelectAllCheckbox } from '@/components/features/bulk-actions/TicketCheckbox';
 import { BulkActionToolbar } from '@/components/features/bulk-actions/BulkActionToolbar';
 import { ViewsAndFiltersPanel } from './ViewsAndFiltersPanel';
-import { parseAgentDashboardSurveyConfig } from '@/lib/constants/survey-ui-config';
+import { parseAgentDashboardTemplate } from '@/lib/constants/survey-ui-config';
 import {
   DEFAULT_VIEW_NAME,
   EMPTY_FILTER_DATA,
@@ -51,10 +51,10 @@ export default async function AgentDashboardPage({
   const { data: surveyUiSetting } = await supabase
     .from('app_settings')
     .select('value')
-    .eq('key', 'survey_agent_dashboard_config')
+    .eq('key', 'survey_agent_dashboard_template')
     .maybeSingle();
 
-  const surveyFilterConfig = parseAgentDashboardSurveyConfig(surveyUiSetting?.value);
+  const surveyFilterTemplate = parseAgentDashboardTemplate(surveyUiSetting?.value as string | null);
 
   const requestedViewId = typeof params.view === 'string' ? params.view : null;
   const pageParam = typeof params.page === 'string' ? params.page : '1';
@@ -113,9 +113,6 @@ export default async function AgentDashboardPage({
   }
 
   const effectiveData: TicketFilterData = { ...activeView.definition.data };
-  if (!effectiveData.sort && surveyFilterConfig.defaultSort) {
-    effectiveData.sort = surveyFilterConfig.defaultSort;
-  }
 
   const queryFilters = filterDataToQueryFilters(effectiveData, pageParam);
 
@@ -206,7 +203,7 @@ export default async function AgentDashboardPage({
         <div className="px-4 pt-4 pb-4 border-t border-gray-200">
           <ViewsAndFiltersPanel
             filterOptions={filterOptions}
-            config={surveyFilterConfig}
+            template={surveyFilterTemplate}
             savedViews={savedViews.map((v) => ({ id: v.id, name: v.name }))}
             activeViewId={activeView.id}
             activeViewName={activeView.name}

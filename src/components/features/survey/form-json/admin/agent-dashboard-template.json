@@ -1,0 +1,126 @@
+{
+  "showQuestionNumbers": "off",
+  "pages": [
+    {
+      "name": "filters",
+      "elements": [
+        {
+          "type": "text",
+          "name": "q",
+          "title": "Search",
+          "inputType": "search",
+          "placeholder": "Search title & all posts..."
+        },
+        {
+          "type": "text",
+          "name": "email",
+          "title": "Submitter Email",
+          "placeholder": "email@..."
+        },
+        {
+          "type": "checkbox",
+          "name": "status",
+          "title": "Status",
+          "colCount": 0,
+          "minSelectedChoices": 1,
+          "choices": [
+            { "value": "open", "text": "Active" },
+            { "value": "pending", "text": "Pending" },
+            { "value": "closed", "text": "Closed" }
+          ],
+          "defaultValue": ["open", "pending", "closed"]
+        },
+        {
+          "type": "dropdown",
+          "name": "sort",
+          "title": "Sort By",
+          "defaultValue": "",
+          "allowClear": false,
+          "choices": [
+            { "value": "", "text": "Last Modified" },
+            { "value": "created", "text": "Created Date" },
+            { "value": "sla", "text": "SLA Risk" }
+          ]
+        },
+        {
+          "type": "dropdown",
+          "name": "urgency",
+          "title": "Urgency",
+          "choices": [
+            { "value": "", "text": "All" },
+            { "value": "low", "text": "Low" },
+            { "value": "medium", "text": "Medium" },
+            { "value": "high", "text": "High" },
+            { "value": "critical", "text": "Critical" }
+          ]
+        },
+        {
+          "type": "dropdown",
+          "name": "severity",
+          "title": "Severity",
+          "startWithNewLine": false,
+          "choices": [
+            { "value": "", "text": "All" },
+            { "value": "low", "text": "Low" },
+            { "value": "medium", "text": "Medium" },
+            { "value": "high", "text": "High" },
+            { "value": "critical", "text": "Critical" }
+          ]
+        },
+        {
+          "type": "dropdown",
+          "name": "type",
+          "title": "Type",
+          "choices": [
+            { "value": "", "text": "All" }
+          ]
+        },
+        {
+          "type": "dropdown",
+          "name": "category",
+          "title": "Category",
+          "startWithNewLine": false,
+          "choices": [
+            { "value": "", "text": "All" }
+          ]
+        },
+        {
+          "type": "dropdown",
+          "name": "agent",
+          "title": "Assigned Agent",
+          "choices": [
+            { "value": "", "text": "All" },
+            { "value": "unassigned", "text": "Unassigned" }
+          ]
+        },
+        {
+          "type": "dropdown",
+          "name": "team",
+          "title": "Team",
+          "startWithNewLine": false,
+          "choices": [
+            { "value": "", "text": "All" },
+            { "value": "none", "text": "No team" }
+          ]
+        },
+        {
+          "type": "dropdown",
+          "name": "tier",
+          "title": "Tier",
+          "startWithNewLine": false,
+          "choices": [
+            { "value": "", "text": "All" },
+            { "value": "none", "text": "No tier" }
+          ]
+        },
+        {
+          "type": "tagbox",
+          "name": "tags",
+          "title": "Tags",
+          "choices": [],
+          "showSelectAllItem": false
+        }
+      ]
+    }
+  ]
+}

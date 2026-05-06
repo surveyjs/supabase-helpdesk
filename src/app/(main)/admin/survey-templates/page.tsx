@@ -1,32 +1,57 @@
 import Link from 'next/link';
 import { createServerClient } from '@/lib/supabase/server';
 import {
+  DEFAULT_AGENT_DASHBOARD_TEMPLATE,
   DEFAULT_TICKET_DETAIL_AGENT_TEMPLATE,
   DEFAULT_TICKET_DETAIL_USER_TEMPLATE,
+  parseAgentDashboardTemplate,
   parseTicketDetailAgentTemplate,
   parseTicketDetailUserTemplate,
+  type SurveyJsonDefinition,
   type TicketDetailTemplateWrapper,
 } from '@/lib/constants/survey-ui-config';
 
-const TEMPLATE_KEYS: Array<{
-  key: string;
-  label: string;
-  description: string;
-  defaultWrapper: TicketDetailTemplateWrapper;
-  parse: (raw: string | null) => TicketDetailTemplateWrapper;
-}> = [
+type TemplateEntry =
+  | {
+      key: 'survey_ticket_detail_agent_template' | 'survey_ticket_detail_user_template';
+      label: string;
+      description: string;
+      kind: 'ticket-detail';
+      defaultValue: TicketDetailTemplateWrapper;
+      parse: (raw: string | null) => TicketDetailTemplateWrapper;
+    }
+  | {
+      key: 'survey_agent_dashboard_template';
+      label: string;
+      description: string;
+      kind: 'agent-dashboard';
+      defaultValue: SurveyJsonDefinition;
+      parse: (raw: string | null) => SurveyJsonDefinition;
+    };
+
+const TEMPLATE_KEYS: TemplateEntry[] = [
+  {
+    key: 'survey_agent_dashboard_template',
+    label: 'Agent Dashboard Filters',
+    description: 'SurveyJS form rendered in the Agent Dashboard "Views & Filters" panel.',
+    kind: 'agent-dashboard',
+    defaultValue: DEFAULT_AGENT_DASHBOARD_TEMPLATE,
+    parse: parseAgentDashboardTemplate,
+  },
   {
     key: 'survey_ticket_detail_agent_template',
     label: 'Ticket Detail (Agent)',
     description: 'Sidebar form shown to agents on the ticket detail page.',
-    defaultWrapper: DEFAULT_TICKET_DETAIL_AGENT_TEMPLATE,
+    kind: 'ticket-detail',
+    defaultValue: DEFAULT_TICKET_DETAIL_AGENT_TEMPLATE,
     parse: parseTicketDetailAgentTemplate,
   },
   {
     key: 'survey_ticket_detail_user_template',
     label: 'Ticket Detail (User)',
     description: 'Sidebar form shown to non-agent users on the ticket detail page.',
-    defaultWrapper: DEFAULT_TICKET_DETAIL_USER_TEMPLATE,
+    kind: 'ticket-detail',
+    defaultValue: DEFAULT_TICKET_DETAIL_USER_TEMPLATE,
     parse: parseTicketDetailUserTemplate,
   },
 ];
@@ -41,15 +66,13 @@ function stableStringify(value: unknown): string {
   return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(',')}}`;
 }
 
-function isDefaultWrapper(
+function isDefaultEntry(
+  entry: TemplateEntry,
   raw: string | null,
-  parse: (raw: string | null) => TicketDetailTemplateWrapper,
-  defaultWrapper: TicketDetailTemplateWrapper,
 ): boolean {
-  // No row → falls back to default at runtime.
   if (raw === null) return true;
-  const parsed = parse(raw);
-  return stableStringify(parsed) === stableStringify(defaultWrapper);
+  const parsed = entry.parse(raw);
+  return stableStringify(parsed) === stableStringify(entry.defaultValue);
 }
 
 export default async function AdminSurveyTemplatesPage() {
@@ -69,15 +92,16 @@ export default async function AdminSurveyTemplatesPage() {
       <div>
         <h1 className="text-2xl font-semibold text-gray-900 mb-2">Survey Templates</h1>
         <p className="text-sm text-gray-600">
-          SurveyJS JSON templates that drive the Ticket Detail editable sidebar.
-          Edit the raw JSON for each role-specific template.
+          SurveyJS JSON templates that drive the Agent Dashboard filter form
+          and the Ticket Detail editable sidebar. Edit the raw JSON for each
+          template.
         </p>
       </div>
 
       <ul className="divide-y divide-gray-200 rounded-lg border border-gray-200 bg-white">
         {TEMPLATE_KEYS.map((t) => {
           const raw = stored.has(t.key) ? stored.get(t.key) ?? null : null;
-          const isDefault = isDefaultWrapper(raw, t.parse, t.defaultWrapper);
+          const isDefault = isDefaultEntry(t, raw);
           return (
             <li key={t.key} className="p-4 flex items-center justify-between gap-4" data-testid={`survey-template-row-${t.key}`}>
               <div>

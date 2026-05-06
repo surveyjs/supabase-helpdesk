@@ -22,13 +22,13 @@ import {
   dataToSurveyData,
   type FilterOptions,
 } from '@/lib/filters/ticket-filter-survey';
-import type { AgentDashboardSurveyConfig } from '@/lib/constants/survey-ui-config';
+import type { SurveyJsonDefinition } from '@/lib/constants/survey-ui-config';
 
 const Survey = dynamic(() => import('survey-react-ui').then((mod) => mod.Survey), { ssr: false });
 
 type ViewsAndFiltersPanelProps = {
   filterOptions: FilterOptions;
-  config: AgentDashboardSurveyConfig;
+  template: SurveyJsonDefinition;
   savedViews: Array<{ id: string; name: string }>;
   activeViewId: string | null;
   activeViewName: string;
@@ -38,7 +38,7 @@ type ViewsAndFiltersPanelProps = {
 export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
   const {
     filterOptions,
-    config,
+    template,
     savedViews,
     activeViewId,
     activeViewName,
@@ -52,13 +52,13 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
   const dataRef = useRef<TicketFilterData>(initialData);
 
   const schema = useMemo(
-    () => buildTicketFilterSurveyJson(filterOptions, config),
-    [filterOptions, config],
+    () => buildTicketFilterSurveyJson(filterOptions, template),
+    [filterOptions, template],
   );
 
   const surveyData = useMemo(
-    () => dataToSurveyData(initialData, config.defaultSort),
-    [initialData, config.defaultSort],
+    () => dataToSurveyData(initialData),
+    [initialData],
   );
 
   const model = useMemo(() => {

@@ -1,5 +1,13 @@
 # Change: SurveyJS-Based Ticket Filtering for the Agent Dashboard
 
+> **Update — superseded for the SurveyJS schema source by
+> [`agent-dashboard-filter-template-storage.md`](./agent-dashboard-filter-template-storage.md).**
+> The form schema referenced by §1 is no longer built in code. It is stored
+> as a SurveyJS template under `app_settings.survey_agent_dashboard_template`
+> and edited in `/admin/survey-templates`. The dynamic `choices` for
+> category/type/agent/team/tier/tags are injected server-side at render
+> time. The SQL generator and saved-views storage shape are unchanged.
+
 ## Summary
 
 Replace the current ad-hoc filter form on the Agent Dashboard with a SurveyJS-driven

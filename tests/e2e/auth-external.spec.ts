@@ -226,6 +226,21 @@ test.describe('Auth External', () => {
       await page.getByTestId('confirm-mode-switch').click();
     }
 
+    // A parallel worker's loginViaForm() can reset auth_mode back to 'built-in'
+    // between the click above and the page re-render. Self-heal by re-setting
+    // 'external' via service role and reloading until the test button appears.
+    const svc = createServiceRoleClient();
+    let visible = false;
+    for (let i = 0; i < 5; i++) {
+      visible = await page
+        .getByTestId('test-external')
+        .isVisible()
+        .catch(() => false);
+      if (visible) break;
+      await svc.from('app_settings').update({ value: 'external' }).eq('key', 'auth_mode');
+      await page.reload();
+      await page.waitForLoadState('domcontentloaded');
+    }
     await expect(page.getByTestId('test-external')).toBeVisible();
   });
 

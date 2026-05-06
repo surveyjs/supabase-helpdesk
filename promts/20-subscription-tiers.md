@@ -322,7 +322,8 @@ Similarly update RLS policies on `ticket_tags` for the `add_remove_tags` capabil
 ## Change Update — Tier Rules in Ticket Detail JSON Config
 
 Ticket detail UI now supports additional config-based tier gating via
-`app_settings.survey_ticket_detail_user_config`.
+`app_settings.survey_ticket_detail_user_template` (the
+`tierControlRules` object inside the stored template wrapper).
 
 Rules:
 - Existing capability checks remain mandatory (`user_has_tier_capability(...)`).

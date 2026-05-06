@@ -60,8 +60,14 @@ test.describe('Admin Setup layout', () => {
     await gotoAdmin(page, '/admin/survey-ui');
     await expect(page.getByRole('heading', { name: 'Survey UI JSON Config' })).toBeVisible({ timeout: 10000 });
     await expect(page.getByTestId('survey-ui-config-survey_agent_dashboard_config')).toBeVisible();
-    await expect(page.getByTestId('survey-ui-config-survey_ticket_detail_agent_config')).toBeVisible();
-    await expect(page.getByTestId('survey-ui-config-survey_ticket_detail_user_config')).toBeVisible();
+  });
+
+  test('admin can open survey templates page', async ({ page }) => {
+    await loginAs(page, 'admin@example.com');
+    await gotoAdmin(page, '/admin/survey-templates');
+    await expect(page.getByRole('heading', { name: 'Survey Templates' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('survey-template-row-survey_ticket_detail_agent_template')).toBeVisible();
+    await expect(page.getByTestId('survey-template-row-survey_ticket_detail_user_template')).toBeVisible();
   });
 });
 

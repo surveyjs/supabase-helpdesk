@@ -66,6 +66,16 @@ Behavior:
 
 ### 4. Ticket Detail Info (Tier-aware JSON)
 
+> **Superseded for ticket detail by [`ticket-detail-survey-template-refactor.md`](./ticket-detail-survey-template-refactor.md).**
+> The original `survey_ticket_detail_agent_config` /
+> `survey_ticket_detail_user_config` boolean-flag JSON has been replaced
+> by two stored SurveyJS templates
+> (`survey_ticket_detail_agent_template`,
+> `survey_ticket_detail_user_template`). Field visibility/edit-ability is
+> trimmed and read-only-flagged server-side based on role + tier rules,
+> and there is no SurveyJS-name → Supabase-column mapping layer. The
+> sidebar form autosaves on `onValueChanged` without `router.refresh()`.
+
 Use JSON configs for ticket detail info rendering:
 - Agent UI uses `survey_ticket_detail_agent_config`.
 - User UI uses `survey_ticket_detail_user_config`.

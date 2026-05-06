@@ -33,10 +33,11 @@ import { MarkAsDuplicateForm } from './MarkAsDuplicateForm';
 import { MergeTicketForm } from './MergeTicketForm';
 import { TicketSidebarSurvey } from './TicketSidebarSurvey';
 import {
-  canTierUseControl,
-  parseTicketDetailAgentConfig,
-  parseTicketDetailUserConfig,
+  parseTicketDetailAgentTemplate,
+  parseTicketDetailUserTemplate,
 } from '@/lib/constants/survey-ui-config';
+import { computeTicketDetailFieldPolicy } from '@/lib/tickets/ticket-detail-policy';
+import { applyTemplatePolicy, injectTemplateChoices } from '@/lib/tickets/apply-template-policy';
 
 function getContrastColor(hex: string): string {
   const c = hex.replace('#', '');
@@ -202,8 +203,8 @@ export default async function TicketDetailPage({
       'ai_ticket_summary_enabled',
       'ai_ticket_summary_min_posts',
       'ai_generate_kb_article_enabled',
-      'survey_ticket_detail_agent_config',
-      'survey_ticket_detail_user_config',
+      'survey_ticket_detail_agent_template',
+      'survey_ticket_detail_user_template',
     ]);
 
   const settingsMap = new Map(allSettings?.map((s) => [s.key, s.value]) ?? []);
@@ -215,15 +216,8 @@ export default async function TicketDetailPage({
 
   const visiblePostsThreshold = parseInt(settingsMap.get('visible_posts_threshold') ?? '10', 10) || 10;
   const visibleCommentsThreshold = parseInt(settingsMap.get('visible_comments_threshold') ?? '3', 10) || 3;
-  const detailAgentConfig = parseTicketDetailAgentConfig(settingsMap.get('survey_ticket_detail_agent_config'));
-  const detailUserConfig = parseTicketDetailUserConfig(settingsMap.get('survey_ticket_detail_user_config'));
-  const detailFieldConfig = isAgent ? detailAgentConfig.fields : detailUserConfig.fields;
-
-  const canTierStatusControl = canTierUseControl(detailUserConfig.tierControlRules.statusAllowedTiers, viewerTierKey);
-  const canTierSeverityControl = canTierUseControl(detailUserConfig.tierControlRules.severityAllowedTiers, viewerTierKey);
-  const canTierTypeControl = canTierUseControl(detailUserConfig.tierControlRules.typeAllowedTiers, viewerTierKey);
-  const canTierTagsControl = canTierUseControl(detailUserConfig.tierControlRules.tagsAllowedTiers, viewerTierKey);
-  const canTierVisibilityControl = canTierUseControl(detailUserConfig.tierControlRules.visibilityAllowedTiers, viewerTierKey);
+  const detailAgentTemplate = parseTicketDetailAgentTemplate(settingsMap.get('survey_ticket_detail_agent_template'));
+  const detailUserTemplate = parseTicketDetailUserTemplate(settingsMap.get('survey_ticket_detail_user_template'));
 
   // Check if user can reply (non-agents cannot reply to duplicates)
   const canReply = isAgent || !ticket.duplicate_of_id;
@@ -617,9 +611,9 @@ export default async function TicketDetailPage({
   }
 
   const creatorName = creator?.display_name ?? `User #${ticket.creator_id}`;
-  const assignedAgentName = assignedAgent?.display_name ?? null;
-  const typeName = ticketType?.name ?? 'Unknown';
-  const categoryName = ticketCategory?.name ?? null;
+  void assignedAgent;
+  void ticketType;
+  void ticketCategory;
 
   // Fetch source article if present (for agents)
   let sourceArticle: { id: number; title: string; slug: string; category_name: string | null } | null = null;
@@ -674,36 +668,45 @@ export default async function TicketDetailPage({
     followers = await getFollowers(ticket.id);
   }
 
-  // SurveyJS sidebar: which editable fields are shown to this viewer
-  const sidebarSurveyFields = {
-    status:
-      detailFieldConfig.status &&
-      (isAgent || (tierCaps.change_status && canTierStatusControl)) &&
-      !ticket.merged_into_id,
-    urgency: detailFieldConfig.urgency && isAgent && !ticket.merged_into_id,
-    severity:
-      detailFieldConfig.severity &&
-      (isAgent || (tierCaps.set_severity && canTierSeverityControl)) &&
-      !ticket.merged_into_id,
-    type:
-      detailFieldConfig.type &&
-      (isAgent || (tierCaps.change_type && canTierTypeControl)) &&
-      !ticket.merged_into_id &&
-      allTypes.length > 0,
-    category: detailFieldConfig.category && isAgent && !ticket.merged_into_id,
-    assigned: detailFieldConfig.assigned && isAgent && !ticket.merged_into_id,
-    visibility:
-      detailFieldConfig.visibility &&
-      (isAgent || (tierCaps.change_visibility && canTierVisibilityControl)) &&
-      !ticket.merged_into_id,
-    tags:
-      detailFieldConfig.tags &&
-      (isAgent || (tierCaps.add_remove_tags && canTierTagsControl)) &&
-      allTags.length > 0,
-    follow: detailFieldConfig.follow && !isOwner && !isBlocked,
-  };
+  // Build SurveyJS sidebar template via template-policy pipeline.
+  const detailTemplateWrapper = isAgent ? detailAgentTemplate : detailUserTemplate;
+  const detailFieldPolicy = computeTicketDetailFieldPolicy({
+    isAgent,
+    isMerged: !!ticket.merged_into_id,
+    isOwner,
+    isBlocked,
+    hasTypes: allTypes.length > 0,
+    hasTags: allTags.length > 0,
+    tierKey: viewerTierKey,
+    tierCaps,
+    tierRules: detailUserTemplate.tierControlRules,
+  });
 
-  const sidebarSurveyInitial = {
+  const trimmedTemplate = applyTemplatePolicy(
+    detailTemplateWrapper.template,
+    detailFieldPolicy,
+  );
+
+  const sidebarTemplateJson = injectTemplateChoices(trimmedTemplate, {
+    type_id: [
+      { value: '', text: 'None' },
+      ...allTypes.map((t) => ({ value: t.id, text: t.name })),
+    ],
+    category_id: [
+      { value: '', text: 'None' },
+      ...allCategories.map((c) => ({ value: c.id, text: c.name })),
+    ],
+    assigned_agent_id: [
+      { value: '', text: 'Unassigned' },
+      ...allAgents.map((a) => ({
+        value: a.id,
+        text: a.display_name ?? a.email,
+      })),
+    ],
+    tag_ids: allTags.map((t) => ({ value: t.id, text: t.name })),
+  });
+
+  const sidebarTemplateInitial: Record<string, unknown> = {
     status: ticket.status as string,
     urgency: ticket.urgency as string,
     severity: ticket.severity as string,
@@ -715,14 +718,7 @@ export default async function TicketDetailPage({
     tag_ids: ticketTags.map((t) => t.id),
   };
 
-  const sidebarSurveyOptions = {
-    types: allTypes,
-    categories: allCategories,
-    agents: allAgents,
-    tags: allTags.map((t) => ({ id: t.id, name: t.name })),
-  };
-
-  const hasAnySidebarSurveyField = Object.values(sidebarSurveyFields).some(Boolean);
+  const hasAnySidebarSurveyField = Object.values(detailFieldPolicy).some((p) => p.visible);
 
   return (
     <div className="relative left-1/2 right-1/2 w-screen -translate-x-1/2 px-6">
@@ -848,83 +844,34 @@ export default async function TicketDetailPage({
               <p className="mb-3 text-xs text-gray-500 italic">Read-only (merged)</p>
             )}
 
-            {/* Editable info via SurveyJS (per-tier configurable) */}
+            {/* Editable info via SurveyJS template (per-tier configurable) */}
             {hasAnySidebarSurveyField && (
               <div className="mb-3">
                 <TicketSidebarSurvey
                   ticketId={ticket.id}
-                  isAgent={isAgent}
-                  fields={sidebarSurveyFields}
-                  initial={sidebarSurveyInitial}
-                  options={sidebarSurveyOptions}
+                  templateJson={sidebarTemplateJson}
+                  initial={sidebarTemplateInitial}
                 />
               </div>
             )}
 
-            {/* Read-only / non-editable info rows */}
+            {/* Read-only / non-editable info rows (fields not represented in the survey template) */}
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-              {detailFieldConfig.urgency && !sidebarSurveyFields.urgency && (
-                <>
-                  <dt className="text-gray-500">Urgency</dt>
-                  <dd>
-                    <Badge variant="priority" value={ticket.urgency} />
-                  </dd>
-                </>
-              )}
-
-              {detailFieldConfig.severity && !sidebarSurveyFields.severity && (
-                <>
-                  <dt className="text-gray-500">Severity</dt>
-                  <dd>
-                    <Badge variant="priority" value={ticket.severity} />
-                  </dd>
-                </>
-              )}
-
-              {detailFieldConfig.type && !sidebarSurveyFields.type && (
-                <>
-                  <dt className="text-gray-500">Type</dt>
-                  <dd>
-                    <span className="text-gray-900">{typeName}</span>
-                  </dd>
-                </>
-              )}
-
-              {detailFieldConfig.category && !sidebarSurveyFields.category && (categoryName || isAgent) && (
-                <>
-                  <dt className="text-gray-500">Category</dt>
-                  <dd>
-                    <span className="text-gray-900">{categoryName ?? 'None'}</span>
-                  </dd>
-                </>
-              )}
-
-              {detailFieldConfig.createdBy && (
-                <>
-                  <dt className="text-gray-500">Created by</dt>
-                  <dd className="text-gray-900">
-                    <DisplayName
-                      userId={ticket.creator_id}
-                      displayName={creatorName}
-                      isCurrentUserAgent={isAgent}
-                    />
-                    {teamName && (
-                      <span className="ml-1 text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">
-                        {teamName}
-                      </span>
-                    )}
-                  </dd>
-                </>
-              )}
-
-              {detailFieldConfig.assigned && !sidebarSurveyFields.assigned && (
-                <>
-                  <dt className="text-gray-500">Assigned</dt>
-                  <dd className="text-gray-900">
-                    <span>{assignedAgentName ?? 'Unassigned'}</span>
-                  </dd>
-                </>
-              )}
+              <>
+                <dt className="text-gray-500">Created by</dt>
+                <dd className="text-gray-900">
+                  <DisplayName
+                    userId={ticket.creator_id}
+                    displayName={creatorName}
+                    isCurrentUserAgent={isAgent}
+                  />
+                  {teamName && (
+                    <span className="ml-1 text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">
+                      {teamName}
+                    </span>
+                  )}
+                </dd>
+              </>
 
               {isAgent && !ticket.merged_into_id && !ticket.duplicate_of_id && (
                 <>
@@ -938,33 +885,18 @@ export default async function TicketDetailPage({
                 </>
               )}
 
-              {detailFieldConfig.createdAt && (
-                <>
-                  <dt className="text-gray-500">Created</dt>
-                  <dd className="text-gray-900" title={new Date(ticket.created_at).toLocaleString()}>
-                    {formatDateTimeWithRelative(ticket.created_at)}
-                  </dd>
-                </>
-              )}
-              {detailFieldConfig.updatedAt && (
-                <>
-                  <dt className="text-gray-500">Updated</dt>
-                  <dd className="text-gray-900" title={new Date(ticket.updated_at).toLocaleString()}>
-                    {formatDateTimeWithRelative(ticket.updated_at)}
-                  </dd>
-                </>
-              )}
-
-              {detailFieldConfig.visibility && !sidebarSurveyFields.visibility && (
-                <>
-                  <dt className="text-gray-500">Visibility</dt>
-                  <dd className="flex items-center gap-2">
-                    <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-                      {ticket.is_private ? 'Private' : 'Public'}
-                    </span>
-                  </dd>
-                </>
-              )}
+              <>
+                <dt className="text-gray-500">Created</dt>
+                <dd className="text-gray-900" title={new Date(ticket.created_at).toLocaleString()}>
+                  {formatDateTimeWithRelative(ticket.created_at)}
+                </dd>
+              </>
+              <>
+                <dt className="text-gray-500">Updated</dt>
+                <dd className="text-gray-900" title={new Date(ticket.updated_at).toLocaleString()}>
+                  {formatDateTimeWithRelative(ticket.updated_at)}
+                </dd>
+              </>
 
               {sourceArticle && (
                 <>
@@ -1068,28 +1000,8 @@ export default async function TicketDetailPage({
               </div>
             )}
 
-            {/* Tags (read-only chip list when not in survey) */}
-            {detailFieldConfig.tags && !sidebarSurveyFields.tags && ticketTags.length > 0 && (
-              <div className="mt-3 border-t border-gray-200 pt-3" data-testid="ticket-tags">
-                <div className="flex flex-wrap gap-1">
-                  {ticketTags.map((tag) => {
-                    const textColor = getContrastColor(tag.color);
-                    return (
-                      <span
-                        key={tag.id}
-                        className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium"
-                        style={{ backgroundColor: tag.color, color: textColor }}
-                      >
-                        {tag.name}
-                      </span>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
             {/* Tags (chip list shown next to the SurveyJS tagbox so colors stay visible) */}
-            {sidebarSurveyFields.tags && ticketTags.length > 0 && (
+            {ticketTags.length > 0 && (
               <div className="mt-3 border-t border-gray-200 pt-3" data-testid="ticket-tags">
                 <div className="flex flex-wrap gap-1">
                   {ticketTags.map((tag) => {
@@ -1109,7 +1021,7 @@ export default async function TicketDetailPage({
             )}
 
             {/* Follow status (owner / blocked / agent counter — toggle is in the SurveyJS form) */}
-            {detailFieldConfig.follow && (isTicketOwner || (isAgent && followers.length > 0)) && (
+            {(isTicketOwner || (isAgent && followers.length > 0)) && (
               <div className="mt-3 border-t border-gray-200 pt-3" data-testid="follow-section">
                 <div className="flex items-center gap-2">
                   {isTicketOwner && <span className="text-xs text-gray-500">Following (owner)</span>}
@@ -1121,7 +1033,7 @@ export default async function TicketDetailPage({
             )}
 
             {/* Custom fields */}
-            {detailFieldConfig.customFields && customFieldDefs && customFieldDefs.length > 0 && (
+            {customFieldDefs && customFieldDefs.length > 0 && (
               <div className="mt-3 border-t border-gray-200 pt-3" data-testid="custom-fields">
                 <h3 className="text-xs font-medium text-gray-500 mb-1">Custom Fields</h3>
                 <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">

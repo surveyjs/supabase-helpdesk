@@ -319,10 +319,15 @@ Add an additional admin section:
 - Sidebar item: `Survey UI Config`
 - Route: `/admin/survey-ui`
 
-This section stores and edits three JSON settings in `app_settings` using SurveyJS forms:
-- `survey_agent_dashboard_config`
-- `survey_ticket_detail_agent_config`
-- `survey_ticket_detail_user_config`
+This section stores and edits SurveyJS-related JSON settings in `app_settings`:
+
+- Route `/admin/survey-ui` (Sidebar item `Survey UI Config`):
+  - `survey_agent_dashboard_config` — agent dashboard filter/sort settings.
+- Route `/admin/survey-templates` (Sidebar item `Survey Templates`):
+  - `survey_ticket_detail_agent_template` — SurveyJS template JSON for the ticket-detail editable sidebar shown to agents.
+  - `survey_ticket_detail_user_template` — SurveyJS template JSON for the ticket-detail editable sidebar shown to non-agent users.
+  - Templates are edited as raw JSON in a SurveyJS `comment` question (no SurveyJS Creator dependency).
+  - Question `name` values must equal Supabase columns: `status, urgency, severity, type_id, category_id, assigned_agent_id, is_private, tag_ids, is_following`.
 
 Guidelines:
 - Save/reset actions must be admin-only and audit-logged.

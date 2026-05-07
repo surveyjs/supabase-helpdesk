@@ -181,14 +181,73 @@ export function MarkdownEditor({
     [measureAndUpdateHeight],
   );
 
+  // Tracks pending placeholder text that should be stripped from the editor
+  // value the next time `handleChange` runs after a failed image upload. The
+  // underlying lib inserts `![Uploading_<id>]()` synchronously and replaces it
+  // with `![<filename>](<url>)` once the `onImageUpload` Promise resolves; on
+  // failure neither token is removed, leaving a broken inline image behind.
+  const pendingCleanupRef = useRef<Array<RegExp>>([]);
+
+  const stripPendingPlaceholders = useCallback((text: string): string => {
+    if (pendingCleanupRef.current.length === 0) return text;
+    let next = text;
+    const stillPending: RegExp[] = [];
+    for (const pattern of pendingCleanupRef.current) {
+      const replaced = next.replace(pattern, '');
+      if (replaced !== next) {
+        next = replaced;
+      } else {
+        stillPending.push(pattern);
+      }
+    }
+    pendingCleanupRef.current = stillPending;
+    return next;
+  }, []);
+
   const handleChange = useCallback(
     ({ text }: { text: string }) => {
-      setValue(text);
-      onValueChange?.(text);
+      const cleaned = stripPendingPlaceholders(text);
+      setValue(cleaned);
+      onValueChange?.(cleaned);
       // Defer measurement to next frame so the textarea reflects the new value.
-      scheduleMeasure(text);
+      scheduleMeasure(cleaned);
     },
-    [onValueChange, scheduleMeasure],
+    [onValueChange, scheduleMeasure, stripPendingPlaceholders],
+  );
+
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  // Wraps the caller's `onImageUpload` so non-image files and upload errors
+  // surface a friendly inline message and the editor's `Uploading_…`
+  // placeholder is removed instead of being left as a broken inline image.
+  const handleEditorImageUpload = useCallback(
+    async (file: File): Promise<string> => {
+      if (!onImageUpload) return '';
+      setUploadError(null);
+      try {
+        if (!file.type.startsWith('image/')) {
+          throw new Error(
+            `Only image files can be embedded inline. "${file.name}" was not uploaded.`,
+          );
+        }
+        return await onImageUpload(file);
+      } catch (err) {
+        const message =
+          err instanceof Error && err.message ? err.message : 'Image upload failed.';
+        setUploadError(message);
+        // Queue removal of both the spinner placeholder and the empty-URL
+        // fallback the lib will insert once we resolve. The next `onChange`
+        // (fired by the lib's text replacement) will run `stripPendingPlaceholders`.
+        pendingCleanupRef.current.push(/!\[Uploading_[A-Za-z0-9_-]+\]\(\)\n?/g);
+        pendingCleanupRef.current.push(
+          new RegExp(`!\\[${escapeRegExp(file.name)}\\]\\(\\)\\n?`, 'g'),
+        );
+        return '';
+      }
+    },
+    [onImageUpload],
   );
 
   // Derive view config from viewMode prop
@@ -225,13 +284,23 @@ export function MarkdownEditor({
         value={value}
         onChange={handleChange}
         renderHTML={(text: string) => renderMarkdown(text)}
-        onImageUpload={onImageUpload}
+        onImageUpload={onImageUpload ? handleEditorImageUpload : undefined}
+        imageAccept="image/*"
         style={{ height: `${height}px` }}
         placeholder={placeholder ?? 'Write using Markdown…'}
         view={viewConfig}
         canView={{ menu: true, md: true, html: true, both: true, fullScreen: false, hideMenu: false }}
         plugins={plugins}
       />
+      {uploadError && (
+        <p
+          role="alert"
+          data-testid="markdown-editor-upload-error"
+          className="mt-2 text-sm text-red-600"
+        >
+          {uploadError}
+        </p>
+      )}
     </div>
   );
 }

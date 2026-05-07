@@ -5,8 +5,12 @@
 -- Ticket types already exist from Phase 1 migration.
 -- This file will be extended in later phases.
 
--- Enable pgcrypto for password hashing
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+-- Enable pgcrypto for password hashing.
+-- On Supabase Cloud the extension is pre-installed in the `extensions` schema
+-- and `public` does not get it. Locally `supabase start` installs it into
+-- `public`. Either way, schema-qualifying the calls below (extensions.crypt,
+-- extensions.gen_salt) keeps the seed working in both environments.
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
 
 -- --------------------------------------------------------
 -- Users (auth.users)
@@ -43,7 +47,7 @@ BEGIN
       '00000000-0000-0000-0000-000000000000'::uuid,
       'authenticated', 'authenticated',
       _u->>'email',
-      crypt('Password123', gen_salt('bf')),
+      extensions.crypt('Password123', extensions.gen_salt('bf')),
       now(), now(), now(),
       jsonb_build_object('display_name', _u->>'name'),
       '{"provider":"email","providers":["email"]}'::jsonb,

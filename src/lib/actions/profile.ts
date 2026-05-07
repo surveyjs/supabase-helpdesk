@@ -235,13 +235,16 @@ export async function updateEditorViewMode(
 
   const minRaw = formData.get('editor_min_height_px');
   const maxRaw = formData.get('editor_max_height_px');
+  // Use Number() (not parseInt) so fractional / suffixed strings like "350.5"
+  // or "350px" become NaN and are rejected by the Number.isInteger checks below
+  // rather than silently truncated.
   const minHeight =
     typeof minRaw === 'string' && minRaw.length > 0
-      ? Number.parseInt(minRaw, 10)
+      ? Number(minRaw)
       : 300;
   const maxHeight =
     typeof maxRaw === 'string' && maxRaw.length > 0
-      ? Number.parseInt(maxRaw, 10)
+      ? Number(maxRaw)
       : 540;
 
   if (!Number.isInteger(minHeight) || minHeight < 120 || minHeight > 1000) {

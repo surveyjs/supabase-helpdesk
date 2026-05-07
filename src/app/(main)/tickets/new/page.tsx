@@ -11,11 +11,29 @@ export default async function NewTicketPage({
   const { from_article } = await searchParams;
   const supabase = await createServerClient();
 
-  const { data: profile } = await supabase
+  const { data: profileWithHeights, error: profileError } = await supabase
     .from('profiles')
     .select('editor_view_mode, editor_min_height_px, editor_max_height_px')
     .eq('id', user.id)
     .single();
+
+  // Older local DBs without migration 027 don't have the height columns;
+  // fall back to selecting just editor_view_mode so the page still renders.
+  let profile: {
+    editor_view_mode?: string | null;
+    editor_min_height_px?: number | null;
+    editor_max_height_px?: number | null;
+  } | null = profileWithHeights;
+  if (profileError?.code === '42703') {
+    const { data: legacyProfile } = await supabase
+      .from('profiles')
+      .select('editor_view_mode')
+      .eq('id', user.id)
+      .single();
+    profile = legacyProfile
+      ? { ...legacyProfile, editor_min_height_px: null, editor_max_height_px: null }
+      : null;
+  }
 
   // Fetch ticket types
   const { data: ticketTypes } = await supabase

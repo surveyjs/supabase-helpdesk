@@ -9,6 +9,13 @@ let svc: SupabaseClient;
 beforeAll(async () => {
   svc = createServiceRoleClient();
 
+  // Cleanup from any prior failed run before recreating, so the fresh-defaults
+  // assertion below is not contaminated by stale rows. The auth.users → profiles
+  // FK isn't fully cascading in some local dev setups, so explicitly drop the
+  // profile row first to avoid a 500 from auth.admin.deleteUser.
+  await svc.from('profiles').delete().eq('id', PROFILE_ID).then(() => undefined, () => undefined);
+  await svc.auth.admin.deleteUser(PROFILE_ID).catch(() => undefined);
+
   const { error } = await svc.auth.admin.createUser({
     id: PROFILE_ID,
     email: 'editor-heights@test.local',
@@ -16,9 +23,16 @@ beforeAll(async () => {
     email_confirm: true,
     user_metadata: { display_name: 'Editor Heights' },
   });
-  if (error && !error.message.includes('already been registered')) {
+  if (error) {
     throw new Error(`createUser: ${error.message}`);
   }
+
+  // Belt-and-suspenders: explicitly reset to the schema defaults so the first
+  // assertion does not depend on the trigger having run with the right values.
+  await svc
+    .from('profiles')
+    .update({ editor_min_height_px: 300, editor_max_height_px: 540 })
+    .eq('id', PROFILE_ID);
 });
 
 afterAll(async () => {

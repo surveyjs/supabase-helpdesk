@@ -97,19 +97,35 @@ export function MarkdownEditor({
   const baseMax = Math.max(baseMin, requestedMax);
 
   const [height, setHeight] = useState<number>(baseMin);
+  const isMountedRef = useRef(true);
+  const pendingFrameRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (pendingFrameRef.current !== null && typeof window !== 'undefined') {
+        window.cancelAnimationFrame(pendingFrameRef.current);
+        pendingFrameRef.current = null;
+      }
+    };
+  }, []);
 
   // Reset height when min/max change (e.g., user updated their preference).
   useEffect(() => {
     setHeight((current) => Math.min(Math.max(current, baseMin), baseMax));
   }, [baseMin, baseMax]);
 
-  // Sync with external defaultValue changes (e.g., canned response insertion)
+  // Sync with external defaultValue changes (e.g., canned response insertion,
+  // form reset after save). Re-measure so the editor grows/shrinks to fit
+  // the externally-injected content immediately, not only on the next keystroke.
   useEffect(() => {
     if (defaultValue !== undefined && defaultValue !== value) {
       setValue(defaultValue);
-      // Reset to base when the form clears (e.g., post saved).
       if (defaultValue === '') {
         setHeight(baseMin);
+      } else {
+        scheduleMeasure(defaultValue);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -117,6 +133,7 @@ export function MarkdownEditor({
 
   const measureAndUpdateHeight = useCallback(
     (text: string) => {
+      if (!isMountedRef.current) return;
       let candidate: number | null = null;
       const wrapper = wrapperRef.current;
       if (wrapper) {
@@ -145,18 +162,33 @@ export function MarkdownEditor({
     [baseMin, baseMax],
   );
 
+  const scheduleMeasure = useCallback(
+    (text: string) => {
+      if (typeof window === 'undefined') {
+        measureAndUpdateHeight(text);
+        return;
+      }
+      if (pendingFrameRef.current !== null) {
+        window.cancelAnimationFrame(pendingFrameRef.current);
+      }
+      pendingFrameRef.current = window.requestAnimationFrame(() => {
+        pendingFrameRef.current = null;
+        if (isMountedRef.current) {
+          measureAndUpdateHeight(text);
+        }
+      });
+    },
+    [measureAndUpdateHeight],
+  );
+
   const handleChange = useCallback(
     ({ text }: { text: string }) => {
       setValue(text);
       onValueChange?.(text);
       // Defer measurement to next frame so the textarea reflects the new value.
-      if (typeof window !== 'undefined') {
-        window.requestAnimationFrame(() => measureAndUpdateHeight(text));
-      } else {
-        measureAndUpdateHeight(text);
-      }
+      scheduleMeasure(text);
     },
-    [onValueChange, measureAndUpdateHeight],
+    [onValueChange, scheduleMeasure],
   );
 
   // Derive view config from viewMode prop

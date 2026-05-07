@@ -95,12 +95,30 @@ export function buildTicketFilterSurveyJson(
 }
 
 /**
+ * Read the `defaultValue` of the `sort` question from the stored template,
+ * if present. Used by the server to compute SQL ORDER BY for the initial
+ * page load so it matches what SurveyJS will render in the filter UI.
+ */
+export function getTemplateDefaultSort(template: SurveyJsonDefinition): string | undefined {
+  let found: string | undefined;
+  walkElements(template, (element) => {
+    if (found !== undefined) return;
+    if (element.name === 'sort' && typeof element.defaultValue === 'string') {
+      found = element.defaultValue;
+    }
+  });
+  return found;
+}
+
+/**
  * Coerce a stored TicketFilterData into the shape SurveyJS expects in
  * `survey.data` (e.g. ensures status defaults to all-selected when missing
- * so the checkbox renders all-checked, and tags is an array).
+ * so the checkbox renders all-checked, and tags is an array). `sort` is
+ * intentionally omitted when undefined so SurveyJS applies the sort
+ * question's `defaultValue` from the template.
  */
 export function dataToSurveyData(data: TicketFilterData): Record<string, unknown> {
-  return {
+  const result: Record<string, unknown> = {
     q: data.q ?? '',
     email: data.email ?? '',
     status: data.status ?? ['open', 'pending', 'closed'],
@@ -111,7 +129,8 @@ export function dataToSurveyData(data: TicketFilterData): Record<string, unknown
     agent: data.agent ?? '',
     team: data.team ?? '',
     tier: data.tier ?? '',
-    sort: data.sort ?? '',
     tags: data.tags ?? [],
   };
+  if (data.sort !== undefined) result.sort = data.sort;
+  return result;
 }

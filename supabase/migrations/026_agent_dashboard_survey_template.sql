@@ -9,7 +9,7 @@
 -- The template's `pages[].elements[].name` values must match the SQL
 -- filter / column keys used by `getAgentTickets`
 -- (q, email, status, sort, urgency, severity, type, category, agent, team,
--- tier, tags). Server validation in `updateSurveyTemplate` enforces this.
+-- tier, tags). Server validation in `saveSurveyTemplate` enforces this.
 --
 -- Dynamic `choices` for type/category/agent/team/tier/tags are intentionally
 -- left as the static sentinel set ("All", "Unassigned", etc.). The agent

@@ -157,13 +157,27 @@ export function canTierUseControl(allowedTiers: string[], tierKey: string | null
 }
 
 /**
- * Walk a SurveyJS template (deep) and collect every element `name`.
+ * SurveyJS container element types whose `name` is a structural identifier
+ * (page/panel) rather than a question column key. These are excluded from
+ * question-name validation.
+ */
+const SURVEY_CONTAINER_TYPES = new Set(['panel', 'paneldynamic', 'page']);
+
+/**
+ * Walk a SurveyJS template (deep) and collect every question element `name`.
+ * Pages (which have no `type`) and panel containers are skipped — their
+ * `name` is structural and is not constrained by the per-template
+ * question-name allowlist.
  */
 export function collectQuestionNames(template: unknown): string[] {
   const names: string[] = [];
   function walk(node: unknown) {
     if (!isRecord(node)) return;
-    if (typeof node.name === 'string') names.push(node.name);
+    const isQuestion =
+      typeof node.name === 'string' &&
+      typeof node.type === 'string' &&
+      !SURVEY_CONTAINER_TYPES.has(node.type);
+    if (isQuestion) names.push(node.name as string);
     if (Array.isArray(node.elements)) node.elements.forEach(walk);
     if (Array.isArray(node.pages)) node.pages.forEach(walk);
   }

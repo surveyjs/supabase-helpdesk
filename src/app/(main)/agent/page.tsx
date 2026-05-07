@@ -20,6 +20,7 @@ import { TicketCheckbox, SelectAllCheckbox } from '@/components/features/bulk-ac
 import { BulkActionToolbar } from '@/components/features/bulk-actions/BulkActionToolbar';
 import { ViewsAndFiltersPanel } from './ViewsAndFiltersPanel';
 import { parseAgentDashboardTemplate } from '@/lib/constants/survey-ui-config';
+import { getTemplateDefaultSort } from '@/lib/filters/ticket-filter-survey';
 import {
   DEFAULT_VIEW_NAME,
   EMPTY_FILTER_DATA,
@@ -113,6 +114,10 @@ export default async function AgentDashboardPage({
   }
 
   const effectiveData: TicketFilterData = { ...activeView.definition.data };
+  if (effectiveData.sort === undefined) {
+    const templateDefaultSort = getTemplateDefaultSort(surveyFilterTemplate);
+    if (templateDefaultSort !== undefined) effectiveData.sort = templateDefaultSort;
+  }
 
   const queryFilters = filterDataToQueryFilters(effectiveData, pageParam);
 

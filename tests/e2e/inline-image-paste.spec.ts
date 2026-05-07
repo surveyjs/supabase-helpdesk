@@ -134,6 +134,7 @@ test.describe('Inline image paste in post editor', () => {
       .from('attachments')
       .select('id, post_id, uploader_id, original_filename, mime_type')
       .eq('uploader_id', alice!.id)
+      .eq('mime_type', 'image/png')
       .is('post_id', null);
     expect(orphans && orphans.length).toBeGreaterThan(0);
     expect(orphans![0].mime_type).toBe('image/png');

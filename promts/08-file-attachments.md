@@ -140,7 +140,7 @@ The bucket should be named `attachments` with RLS enabled. Access policies:
 - Show selected files list with remove buttons before upload
 - Upload progress indicator (optional — Supabase Storage provides upload progress)
 - After upload: files appear below the post body
-- **Note:** The post form now uses `MarkdownEditor` (from the ticket detail redesign), which handles image uploads natively via its `onImageUpload` prop. The `FileUpload` drop zone is **no longer rendered on individual post cards** — it was removed in the ticket detail redesign. The `AttachmentList` component still renders existing attachments below each post. The `FileUpload` component source file is retained for potential future use (e.g., non-image attachments in other contexts).
+- **Note:** The post form now uses `MarkdownEditor` (from the ticket detail redesign), which handles image *paste* natively via its `onImageUpload` prop and exposes a separate **Attach file(s)** toolbar button + drop dialog (`onAttachmentUpload` prop) for any admin-allowed file type. The standalone `FileUpload` drop zone is **no longer rendered on individual post cards** — it was removed in the ticket detail redesign. The `AttachmentList` component still renders existing attachments below each post. The `FileUpload` component source file is retained for potential future use. See `promts/changes/attach-files.md` for the editor-driven attach flow.
 
 **`src/components/features/attachments/AttachmentList.tsx`**:
 - Server Component
@@ -227,6 +227,10 @@ Add a new section to the admin sidebar:
   `uploader_id` column to `attachments` (orphan rows), an
   `uploadInlineImage` Server Action, and `claimInlineAttachments(postId,
   body)` that links pasted/dropped images to the post once it is saved.
+- **Attach file(s)** editor button + drop dialog for any admin-allowed
+  file type — see `promts/changes/attach-files.md`. Adds the
+  `uploadInlineAttachment` Server Action (re-uses the orphan-row /
+  claim flow above) and replaces the legacy `image` toolbar plugin.
 
 ## Verification Checklist
 

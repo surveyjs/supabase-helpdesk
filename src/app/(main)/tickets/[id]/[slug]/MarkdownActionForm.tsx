@@ -4,6 +4,7 @@ import { useActionState, type ReactNode } from 'react';
 import type { TicketActionState } from '@/lib/actions/tickets';
 import { MarkdownEditor } from '@/components/features/tickets/MarkdownEditor';
 import { uploadInlineImageFromEditor } from '@/components/features/tickets/inlineImageUpload';
+import { uploadInlineAttachmentFromEditor } from '@/components/features/tickets/inlineAttachmentUpload';
 
 const initialState: TicketActionState = {};
 
@@ -79,6 +80,7 @@ export function MarkdownActionForm({
         minHeightPx={editorMinHeightPx}
         maxHeightPx={editorMaxHeightPx}
         onImageUpload={uploadInlineImageFromEditor}
+        onAttachmentUpload={uploadInlineAttachmentFromEditor}
         extraToolbarPlugins={extraToolbarPlugins}
       />
       <div className="flex gap-2">

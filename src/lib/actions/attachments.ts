@@ -457,6 +457,156 @@ export async function uploadInlineImage(
   return { url, attachmentId: inserted.id };
 }
 
+// ===========================================================================
+// Inline attachment upload (toolbar "Attach file(s)" button / drag-drop)
+// ---------------------------------------------------------------------------
+// Uploads a single file of any allowed type as an orphan attachment row
+// (post_id IS NULL). When the parent post is later saved,
+// `claimInlineAttachments(postId, body)` re-parents the row by scanning the
+// body for `/attachments/<uuid>` substrings (matches both `[name](/...)` and
+// `![name](/...)` markdown).
+// ===========================================================================
+
+export type InlineAttachmentUploadResult =
+  | {
+      url: string;
+      attachmentId: string;
+      name: string;
+      mimeType: string;
+      isImage: boolean;
+      error?: undefined;
+    }
+  | { error: string; url?: undefined; attachmentId?: undefined; name?: undefined; mimeType?: undefined; isImage?: undefined };
+
+export async function uploadInlineAttachment(
+  formData: FormData,
+): Promise<InlineAttachmentUploadResult> {
+  const supabase = await createServerClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'Not authenticated.' };
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id, role, is_blocked')
+    .eq('id', user.id)
+    .single();
+  if (!profile) return { error: 'Profile not found.' };
+  if (profile.is_blocked) return { error: 'Your account has been blocked.' };
+
+  const file = formData.get('file');
+  if (!(file instanceof File)) return { error: 'No file provided.' };
+
+  if (file.name.length > 255) {
+    return { error: 'Filename exceeds the 255-character limit.' };
+  }
+
+  // Honour the configured allowed types and max file size (with tier override).
+  const [allowedTypesRes, maxSizeRes] = await Promise.all([
+    supabase.from('app_settings').select('value').eq('key', 'allowed_file_types').single(),
+    supabase.from('app_settings').select('value').eq('key', 'max_file_size_mb').single(),
+  ]);
+
+  let allowedTypes: string[] = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'pdf', 'txt'];
+  if (allowedTypesRes.data) {
+    try {
+      allowedTypes = JSON.parse(allowedTypesRes.data.value);
+    } catch { /* use defaults */ }
+  }
+
+  const ext = getFileExtension(file.name);
+  if (!allowedTypes.includes(ext)) {
+    return { error: `File type ".${ext || 'unknown'}" is not allowed. Allowed: ${allowedTypes.join(', ')}` };
+  }
+  const expectedMimes = EXTENSION_MIME_MAP[ext];
+  if (expectedMimes && !expectedMimes.includes(file.type) && file.type !== 'application/octet-stream') {
+    return { error: `File "${file.name}" has mismatched type (expected ${expectedMimes.join('/')}, got ${file.type}).` };
+  }
+
+  const parsedMaxSize = maxSizeRes.data ? parseInt(maxSizeRes.data.value, 10) : NaN;
+  let maxSizeMb = Number.isFinite(parsedMaxSize) && parsedMaxSize > 0 ? parsedMaxSize : 10;
+
+  const { data: tierProfile } = await supabase
+    .from('profiles')
+    .select('tier_id, tier_expires_at')
+    .eq('id', user.id)
+    .single();
+  if (tierProfile?.tier_id) {
+    const tierActive = !tierProfile.tier_expires_at || new Date(tierProfile.tier_expires_at) > new Date();
+    if (tierActive) {
+      const { data: tier } = await supabase
+        .from('subscription_tiers')
+        .select('limit_max_file_size')
+        .eq('id', tierProfile.tier_id)
+        .single();
+      if (tier?.limit_max_file_size != null) {
+        const tierMb = Math.min(tier.limit_max_file_size / (1024 * 1024), 50);
+        if (tierMb > maxSizeMb) maxSizeMb = tierMb;
+      }
+    }
+  }
+
+  const maxSizeBytes = maxSizeMb * 1024 * 1024;
+  if (file.size > maxSizeBytes) {
+    return { error: `File "${file.name}" exceeds the ${maxSizeMb}MB limit.` };
+  }
+
+  const uuid = crypto.randomUUID();
+  const safeName = sanitizeFilename(file.name);
+  const storagePath = `inline/${user.id}/${uuid}-${safeName}`;
+
+  let fileBuffer: Uint8Array = new Uint8Array(await file.arrayBuffer());
+  if (ext === 'svg') {
+    fileBuffer = await sanitizeSvg(fileBuffer);
+  }
+
+  // Fall back to the canonical MIME for the validated extension when the
+  // browser sent a generic / empty type. Otherwise Storage records
+  // `application/octet-stream`, which breaks inline image rendering and
+  // confuses downloads.
+  const storageContentType =
+    file.type && file.type !== 'application/octet-stream'
+      ? file.type
+      : (EXTENSION_MIME_MAP[ext]?.[0] ?? 'application/octet-stream');
+
+  const { error: uploadError } = await supabase.storage
+    .from('attachments')
+    .upload(storagePath, fileBuffer, { contentType: storageContentType, upsert: false });
+  if (uploadError) {
+    return { error: `Failed to upload "${file.name}": ${uploadError.message}` };
+  }
+
+  const { data: inserted, error: insertError } = await supabase
+    .from('attachments')
+    .insert({
+      post_id: null,
+      uploader_id: user.id,
+      storage_path: storagePath,
+      original_filename: file.name,
+      file_size: file.size,
+      mime_type: storageContentType,
+    })
+    .select('id')
+    .single();
+  if (insertError || !inserted) {
+    await supabase.storage.from('attachments').remove([storagePath]);
+    return { error: `Failed to record attachment: ${insertError?.message ?? 'unknown error'}` };
+  }
+
+  // Derive `isImage` from the validated extension so an image with a
+  // missing/generic browser MIME (e.g. application/octet-stream) is still
+  // inserted as `![name](url)` rather than a plain link.
+  const isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext);
+
+  return {
+    url: `/attachments/${inserted.id}`,
+    attachmentId: inserted.id,
+    name: file.name,
+    mimeType: storageContentType,
+    isImage,
+  };
+}
+
 /**
  * Find inline-image attachment ids referenced in `body` and re-parent the
  * matching orphan rows onto `postId`. Safe to call after every post create or

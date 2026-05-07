@@ -7,10 +7,14 @@ export function ReplyToggle({
   parentPostId,
   parentCommentId,
   editorViewMode = 'both',
+  editorMinHeightPx,
+  editorMaxHeightPx,
 }: {
   parentPostId: string;
   parentCommentId?: string;
   editorViewMode?: 'both' | 'preview' | 'editor';
+  editorMinHeightPx?: number;
+  editorMaxHeightPx?: number;
 }) {
   return (
     <ComposerToggle
@@ -23,6 +27,8 @@ export function ReplyToggle({
           parentPostId={parentPostId}
           parentCommentId={parentCommentId}
           editorViewMode={editorViewMode}
+          editorMinHeightPx={editorMinHeightPx}
+          editorMaxHeightPx={editorMaxHeightPx}
           submitLabel="Add a comment"
           onCancel={close}
         />

@@ -13,7 +13,7 @@ export default async function NewTicketPage({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('editor_view_mode')
+    .select('editor_view_mode, editor_min_height_px, editor_max_height_px')
     .eq('id', user.id)
     .single();
 
@@ -88,6 +88,16 @@ export default async function NewTicketPage({
           defaultPrivate={defaultPrivate}
           showPrivacyControl={showPrivacyControl}
           editorViewMode={(profile?.editor_view_mode as 'both' | 'preview' | 'editor' | null) ?? 'both'}
+          editorMinHeightPx={
+            typeof (profile as { editor_min_height_px?: number | null } | null)?.editor_min_height_px === 'number'
+              ? (profile as { editor_min_height_px: number }).editor_min_height_px
+              : undefined
+          }
+          editorMaxHeightPx={
+            typeof (profile as { editor_max_height_px?: number | null } | null)?.editor_max_height_px === 'number'
+              ? (profile as { editor_max_height_px: number }).editor_max_height_px
+              : undefined
+          }
           initialTitle={fromArticleTitle}
           sourceArticleId={fromArticleId}
           aiAutoCategEnabled={aiAutoCategEnabled}

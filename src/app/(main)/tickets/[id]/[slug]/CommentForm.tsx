@@ -10,12 +10,16 @@ export function CommentForm({
   parentPostId,
   parentCommentId,
   editorViewMode = 'both',
+  editorMinHeightPx,
+  editorMaxHeightPx,
   submitLabel = 'Add a comment',
   onCancel,
 }: {
   parentPostId: string;
   parentCommentId?: string;
   editorViewMode?: EditorViewMode;
+  editorMinHeightPx?: number;
+  editorMaxHeightPx?: number;
   submitLabel?: string;
   onCancel?: () => void;
 }) {
@@ -33,6 +37,8 @@ export function CommentForm({
       placeholder="Write a comment… (Markdown supported)"
       compact
       editorViewMode={editorViewMode}
+      editorMinHeightPx={editorMinHeightPx}
+      editorMaxHeightPx={editorMaxHeightPx}
       submitLabel={submitLabel}
       pendingLabel="Posting…"
       onCancel={onCancel}

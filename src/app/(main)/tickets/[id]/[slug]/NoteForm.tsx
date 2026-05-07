@@ -9,9 +9,13 @@ import {
 export function NoteForm({
   ticketId,
   editorViewMode = 'both',
+  editorMinHeightPx,
+  editorMaxHeightPx,
 }: {
   ticketId: number;
   editorViewMode?: EditorViewMode;
+  editorMinHeightPx?: number;
+  editorMaxHeightPx?: number;
 }) {
   return (
     <div className="bg-amber-50 rounded-lg border border-amber-200 p-4">
@@ -22,6 +26,8 @@ export function NoteForm({
         placeholder="Write an internal note… (only visible to agents)"
         compact
         editorViewMode={editorViewMode}
+        editorMinHeightPx={editorMinHeightPx}
+        editorMaxHeightPx={editorMaxHeightPx}
         submitLabel="Add Note"
         pendingLabel="Adding…"
         variant="amber"

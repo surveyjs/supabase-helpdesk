@@ -10,22 +10,37 @@ export default async function ProfilePage() {
   const user = await requireAuth();
   const supabase = await createServerClient();
 
-  const profileSelect = 'id, email, display_name, role, team_id, created_at, editor_view_mode';
+  const profileSelect =
+    'id, email, display_name, role, team_id, created_at, editor_view_mode, editor_min_height_px, editor_max_height_px';
   const { data: profileWithEditorMode, error: profileError } = await supabase
     .from('profiles')
     .select(profileSelect)
     .eq('id', user.id)
     .single();
 
-  // Older local DBs may not have editor_view_mode yet; fall back without it.
-  let profile = profileWithEditorMode;
+  // Older local DBs may not have editor_view_mode (mig 021) or the
+  // editor_min/max_height columns (mig 027) yet; fall back without them.
+  let profile = profileWithEditorMode as
+    | (typeof profileWithEditorMode & {
+        editor_view_mode?: string | null;
+        editor_min_height_px?: number | null;
+        editor_max_height_px?: number | null;
+      })
+    | null;
   if (profileError?.code === '42703') {
     const { data: profileWithoutEditorMode } = await supabase
       .from('profiles')
       .select('id, email, display_name, role, team_id, created_at')
       .eq('id', user.id)
       .single();
-    profile = profileWithoutEditorMode ? { ...profileWithoutEditorMode, editor_view_mode: null } : null;
+    profile = profileWithoutEditorMode
+      ? {
+          ...profileWithoutEditorMode,
+          editor_view_mode: null,
+          editor_min_height_px: null,
+          editor_max_height_px: null,
+        }
+      : null;
   }
 
   if (!profile) redirect('/login');
@@ -116,6 +131,12 @@ export default async function ProfilePage() {
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Editor Preference</h2>
         <EditorPreferenceForm
           currentMode={(profile.editor_view_mode as 'both' | 'preview' | 'editor' | null) ?? 'both'}
+          currentMinHeightPx={
+            typeof profile.editor_min_height_px === 'number' ? profile.editor_min_height_px : 300
+          }
+          currentMaxHeightPx={
+            typeof profile.editor_max_height_px === 'number' ? profile.editor_max_height_px : 540
+          }
         />
       </div>
 

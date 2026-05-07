@@ -13,12 +13,16 @@ export function EditablePost({
   rawBody,
   canEdit,
   editorViewMode = 'both',
+  editorMinHeightPx,
+  editorMaxHeightPx,
 }: {
   postId: string;
   htmlBody: string;
   rawBody: string;
   canEdit: boolean;
   editorViewMode?: EditorViewMode;
+  editorMinHeightPx?: number;
+  editorMaxHeightPx?: number;
 }) {
   const [editing, setEditing] = useState(false);
 
@@ -38,6 +42,8 @@ export function EditablePost({
         hiddenFields={<input type="hidden" name="post_id" value={postId} />}
         defaultBody={rawBody}
         editorViewMode={editorViewMode}
+        editorMinHeightPx={editorMinHeightPx}
+        editorMaxHeightPx={editorMaxHeightPx}
         submitLabel="Save"
         pendingLabel="Saving…"
         onCancel={() => setEditing(false)}

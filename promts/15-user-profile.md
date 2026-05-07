@@ -72,8 +72,10 @@ CREATE POLICY user_notes_delete ON user_notes
   - On confirm: call `deleteOwnAccount` Server Action
 - **Editor preference** section:
   - Show the current editor view mode (`both`, `preview`, or `editor`) with radio buttons or a segmented control
-  - On change: call `updateEditorViewMode` server action to persist the preference
+  - Show numeric inputs for **Initial height (px)** (`editor_min_height_px`, range `120–1000`, default `300`) and **Maximum height (px)** (`editor_max_height_px`, range `200–2000`, default `540`). Validate `min ≤ max` on the client and disable the submit button when violated.
+  - On change: call `updateEditorViewMode` server action to persist the preference (view mode + both heights in a single submission)
   - This is a convenience — the primary way to change the mode is the in-editor toggle on any Markdown editor
+  - The `MarkdownEditor` opens at `editor_min_height_px` and auto-grows as the user types, capped at `editor_max_height_px`; once capped, additional content scrolls inside the editor.
 
 ### 3. Server Actions for Profile
 
@@ -104,9 +106,12 @@ CREATE POLICY user_notes_delete ON user_notes
 
 - `updateEditorViewMode(formData: FormData)`:
   - Validate `editor_view_mode` is one of `'both'`, `'preview'`, `'editor'`
-  - Update `profiles.editor_view_mode` for the current user
+  - Validate `editor_min_height_px` is an integer in `[120, 1000]` (defaults to `300` when missing)
+  - Validate `editor_max_height_px` is an integer in `[200, 2000]` (defaults to `540` when missing)
+  - Reject when `editor_min_height_px > editor_max_height_px`
+  - Update `profiles.editor_view_mode`, `profiles.editor_min_height_px`, `profiles.editor_max_height_px` for the current user in a single `update` call
   - Revalidate
-  - Note: The `editor_view_mode` column is added via `supabase/migrations/021_editor_preference.sql`
+  - Note: The `editor_view_mode` column is added via `supabase/migrations/021_editor_preference.sql`; the height columns are added via `supabase/migrations/027_editor_height_preferences.sql`. Server-side fall back to a view-mode-only update on `42703` so older databases keep working.
 
 ### 4. Agent-Viewable User Profile
 

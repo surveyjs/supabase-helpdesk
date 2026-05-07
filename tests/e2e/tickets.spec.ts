@@ -7,7 +7,10 @@ import { createServiceRoleClient } from '../helpers/supabase';
 async function loginAs(page: Page, email: string, password = 'Password123') {
   const svc = createServiceRoleClient();
   await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
-  await svc.from('profiles').update({ editor_view_mode: 'both' }).eq('email', email.toLowerCase());
+  await svc
+    .from('profiles')
+    .update({ editor_view_mode: 'both', editor_min_height_px: 300, editor_max_height_px: 540 })
+    .eq('email', email.toLowerCase());
 
   await page.goto('/login');
   await page.getByLabel('Email').fill(email);

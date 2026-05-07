@@ -35,6 +35,8 @@ export function TicketForm({
   defaultPrivate,
   showPrivacyControl,
   editorViewMode = 'both',
+  editorMinHeightPx,
+  editorMaxHeightPx,
   initialTitle,
   sourceArticleId,
   aiAutoCategEnabled,
@@ -46,6 +48,8 @@ export function TicketForm({
   defaultPrivate: boolean;
   showPrivacyControl: boolean;
   editorViewMode?: 'both' | 'preview' | 'editor';
+  editorMinHeightPx?: number;
+  editorMaxHeightPx?: number;
   initialTitle?: string | null;
   sourceArticleId?: number | null;
   aiAutoCategEnabled?: boolean;
@@ -366,6 +370,8 @@ export function TicketForm({
           placeholder="Describe your issue in detail (Markdown supported)"
           onValueChange={handleBodyChange}
           viewMode={editorViewMode}
+          minHeightPx={editorMinHeightPx}
+          maxHeightPx={editorMaxHeightPx}
           onImageUpload={uploadInlineImageFromEditor}
         />
         {state.fieldErrors?.body && (

@@ -243,7 +243,7 @@ Implement progressive disclosure for long tickets:
 
 **`src/components/features/tickets/MarkdownEditor.tsx`** (replaces `MarkdownPreview.tsx`):
 - Verify the client-side editor/preview renders consistently with server-side rendering
-- Rich Markdown editor using `react-markdown-editor-lite` with built-in toolbar, code block support, and native image upload (`onImageUpload` prop)
+- Rich Markdown editor using `react-markdown-editor-lite` with built-in toolbar, code block support, native image paste (`onImageUpload` prop) and an **Attach file(s)** toolbar button / drop dialog (`onAttachmentUpload` prop) — see `promts/changes/attach-files.md`
 - Both server-rendered HTML and editor preview must use the same sanitization configuration (both use `markdown-it`)
 - This component is an **abstraction layer** — it is the ONLY file that imports `react-markdown-editor-lite`. Swapping editors requires changing only this file.
 
@@ -326,6 +326,11 @@ Implement progressive disclosure for long tickets:
   `promts/changes/inline-image-paste.md` (post-create / edit Server Actions
   must invoke `claimInlineAttachments(postId, body)` after every insert /
   update so orphan attachments get linked to the new post).
+- **Attach file(s)** toolbar button + drop dialog supporting any
+  admin-allowed file type (not just images) — see
+  `promts/changes/attach-files.md`. Re-uses the same orphan-claim flow as
+  the inline image paste; no extra Server Action plumbing required
+  beyond `claimInlineAttachments`.
 
 ## Verification Checklist
 

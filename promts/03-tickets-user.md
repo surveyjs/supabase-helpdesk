@@ -126,7 +126,10 @@ Create migration **`supabase/migrations/003_tickets.sql`**:
 - Rich Markdown editor using `react-markdown-editor-lite` (dynamically imported with `ssr: false`)
 - Uses `markdown-it` for preview rendering (consistent with server-side config)
 - Built-in toolbar: bold, italic, headings, links, images, code blocks (fenced + inline), lists, tables, quotes
-- Native image upload via `onImageUpload` prop (drag-and-drop, paste, toolbar button)
+- Native image *paste* via `onImageUpload` prop. Drag-and-drop and the
+  toolbar button now route through the new **Attach file(s)** dialog
+  (`onAttachmentUpload` prop), supporting any admin-allowed file type.
+  See `promts/changes/attach-files.md`.
 - Hidden `<textarea>` with `name` attribute for Server Action form compatibility
 - `compact` prop for smaller forms (comments, notes)
 - `viewMode` prop (`'both' | 'preview' | 'editor'`) — controls editor/preview display, driven by user's `editor_view_mode` profile preference

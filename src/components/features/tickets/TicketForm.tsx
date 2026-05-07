@@ -7,6 +7,7 @@ import { autoCategorizeTicket, detectDuplicateTickets, type AutoCategorizeResult
 import { generateSlug } from '@/lib/utils/slug';
 import { MarkdownEditor } from '@/components/features/tickets/MarkdownEditor';
 import { uploadInlineImageFromEditor } from '@/components/features/tickets/inlineImageUpload';
+import { uploadInlineAttachmentFromEditor } from '@/components/features/tickets/inlineAttachmentUpload';
 import Link from 'next/link';
 
 const initialState: TicketActionState = {};
@@ -373,6 +374,7 @@ export function TicketForm({
           minHeightPx={editorMinHeightPx}
           maxHeightPx={editorMaxHeightPx}
           onImageUpload={uploadInlineImageFromEditor}
+          onAttachmentUpload={uploadInlineAttachmentFromEditor}
         />
         {state.fieldErrors?.body && (
           <p className="mt-1 text-sm text-red-600">{state.fieldErrors.body}</p>

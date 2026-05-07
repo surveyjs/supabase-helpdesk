@@ -5,9 +5,10 @@ import { redirect } from 'next/navigation';
 import { createServerClient, createServiceRoleClient } from '@/lib/supabase/server';
 import { requireAdminRole, logAudit } from './_admin-helpers';
 import {
-  DEFAULT_AGENT_DASHBOARD_SURVEY_CONFIG,
+  DEFAULT_AGENT_DASHBOARD_TEMPLATE,
   DEFAULT_TICKET_DETAIL_AGENT_TEMPLATE,
   DEFAULT_TICKET_DETAIL_USER_TEMPLATE,
+  findInvalidAgentDashboardQuestionNames,
   findInvalidTicketDetailQuestionNames,
 } from '@/lib/constants/survey-ui-config';
 
@@ -1335,7 +1336,7 @@ export async function updateDefaultNotificationPreferences(formData: FormData): 
 // ============================================================
 
 const SURVEY_UI_SETTING_KEYS = [
-  'survey_agent_dashboard_config',
+  'survey_agent_dashboard_template',
   'survey_ticket_detail_agent_template',
   'survey_ticket_detail_user_template',
 ] as const;
@@ -1355,51 +1356,14 @@ function isTicketDetailTemplateKey(
   );
 }
 
-function setDeepValue(target: Record<string, unknown>, path: string, value: unknown) {
-  const parts = path.split('.');
-  let cursor: Record<string, unknown> = target;
-  for (let i = 0; i < parts.length - 1; i += 1) {
-    const key = parts[i];
-    if (typeof cursor[key] !== 'object' || cursor[key] === null || Array.isArray(cursor[key])) {
-      cursor[key] = {};
-    }
-    cursor = cursor[key] as Record<string, unknown>;
-  }
-  cursor[parts[parts.length - 1]] = value;
-}
-
-function normalizeSurveyUiPayload(raw: unknown): Record<string, unknown> {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
-
-  const payload = raw as Record<string, unknown>;
-  const normalized: Record<string, unknown> = {};
-
-  for (const [key, value] of Object.entries(payload)) {
-    if (key.includes('.')) {
-      setDeepValue(normalized, key, value);
-    } else {
-      normalized[key] = value;
-    }
-  }
-
-  const tierControlRules = normalized.tierControlRules;
-  if (tierControlRules && typeof tierControlRules === 'object' && !Array.isArray(tierControlRules)) {
-    const rules = tierControlRules as Record<string, unknown>;
-    for (const [key, value] of Object.entries(rules)) {
-      if (typeof value === 'string') {
-        rules[key] = value
-          .split(',')
-          .map((part) => part.trim())
-          .filter(Boolean);
-      }
-    }
-  }
-
-  return normalized;
+function isAgentDashboardTemplateKey(
+  value: SurveyUiSettingKey,
+): value is 'survey_agent_dashboard_template' {
+  return value === 'survey_agent_dashboard_template';
 }
 
 function getSurveyUiDefaultValue(settingKey: SurveyUiSettingKey): Record<string, unknown> {
-  if (settingKey === 'survey_agent_dashboard_config') return DEFAULT_AGENT_DASHBOARD_SURVEY_CONFIG;
+  if (settingKey === 'survey_agent_dashboard_template') return DEFAULT_AGENT_DASHBOARD_TEMPLATE;
   if (settingKey === 'survey_ticket_detail_agent_template') return DEFAULT_TICKET_DETAIL_AGENT_TEMPLATE;
   return DEFAULT_TICKET_DETAIL_USER_TEMPLATE;
 }
@@ -1410,43 +1374,20 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 export type SurveyUiSaveResult = { ok: true } | { ok: false; error: string };
 
-export async function updateSurveyUiConfig(formData: FormData): Promise<void> {
-  const { supabase, profile: adminProfile } = await requireAdminRole();
-
-  const settingKey = (formData.get('setting_key') as string) ?? '';
-  const configJson = (formData.get('config_json') as string) ?? '';
-  if (!isSurveyUiSettingKey(settingKey) || !configJson) return;
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(configJson);
-  } catch {
-    return;
-  }
-
-  // Templates have their own dedicated action with structured errors.
-  if (isTicketDetailTemplateKey(settingKey)) return;
-
-  const normalized = normalizeSurveyUiPayload(parsed);
-
-  await supabase
-    .from('app_settings')
-    .update({ value: JSON.stringify(normalized) })
-    .eq('key', settingKey);
-
-  await logAudit(supabase, adminProfile.id, 'update_survey_ui_config', 'app_settings', settingKey, {
-    setting_key: settingKey,
-  });
-
-  revalidatePath('/admin/survey-ui');
-  revalidatePath('/agent');
-}
-
 /**
- * Save a ticket-detail SurveyJS template. Returns a structured result so
- * the editor can surface validation errors to the admin.
+ * Save a SurveyJS template stored in `app_settings` (ticket-detail or
+ * agent-dashboard). Returns a structured result so the editor can surface
+ * validation errors to the admin.
+ *
+ * Validation differs by key:
+ *  - Ticket-detail keys persist a wrapper `{ template, tierControlRules }`
+ *    and validate question names against the ticket-detail allowlist on
+ *    the inner `template` object.
+ *  - The agent-dashboard key persists the bare SurveyJS template JSON and
+ *    validates question names against the agent-dashboard allowlist on the
+ *    parsed root.
  */
-export async function saveTicketDetailTemplate(
+export async function saveSurveyTemplate(
   _prev: SurveyUiSaveResult | null,
   formData: FormData,
 ): Promise<SurveyUiSaveResult> {
@@ -1455,7 +1396,7 @@ export async function saveTicketDetailTemplate(
   const settingKey = (formData.get('setting_key') as string) ?? '';
   const configJson = (formData.get('config_json') as string) ?? '';
 
-  if (!isSurveyUiSettingKey(settingKey) || !isTicketDetailTemplateKey(settingKey)) {
+  if (!isSurveyUiSettingKey(settingKey)) {
     return { ok: false, error: 'Unknown template key.' };
   }
   if (!configJson) return { ok: false, error: 'Missing JSON payload.' };
@@ -1470,16 +1411,27 @@ export async function saveTicketDetailTemplate(
   if (!isPlainObject(parsed)) {
     return { ok: false, error: 'Template root must be a JSON object.' };
   }
-  const template = (parsed as Record<string, unknown>).template;
-  if (!isPlainObject(template)) {
-    return { ok: false, error: 'Template wrapper must include a `template` object.' };
-  }
-  const invalid = findInvalidTicketDetailQuestionNames(template);
-  if (invalid.length > 0) {
-    return {
-      ok: false,
-      error: `Template contains question name(s) not allowed: ${invalid.join(', ')}.`,
-    };
+
+  if (isTicketDetailTemplateKey(settingKey)) {
+    const template = (parsed as Record<string, unknown>).template;
+    if (!isPlainObject(template)) {
+      return { ok: false, error: 'Template wrapper must include a `template` object.' };
+    }
+    const invalid = findInvalidTicketDetailQuestionNames(template);
+    if (invalid.length > 0) {
+      return {
+        ok: false,
+        error: `Template contains question name(s) not allowed: ${invalid.join(', ')}.`,
+      };
+    }
+  } else if (isAgentDashboardTemplateKey(settingKey)) {
+    const invalid = findInvalidAgentDashboardQuestionNames(parsed);
+    if (invalid.length > 0) {
+      return {
+        ok: false,
+        error: `Template contains question name(s) not allowed: ${invalid.join(', ')}.`,
+      };
+    }
   }
 
   await supabase
@@ -1493,6 +1445,9 @@ export async function saveTicketDetailTemplate(
 
   revalidatePath('/admin/survey-templates');
   revalidatePath(`/admin/survey-templates/${settingKey}`);
+  if (isAgentDashboardTemplateKey(settingKey)) {
+    revalidatePath('/agent');
+  }
   return { ok: true };
 }
 
@@ -1512,10 +1467,11 @@ export async function resetSurveyUiConfig(formData: FormData): Promise<void> {
     setting_key: settingKey,
   });
 
-  revalidatePath('/admin/survey-ui');
   revalidatePath('/admin/survey-templates');
   revalidatePath(`/admin/survey-templates/${settingKey}`);
-  revalidatePath('/agent');
+  if (isAgentDashboardTemplateKey(settingKey)) {
+    revalidatePath('/agent');
+  }
 }
 
 // ============================================================

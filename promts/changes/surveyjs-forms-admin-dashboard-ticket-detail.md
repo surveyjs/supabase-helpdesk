@@ -1,5 +1,13 @@
 # Change: SurveyJS Forms for Admin, Agent Dashboard, and Ticket Detail
 
+> **Update — superseded for the agent dashboard filter form by
+> [`agent-dashboard-filter-template-storage.md`](./agent-dashboard-filter-template-storage.md).**
+> The boolean `survey_agent_dashboard_config.enabledFilters` map and the
+> `/admin/survey-ui` route described below have been removed. The agent
+> dashboard filter form is now driven by a SurveyJS template stored under
+> `app_settings.survey_agent_dashboard_template` and edited in
+> `/admin/survey-templates` alongside the ticket-detail templates.
+
 ## Summary
 
 Introduce SurveyJS (React) as the form engine for the following areas:

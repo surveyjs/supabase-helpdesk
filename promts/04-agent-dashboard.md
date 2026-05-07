@@ -268,7 +268,7 @@ Agent dashboard filters are now rendered through SurveyJS (React) instead of pla
 Implementation expectations:
 - Keep URL-driven filtering semantics identical (`/agent?...`).
 - Keep saved views behavior unchanged.
-- Read optional JSON config from `app_settings.survey_agent_dashboard_config` to control enabled fields and default sort.
+- Read the SurveyJS form definition from `app_settings.survey_agent_dashboard_template` to control which filter fields are rendered and their layout. Admins edit this JSON in `/admin/survey-templates`. Question names must equal the SQL filter keys.
 - Preserve existing filter coverage (status, search, email, urgency, severity, category, type, agent, team, tier, tags, sort).
 - Block indicator on submitter names — Phase 15
 - SLA sort ("SLA Risk") — Phase 12

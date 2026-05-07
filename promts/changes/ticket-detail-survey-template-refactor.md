@@ -146,7 +146,7 @@ The new page lists every SurveyJS template stored in `app_settings`:
 
 - `survey_ticket_detail_agent_template`
 - `survey_ticket_detail_user_template`
-- (optional, if migrated) `survey_agent_dashboard_template`
+- (optional, if migrated) `survey_agent_dashboard_template` — **Now required.** See [`agent-dashboard-filter-template-storage.md`](./agent-dashboard-filter-template-storage.md).
 
 Each row links to a sub-page `/admin/survey-templates/[key]` that
 renders the JSON editor described in §2.2.

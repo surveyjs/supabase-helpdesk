@@ -368,7 +368,11 @@ export function MarkdownEditor({
 
   const insertAttachmentMarkdown = useCallback(
     (uploaded: InlineAttachmentUploaded) => {
-      const safeName = uploaded.name.replace(/[\[\]]/g, '');
+      // Escape Markdown link-text metacharacters and strip newlines so a
+      // filename like `weird ](evil).pdf` cannot break out of `[...](...)`.
+      const safeName = uploaded.name
+        .replace(/[\r\n]+/g, ' ')
+        .replace(/[\\\[\]()]/g, (ch) => `\\${ch}`);
       const md = `${uploaded.isImage ? '!' : ''}[${safeName}](${uploaded.url})`;
       const wrapper = wrapperRef.current;
       const textarea = wrapper?.querySelector<HTMLTextAreaElement>(

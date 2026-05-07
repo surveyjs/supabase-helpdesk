@@ -12,16 +12,27 @@ test.describe('Attach file(s) editor button', () => {
   test.beforeAll(async () => {
     const admin = createServiceRoleClient();
 
-    // Make sure `.txt` is in the allowed list (it is by default, but be explicit).
-    await admin.from('app_settings').upsert(
-      {
-        key: 'allowed_file_types',
-        value: JSON.stringify([
-          'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'pdf', 'txt', 'md',
-        ]),
-      },
-      { onConflict: 'key' },
-    );
+    // Ensure `.txt` is included in the allowed list without overwriting any
+    // other entries other specs (or migration 006 defaults) rely on.
+    const { data: allowedRow } = await admin
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'allowed_file_types')
+      .single();
+    let allowed: string[] = [];
+    if (allowedRow?.value) {
+      try { allowed = JSON.parse(allowedRow.value); } catch { /* fall through */ }
+    }
+    if (!Array.isArray(allowed) || allowed.length === 0) {
+      allowed = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'pdf', 'txt'];
+    }
+    if (!allowed.includes('txt')) {
+      allowed = [...allowed, 'txt'];
+      await admin
+        .from('app_settings')
+        .update({ value: JSON.stringify(allowed) })
+        .eq('key', 'allowed_file_types');
+    }
 
     // Loosen ticket creation rate limit and clear stale fixtures.
     await admin
@@ -34,7 +45,14 @@ test.describe('Attach file(s) editor button', () => {
       .eq('email', 'alice@example.com')
       .single();
     if (alice) {
-      await admin.from('attachments').delete().eq('uploader_id', alice.id).is('post_id', null);
+      // Scope to this spec's artifact (`spec.txt`) so we don't race with
+      // other specs (e.g. inline-image-paste) that also create alice orphans.
+      await admin
+        .from('attachments')
+        .delete()
+        .eq('uploader_id', alice.id)
+        .is('post_id', null)
+        .eq('original_filename', 'spec.txt');
     }
 
     const { data: stale } = await admin
@@ -113,6 +131,7 @@ test.describe('Attach file(s) editor button', () => {
       .from('attachments')
       .select('id, post_id, original_filename, mime_type')
       .eq('uploader_id', alice!.id)
+      .eq('original_filename', 'spec.txt')
       .is('post_id', null);
     expect(orphans?.length ?? 0).toBeGreaterThan(0);
     expect(orphans!.some((o) => o.original_filename === 'spec.txt')).toBe(true);

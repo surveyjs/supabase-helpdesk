@@ -560,9 +560,18 @@ export async function uploadInlineAttachment(
     fileBuffer = await sanitizeSvg(fileBuffer);
   }
 
+  // Fall back to the canonical MIME for the validated extension when the
+  // browser sent a generic / empty type. Otherwise Storage records
+  // `application/octet-stream`, which breaks inline image rendering and
+  // confuses downloads.
+  const storageContentType =
+    file.type && file.type !== 'application/octet-stream'
+      ? file.type
+      : (EXTENSION_MIME_MAP[ext]?.[0] ?? 'application/octet-stream');
+
   const { error: uploadError } = await supabase.storage
     .from('attachments')
-    .upload(storagePath, fileBuffer, { contentType: file.type, upsert: false });
+    .upload(storagePath, fileBuffer, { contentType: storageContentType, upsert: false });
   if (uploadError) {
     return { error: `Failed to upload "${file.name}": ${uploadError.message}` };
   }
@@ -575,7 +584,7 @@ export async function uploadInlineAttachment(
       storage_path: storagePath,
       original_filename: file.name,
       file_size: file.size,
-      mime_type: file.type,
+      mime_type: storageContentType,
     })
     .select('id')
     .single();
@@ -584,12 +593,17 @@ export async function uploadInlineAttachment(
     return { error: `Failed to record attachment: ${insertError?.message ?? 'unknown error'}` };
   }
 
+  // Derive `isImage` from the validated extension so an image with a
+  // missing/generic browser MIME (e.g. application/octet-stream) is still
+  // inserted as `![name](url)` rather than a plain link.
+  const isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].includes(ext);
+
   return {
     url: `/attachments/${inserted.id}`,
     attachmentId: inserted.id,
     name: file.name,
-    mimeType: file.type,
-    isImage: file.type.startsWith('image/'),
+    mimeType: storageContentType,
+    isImage,
   };
 }
 

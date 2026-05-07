@@ -1,10 +1,17 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import MdEditorLib from 'react-markdown-editor-lite';
 import CannedResponsePlugin from './CannedResponsePlugin';
 import { renderMarkdown } from '@/lib/utils/markdown';
+
+export const DEFAULT_EDITOR_MIN_HEIGHT_PX = 300;
+export const DEFAULT_EDITOR_MAX_HEIGHT_PX = 540;
+const EDITOR_TOOLBAR_OFFSET_PX = 38;
+const EDITOR_LINE_HEIGHT_PX = 22;
+const EDITOR_TEXTAREA_PADDING_PX = 16;
+const COMPACT_MIN_HEIGHT_FLOOR_PX = 120;
 
 type MdEditorLibWithUse = {
   use: (plugin: unknown) => void;
@@ -58,6 +65,10 @@ export interface MarkdownEditorProps {
   onImageUpload?: (file: File) => Promise<string>;
   /** Toolbar plugins to prepend (e.g., canned response button for agents) */
   extraToolbarPlugins?: string[];
+  /** Initial editor height in px (default 300). */
+  minHeightPx?: number;
+  /** Maximum editor height in px (default 540). */
+  maxHeightPx?: number;
 }
 
 export function MarkdownEditor({
@@ -72,21 +83,113 @@ export function MarkdownEditor({
   onValueChange,
   onImageUpload,
   extraToolbarPlugins,
+  minHeightPx,
+  maxHeightPx,
 }: MarkdownEditorProps) {
   const [value, setValue] = useState(defaultValue ?? '');
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
 
-  // Sync with external defaultValue changes (e.g., canned response insertion)
+  const requestedMin = minHeightPx ?? DEFAULT_EDITOR_MIN_HEIGHT_PX;
+  const requestedMax = maxHeightPx ?? DEFAULT_EDITOR_MAX_HEIGHT_PX;
+  const baseMin = compact
+    ? Math.max(COMPACT_MIN_HEIGHT_FLOOR_PX, Math.floor(requestedMin / 2))
+    : requestedMin;
+  const baseMax = Math.max(baseMin, requestedMax);
+
+  const [height, setHeight] = useState<number>(baseMin);
+  const isMountedRef = useRef(true);
+  const pendingFrameRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (pendingFrameRef.current !== null && typeof window !== 'undefined') {
+        window.cancelAnimationFrame(pendingFrameRef.current);
+        pendingFrameRef.current = null;
+      }
+    };
+  }, []);
+
+  // Reset height when min/max change (e.g., user updated their preference).
+  useEffect(() => {
+    setHeight((current) => Math.min(Math.max(current, baseMin), baseMax));
+  }, [baseMin, baseMax]);
+
+  // Sync with external defaultValue changes (e.g., canned response insertion,
+  // form reset after save). Re-measure so the editor grows/shrinks to fit
+  // the externally-injected content immediately, not only on the next keystroke.
   useEffect(() => {
     if (defaultValue !== undefined && defaultValue !== value) {
       setValue(defaultValue);
+      if (defaultValue === '') {
+        setHeight(baseMin);
+      } else {
+        scheduleMeasure(defaultValue);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defaultValue]);
 
-  const handleChange = useCallback(({ text }: { text: string }) => {
-    setValue(text);
-    onValueChange?.(text);
-  }, [onValueChange]);
+  const measureAndUpdateHeight = useCallback(
+    (text: string) => {
+      if (!isMountedRef.current) return;
+      let candidate: number | null = null;
+      const wrapper = wrapperRef.current;
+      if (wrapper) {
+        const textarea = wrapper.querySelector<HTMLTextAreaElement>(
+          'textarea.section-container',
+        ) ?? wrapper.querySelector<HTMLTextAreaElement>('textarea');
+        if (textarea) {
+          // Force scrollHeight recalc by temporarily clearing height.
+          const previous = textarea.style.height;
+          textarea.style.height = 'auto';
+          const contentHeight = textarea.scrollHeight;
+          textarea.style.height = previous;
+          candidate = contentHeight + EDITOR_TOOLBAR_OFFSET_PX;
+        }
+      }
+      if (candidate === null) {
+        const lines = text.length === 0 ? 1 : text.split('\n').length;
+        candidate =
+          lines * EDITOR_LINE_HEIGHT_PX +
+          EDITOR_TEXTAREA_PADDING_PX +
+          EDITOR_TOOLBAR_OFFSET_PX;
+      }
+      const clamped = Math.min(Math.max(candidate, baseMin), baseMax);
+      setHeight((prev) => (prev === clamped ? prev : clamped));
+    },
+    [baseMin, baseMax],
+  );
+
+  const scheduleMeasure = useCallback(
+    (text: string) => {
+      if (typeof window === 'undefined') {
+        measureAndUpdateHeight(text);
+        return;
+      }
+      if (pendingFrameRef.current !== null) {
+        window.cancelAnimationFrame(pendingFrameRef.current);
+      }
+      pendingFrameRef.current = window.requestAnimationFrame(() => {
+        pendingFrameRef.current = null;
+        if (isMountedRef.current) {
+          measureAndUpdateHeight(text);
+        }
+      });
+    },
+    [measureAndUpdateHeight],
+  );
+
+  const handleChange = useCallback(
+    ({ text }: { text: string }) => {
+      setValue(text);
+      onValueChange?.(text);
+      // Defer measurement to next frame so the textarea reflects the new value.
+      scheduleMeasure(text);
+    },
+    [onValueChange, scheduleMeasure],
+  );
 
   // Derive view config from viewMode prop
   const viewConfig = {
@@ -104,7 +207,7 @@ export function MarkdownEditor({
     : defaultPlugins;
 
   return (
-    <div data-testid="markdown-editor">
+    <div data-testid="markdown-editor" ref={wrapperRef}>
       {/* Hidden textarea for form submission (keeps Server Action forms working) */}
       <textarea
         id={id}
@@ -123,7 +226,7 @@ export function MarkdownEditor({
         onChange={handleChange}
         renderHTML={(text: string) => renderMarkdown(text)}
         onImageUpload={onImageUpload}
-        style={{ height: compact ? '150px' : '250px' }}
+        style={{ height: `${height}px` }}
         placeholder={placeholder ?? 'Write using Markdown…'}
         view={viewConfig}
         canView={{ menu: true, md: true, html: true, both: true, fullScreen: false, hideMenu: false }}

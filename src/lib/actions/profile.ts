@@ -233,13 +233,52 @@ export async function updateEditorViewMode(
     return { error: 'Invalid editor view mode.' };
   }
 
+  const minRaw = formData.get('editor_min_height_px');
+  const maxRaw = formData.get('editor_max_height_px');
+  // Use Number() (not parseInt) so fractional / suffixed strings like "350.5"
+  // or "350px" become NaN and are rejected by the Number.isInteger checks below
+  // rather than silently truncated.
+  const minHeight =
+    typeof minRaw === 'string' && minRaw.length > 0
+      ? Number(minRaw)
+      : 300;
+  const maxHeight =
+    typeof maxRaw === 'string' && maxRaw.length > 0
+      ? Number(maxRaw)
+      : 540;
+
+  if (!Number.isInteger(minHeight) || minHeight < 120 || minHeight > 1000) {
+    return { error: 'Initial editor height must be an integer between 120 and 1000 px.' };
+  }
+  if (!Number.isInteger(maxHeight) || maxHeight < 200 || maxHeight > 2000) {
+    return { error: 'Maximum editor height must be an integer between 200 and 2000 px.' };
+  }
+  if (minHeight > maxHeight) {
+    return { error: 'Initial editor height must be less than or equal to maximum height.' };
+  }
+
   const { error } = await supabase
     .from('profiles')
-    .update({ editor_view_mode: mode })
+    .update({
+      editor_view_mode: mode,
+      editor_min_height_px: minHeight,
+      editor_max_height_px: maxHeight,
+    })
     .eq('id', user.id);
 
   if (error) {
-    return { error: 'Failed to update editor preference.' };
+    // Older DBs without migration 027 may not have the height columns yet.
+    if (error.code === '42703') {
+      const { error: legacyError } = await supabase
+        .from('profiles')
+        .update({ editor_view_mode: mode })
+        .eq('id', user.id);
+      if (legacyError) {
+        return { error: 'Failed to update editor preference.' };
+      }
+    } else {
+      return { error: 'Failed to update editor preference.' };
+    }
   }
 
   revalidatePath('/');

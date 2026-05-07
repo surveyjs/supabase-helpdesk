@@ -122,16 +122,41 @@ export default async function TicketDetailPage({
   const tierExpired = !!profile?.tier_expires_at && profile.tier_expires_at < nowIso;
   const viewerTierKey = !tierExpired ? (viewerTier?.key ?? null) : null;
 
-  // Backward-compatible: editor_view_mode may not exist before migration 021 is applied.
+  // Backward-compatible: editor_view_mode may not exist before migration 021 is applied,
+  // and the height columns may not exist before migration 027.
   let editorViewMode: 'both' | 'preview' | 'editor' = 'both';
+  let editorMinHeightPx: number | undefined;
+  let editorMaxHeightPx: number | undefined;
   const { data: editorPref } = await supabase
     .from('profiles')
-    .select('editor_view_mode')
+    .select('editor_view_mode, editor_min_height_px, editor_max_height_px')
     .eq('id', user.id)
     .maybeSingle();
-  const pref = (editorPref as { editor_view_mode?: string } | null)?.editor_view_mode;
-  if (pref === 'both' || pref === 'preview' || pref === 'editor') {
-    editorViewMode = pref;
+  const pref = (editorPref as {
+    editor_view_mode?: string;
+    editor_min_height_px?: number | null;
+    editor_max_height_px?: number | null;
+  } | null);
+  if (pref?.editor_view_mode === 'both' || pref?.editor_view_mode === 'preview' || pref?.editor_view_mode === 'editor') {
+    editorViewMode = pref.editor_view_mode;
+  }
+  if (typeof pref?.editor_min_height_px === 'number') {
+    editorMinHeightPx = pref.editor_min_height_px;
+  }
+  if (typeof pref?.editor_max_height_px === 'number') {
+    editorMaxHeightPx = pref.editor_max_height_px;
+  }
+  if (editorMinHeightPx === undefined || editorMaxHeightPx === undefined) {
+    // Older DB schema (no height columns yet): fall back to view-mode-only select.
+    const { data: legacyPref } = await supabase
+      .from('profiles')
+      .select('editor_view_mode')
+      .eq('id', user.id)
+      .maybeSingle();
+    const legacy = (legacyPref as { editor_view_mode?: string } | null)?.editor_view_mode;
+    if (legacy === 'both' || legacy === 'preview' || legacy === 'editor') {
+      editorViewMode = legacy;
+    }
   }
 
   // Keep ticket detail editors actionable on first render: preview-only mode hides editing toolbox.
@@ -431,6 +456,8 @@ export default async function TicketDetailPage({
             rawBody={post.body}
             canEdit={canEditPost}
               editorViewMode={ticketDetailEditorViewMode}
+              editorMinHeightPx={editorMinHeightPx}
+              editorMaxHeightPx={editorMaxHeightPx}
           />
 
           {/* Action buttons */}
@@ -503,7 +530,7 @@ export default async function TicketDetailPage({
         {/* Reply button */}
         {canReplyToPost && level === 0 && (
           <div className="mt-1 ml-6">
-            <ReplyToggle parentPostId={post.id} editorViewMode={ticketDetailEditorViewMode} />
+            <ReplyToggle parentPostId={post.id} editorViewMode={ticketDetailEditorViewMode} editorMinHeightPx={editorMinHeightPx} editorMaxHeightPx={editorMaxHeightPx} />
           </div>
         )}
         {canReplyToPost && level === 1 && (
@@ -512,6 +539,8 @@ export default async function TicketDetailPage({
               parentPostId={post.parent_post_id!}
               parentCommentId={post.id}
               editorViewMode={ticketDetailEditorViewMode}
+              editorMinHeightPx={editorMinHeightPx}
+              editorMaxHeightPx={editorMaxHeightPx}
             />
           </div>
         )}
@@ -784,6 +813,8 @@ export default async function TicketDetailPage({
                     ticketId={ticket.id}
                     isAgent={isAgent}
                     editorViewMode={ticketDetailEditorViewMode}
+                    editorMinHeightPx={editorMinHeightPx}
+                    editorMaxHeightPx={editorMaxHeightPx}
                     aiSuggestedReplyEnabled={aiSuggestedReplyEnabled}
                   />
                 )}
@@ -797,7 +828,7 @@ export default async function TicketDetailPage({
                   <p className="text-sm text-gray-500 italic">No internal notes yet.</p>
                 )}
                 {!ticket.merged_into_id && (
-                  <NoteForm ticketId={ticket.id} editorViewMode={ticketDetailEditorViewMode} />
+                  <NoteForm ticketId={ticket.id} editorViewMode={ticketDetailEditorViewMode} editorMinHeightPx={editorMinHeightPx} editorMaxHeightPx={editorMaxHeightPx} />
                 )}
               </div>
             ) : undefined}

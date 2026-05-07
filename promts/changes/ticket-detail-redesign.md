@@ -406,6 +406,12 @@ Each form component passes `viewMode={editorViewMode}` to `<MarkdownEditor>`.
 
 On `/profile`, add an "Editor Preference" section showing the current mode with radio buttons or a dropdown. This is a convenience — the primary way to change the mode is the in-editor toggle.
 
+> **Note:** The auto-grow behaviour and the `editor_min_height_px` /
+> `editor_max_height_px` profile preferences are specified separately in
+> [editor-auto-grow-height.md](./editor-auto-grow-height.md) (migration
+> `027_editor_height_preferences.sql`). The same `updateEditorViewMode`
+> server action handles both the view-mode and height fields.
+
 ---
 
 ## 6. Compact Ticket Information

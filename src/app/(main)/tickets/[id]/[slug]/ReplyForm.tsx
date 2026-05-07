@@ -10,12 +10,16 @@ export function ReplyForm({
   ticketId,
   isAgent = false,
   editorViewMode = 'both',
+  editorMinHeightPx,
+  editorMaxHeightPx,
   submitLabel = 'Add a reply',
   onCancel,
 }: {
   ticketId: number;
   isAgent?: boolean;
   editorViewMode?: EditorViewMode;
+  editorMinHeightPx?: number;
+  editorMaxHeightPx?: number;
   submitLabel?: string;
   onCancel?: () => void;
 }) {
@@ -25,6 +29,8 @@ export function ReplyForm({
       hiddenFields={<input type="hidden" name="ticket_id" value={ticketId} />}
       placeholder="Write your reply… (Markdown supported)"
       editorViewMode={editorViewMode}
+      editorMinHeightPx={editorMinHeightPx}
+      editorMaxHeightPx={editorMaxHeightPx}
       extraToolbarPlugins={isAgent ? ['canned-response'] : undefined}
       submitLabel={submitLabel}
       pendingLabel="Sending…"

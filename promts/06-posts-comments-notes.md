@@ -174,7 +174,7 @@ Each post/comment/note shows:
 #### 3b. Inline Edit Form
 
 When the user clicks "Edit" on a post/comment/note:
-- Replace the rendered body with a `<MarkdownEditor>` component pre-filled with the current Markdown body, with `viewMode` from the user's profile preference
+- Replace the rendered body with a `<MarkdownEditor>` component pre-filled with the current Markdown body, with `viewMode`, `minHeightPx`, and `maxHeightPx` from the user's profile preferences (`editor_view_mode`, `editor_min_height_px`, `editor_max_height_px`)
 - Show "Save" and "Cancel" buttons
 - On save: call `editPost` Server Action
 - On cancel: revert to rendered view
@@ -182,7 +182,7 @@ When the user clicks "Edit" on a post/comment/note:
 
 #### 3c. Inline Comment/Reply Forms
 
-- Each post has a "Reply" link that reveals an inline comment form (`<MarkdownEditor name="body" compact viewMode={editorViewMode}>` + "Comment" button)
+- Each post has a "Reply" link that reveals an inline comment form (`<MarkdownEditor name="body" compact viewMode={editorViewMode} minHeightPx={editorMinHeightPx} maxHeightPx={editorMaxHeightPx}>` + "Comment" button). The editor opens at the agent's preferred initial height and grows as they type, up to the maximum.
 - Each level-1 comment has a "Reply" link that reveals a reply form
 - Forms call `addComment` Server Action with appropriate `parent_post_id` and `parent_comment_id`
 - These are `<form>` elements with hidden fields for IDs

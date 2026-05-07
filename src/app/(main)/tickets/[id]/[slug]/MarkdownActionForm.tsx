@@ -21,6 +21,8 @@ export type MarkdownActionFormProps = {
   placeholder?: string;
   compact?: boolean;
   editorViewMode?: EditorViewMode;
+  editorMinHeightPx?: number;
+  editorMaxHeightPx?: number;
   extraToolbarPlugins?: string[];
   submitLabel: string;
   pendingLabel: string;
@@ -45,6 +47,8 @@ export function MarkdownActionForm({
   placeholder,
   compact = false,
   editorViewMode = 'both',
+  editorMinHeightPx,
+  editorMaxHeightPx,
   extraToolbarPlugins,
   submitLabel,
   pendingLabel,
@@ -72,6 +76,8 @@ export function MarkdownActionForm({
         defaultValue={defaultBody}
         compact={compact}
         viewMode={editorViewMode}
+        minHeightPx={editorMinHeightPx}
+        maxHeightPx={editorMaxHeightPx}
         onImageUpload={uploadInlineImageFromEditor}
         extraToolbarPlugins={extraToolbarPlugins}
       />

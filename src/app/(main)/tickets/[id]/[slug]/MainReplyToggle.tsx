@@ -8,11 +8,15 @@ export function MainReplyToggle({
   ticketId,
   isAgent,
   editorViewMode = 'both',
+  editorMinHeightPx,
+  editorMaxHeightPx,
   aiSuggestedReplyEnabled = false,
 }: {
   ticketId: number;
   isAgent: boolean;
   editorViewMode?: 'both' | 'preview' | 'editor';
+  editorMinHeightPx?: number;
+  editorMaxHeightPx?: number;
   aiSuggestedReplyEnabled?: boolean;
 }) {
   return (
@@ -33,6 +37,8 @@ export function MainReplyToggle({
             ticketId={ticketId}
             isAgent={isAgent}
             editorViewMode={editorViewMode}
+            editorMinHeightPx={editorMinHeightPx}
+            editorMaxHeightPx={editorMaxHeightPx}
             submitLabel="Add a reply"
             onCancel={close}
           />

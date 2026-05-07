@@ -130,6 +130,7 @@ Create migration **`supabase/migrations/003_tickets.sql`**:
 - Hidden `<textarea>` with `name` attribute for Server Action form compatibility
 - `compact` prop for smaller forms (comments, notes)
 - `viewMode` prop (`'both' | 'preview' | 'editor'`) — controls editor/preview display, driven by user's `editor_view_mode` profile preference
+- `minHeightPx` / `maxHeightPx` props — initial and maximum editor height in px (defaults `300` / `540`); the wrapper auto-grows from the initial height to the maximum as the user types, then scrolls internally. Driven by the agent's `editor_min_height_px` / `editor_max_height_px` profile preferences (migration 027).
 - `extraToolbarPlugins` prop — allows injecting custom toolbar buttons (e.g., canned response plugin for agents)
 - `onValueChange` callback for external text insertion (canned responses, AI suggestions)
 - `data-testid="markdown-editor"` on wrapper div

@@ -544,9 +544,9 @@ describe('Migrated attachments (legacy_blob_id)', () => {
       .select('id')
       .single();
 
-    // Regular user cannot see it
-    const userClient = clients['user8@test.com'];
-    const { data } = await userClient
+    // user8b has no relationship to this ticket — cannot see private post's attachment
+    const user2Client = clients['user8b@test.com'];
+    const { data } = await user2Client
       .from('attachments')
       .select('*')
       .eq('id', att!.id);

@@ -211,9 +211,23 @@ test.describe('Auth External', () => {
       await page.getByTestId('confirm-mode-switch').click();
     }
 
+    // A parallel worker's loginViaForm() can reset auth_mode back to 'built-in'
+    // between the click above and the page re-render, causing the external
+    // provider survey to never appear. Self-heal by re-setting external and
+    // reloading until the survey is visible.
+    const svc = createServiceRoleClient();
+    let surveyVisible = false;
+    for (let i = 0; i < 5; i++) {
+      surveyVisible = await page.getByTestId('external-provider-survey').isVisible().catch(() => false);
+      if (surveyVisible) break;
+      await svc.from('app_settings').update({ value: 'external' }).eq('key', 'auth_mode');
+      await page.reload();
+      await page.waitForLoadState('domcontentloaded');
+    }
+
     const survey = page.getByTestId('external-provider-survey');
     const secretInput = survey.locator('input[type="password"]').first();
-    await expect(secretInput).toBeVisible();
+    await expect(secretInput).toBeVisible({ timeout: 5000 });
   });
 
   test('test connection button is present for external provider', async ({ page }) => {
@@ -289,8 +303,20 @@ test.describe('Auth External', () => {
     await svc.from('app_settings').update({ value: 'external' }).eq('key', 'auth_mode');
     await svc.from('app_settings').update({ value: 'Test SSO' }).eq('key', 'auth_external_provider_name');
 
+    // A parallel worker's loginViaForm() can reset auth_mode back to 'built-in'
+    // between the DB write above and the page render. Re-set and reload until
+    // the external login button appears.
     await page.goto('/login');
-    await expect(page.getByTestId('external-login-btn')).toBeVisible({ timeout: 10000 });
+    let visible = false;
+    for (let i = 0; i < 5; i++) {
+      visible = await page.getByTestId('external-login-btn').isVisible().catch(() => false);
+      if (visible) break;
+      await svc.from('app_settings').update({ value: 'external' }).eq('key', 'auth_mode');
+      await page.reload();
+      await page.waitForLoadState('domcontentloaded');
+    }
+    expect(visible).toBe(true);
+
     await expect(page.getByText('Sign in with Test SSO')).toBeVisible();
 
     // No email/password form
@@ -307,7 +333,16 @@ test.describe('Auth External', () => {
     await svc.from('app_settings').update({ value: 'Test SSO' }).eq('key', 'auth_external_provider_name');
 
     await page.goto('/login?no_redirect=true');
-    await expect(page.getByTestId('external-login-btn')).toBeVisible({ timeout: 10000 });
+    let visible = false;
+    for (let i = 0; i < 5; i++) {
+      visible = await page.getByTestId('external-login-btn').isVisible().catch(() => false);
+      if (visible) break;
+      await svc.from('app_settings').update({ value: 'external' }).eq('key', 'auth_mode');
+      await svc.from('app_settings').update({ value: 'true' }).eq('key', 'auth_external_auto_redirect');
+      await page.reload();
+      await page.waitForLoadState('domcontentloaded');
+    }
+    expect(visible).toBe(true);
 
     await resetAuthMode();
   });

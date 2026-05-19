@@ -26,15 +26,21 @@ export async function GET(
   // RLS on `attachments` decides visibility (post visibility, orphan ownership, etc.).
   const { data: attachment } = await supabase
     .from('attachments')
-    .select('id, storage_path')
+    .select('id, storage_path, legacy_blob_id')
     .eq('id', id)
     .single();
 
   if (!attachment) return new NextResponse('Not found', { status: 404 });
 
+  const storagePath = attachment.legacy_blob_id
+    ? `migrated/${attachment.legacy_blob_id}`
+    : attachment.storage_path;
+
+  if (!storagePath) return new NextResponse('Not found', { status: 404 });
+
   const { data: signed } = await supabase.storage
     .from('attachments')
-    .createSignedUrl(attachment.storage_path, 60 * 5); // 5 min — just for the redirect
+    .createSignedUrl(storagePath, 60 * 5); // 5 min — just for the redirect
 
   if (!signed?.signedUrl) {
     return new NextResponse('Failed to sign URL', { status: 500 });

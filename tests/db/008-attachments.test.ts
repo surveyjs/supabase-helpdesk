@@ -485,3 +485,84 @@ describe('File metadata validation', () => {
     expect(error).not.toBeNull();
   });
 });
+
+// ============================================================
+// MIGRATED ATTACHMENTS (legacy_blob_id)
+// ============================================================
+
+describe('Migrated attachments (legacy_blob_id)', () => {
+  it('stores migrated attachment with legacy_blob_id and no storage_path', async () => {
+    const blobId = '00000000-0000-0000-0000-000000000099';
+
+    const { data, error } = await svc
+      .from('attachments')
+      .insert({
+        post_id: postId,
+        legacy_blob_id: blobId,
+        original_filename: 'migrated-report.pdf',
+        file_size: 52428800, // 50 MB — above the 10 MB user limit
+        mime_type: 'application/pdf',
+      })
+      .select('*')
+      .single();
+
+    expect(error).toBeNull();
+    expect(data!.legacy_blob_id).toBe(blobId);
+    expect(data!.storage_path).toBeNull();
+    expect(data!.file_size).toBe(52428800);
+
+    // Clean up
+    await svc.from('attachments').delete().eq('id', data!.id);
+  });
+
+  it('rejects attachment with neither storage_path nor legacy_blob_id', async () => {
+    const { error } = await svc
+      .from('attachments')
+      .insert({
+        post_id: postId,
+        original_filename: 'orphan.txt',
+        file_size: 100,
+        mime_type: 'text/plain',
+      });
+
+    expect(error).not.toBeNull();
+  });
+
+  it('migrated attachment inherits same post-visibility RLS as regular attachments', async () => {
+    const blobId = '00000000-0000-0000-0000-0000000000aa';
+
+    // Insert on private post (via service role)
+    const { data: att } = await svc
+      .from('attachments')
+      .insert({
+        post_id: privatePostId,
+        legacy_blob_id: blobId,
+        original_filename: 'private-migrated.pdf',
+        file_size: 1024,
+        mime_type: 'application/pdf',
+      })
+      .select('id')
+      .single();
+
+    // Regular user cannot see it
+    const userClient = clients['user8@test.com'];
+    const { data } = await userClient
+      .from('attachments')
+      .select('*')
+      .eq('id', att!.id);
+
+    expect(data?.length ?? 0).toBe(0);
+
+    // Agent can see it
+    const agentClient = clients['agent8@test.com'];
+    const { data: agentData } = await agentClient
+      .from('attachments')
+      .select('*')
+      .eq('id', att!.id);
+
+    expect(agentData!.length).toBe(1);
+
+    // Clean up
+    await svc.from('attachments').delete().eq('id', att!.id);
+  });
+});

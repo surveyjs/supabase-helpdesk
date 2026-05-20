@@ -247,7 +247,7 @@ export async function deleteAttachment(formData: FormData): Promise<void> {
   // Fetch attachment
   const { data: attachment } = await supabase
     .from('attachments')
-    .select('id, post_id, storage_path, original_filename')
+    .select('id, post_id, storage_path, legacy_blob_id, original_filename')
     .eq('id', attachmentId)
     .single();
 
@@ -266,10 +266,14 @@ export async function deleteAttachment(formData: FormData): Promise<void> {
   const isAgent = profile.role === 'agent' || profile.role === 'admin';
   if (post.author_id !== user.id && !isAgent) return;
 
+  const storagePath = attachment.legacy_blob_id
+    ? `migrated/${attachment.legacy_blob_id}`
+    : attachment.storage_path;
+
   // Delete from storage first so we don't orphan the DB row on failure
   const { error: storageDeleteError } = await supabase.storage
     .from('attachments')
-    .remove([attachment.storage_path]);
+    .remove(storagePath ? [storagePath] : []);
 
   if (storageDeleteError) {
     console.error(`Failed to delete attachment from storage: ${storageDeleteError.message}`);
@@ -315,16 +319,22 @@ export async function getAttachmentUrl(attachmentId: string): Promise<string | n
   // Fetch attachment (RLS on attachments inherits post visibility)
   const { data: attachment } = await supabase
     .from('attachments')
-    .select('id, storage_path')
+    .select('id, storage_path, legacy_blob_id')
     .eq('id', attachmentId)
     .single();
 
   if (!attachment) return null;
 
+  const storagePath = attachment.legacy_blob_id
+    ? `migrated/${attachment.legacy_blob_id}`
+    : attachment.storage_path;
+
+  if (!storagePath) return null;
+
   // Generate signed URL (1 hour expiry)
   const { data } = await supabase.storage
     .from('attachments')
-    .createSignedUrl(attachment.storage_path, 3600);
+    .createSignedUrl(storagePath, 3600);
 
   return data?.signedUrl ?? null;
 }

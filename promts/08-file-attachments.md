@@ -26,6 +26,25 @@ CREATE TABLE attachments (
 );
 
 CREATE INDEX idx_attachments_post_id ON attachments (post_id);
+```
+
+> **Migration 028 extends this table** (`supabase/migrations/028_migrated_attachments.sql`):
+>
+> ```sql
+> ALTER TABLE attachments
+>   ADD COLUMN legacy_blob_id UUID,
+>   ALTER COLUMN storage_path DROP NOT NULL,
+>   ADD CONSTRAINT attachments_has_path CHECK (
+>     storage_path IS NOT NULL OR legacy_blob_id IS NOT NULL
+>   );
+> ```
+>
+> - **User-uploaded files** (`legacy_blob_id IS NULL`): `storage_path` is set to the standard `tickets/{ticketId}/posts/{postId}/{uuid}-{filename}` path.
+> - **Migrated files** (`legacy_blob_id IS NOT NULL`): `storage_path` is NULL; the blob lives at `migrated/{legacy_blob_id}` in the `attachments` Storage bucket. These files are read-only — to replace one, the user deletes the row and re-uploads, which creates a new row with a standard `storage_path`.
+>
+> The `getAttachmentUrl` Server Action and the `/attachments/[id]` route both resolve the correct path automatically: `legacy_blob_id ? \`migrated/${legacy_blob_id}\` : storage_path`.
+
+```sql
 
 ALTER TABLE attachments ENABLE ROW LEVEL SECURITY;
 
@@ -213,10 +232,21 @@ Add a new section to the admin sidebar:
 
 - **Signed URLs**: All file downloads go through signed URLs generated server-side. This avoids exposing Storage bucket paths directly and ensures access control is enforced through the `attachments` table RLS.
 - **Upload flow**: The recommended approach is a two-phase process: (1) Create the post via Server Action, getting back the post_id. (2) Upload files to Storage and create `attachments` rows in a second Server Action. This is simpler than handling multipart uploads in a single Server Action.
-- **Storage path format**: `attachments/tickets/{ticketId}/posts/{postId}/{uuid}-{filename}` — the UUID prefix prevents filename collisions.
+- **Storage path format**: `tickets/{ticketId}/posts/{postId}/{uuid}-{filename}` for user uploads. Migrated files live at `migrated/{legacy_blob_id}`. Both are served from the same `attachments` bucket via signed URLs.
+- **File size limit**: The bucket has no hard `file_size_limit` (removed in migration 028 to allow migrated files larger than 10 MB). The 10 MB cap for user uploads is enforced exclusively in the `uploadAttachments` / `uploadInlineAttachment` Server Actions via `app_settings.max_file_size_mb`. Migrated files (`legacy_blob_id IS NOT NULL`) bypass this check entirely.
 - **Image thumbnails**: Use CSS `max-width: 200px; max-height: 200px; object-fit: contain` for inline thumbnail previews. Do not create actual thumbnail image variants.
 - **SVG sanitization**: Must happen server-side before storage. The library strips all potentially dangerous elements while preserving valid SVG rendering.
 - `dompurify` or `isomorphic-dompurify` works well for server-side SVG sanitization. Configure it to allow SVG elements (`<svg>`, `<circle>`, `<path>`, `<rect>`, etc.) while stripping script-related content.
+
+## Migrated Attachments (Phase 28)
+
+`supabase/migrations/028_migrated_attachments.sql` adds `legacy_blob_id UUID` to support files imported from the AnswerDesk migration:
+
+- `storage_path` becomes nullable; exactly one of `storage_path` / `legacy_blob_id` must be non-null (CHECK constraint).
+- Migrated blobs are uploaded to the `attachments` bucket under `migrated/{FileItems.Id}` by the migration script (service role, no Server Action).
+- The bucket's `file_size_limit` is set to NULL so large legacy files can be uploaded; the 10 MB cap for user uploads is enforced by the Server Actions only.
+- `getAttachmentUrl`, `deleteAttachment`, and the `/attachments/[id]` route all resolve the path via `legacy_blob_id ? \`migrated/${legacy_blob_id}\` : storage_path`.
+- Migrated files are read-only. Deleting and re-uploading creates a normal row with `storage_path`.
 
 ## Deferred Features (Added by Later Phases)
 

@@ -25,14 +25,24 @@ export async function AttachmentList({
 
   const { data: attachments } = await supabase
     .from('attachments')
-    .select('id, storage_path, original_filename, file_size, mime_type, created_at')
+    .select('id, storage_path, legacy_blob_id, original_filename, file_size, mime_type, created_at')
     .eq('post_id', postId)
     .order('created_at', { ascending: true });
 
   if (!attachments || attachments.length === 0) return null;
 
+  // Resolve the effective Storage path for each attachment.
+  // Migrated attachments have legacy_blob_id set and storage_path null;
+  // their blobs live at migrated/{legacy_blob_id} in the bucket.
+  const withPaths = attachments.map((att) => ({
+    ...att,
+    effectivePath: att.legacy_blob_id
+      ? `migrated/${att.legacy_blob_id}`
+      : att.storage_path,
+  }));
+
   // Generate signed URLs in a single batch call
-  const paths = attachments.map((att) => att.storage_path);
+  const paths = withPaths.map((att) => att.effectivePath).filter(Boolean) as string[];
   const { data: signedUrlData } = await supabase.storage
     .from('attachments')
     .createSignedUrls(paths, 3600);
@@ -46,9 +56,9 @@ export async function AttachmentList({
     }
   }
 
-  const attachmentsWithUrls = attachments.map((att) => ({
+  const attachmentsWithUrls = withPaths.map((att) => ({
     ...att,
-    signedUrl: signedUrlMap.get(att.storage_path) ?? null,
+    signedUrl: att.effectivePath ? (signedUrlMap.get(att.effectivePath) ?? null) : null,
   }));
 
   return (

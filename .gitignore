@@ -45,3 +45,7 @@ test-results/
 next-env.d.ts
 playwright-results.json
 *.log
+
+# migration
+/migration/
+

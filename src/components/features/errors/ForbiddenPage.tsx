@@ -35,7 +35,7 @@ export async function ForbiddenPage({ message }: { message?: string }) {
           href="/"
           className="inline-block mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
         >
-          Go home
+          Home
         </Link>
       </div>
     </div>

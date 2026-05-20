@@ -123,7 +123,7 @@ export function AiConfigSurveyForm({ settings, usage }: Props) {
         </button>
         {testResult && (
           <span className={`ml-3 text-sm ${testResult.success ? 'text-green-600' : 'text-red-600'}`}>
-            {testResult.success ? `✓ Connected (${testResult.model})` : `✗ ${testResult.error}`}
+            {testResult.success ? `Connected (${testResult.model})` : testResult.error}
           </span>
         )}
       </div>

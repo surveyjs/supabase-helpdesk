@@ -38,7 +38,7 @@ export function ProviderTestButton({ provider }: { provider: string }) {
               : 'bg-red-50 border border-red-200 text-red-700'
           }`}
         >
-          {result.success ? `✓ ${result.details}` : `✗ ${result.error}`}
+          {result.success ? result.details : result.error}
         </div>
       )}
     </div>

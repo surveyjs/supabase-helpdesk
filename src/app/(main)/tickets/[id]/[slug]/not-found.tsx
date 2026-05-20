@@ -42,7 +42,7 @@ export default async function TicketNotFound() {
             href="/"
             className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
           >
-            Go home
+            Home
           </Link>
         </div>
       </div>

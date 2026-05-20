@@ -35,9 +35,8 @@ export function CsatForm({ token, existingRating, existingComment }: CsatFormPro
   if (result?.success) {
     return (
       <div className="text-center" data-testid="csat-success">
-        <div className="text-4xl mb-4">🎉</div>
         <h2 className="text-lg font-semibold text-gray-900 mb-2">
-          Thank you for your feedback!
+          Thank you for your feedback.
         </h2>
         <div className="flex justify-center gap-1 mb-4" data-testid="csat-submitted-stars">
           {[1, 2, 3, 4, 5].map((star) => (
@@ -135,7 +134,7 @@ export function CsatForm({ token, existingRating, existingComment }: CsatFormPro
         className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
         data-testid="csat-submit"
       >
-        {submitting ? 'Submitting...' : existingRating ? 'Update Rating' : 'Submit Rating'}
+        {submitting ? 'Saving…' : existingRating ? 'Update Rating' : 'Save Rating'}
       </button>
     </form>
   );

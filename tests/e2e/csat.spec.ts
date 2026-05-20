@@ -93,7 +93,7 @@ test.describe('CSAT Rating Page', () => {
   test('invalid token shows error page', async ({ page }) => {
     await page.goto('/csat/invalidtoken123');
     await expect(page.getByText('Invalid or Expired Link')).toBeVisible({ timeout: 10000 });
-    await expect(page.getByRole('link', { name: 'Go to Login' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible();
   });
 
   test('expired token shows error page', async ({ page }) => {

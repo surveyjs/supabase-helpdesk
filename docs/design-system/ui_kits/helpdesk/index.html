@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>HelpDesk — UI Kit</title>
+<link rel="icon" href="../../assets/mark.svg" type="image/svg+xml"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  // Match Tailwind config to the upstream Tailwind v4 + Geist setup
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Geist', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Arial', 'sans-serif'],
+          mono: ['"Geist Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
+        }
+      }
+    }
+  };
+</script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&display=swap"/>
+<style>
+  html { -webkit-font-smoothing: antialiased; }
+  body { font-family: 'Geist', ui-sans-serif, system-ui, sans-serif; }
+  code, kbd, pre, .font-mono { font-family: 'Geist Mono', ui-monospace, monospace; }
+  details > summary::-webkit-details-marker { display:none; }
+  .prose-helpdesk strong { color: #111827; font-weight: 600; }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body class="min-h-full flex flex-col bg-gray-50 font-sans text-gray-700">
+<div id="app" class="flex-1 flex flex-col"></div>
+
+<script type="text/babel" src="components.jsx"></script>
+<script type="text/babel" src="NavBar.jsx"></script>
+<script type="text/babel" src="HelpCenter.jsx"></script>
+<script type="text/babel" src="MyTickets.jsx"></script>
+<script type="text/babel" src="TicketDetail.jsx"></script>
+<script type="text/babel" src="AgentDashboard.jsx"></script>
+<script type="text/babel" src="NewTicket.jsx"></script>
+<script type="text/babel" src="Login.jsx"></script>
+
+<script type="text/babel">
+  const { useState } = React;
+
+  function App() {
+    // Default user is an agent so the full nav appears immediately.
+    const [user, setUser] = useState({ email: 'alex.park@helpdesk.example', displayName: 'Alex Park', role: 'agent' });
+    const [route, setRoute] = useState('agent');
+    const [openTicket, setOpenTicket] = useState(null);
+
+    function navigate(to) {
+      if (to === 'sign-out') { setUser(null); setRoute('login'); return; }
+      if (to === 'login')    { setUser(null); setRoute('login'); return; }
+      setOpenTicket(null);
+      setRoute(to);
+    }
+
+    function openTicketAndGo(t) { setOpenTicket(t); setRoute('ticket-detail'); }
+
+    let screen;
+    if (route === 'login')         screen = <Login onLogin={(email) => { setUser({ email, displayName: email.split('@')[0], role: 'agent' }); setRoute('agent'); }}/>;
+    else if (route === 'help')     screen = <HelpCenter onNavigate={navigate}/>;
+    else if (route === 'my-tickets') screen = <MyTickets onNavigate={navigate} onOpenTicket={openTicketAndGo}/>;
+    else if (route === 'agent')    screen = <AgentDashboard onOpenTicket={openTicketAndGo}/>;
+    else if (route === 'new-ticket') screen = <NewTicket onCreated={(t) => openTicketAndGo(t)} onCancel={() => setRoute(user && (user.role === 'agent' || user.role === 'admin') ? 'agent' : 'my-tickets')}/>;
+    else if (route === 'ticket-detail' && openTicket) screen = <TicketDetail ticket={openTicket} onBack={() => setRoute(user && (user.role === 'agent' || user.role === 'admin') ? 'agent' : 'my-tickets')}/>;
+    else screen = <Placeholder title={route}/>;
+
+    return (
+      <>
+        <HDNavBar route={route} onNavigate={navigate} user={user}/>
+        <main id="main" className="flex-1 max-w-5xl w-full mx-auto px-4 py-6">
+          {screen}
+        </main>
+        <footer className="border-t border-gray-200 bg-white py-4 mt-6">
+          <div className="max-w-5xl mx-auto px-4 text-xs text-gray-500 flex flex-wrap items-center justify-between gap-2">
+            <span>HelpDesk · Open-source ticketing by SurveyJS</span>
+            <span className="font-mono">v0.1.0 · prototype</span>
+          </div>
+        </footer>
+      </>
+    );
+  }
+
+  function Placeholder({ title }) {
+    const map = {
+      'kb-manage': 'Manage Articles',
+      'reports': 'Reports',
+      'canned': 'Canned Responses',
+      'admin': 'Setup',
+      'profile': 'Profile',
+      'notif-settings': 'Notification Settings',
+    };
+    const label = map[title] || title;
+    return (
+      <div>
+        <h1 className="text-2xl font-semibold text-gray-900 mb-4">{label}</h1>
+        <div className="bg-white border border-gray-200 rounded-lg p-12 text-center text-gray-500">
+          <p className="text-sm mb-2">This surface isn&rsquo;t mocked in the UI kit.</p>
+          <p className="text-xs">It exists in <code className="font-mono text-gray-600">src/app/(main)/{title === 'admin' ? 'admin' : title}</code> in the source repo — see the README for context.</p>
+        </div>
+      </div>
+    );
+  }
+
+  window.App = App;
+  ReactDOM.createRoot(document.getElementById('app')).render(<App/>);
+</script>
+</body>
+</html>

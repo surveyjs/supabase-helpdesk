@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Type — Display & Headings</title>
+<link rel="stylesheet" href="../colors_and_type.css"/>
+<style>
+  body { margin: 0; padding: 24px 32px; background: #fff; min-height: 240px; box-sizing: border-box; }
+  .row { display: grid; grid-template-columns: 90px 1fr 110px; align-items: baseline; gap: 16px; padding: 8px 0; border-bottom: 1px solid #F3F4F6; }
+  .row:last-child { border-bottom: 0; }
+  .meta { font: 500 11px/1 "Geist Mono", ui-monospace, monospace; color: #6B7280; text-transform: uppercase; letter-spacing: 0.06em; }
+  .num { font: 500 12px/1 "Geist Mono", ui-monospace, monospace; color: #9CA3AF; text-align: right; }
+  .specimen { font-family: "Geist", system-ui, sans-serif; color: #111827; }
+  .h1 { font-size: 24px; font-weight: 600; line-height: 1.2; letter-spacing: -0.01em; }
+  .h2 { font-size: 20px; font-weight: 600; line-height: 1.35; }
+  .h3 { font-size: 18px; font-weight: 500; line-height: 1.35; }
+  .h-page { font-size: 18px; font-weight: 600; line-height: 1.2; } /* navbar wordmark */
+</style>
+</head>
+<body>
+  <div class="row"><span class="meta">H1 / Page</span><span class="specimen h1">Create Ticket</span><span class="num">24 · 600</span></div>
+  <div class="row"><span class="meta">H2 / Section</span><span class="specimen h2">My Stats (Last 30 Days)</span><span class="num">20 · 600</span></div>
+  <div class="row"><span class="meta">H3 / Card</span><span class="specimen h3">Browse Public Tickets</span><span class="num">18 · 500</span></div>
+  <div class="row"><span class="meta">Brand</span><span class="specimen h-page">HelpDesk</span><span class="num">18 · 600</span></div>
+</body>
+</html>

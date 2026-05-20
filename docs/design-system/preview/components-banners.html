@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Components — Banners & Empty</title>
+<style>
+  body { margin: 0; padding: 24px 32px; background: #fff; min-height: 240px; box-sizing: border-box; font-family: "Geist", system-ui, sans-serif; color:#374151; font-size: 14px; }
+  .stack { display: grid; gap: 12px; max-width: 640px; }
+  .banner { border-radius: 6px; padding: 10px 14px; font-size: 13px; line-height: 1.5; }
+  .err   { background:#FEF2F2; border: 1px solid #FECACA; color:#B91C1C; }
+  .warn  { background:#FFFBEB; border: 1px solid #FCD34D; color:#92400E; }
+  .info  { background:#EFF6FF; border: 1px solid #BFDBFE; color:#1E40AF; }
+  .ok    { background:#F0FDF4; border: 1px solid #BBF7D0; color:#166534; }
+
+  .empty { background:#fff; border: 1px dashed #E5E7EB; border-radius: 8px; padding: 28px; text-align: center; color: #6B7280; font-size: 14px; }
+  .empty .icon { width: 32px; height: 32px; margin: 0 auto 8px; color: #D1D5DB; }
+</style>
+</head>
+<body>
+<div class="stack">
+  <div class="banner err" role="alert"><strong>Invalid email or password.</strong> Try again or reset your password.</div>
+  <div class="banner warn">This saved view uses an unsupported filter type (<code>ai</code>). Showing all tickets instead.</div>
+  <div class="banner info">SLA: Approaching — first response due in 1h 12m.</div>
+  <div class="banner ok">Ticket closed. The submitter will receive a CSAT survey email.</div>
+
+  <div class="empty">
+    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 12h18M3 17h12"/></svg>
+    No tickets match your filters.
+  </div>
+</div>
+</body>
+</html>

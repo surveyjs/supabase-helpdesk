@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Type — Body & UI</title>
+<link rel="stylesheet" href="../colors_and_type.css"/>
+<style>
+  body { margin: 0; padding: 24px 32px; background: #fff; min-height: 260px; box-sizing: border-box; font-family: "Geist", system-ui, sans-serif; }
+  .row { display: grid; grid-template-columns: 110px 1fr 110px; align-items: baseline; gap: 16px; padding: 10px 0; border-bottom: 1px solid #F3F4F6; }
+  .row:last-child { border-bottom: 0; }
+  .meta { font: 500 11px/1 "Geist Mono", ui-monospace, monospace; color: #6B7280; text-transform: uppercase; letter-spacing: 0.06em; }
+  .num { font: 500 12px/1 "Geist Mono", ui-monospace, monospace; color: #9CA3AF; text-align: right; }
+  .body { font-size: 16px; line-height: 1.6; color: #374151; }
+  .ui    { font-size: 14px; line-height: 1.5; color: #374151; }
+  .label { font-size: 14px; line-height: 1.5; color: #374151; font-weight: 500; }
+  .small { font-size: 12px; line-height: 1.5; color: #6B7280; }
+  .table-head { font-size: 12px; color: #6B7280; text-transform: uppercase; font-weight: 500; letter-spacing: 0.03em; }
+  .mono { font-family: "Geist Mono", ui-monospace, monospace; font-size: 13px; color: #111827; background: #F3F4F6; padding: 2px 6px; border-radius: 4px; }
+</style>
+</head>
+<body>
+  <div class="row"><span class="meta">Body / Prose</span><span class="body">Reply with Markdown support, attach files, and track every change.</span><span class="num">16 · 400</span></div>
+  <div class="row"><span class="meta">UI / Default</span><span class="ui">14px is the default for buttons, links, inputs and table cells.</span><span class="num">14 · 400</span></div>
+  <div class="row"><span class="meta">Label</span><span class="label">Email</span><span class="num">14 · 500</span></div>
+  <div class="row"><span class="meta">Meta · small</span><span class="small">Updated 2 hours ago · 3 posts</span><span class="num">12 · 400</span></div>
+  <div class="row"><span class="meta">Table head</span><span class="table-head">SUBMITTER · STATUS · URGENCY</span><span class="num">12 · 500</span></div>
+  <div class="row"><span class="meta">Mono / Code</span><span><code class="mono">TICKET-1284</code> · <code class="mono">npm run dev</code></span><span class="num">13 · 400</span></div>
+</body>
+</html>

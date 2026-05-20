@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Components — Cards & Table row</title>
+<style>
+  body { margin: 0; padding: 24px 28px; background: #F9FAFB; min-height: 260px; box-sizing: border-box; font-family: "Geist", system-ui, sans-serif; color:#111827; }
+  .stack { display: grid; gap: 14px; max-width: 640px; }
+  .card { background: #fff; border: 1px solid #E5E7EB; border-radius: 8px; padding: 16px; }
+  .card .title { font-size: 14px; font-weight: 500; color: #2563EB; margin-bottom: 6px; }
+  .card .meta { font-size: 12px; color: #6B7280; }
+  .pill { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 9999px; font-size: 12px; font-weight: 500; }
+  .row-meta { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+
+  /* Table-style row (desktop dashboard) */
+  .table { background:#fff; border:1px solid #E5E7EB; border-radius: 8px; overflow: hidden; }
+  .thead { background:#F9FAFB; display:grid; grid-template-columns: 1.6fr .8fr .6fr .6fr .5fr; gap: 10px; padding: 10px 14px; font-size: 11px; color:#6B7280; text-transform: uppercase; font-weight:500; letter-spacing: 0.03em; border-bottom: 1px solid #E5E7EB;}
+  .tr { display:grid; grid-template-columns: 1.6fr .8fr .6fr .6fr .5fr; gap: 10px; padding: 10px 14px; font-size: 13px; align-items: center; border-bottom: 1px solid #F3F4F6;}
+  .tr:last-child { border-bottom: 0; }
+  .tr:hover { background:#F9FAFB; }
+  .ticket-link { color:#2563EB; font-weight: 500; }
+  .submitter { color:#374151; }
+  .updated { color:#9CA3AF; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="stack">
+  <!-- Compact ticket card (mobile) -->
+  <div class="card">
+    <div class="title">Email notifications stopped arriving</div>
+    <div class="row-meta">
+      <span class="pill" style="background:#DCFCE7;color:#15803D">Open</span>
+      <span class="pill" style="background:#FFEDD5;color:#C2410C">High</span>
+      <span style="font-size:12px;color:#6B7280">SLA: Approaching</span>
+    </div>
+    <div class="meta" style="margin-top:6px">Updated 2 hours ago · 3 posts</div>
+  </div>
+
+  <!-- Table row (desktop dashboard) -->
+  <div class="table">
+    <div class="thead">
+      <span>Title</span><span>Submitter</span><span>Status</span><span>Urgency</span><span>Updated</span>
+    </div>
+    <div class="tr">
+      <a class="ticket-link" href="#">Email notifications stopped arriving</a>
+      <span class="submitter">Maya Lin <span class="pill" style="background:#F3E8FF;color:#7E22CE;font-size:10px">★ Premium</span></span>
+      <span><span class="pill" style="background:#DCFCE7;color:#15803D">Open</span></span>
+      <span><span class="pill" style="background:#FFEDD5;color:#C2410C">High</span></span>
+      <span class="updated">May 20</span>
+    </div>
+    <div class="tr">
+      <a class="ticket-link" href="#">Cannot upload attachments &gt; 5MB</a>
+      <span class="submitter">Jordan O.</span>
+      <span><span class="pill" style="background:#FEF9C3;color:#A16207">Pending</span></span>
+      <span><span class="pill" style="background:#CCFBF1;color:#0F766E">Medium</span></span>
+      <span class="updated">May 19</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

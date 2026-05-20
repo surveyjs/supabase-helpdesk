@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Colors — Primary blue</title>
+<style>
+  body { margin: 0; padding: 24px 28px; background: #fff; min-height: 220px; box-sizing: border-box; font-family: "Geist", system-ui, sans-serif; }
+  .grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; align-items: end; }
+  .sw { border-radius: 8px; overflow: hidden; border: 1px solid #E5E7EB; }
+  .chip { height: 84px; display: flex; align-items: flex-end; padding: 10px; }
+  .meta { padding: 8px 10px; background: #fff; }
+  .name { font-size: 12px; font-weight: 500; color: #111827; }
+  .hex { font-family: "Geist Mono", ui-monospace, monospace; font-size: 11px; color: #6B7280; margin-top: 1px; }
+  .tag { font: 500 11px/1.4 "Geist Mono", ui-monospace, monospace; color: #9CA3AF; margin-top: 6px; }
+  .badge { background: #fff; color: #1D4ED8; font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 999px; }
+</style>
+</head>
+<body>
+  <div class="grid">
+    <div class="sw"><div class="chip" style="background:#EFF6FF"></div><div class="meta"><div class="name">blue-50</div><div class="hex">#EFF6FF</div><div class="tag">active row bg</div></div></div>
+    <div class="sw"><div class="chip" style="background:#DBEAFE"><span class="badge">Agent</span></div><div class="meta"><div class="name">blue-100</div><div class="hex">#DBEAFE</div><div class="tag">badge bg</div></div></div>
+    <div class="sw"><div class="chip" style="background:#3B82F6"></div><div class="meta"><div class="name">blue-500</div><div class="hex">#3B82F6</div><div class="tag">focus ring</div></div></div>
+    <div class="sw"><div class="chip" style="background:#2563EB"><span style="color:#fff;font-size:11px;font-weight:600;">PRIMARY</span></div><div class="meta"><div class="name">blue-600</div><div class="hex">#2563EB</div><div class="tag">buttons · links</div></div></div>
+    <div class="sw"><div class="chip" style="background:#1D4ED8"></div><div class="meta"><div class="name">blue-700</div><div class="hex">#1D4ED8</div><div class="tag">hover</div></div></div>
+    <div class="sw"><div class="chip" style="background:#1E40AF"></div><div class="meta"><div class="name">blue-800</div><div class="hex">#1E40AF</div><div class="tag">link active</div></div></div>
+  </div>
+</body>
+</html>

@@ -265,18 +265,16 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
                 disabled={!newViewName.trim() || busy}
                 className="text-sm px-2 py-0.5 rounded bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50"
                 aria-label="Confirm new view"
-                title="Save"
               >
-                ✓
+                Save
               </button>
               <button
                 type="button"
                 onClick={handleAddCancel}
                 className="text-sm px-2 py-0.5 rounded bg-gray-100 text-gray-700 hover:bg-gray-200"
                 aria-label="Cancel new view"
-                title="Cancel"
               >
-                ✕
+                Cancel
               </button>
             </span>
           ) : (

@@ -1,0 +1,179 @@
+/* =============================================================
+   HelpDesk — Color & Type Foundations
+   Source of truth: surveyjs/supabase-helpdesk
+   Tailwind 4 + Geist font family. Light-theme only (no dark mode).
+   These vars mirror the Tailwind gray / blue / etc. scales the
+   product uses everywhere, exposed as semantic tokens.
+   ============================================================= */
+
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&display=swap");
+
+:root {
+  /* ---------- Type ---------- */
+  --font-sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  /* Type scale — derived from the Tailwind classes used across the app
+     (text-xs through text-2xl). The product is typographically restrained;
+     headings rarely go above text-2xl, body is text-sm. */
+  --fs-xs: 0.75rem;    /* 12 — meta, table headers (uppercase) */
+  --fs-sm: 0.875rem;   /* 14 — body, buttons, labels (default UI size) */
+  --fs-base: 1rem;     /* 16 — paragraph */
+  --fs-lg: 1.125rem;   /* 18 — list item titles, brand wordmark */
+  --fs-xl: 1.25rem;    /* 20 — section heads */
+  --fs-2xl: 1.5rem;    /* 24 — page H1 */
+
+  --lh-tight: 1.2;
+  --lh-snug: 1.35;
+  --lh-normal: 1.5;
+  --lh-relaxed: 1.6;
+
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+
+  /* ---------- Neutrals (Tailwind gray) ---------- */
+  --gray-50:  #F9FAFB;  /* page background */
+  --gray-100: #F3F4F6;  /* subtle row hover, badge bg (closed/neutral) */
+  --gray-200: #E5E7EB;  /* card borders, dividers */
+  --gray-300: #D1D5DB;  /* input borders, button borders */
+  --gray-400: #9CA3AF;
+  --gray-500: #6B7280;  /* placeholder, meta text */
+  --gray-600: #4B5563;  /* secondary text */
+  --gray-700: #374151;  /* body text, badge fg */
+  --gray-800: #1F2937;
+  --gray-900: #111827;  /* headings, brand wordmark */
+
+  /* ---------- Primary — Blue ---------- */
+  --blue-50:  #EFF6FF;  /* mobile-menu active bg */
+  --blue-100: #DBEAFE;  /* low-priority badge bg, role-agent bg */
+  --blue-500: #3B82F6;  /* focus ring */
+  --blue-600: #2563EB;  /* primary button, links */
+  --blue-700: #1D4ED8;  /* link hover / badge fg */
+  --blue-800: #1E40AF;  /* link active */
+
+  /* ---------- Semantic — status pills ---------- */
+  --green-100: #DCFCE7;  --green-500: #22C55E;  --green-700: #15803D;   /* open / on-track */
+  --yellow-100: #FEF9C3; --yellow-500: #EAB308; --yellow-700: #A16207;  /* pending / approaching */
+  --red-100:    #FEE2E2; --red-500:    #EF4444; --red-700:    #B91C1C;  /* critical / breached / admin */
+  --orange-100: #FFEDD5; --orange-500: #F97316; --orange-700: #C2410C;  /* high priority */
+  --teal-100:   #CCFBF1; --teal-500:   #14B8A6; --teal-700:   #0F766E;  /* medium priority */
+  --purple-100: #F3E8FF; --purple-700: #7E22CE;  /* tier badge */
+  --indigo-100: #E0E7FF; --indigo-700: #4338CA;  /* tier badge */
+  --pink-100:   #FCE7F3; --pink-700:   #BE185D;  /* tier badge */
+
+  /* Surfaces & info banners */
+  --red-50:    #FEF2F2;
+  --amber-50:  #FFFBEB;
+  --amber-300: #FCD34D;
+  --amber-800: #92400E;
+
+  /* ---------- Semantic application vars ---------- */
+  --bg-app: var(--gray-50);          /* page background (the white-on-gray feel) */
+  --bg-surface: #FFFFFF;             /* cards, nav, dropdowns */
+  --bg-muted: var(--gray-50);        /* row hover, gray buttons */
+  --bg-muted-hover: var(--gray-100);
+  --bg-inverse: var(--gray-900);
+
+  --fg-default: var(--gray-900);     /* headings, primary text */
+  --fg-body: var(--gray-700);        /* body */
+  --fg-muted: var(--gray-600);       /* secondary */
+  --fg-subtle: var(--gray-500);      /* meta, placeholder */
+  --fg-on-primary: #FFFFFF;          /* text on blue-600 */
+  --fg-link: var(--blue-600);
+  --fg-link-hover: var(--blue-800);
+
+  --border-default: var(--gray-200);
+  --border-strong: var(--gray-300);
+  --border-input-focus: var(--blue-500);
+
+  --primary: var(--blue-600);
+  --primary-hover: var(--blue-700);
+  --focus-ring: var(--blue-500);
+
+  /* ---------- Shape ---------- */
+  --radius-sm: 0.25rem;   /* default `rounded` — buttons, inputs, links */
+  --radius-md: 0.375rem;  /* `rounded-md` — admin banners */
+  --radius-lg: 0.5rem;    /* `rounded-lg` — cards, dropdown menu */
+  --radius-pill: 9999px;  /* badges */
+
+  /* ---------- Elevation ---------- */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.06), 0 2px 4px -2px rgb(0 0 0 / 0.06);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.06); /* dropdowns */
+
+  /* ---------- Spacing (Tailwind v4 default 4px scale, named) ---------- */
+  --space-1: 0.25rem;  /*  4 */
+  --space-2: 0.5rem;   /*  8 — gap between buttons */
+  --space-3: 0.75rem;  /* 12 — input padding */
+  --space-4: 1rem;     /* 16 — card inner padding */
+  --space-5: 1.25rem;  /* 20 */
+  --space-6: 1.5rem;   /* 24 — card padding, section gap */
+  --space-8: 2rem;     /* 32 */
+  --space-12: 3rem;    /* 48 */
+
+  /* Layout constants */
+  --container-max: 64rem;            /* max-w-5xl — main content cap */
+  --tap-min: 44px;                   /* WCAG 2.1 AA — touch targets */
+}
+
+/* =============================================================
+   Semantic element styles
+   Use these in throwaway/quick HTML; production code should keep
+   using the Tailwind utilities the app already favors.
+   ============================================================= */
+
+html, body {
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  color: var(--fg-body);
+  background: var(--bg-app);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, .h1 {
+  font: var(--fw-semibold) var(--fs-2xl)/var(--lh-tight) var(--font-sans);
+  color: var(--fg-default);
+  letter-spacing: -0.01em;
+}
+h2, .h2 {
+  font: var(--fw-semibold) var(--fs-xl)/var(--lh-snug) var(--font-sans);
+  color: var(--fg-default);
+}
+h3, .h3 {
+  font: var(--fw-medium) var(--fs-lg)/var(--lh-snug) var(--font-sans);
+  color: var(--fg-default);
+}
+.label, label {
+  font: var(--fw-medium) var(--fs-sm)/var(--lh-normal) var(--font-sans);
+  color: var(--gray-700);
+}
+.meta, .uppercase-meta {
+  font: var(--fw-medium) var(--fs-xs)/var(--lh-normal) var(--font-sans);
+  color: var(--fg-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+p, .body {
+  font: var(--fw-regular) var(--fs-sm)/var(--lh-relaxed) var(--font-sans);
+  color: var(--fg-body);
+}
+code, kbd, pre {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+}
+a {
+  color: var(--fg-link);
+  text-decoration: none;
+}
+a:hover { color: var(--fg-link-hover); }
+a.underlined { text-decoration: underline; text-underline-offset: 2px; }
+
+/* Focus — every interactive element uses this blue ring */
+*:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}

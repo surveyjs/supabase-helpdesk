@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Components — Form inputs</title>
+<style>
+  body { margin: 0; padding: 24px 32px; background: #fff; min-height: 280px; box-sizing: border-box; font-family: "Geist", system-ui, sans-serif; color: #374151; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px 28px; max-width: 600px; }
+  label { display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 4px; }
+  .input, select, textarea {
+    display: block; width: 100%; box-sizing: border-box;
+    border: 1px solid #D1D5DB; border-radius: 4px;
+    padding: 8px 12px; font-size: 14px; color: #111827;
+    font-family: inherit; outline: none;
+  }
+  .input:focus, select:focus, textarea:focus { border-color: #3B82F6; box-shadow: 0 0 0 1px #3B82F6; }
+  .focused { border-color: #3B82F6; box-shadow: 0 0 0 1px #3B82F6; }
+  .error-input { border-color: #EF4444; }
+  .error-msg { color: #B91C1C; font-size: 12px; margin-top: 4px; }
+  textarea { resize: vertical; min-height: 60px; }
+  .checkbox { display:inline-flex; align-items: center; gap: 8px; font-size: 14px; margin-top: 6px; }
+  .checkbox input { width: 16px; height: 16px; accent-color: #2563EB; }
+</style>
+</head>
+<body>
+<div class="grid">
+  <div>
+    <label for="a">Email</label>
+    <input id="a" class="input" value="agent@example.com">
+  </div>
+  <div>
+    <label for="b">Status</label>
+    <select>
+      <option>All statuses</option>
+      <option>Open</option>
+      <option>Pending</option>
+      <option>Closed</option>
+    </select>
+  </div>
+  <div>
+    <label for="c">Search</label>
+    <input id="c" class="input focused" placeholder="Search tickets…" value="login error">
+  </div>
+  <div>
+    <label for="d">Password</label>
+    <input id="d" type="password" class="input error-input" value="••••">
+    <div class="error-msg">Invalid email or password</div>
+  </div>
+  <div style="grid-column: span 2">
+    <label for="e">Reply</label>
+    <textarea id="e" placeholder="Type your reply… Markdown supported.">Thanks for reaching out — I'll take a look.</textarea>
+    <div class="checkbox"><input id="priv" type="checkbox" checked><label for="priv" style="display:inline;margin:0;font-weight:400;color:#6B7280">Private (only agents can see)</label></div>
+  </div>
+</div>
+</body>
+</html>

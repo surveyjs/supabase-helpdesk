@@ -205,7 +205,7 @@ export function ReportControls({ isAdmin, types, categories, tiers }: Props) {
       </div>
 
       {isPending && (
-        <div className="mt-2 text-sm text-gray-500">Loading...</div>
+        <div className="mt-2 text-sm text-gray-500">Loading…</div>
       )}
     </div>
   );

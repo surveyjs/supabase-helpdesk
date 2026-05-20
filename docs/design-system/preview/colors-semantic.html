@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Colors — Status & Priority</title>
+<style>
+  body { margin: 0; padding: 24px 28px; background: #fff; min-height: 280px; box-sizing: border-box; font-family: "Geist", system-ui, sans-serif; color:#111827; }
+  .label { font: 500 11px/1 "Geist Mono", ui-monospace, monospace; color:#6B7280; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 10px; }
+  .group { margin-bottom: 16px; }
+  .pills { display:flex; gap: 8px; flex-wrap: wrap; align-items:center; }
+  .pill { display:inline-flex; align-items:center; padding: 2px 10px; border-radius: 9999px; font-size: 12px; font-weight: 500; }
+  .dot { display:inline-block; width: 10px; height: 10px; border-radius: 9999px; margin-right: 8px; }
+  .row { display:flex; align-items:center; gap: 16px; font-size: 13px; color:#374151; }
+</style>
+</head>
+<body>
+
+<div class="group">
+  <div class="label">Ticket status</div>
+  <div class="pills">
+    <span class="pill" style="background:#DCFCE7;color:#15803D">Open</span>
+    <span class="pill" style="background:#FEF9C3;color:#A16207">Pending</span>
+    <span class="pill" style="background:#F3F4F6;color:#374151">Closed</span>
+  </div>
+</div>
+
+<div class="group">
+  <div class="label">Priority / Urgency / Severity</div>
+  <div class="pills">
+    <span class="pill" style="background:#DBEAFE;color:#1D4ED8">Low</span>
+    <span class="pill" style="background:#CCFBF1;color:#0F766E">Medium</span>
+    <span class="pill" style="background:#FFEDD5;color:#C2410C">High</span>
+    <span class="pill" style="background:#FEE2E2;color:#B91C1C">Critical</span>
+  </div>
+</div>
+
+<div class="group">
+  <div class="label">Role badges</div>
+  <div class="pills">
+    <span class="pill" style="background:#DBEAFE;color:#1D4ED8">Agent</span>
+    <span class="pill" style="background:#FEE2E2;color:#B91C1C">Admin</span>
+  </div>
+</div>
+
+<div class="group">
+  <div class="label">SLA indicator dots — table compact form</div>
+  <div class="pills">
+    <span class="row"><span class="dot" style="background:#22C55E"></span>On track</span>
+    <span class="row"><span class="dot" style="background:#EAB308"></span>Approaching</span>
+    <span class="row"><span class="dot" style="background:#EF4444"></span>Breached</span>
+  </div>
+</div>
+
+</body>
+</html>

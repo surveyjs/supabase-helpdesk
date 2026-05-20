@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Components — Buttons</title>
+<style>
+  body { margin: 0; padding: 26px 32px; background: #fff; min-height: 240px; box-sizing: border-box; font-family: "Geist", system-ui, sans-serif; }
+  .group { margin-bottom: 18px; }
+  .group:last-child { margin-bottom: 0; }
+  .label { font: 500 11px/1 "Geist Mono", ui-monospace, monospace; color:#6B7280; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+  /* Primary — bg-blue-600 / hover bg-blue-700 / text-white */
+  .btn-primary { background: #2563EB; color: #fff; border: 0; padding: 8px 16px; font-size: 14px; font-weight: 500; border-radius: 4px; cursor: pointer; }
+  .btn-primary:hover { background: #1D4ED8; }
+  /* Secondary — bg-gray-100 / text-gray-700 */
+  .btn-secondary { background: #F3F4F6; color: #374151; border: 0; padding: 6px 12px; font-size: 14px; font-weight: 500; border-radius: 4px; }
+  /* Outline — border-gray-300 */
+  .btn-outline { background: #fff; color: #374151; border: 1px solid #D1D5DB; padding: 6px 12px; font-size: 14px; font-weight: 500; border-radius: 4px; }
+  /* Ghost / link */
+  .btn-link { background: transparent; color: #2563EB; border: 0; padding: 6px 8px; font-size: 14px; font-weight: 500; }
+  .btn-link:hover { color: #1E40AF; }
+  /* Danger */
+  .btn-danger { background: #B91C1C; color: #fff; border: 0; padding: 6px 12px; font-size: 14px; font-weight: 500; border-radius: 4px; }
+  /* Disabled */
+  .btn-primary[disabled] { opacity: 0.5; cursor: not-allowed; }
+  /* Sizes */
+  .btn-sm { padding: 4px 10px; font-size: 13px; }
+  .btn-lg { padding: 10px 18px; font-size: 15px; }
+</style>
+</head>
+<body>
+<div class="group">
+  <div class="label">Buttons — variants</div>
+  <div class="row">
+    <button class="btn-primary">New Ticket</button>
+    <button class="btn-secondary">Search</button>
+    <button class="btn-outline">Cancel</button>
+    <button class="btn-link">Browse Public Tickets →</button>
+    <button class="btn-danger">Delete</button>
+    <button class="btn-primary" disabled>Logging in…</button>
+  </div>
+</div>
+<div class="group">
+  <div class="label">Sizes</div>
+  <div class="row">
+    <button class="btn-primary btn-sm">Apply</button>
+    <button class="btn-primary">Apply</button>
+    <button class="btn-primary btn-lg">Sign in with External Provider</button>
+  </div>
+</div>
+</body>
+</html>

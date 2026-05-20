@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Components — Pagination & Tabs</title>
+<style>
+  body { margin: 0; padding: 28px 32px; background: #fff; min-height: 220px; box-sizing: border-box; font-family: "Geist", system-ui, sans-serif; color:#374151; }
+  .label { font: 500 11px/1 "Geist Mono", ui-monospace, monospace; color:#6B7280; text-transform: uppercase; letter-spacing: 0.06em; margin: 12px 0 10px; }
+  .label:first-child { margin-top: 0; }
+  /* Pagination */
+  .pag { display: inline-flex; gap: 4px; }
+  .pag a { padding: 6px 12px; font-size: 14px; border: 1px solid #D1D5DB; border-radius: 4px; color:#4B5563; text-decoration:none; }
+  .pag a.cur { background:#2563EB; color:#fff; border-color:#2563EB; }
+  .pag a:hover:not(.cur) { background:#F9FAFB; }
+
+  /* Tabs / segmented buttons */
+  .tabs { display: inline-flex; gap: 8px; }
+  .tab { padding: 6px 12px; font-size: 14px; font-weight: 500; border-radius: 4px; color:#374151; background: #F3F4F6; }
+  .tab.cur { background: #2563EB; color: #fff; }
+
+  /* Inline status filters (under-tabs style) */
+  .chips { display: inline-flex; gap: 6px; }
+  .chip { padding: 4px 10px; font-size: 13px; border-radius: 9999px; border: 1px solid #E5E7EB; color:#374151; background:#fff; }
+  .chip.cur { background:#111827; color:#fff; border-color:#111827; }
+</style>
+</head>
+<body>
+  <div class="label">Pagination</div>
+  <div class="pag">
+    <a href="#">Previous</a>
+    <a href="#">1</a>
+    <a href="#" class="cur">2</a>
+    <a href="#">3</a>
+    <a href="#">4</a>
+    <a href="#">5</a>
+    <a href="#">Next</a>
+  </div>
+
+  <div class="label">Toggle — My / Team</div>
+  <div class="tabs">
+    <button class="tab cur">My Tickets</button>
+    <button class="tab">Team Tickets</button>
+  </div>
+
+  <div class="label">Filter chips</div>
+  <div class="chips">
+    <button class="chip cur">All</button>
+    <button class="chip">Active</button>
+    <button class="chip">Closed</button>
+  </div>
+</body>
+</html>

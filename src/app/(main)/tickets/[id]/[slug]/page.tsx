@@ -952,9 +952,9 @@ export default async function TicketDetailPage({
                       <SlaStatusDot status={slaStatus.firstResponse.status} />
                       <span className="text-gray-500">Response:</span>
                       {slaStatus.firstResponse.status === 'met' ? (
-                        <span className="text-green-700">✓ {formatMinutesAsHours(slaStatus.firstResponse.elapsedMinutes)}</span>
+                        <span className="text-green-700">Met · {formatMinutesAsHours(slaStatus.firstResponse.elapsedMinutes)}</span>
                       ) : slaStatus.firstResponse.status === 'breached' && slaStatus.firstResponse.completedAt ? (
-                        <span className="text-red-700">✗ {formatMinutesAsHours(slaStatus.firstResponse.elapsedMinutes)}/{formatMinutesAsHours(slaStatus.firstResponse.targetMinutes)}</span>
+                        <span className="text-red-700">Breached · {formatMinutesAsHours(slaStatus.firstResponse.elapsedMinutes)}/{formatMinutesAsHours(slaStatus.firstResponse.targetMinutes)}</span>
                       ) : (
                         <span>{formatMinutesAsHours(slaStatus.firstResponse.elapsedMinutes)}/{formatMinutesAsHours(slaStatus.firstResponse.targetMinutes)} ({slaStatus.firstResponse.percentage}%)</span>
                       )}
@@ -963,9 +963,9 @@ export default async function TicketDetailPage({
                       <SlaStatusDot status={slaStatus.resolution.status} />
                       <span className="text-gray-500">Resolution:</span>
                       {slaStatus.resolution.status === 'met' ? (
-                        <span className="text-green-700">✓ {formatMinutesAsHours(slaStatus.resolution.elapsedMinutes)}</span>
+                        <span className="text-green-700">Met · {formatMinutesAsHours(slaStatus.resolution.elapsedMinutes)}</span>
                       ) : slaStatus.resolution.status === 'breached' && slaStatus.resolution.completedAt ? (
-                        <span className="text-red-700">✗ {formatMinutesAsHours(slaStatus.resolution.elapsedMinutes)}/{formatMinutesAsHours(slaStatus.resolution.targetMinutes)}</span>
+                        <span className="text-red-700">Breached · {formatMinutesAsHours(slaStatus.resolution.elapsedMinutes)}/{formatMinutesAsHours(slaStatus.resolution.targetMinutes)}</span>
                       ) : (
                         <span>{formatMinutesAsHours(slaStatus.resolution.elapsedMinutes)}/{formatMinutesAsHours(slaStatus.resolution.targetMinutes)} ({slaStatus.resolution.percentage}%)</span>
                       )}

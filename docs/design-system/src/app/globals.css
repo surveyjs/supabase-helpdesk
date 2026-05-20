@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+  /*
+   * Prevent stray horizontal scrolling caused by full-bleed sections that
+   * use the `w-screen` (100vw) breakout pattern (e.g. the ticket detail
+   * page). 100vw includes the vertical scrollbar width, so on pages that
+   * scroll vertically the breakout is a few pixels wider than the actual
+   * content area. `overflow-x: clip` suppresses that overflow without
+   * creating a scroll container — important so descendants can still use
+   * `position: sticky` (the ticket detail sidebar relies on it).
+   */
+  overflow-x: clip;
+}

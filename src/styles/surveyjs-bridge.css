@@ -1,0 +1,409 @@
+/* SurveyJS V3 ↔ Tailwind v4 bridge.
+ *
+ * WHY !important ON EVERY --sjs2-* / --sjs-* DECLARATION:
+ * SurveyJS V3 runtime applies a default-light theme by writing ~200 CSS
+ * custom properties as inline style="--sjs2-…" on .sd-root-modern.
+ * Inline styles defeat any stylesheet rule regardless of specificity.
+ * The CSS Custom Properties spec explicitly allows !important on --*
+ * declarations; it is the only way to win over inline style writes.
+ *
+ * This file covers the Survey Library only (no Survey Creator).
+ * Import order: after tailwindcss, before any component styles.
+ */
+
+/* =====================================================================
+ * Design system tokens — consumed only by this bridge file.
+ * Defined here rather than globals.css to keep co-located with their
+ * sole consumer and avoid polluting the global stylesheet.
+ * ===================================================================== */
+:root {
+  --background: #ffffff;
+  --foreground: #111827;
+  --card: #ffffff;
+  --card-foreground: #111827;
+  --muted: #f3f4f6;
+  --muted-foreground: #6b7280;
+  --accent: #f3f4f6;
+  --accent-foreground: #374151;
+  --primary: #2563eb;
+  --primary-foreground: #ffffff;
+  --secondary: #f3f4f6;
+  --secondary-foreground: #374151;
+  --destructive: #dc2626;
+  --border: #e5e7eb;
+  --popover: #ffffff;
+  --popover-foreground: #111827;
+  --radius: 6px;
+  --font-sans: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+/* =====================================================================
+ * SECTION A — Survey runtime token mappings
+ * Selector scope covers: `:root` for popups portaled to <body>,
+ * `.sd-root-modern` for the survey widget root.
+ * ===================================================================== */
+
+:root,
+.sd-root-modern {
+  /* 1. V3 gray palette (000 = lightest / background → 999 = darkest / foreground) */
+  --sjs2-palette-gray-000: var(--background) !important;
+  --sjs2-palette-gray-100: var(--muted) !important;
+  --sjs2-palette-gray-150: color-mix(in oklch, var(--muted) 70%, var(--background)) !important;
+  --sjs2-palette-gray-200: var(--accent) !important;
+  --sjs2-palette-gray-250: var(--border) !important;
+  --sjs2-palette-gray-300: var(--border) !important;
+  --sjs2-palette-gray-400: color-mix(in oklch, var(--muted-foreground) 35%, var(--background)) !important;
+  --sjs2-palette-gray-500: var(--muted-foreground) !important;
+  --sjs2-palette-gray-600: color-mix(in oklch, var(--foreground) 70%, var(--background)) !important;
+  --sjs2-palette-gray-650: color-mix(in oklch, var(--foreground) 80%, var(--background)) !important;
+  --sjs2-palette-gray-700: color-mix(in oklch, var(--foreground) 85%, var(--background)) !important;
+  --sjs2-palette-gray-750: color-mix(in oklch, var(--foreground) 90%, var(--background)) !important;
+  --sjs2-palette-gray-800: color-mix(in oklch, var(--foreground) 95%, var(--background)) !important;
+  --sjs2-palette-gray-850: var(--foreground) !important;
+  --sjs2-palette-gray-900: var(--foreground) !important;
+  --sjs2-palette-gray-950: var(--foreground) !important;
+  --sjs2-palette-gray-999: var(--foreground) !important;
+
+  /* 2. Brand → --primary */
+  --sjs2-color-project-brand-400: color-mix(in oklch, var(--primary) 80%, var(--background)) !important;
+  --sjs2-color-project-brand-600: var(--primary) !important;
+  --sjs2-color-project-brand-700: color-mix(in oklch, var(--primary) 90%, black) !important;
+  --sjs2-color-project-brand-800: color-mix(in oklch, var(--primary) 80%, black) !important;
+
+  /* 3. Red → --destructive */
+  --sjs2-palette-red-400: color-mix(in oklch, var(--destructive) 70%, var(--background)) !important;
+  --sjs2-palette-red-600: var(--destructive) !important;
+  --sjs2-palette-red-700: color-mix(in oklch, var(--destructive) 90%, black) !important;
+
+  /* 4. Geometry / typography */
+  --sjs2-base-unit-radius: var(--radius) !important;
+  --sjs2-typography-font-family-text: var(--font-sans) !important;
+  --sjs2-typography-font-family-component-header-title: var(--font-sans) !important;
+  --sjs2-typography-font-family-component-header-description: var(--font-sans) !important;
+  --sjs2-typography-font-family-component-page-title: var(--font-sans) !important;
+  --sjs2-typography-font-family-component-page-description: var(--font-sans) !important;
+  --sjs2-typography-font-family-component-question-title: var(--font-sans) !important;
+  --sjs2-typography-font-family-component-question-description: var(--font-sans) !important;
+  --sjs2-typography-font-family-component-input-content: var(--font-sans) !important;
+
+  /* 5. Utility surfaces */
+  --sjs2-color-utility-body: var(--background) !important;
+  --sjs2-color-utility-surface-survey: var(--background) !important;
+  --sjs2-color-utility-surface-survey-panelless: var(--background) !important;
+  --sjs2-color-utility-sheet: var(--card) !important;
+  --sjs2-color-utility-overlay: color-mix(in oklch, var(--foreground) 50%, transparent) !important;
+  --sjs2-color-utility-scrollbar: var(--border) !important;
+
+  /* 6. V3 semantic brand tokens */
+  --sjs2-color-bg-brand-primary: var(--primary) !important;
+  --sjs2-color-bg-brand-primary-dim: color-mix(in oklch, var(--primary) 80%, var(--background)) !important;
+  --sjs2-color-bg-brand-secondary: color-mix(in oklch, var(--primary) 12%, transparent) !important;
+  --sjs2-color-bg-brand-secondary-dim: color-mix(in oklch, var(--primary) 6%, transparent) !important;
+  --sjs2-color-fg-brand-on-primary: var(--primary-foreground) !important;
+  --sjs2-color-fg-brand-primary: var(--primary) !important;
+  --sjs2-color-border-brand-primary: var(--primary) !important;
+
+  /* 7. V3 semantic fg/bg/border-basic tokens */
+  --sjs2-color-fg-basic-primary: var(--foreground) !important;
+  --sjs2-color-fg-basic-primary-muted: color-mix(in oklch, var(--foreground) 75%, var(--muted-foreground)) !important;
+  --sjs2-color-fg-basic-secondary: var(--muted-foreground) !important;
+  --sjs2-color-fg-basic-tertiary: color-mix(in oklch, var(--foreground) 50%, var(--muted-foreground)) !important;
+  --sjs2-color-fg-basic-disabled: color-mix(in oklch, var(--muted-foreground) 60%, transparent) !important;
+  --sjs2-color-fg-basic-on-color: var(--background) !important;
+  --sjs2-color-bg-basic-primary: var(--card) !important;
+  --sjs2-color-bg-basic-primary-dim: var(--accent) !important;
+  --sjs2-color-bg-basic-secondary: var(--background) !important;
+  --sjs2-color-bg-basic-secondary-dim: var(--muted) !important;
+  --sjs2-color-border-basic-primary: var(--border) !important;
+  --sjs2-color-border-basic-secondary: var(--border) !important;
+  --sjs2-color-border-basic-secondary-disabled: color-mix(in oklch, var(--border) 50%, transparent) !important;
+
+  /* 8. V3 shadow / focus utility */
+  --sjs2-color-utility-shadow-surface-focused: color-mix(in oklch, var(--primary) 50%, transparent) !important;
+  --sjs2-color-utility-shadow-surface-pressed: var(--primary) !important;
+  --sjs2-color-utility-shadow-surface-hovered: color-mix(in oklch, var(--primary) 40%, transparent) !important;
+
+  /* 9. V3 component leaves */
+  --sjs2-color-component-panel-default-bg: var(--card) !important;
+  --sjs2-color-component-formbox-default-bg: var(--muted) !important;
+  --sjs2-color-component-formbox-focused-bg: var(--muted) !important;
+  --sjs2-color-component-formbox-invalid-bg: var(--muted) !important;
+  --sjs2-color-component-formbox-readonly-bg: var(--muted) !important;
+  --sjs2-color-component-formbox-disabled-bg: var(--muted) !important;
+  --sjs2-color-component-formbox-hovered-bg: var(--accent) !important;
+  --sjs2-color-component-input-default-value: var(--foreground) !important;
+  --sjs2-color-component-input-default-placeholder: var(--muted-foreground) !important;
+  --sjs2-color-component-input-default-label: var(--muted-foreground) !important;
+  --sjs2-color-component-input-default-icon: var(--muted-foreground) !important;
+  --sjs2-color-component-input-default-line: var(--border) !important;
+  --sjs2-color-component-input-default-description: var(--muted-foreground) !important;
+  --sjs2-color-component-question-default-title: var(--foreground) !important;
+  --sjs2-color-component-question-default-title-placeholder: var(--muted-foreground) !important;
+  --sjs2-color-component-question-default-description: var(--muted-foreground) !important;
+
+  /* 10. Component-action-neutral (all variant × state × slot)
+   *     Quaternary defaults to rgba(28,27,32,0.4) icons — invisible on dark
+   *     backgrounds unless overridden. */
+  /* primary */
+  --sjs2-color-component-action-neutral-primary-default-bg: var(--primary) !important;
+  --sjs2-color-component-action-neutral-primary-hovered-bg: color-mix(in oklch, var(--primary) 88%, black) !important;
+  --sjs2-color-component-action-neutral-primary-disabled-bg: var(--muted) !important;
+  --sjs2-color-component-action-neutral-primary-default-label: var(--primary-foreground) !important;
+  --sjs2-color-component-action-neutral-primary-hovered-label: var(--primary-foreground) !important;
+  --sjs2-color-component-action-neutral-primary-disabled-label: var(--muted-foreground) !important;
+  --sjs2-color-component-action-neutral-primary-default-icon: var(--primary-foreground) !important;
+  --sjs2-color-component-action-neutral-primary-hovered-icon: var(--primary-foreground) !important;
+  --sjs2-color-component-action-neutral-primary-disabled-icon: var(--muted-foreground) !important;
+  /* secondary */
+  --sjs2-color-component-action-neutral-secondary-default-bg: var(--secondary) !important;
+  --sjs2-color-component-action-neutral-secondary-hovered-bg: var(--accent) !important;
+  --sjs2-color-component-action-neutral-secondary-disabled-bg: var(--muted) !important;
+  --sjs2-color-component-action-neutral-secondary-default-label: var(--secondary-foreground) !important;
+  --sjs2-color-component-action-neutral-secondary-hovered-label: var(--accent-foreground) !important;
+  --sjs2-color-component-action-neutral-secondary-disabled-label: var(--muted-foreground) !important;
+  --sjs2-color-component-action-neutral-secondary-default-icon: var(--secondary-foreground) !important;
+  --sjs2-color-component-action-neutral-secondary-hovered-icon: var(--accent-foreground) !important;
+  --sjs2-color-component-action-neutral-secondary-disabled-icon: var(--muted-foreground) !important;
+  /* tertiary */
+  --sjs2-color-component-action-neutral-tertiary-default-bg: transparent !important;
+  --sjs2-color-component-action-neutral-tertiary-hovered-bg: var(--accent) !important;
+  --sjs2-color-component-action-neutral-tertiary-disabled-bg: transparent !important;
+  --sjs2-color-component-action-neutral-tertiary-default-label: var(--foreground) !important;
+  --sjs2-color-component-action-neutral-tertiary-hovered-label: var(--accent-foreground) !important;
+  --sjs2-color-component-action-neutral-tertiary-disabled-label: var(--muted-foreground) !important;
+  --sjs2-color-component-action-neutral-tertiary-default-icon: var(--foreground) !important;
+  --sjs2-color-component-action-neutral-tertiary-hovered-icon: var(--accent-foreground) !important;
+  --sjs2-color-component-action-neutral-tertiary-disabled-icon: var(--muted-foreground) !important;
+  /* quaternary */
+  --sjs2-color-component-action-neutral-quaternary-default-bg: transparent !important;
+  --sjs2-color-component-action-neutral-quaternary-hovered-bg: var(--accent) !important;
+  --sjs2-color-component-action-neutral-quaternary-disabled-bg: transparent !important;
+  --sjs2-color-component-action-neutral-quaternary-default-label: var(--muted-foreground) !important;
+  --sjs2-color-component-action-neutral-quaternary-hovered-label: var(--accent-foreground) !important;
+  --sjs2-color-component-action-neutral-quaternary-disabled-label: color-mix(in oklch, var(--muted-foreground) 60%, transparent) !important;
+  --sjs2-color-component-action-neutral-quaternary-default-icon: var(--muted-foreground) !important;
+  --sjs2-color-component-action-neutral-quaternary-hovered-icon: var(--accent-foreground) !important;
+  --sjs2-color-component-action-neutral-quaternary-disabled-icon: color-mix(in oklch, var(--muted-foreground) 60%, transparent) !important;
+  /* tertiary-surface */
+  --sjs2-color-component-action-neutral-tertiary-surface-default-bg: var(--card) !important;
+  --sjs2-color-component-action-neutral-tertiary-surface-hovered-bg: var(--accent) !important;
+  --sjs2-color-component-action-neutral-tertiary-surface-disabled-bg: var(--muted) !important;
+  --sjs2-color-component-action-neutral-tertiary-surface-default-label: var(--foreground) !important;
+  --sjs2-color-component-action-neutral-tertiary-surface-hovered-label: var(--accent-foreground) !important;
+  --sjs2-color-component-action-neutral-tertiary-surface-disabled-label: var(--muted-foreground) !important;
+  --sjs2-color-component-action-neutral-tertiary-surface-default-icon: var(--foreground) !important;
+  --sjs2-color-component-action-neutral-tertiary-surface-hovered-icon: var(--accent-foreground) !important;
+  --sjs2-color-component-action-neutral-tertiary-surface-disabled-icon: var(--muted-foreground) !important;
+  /* quaternary-surface */
+  --sjs2-color-component-action-neutral-quaternary-surface-default-bg: var(--card) !important;
+  --sjs2-color-component-action-neutral-quaternary-surface-hovered-bg: var(--accent) !important;
+  --sjs2-color-component-action-neutral-quaternary-surface-disabled-bg: var(--muted) !important;
+  --sjs2-color-component-action-neutral-quaternary-surface-default-label: var(--muted-foreground) !important;
+  --sjs2-color-component-action-neutral-quaternary-surface-hovered-label: var(--accent-foreground) !important;
+  --sjs2-color-component-action-neutral-quaternary-surface-disabled-label: color-mix(in oklch, var(--muted-foreground) 60%, transparent) !important;
+  --sjs2-color-component-action-neutral-quaternary-surface-default-icon: var(--muted-foreground) !important;
+  --sjs2-color-component-action-neutral-quaternary-surface-hovered-icon: var(--accent-foreground) !important;
+  --sjs2-color-component-action-neutral-quaternary-surface-disabled-icon: color-mix(in oklch, var(--muted-foreground) 60%, transparent) !important;
+}
+
+/* =====================================================================
+ * SECTION B — Dark-mode: gray-000 reused as on-primary foreground.
+ * In dark mode --background is dark, so the checkmark glyph on primary
+ * buttons would disappear without this re-pin.
+ * ===================================================================== */
+.dark,
+.dark .sd-root-modern {
+  --sjs2-palette-gray-000: var(--primary-foreground) !important;
+}
+
+/* =====================================================================
+ * SECTION C — Survey root background neutralization
+ * ===================================================================== */
+.sd-root-modern {
+  background: transparent !important;
+}
+
+/* =====================================================================
+ * SECTION D — Defensive direct-element rules
+ * survey-core.css uses var(--token, #literal-hex) fallbacks that bypass
+ * the variable chain entirely. Re-pin properties directly on elements.
+ * ===================================================================== */
+
+/* Borderless questions — strip the card chrome from every question frame. */
+.sd-root-modern .sd-element--with-frame {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
+  padding: 0 !important;
+}
+
+.sd-root-modern .sd-panel {
+  background: transparent;
+  color: var(--card-foreground);
+}
+
+/* Input boxes */
+.sd-root-modern .sd-formbox {
+  background-color: var(--muted);
+  border-color: var(--border);
+}
+
+/* CRITICAL: input text color.
+ * survey-core.css: color: var(--sjs2-…, #1c1b20) — literal fallback wins
+ * in dark mode without this rule. */
+.sd-root-modern .sd-formbox__input {
+  color: var(--foreground);
+  background: transparent;
+}
+.sd-root-modern .sd-formbox__input::placeholder {
+  color: var(--muted-foreground);
+}
+
+/* Titles & descriptions */
+.sd-root-modern .sd-title,
+.sd-root-modern .sd-element__title,
+.sd-root-modern .sd-question__title,
+.sd-root-modern .sd-page__title {
+  color: var(--foreground);
+}
+
+.sd-root-modern .sd-description,
+.sd-root-modern .sd-question__description,
+.sd-root-modern .sd-page__description {
+  color: var(--muted-foreground);
+}
+
+/* Popups portal to <body> — outside .sd-root-modern scope */
+.sv-popup__container,
+.sv-popup__body-content,
+.sv-list,
+.sv-list__container {
+  background-color: var(--popover) !important;
+  color: var(--popover-foreground) !important;
+  border-color: var(--border) !important;
+}
+
+.sv-list__item .sv-list__item-body {
+  color: var(--popover-foreground) !important;
+}
+
+.sv-list__item--selected > .sv-list__item-body,
+.sv-list__item.sv-list__item--selected .sv-list__item-body,
+.sv-list__item:hover > .sv-list__item-body {
+  background-color: var(--accent) !important;
+  color: var(--accent-foreground) !important;
+}
+
+/* Icon sizing — Tailwind preflight removes intrinsic SVG dimensions,
+ * causing SurveyJS chevron/clear icons to expand to container width. */
+.sd-dropdown,
+.sd-dropdown_chevron-button,
+.sd-dropdown_clean-button,
+.sd-tagbox_clean-button,
+.sd-action-bar .sv-action__icon,
+.sv-list__item .sv-svg-icon,
+.sv-popup__container .sv-svg-icon {
+  flex-shrink: 0;
+}
+
+.sd-dropdown__chevron-button,
+.sd-dropdown_chevron-button,
+.sd-dropdown_clean-button,
+.sd-tagbox_clean-button {
+  width: 20px !important;
+  height: 20px !important;
+  min-width: 20px;
+  min-height: 20px;
+}
+
+.sd-dropdown__chevron-button svg,
+.sd-dropdown_chevron-button svg,
+.sd-dropdown_clean-button svg,
+.sd-tagbox_clean-button svg,
+.sv-svg-icon,
+.sd-action__icon,
+.sv-action-bar .sv-svg-icon,
+.sv-list__item svg {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+/* Keep dropdown trigger to a single-row layout */
+.sd-dropdown {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px;
+  min-height: 36px;
+}
+
+.sd-dropdown__value,
+.sd-dropdown_value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sd-tagbox {
+  min-height: 36px;
+}
+
+/* =====================================================================
+ * SECTION E — Density / spacing
+ * The default base unit is 8px, giving 40px card padding and 16px row
+ * gaps.  Two fixes are needed:
+ *
+ *  1. --sd-base-padding / --sd-base-vertical-padding / --sd-page-vertical-padding
+ *     are declared on BOTH .sd-root-modern AND .sd-container-modern in
+ *     survey-core.css.  CSS custom properties only inherit to children
+ *     that have no own declaration, so the .sd-container-modern child
+ *     ignores any override placed only on .sd-root-modern.  The selector
+ *     must mirror the one in survey-core.css and target both elements.
+ *
+ *  2. Row margin-top uses --sjs2-spacing-x200 = calc(base * 2), not
+ *     --sd-base-vertical-padding.  Reducing --sjs2-base-unit-spacing
+ *     recalculates all x-multiples on the same element automatically.
+ * ===================================================================== */
+
+/* Reduce the spacing base unit from 8px → 5px so all derived x-multiples
+ * (including the 16px row gap --sjs2-spacing-x200) shrink proportionally. */
+.sd-root-modern {
+  --sjs2-base-unit-spacing: 5px !important;
+}
+
+/* Mirror the survey-core.css selector so .sd-container-modern gets the
+ * direct overrides, not the inherited (and therefore ignored) values. */
+.sd-root-modern,
+.sd-container-modern {
+  --sd-base-padding: 12px !important;
+  --sd-base-vertical-padding: 8px !important;
+  --sd-page-vertical-padding: 0px !important;
+}
+
+/* =====================================================================
+ * SECTION F — Survey navigation buttons (Prev / Next / Complete)
+ * ===================================================================== */
+
+.sd-root-modern .sd-body__navigation .sd-action {
+  --sd-action-background: var(--card);
+  --sd-action-hover-background: var(--accent);
+  --sd-action-disabled-background: var(--muted);
+  --sd-action-title-color: var(--foreground);
+  --sd-action-hover-title-color: var(--foreground);
+  --sd-action-disabled-title-color: var(--muted-foreground);
+  --sd-action-icon-color: var(--muted-foreground);
+  --sd-action-hover-icon-color: var(--foreground);
+}
+
+.sd-root-modern .sd-body__navigation .sd-action.sd-navigation__complete-btn,
+.sd-root-modern .sd-body__navigation .sd-action.sd-navigation__next-btn,
+.sd-root-modern .sd-body__navigation .sd-action--positive,
+.sd-root-modern .sd-body__navigation .sd-action--action {
+  --sd-action-background: var(--primary);
+  --sd-action-hover-background: color-mix(in oklch, var(--primary) 88%, black);
+  --sd-action-title-color: var(--primary-foreground);
+  --sd-action-hover-title-color: var(--primary-foreground);
+  --sd-action-icon-color: var(--primary-foreground);
+  --sd-action-hover-icon-color: var(--primary-foreground);
+}

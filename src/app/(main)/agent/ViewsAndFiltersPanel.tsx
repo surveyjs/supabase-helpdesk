@@ -4,9 +4,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { Model } from 'survey-core';
-import surveyTheme from '@/components/features/survey/theme.json';
-import 'survey-core/survey-core.min.css';
-import '@/components/features/survey/survey-overrides.css';
 import {
   createSavedViewReturnId,
   deleteSavedView,
@@ -63,7 +60,6 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
 
   const model = useMemo(() => {
     const m = new Model(schema);
-    m.applyTheme(surveyTheme as Parameters<Model['applyTheme']>[0]);
     m.showCompletedPage = false;
     m.completeText = 'Apply Filters';
     m.data = surveyData;

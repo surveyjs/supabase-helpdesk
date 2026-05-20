@@ -1,5 +1,4 @@
 import { createServerClient } from '@/lib/supabase/server';
-import 'survey-core/survey-core.min.css';
 import { AdminPrivacySurveyForm } from './AdminPrivacySurveyForm';
 
 export default async function AdminPrivacyPage() {

@@ -3,9 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { Model } from 'survey-core';
-import surveyTheme from '@/components/features/survey/theme.json';
-import 'survey-core/survey-core.min.css';
-import '@/components/features/survey/survey-overrides.css';
 import { ticketDetailDispatch } from '@/lib/tickets/ticket-detail-dispatch';
 import { dispatchTicketDetailFieldChange } from '@/lib/tickets/ticket-detail-events';
 import type { SurveyJsonDefinition } from '@/lib/constants/survey-ui-config';
@@ -30,7 +27,6 @@ export function TicketSidebarSurvey({ ticketId, templateJson, initial }: TicketS
 
   const model = useMemo(() => {
     const m = new Model(templateJson);
-    m.applyTheme(surveyTheme as Parameters<Model['applyTheme']>[0]);
     m.showCompletedPage = false;
     m.showCompleteButton = false;
     // Goal #6: assign data after model construction.

@@ -123,7 +123,7 @@ test.describe('CSAT Rating Page', () => {
 
     // Should show success
     await expect(page.getByTestId('csat-success')).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText('Thank you for your feedback!')).toBeVisible();
+    await expect(page.getByText('Thank you for your feedback.')).toBeVisible();
   });
 
   test('confirmation page shows new token link', async ({ page }) => {

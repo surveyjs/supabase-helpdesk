@@ -118,9 +118,16 @@ test.describe('Inbound Email Admin Configuration', () => {
     await replyToInput.fill('support@test-helpdesk.com');
     await replyToInput.press('Tab');
 
-    // Enable - use force click to bypass pointer interception
+    // Enable - SurveyJS v3 renders boolean as a visually-hidden checkbox
+    // wrapped in a label. Clicking the label toggles the input via native
+    // HTML behavior and fires SurveyJS's onChange handler.
     const checkbox = form.locator('input[name="inbound_email_enabled"]');
-    await checkbox.click({ force: true });
+    const checkboxLabel = form.locator('label.sd-boolean').first();
+    if (await checkboxLabel.count()) {
+      await checkboxLabel.click();
+    } else {
+      await checkbox.click({ force: true });
+    }
 
     // Wait for autosave (no button to click in autosave mode)
     // Verify saved in DB by polling

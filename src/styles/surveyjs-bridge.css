@@ -234,7 +234,6 @@
   background: transparent !important;
   box-shadow: none !important;
   border: none !important;
-  padding: 0 !important;
 }
 
 .sd-root-modern .sd-panel {
@@ -407,3 +406,25 @@
   --sd-action-icon-color: var(--primary-foreground);
   --sd-action-hover-icon-color: var(--primary-foreground);
 }
+
+/* =====================================================================
+ * SECTION G — Disable SurveyJS internal scroll wrapper
+ * V3 wraps the survey root in `.sv-scroll__wrapper` which is `height: 100%`
+ * with an `overflow-y: auto` inner `.sv-scroll__scroller`. When the survey
+ * is embedded inside a Tailwind container without an explicit height, the
+ * wrapper collapses and clips content (e.g. matrixdynamic "Add" button at
+ * the bottom of the form is hidden until the user scrolls inside the
+ * survey). Let the survey grow naturally instead.
+ * ===================================================================== */
+.sv-scroll__wrapper {
+  height: auto !important;
+}
+
+.sv-scroll__scroller {
+  overflow: visible !important;
+}
+
+.sv-scroll__scrollbar {
+  display: none !important;
+}
+

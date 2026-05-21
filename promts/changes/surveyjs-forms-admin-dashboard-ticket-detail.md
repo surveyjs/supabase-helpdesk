@@ -7,6 +7,12 @@
 > dashboard filter form is now driven by a SurveyJS template stored under
 > `app_settings.survey_agent_dashboard_template` and edited in
 > `/admin/survey-templates` alongside the ticket-detail templates.
+>
+> **Update — superseded for ticket-detail custom fields by
+> [`ticket-detail-custom-fields-surveyjs.md`](./ticket-detail-custom-fields-surveyjs.md).**
+> Custom fields on the ticket detail page are now SurveyJS questions in
+> the sidebar template (named `custom_fields.<name>`), optionally
+> auto-generated via the `autoGenerateCustomFields` wrapper flag.
 
 ## Summary
 

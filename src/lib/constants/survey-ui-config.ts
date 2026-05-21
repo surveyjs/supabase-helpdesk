@@ -35,7 +35,40 @@ export type TicketDetailTierControlRules = {
 export type TicketDetailTemplateWrapper = {
   template: SurveyJsonDefinition;
   tierControlRules: TicketDetailTierControlRules;
+  /**
+   * When `true` (default) the server auto-injects a "Custom Fields"
+   * panel built from `public.custom_fields` rows into the sidebar
+   * SurveyJS template at render time. When `false`, the admin must
+   * author `custom_fields.<name>` questions directly in the template
+   * JSON; no automatic injection happens.
+   */
+  autoGenerateCustomFields: boolean;
 };
+
+/**
+ * Question-name prefix used for custom-field questions inside
+ * ticket-detail SurveyJS templates. A valid custom-field question name
+ * is `${CUSTOM_FIELD_QUESTION_PREFIX}<custom field name>` where the
+ * trailing portion equals a row in `public.custom_fields.name`.
+ */
+export const CUSTOM_FIELD_QUESTION_PREFIX = 'custom_fields.';
+
+/**
+ * Regex that matches a syntactically valid custom-field question name.
+ * The portion after the prefix may contain letters, digits, spaces,
+ * underscores, and hyphens; existence of the matching custom-field row
+ * is validated separately by the admin save flow.
+ */
+export const CUSTOM_FIELD_QUESTION_NAME_REGEX = /^custom_fields\.[A-Za-z0-9_\- ]+$/;
+
+export function isCustomFieldQuestionName(name: string): boolean {
+  return CUSTOM_FIELD_QUESTION_NAME_REGEX.test(name);
+}
+
+export function customFieldNameFromQuestion(questionName: string): string | null {
+  if (!isCustomFieldQuestionName(questionName)) return null;
+  return questionName.slice(CUSTOM_FIELD_QUESTION_PREFIX.length);
+}
 
 /**
  * Allowed SurveyJS question `name` values for the agent dashboard filter
@@ -74,11 +107,13 @@ export const DEFAULT_TICKET_DETAIL_TIER_CONTROL_RULES: TicketDetailTierControlRu
 export const DEFAULT_TICKET_DETAIL_AGENT_TEMPLATE: TicketDetailTemplateWrapper = {
   template: agentTemplateJson as SurveyJsonDefinition,
   tierControlRules: { ...DEFAULT_TICKET_DETAIL_TIER_CONTROL_RULES },
+  autoGenerateCustomFields: true,
 };
 
 export const DEFAULT_TICKET_DETAIL_USER_TEMPLATE: TicketDetailTemplateWrapper = {
   template: userTemplateJson as SurveyJsonDefinition,
   tierControlRules: { ...DEFAULT_TICKET_DETAIL_TIER_CONTROL_RULES },
+  autoGenerateCustomFields: true,
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -136,7 +171,11 @@ function parseTemplateWrapper(
     if (!isRecord(parsed)) return fallback;
     const template = isRecord(parsed.template) ? (parsed.template as SurveyJsonDefinition) : fallback.template;
     const tierControlRules = parseTierControlRules(parsed.tierControlRules);
-    return { template, tierControlRules };
+    const autoGenerateCustomFields =
+      typeof parsed.autoGenerateCustomFields === 'boolean'
+        ? parsed.autoGenerateCustomFields
+        : true;
+    return { template, tierControlRules, autoGenerateCustomFields };
   } catch {
     return fallback;
   }
@@ -188,8 +227,29 @@ export function collectQuestionNames(template: unknown): string[] {
 /**
  * Validate that every named element in a ticket-detail template uses an
  * allowed name. Returns the list of offending names (empty when valid).
+ *
+ * Names are accepted when they appear in `TICKET_DETAIL_ALLOWED_QUESTION_NAMES`
+ * or match the custom-field convention `custom_fields.<name>` (see
+ * `CUSTOM_FIELD_QUESTION_NAME_REGEX`). The existence of the referenced
+ * custom-field row is validated separately by the admin save flow when
+ * `autoGenerateCustomFields` is `false`.
  */
 export function findInvalidTicketDetailQuestionNames(template: unknown): string[] {
   const allowed = new Set<string>(TICKET_DETAIL_ALLOWED_QUESTION_NAMES);
-  return collectQuestionNames(template).filter((name) => !allowed.has(name));
+  return collectQuestionNames(template).filter(
+    (name) => !allowed.has(name) && !isCustomFieldQuestionName(name),
+  );
+}
+
+/**
+ * Collect every `custom_fields.<name>` question name in the template,
+ * returning the bare custom-field name (without the `custom_fields.`
+ * prefix). Used by the admin save flow to validate that authored
+ * names correspond to existing `public.custom_fields` rows when
+ * `autoGenerateCustomFields` is `false`.
+ */
+export function collectCustomFieldQuestionNames(template: unknown): string[] {
+  return collectQuestionNames(template)
+    .filter(isCustomFieldQuestionName)
+    .map((name) => name.slice(CUSTOM_FIELD_QUESTION_PREFIX.length));
 }

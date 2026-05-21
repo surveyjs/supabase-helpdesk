@@ -12,6 +12,12 @@ import {
   removeTagFromTicket,
 } from '@/lib/actions/agent';
 import { followTicket, unfollowTicket } from '@/lib/actions/tickets';
+import { updateCustomFieldValue } from '@/lib/actions/admin';
+import {
+  CUSTOM_FIELD_QUESTION_PREFIX,
+  isCustomFieldQuestionName,
+  customFieldNameFromQuestion,
+} from '@/lib/constants/survey-ui-config';
 
 function fd(entries: Record<string, string>): FormData {
   const f = new FormData();
@@ -101,3 +107,50 @@ export const ticketDetailDispatch: Record<string, TicketDetailDispatcher> = {
     return [v ? followTicket(fd({ ticket_id: ticketId })) : unfollowTicket(fd({ ticket_id: ticketId }))];
   },
 };
+
+function coerceCustomFieldValueForAction(value: unknown): string {
+  if (value == null) return '';
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  if (typeof value === 'number') return Number.isFinite(value) ? String(value) : '';
+  if (typeof value === 'string') return value;
+  return String(value);
+}
+
+function valuesEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (a == null && b == null) return true;
+  if (a == null || b == null) return false;
+  if (typeof a !== typeof b) return false;
+  return a === b;
+}
+
+function buildCustomFieldDispatcher(fieldName: string): TicketDetailDispatcher {
+  return (ticketId, next, prev) => {
+    if (valuesEqual(next, prev)) return [];
+    const value = coerceCustomFieldValueForAction(next);
+    return [
+      updateCustomFieldValue(
+        fd({ ticket_id: ticketId, field_name: fieldName, value }),
+      ),
+    ];
+  };
+}
+
+/**
+ * Resolve the dispatcher for a SurveyJS question name. Returns a
+ * dynamic handler for any name matching the `custom_fields.<name>`
+ * convention; otherwise returns the static handler (if any).
+ */
+export function getDispatcher(
+  questionName: string,
+): TicketDetailDispatcher | undefined {
+  if (isCustomFieldQuestionName(questionName)) {
+    const fieldName = customFieldNameFromQuestion(questionName);
+    if (!fieldName) return undefined;
+    return buildCustomFieldDispatcher(fieldName);
+  }
+  return ticketDetailDispatch[questionName];
+}
+
+// Re-export for tests that need to recognise the convention.
+export { CUSTOM_FIELD_QUESTION_PREFIX };

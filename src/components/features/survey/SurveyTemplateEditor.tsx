@@ -17,28 +17,73 @@ type SurveyTemplateEditorProps = {
   initialJson: string;
 };
 
-const EDITOR_SCHEMA = {
-  showQuestionNumbers: 'off',
-  pages: [
-    {
-      elements: [
-        {
-          type: 'comment',
-          name: 'template_json',
-          title: 'SurveyJS template JSON',
-          rows: 24,
-          isRequired: true,
-        },
-      ],
-    },
-  ],
-} as const;
+const TICKET_DETAIL_KEYS = new Set([
+  'survey_ticket_detail_agent_template',
+  'survey_ticket_detail_user_template',
+]);
+
+const AUTO_GEN_HINTS: Record<string, string> = {
+  survey_ticket_detail_agent_template:
+    'When enabled, custom-field definitions are automatically rendered as SurveyJS questions (named `custom_fields.<name>`) at the bottom of the sidebar. Disable to author them manually in the JSON.',
+  survey_ticket_detail_user_template:
+    'When enabled, custom-field definitions are automatically rendered as SurveyJS questions (named `custom_fields.<name>`) at the bottom of the sidebar. Disable to author them manually in the JSON.',
+};
+
+function buildEditorSchema(includeAutoGen: boolean): Record<string, unknown> {
+  const elements: Array<Record<string, unknown>> = [];
+  if (includeAutoGen) {
+    elements.push({
+      type: 'boolean',
+      name: 'auto_generate_custom_fields',
+      title: 'Auto-generate custom fields',
+      renderAs: 'checkbox',
+    });
+  }
+  elements.push({
+    type: 'comment',
+    name: 'template_json',
+    title: 'SurveyJS template JSON',
+    rows: 24,
+    isRequired: true,
+  });
+  return {
+    showQuestionNumbers: 'off',
+    pages: [{ elements }],
+  };
+}
+
+function readAutoGenerateFromWrapper(json: string): boolean {
+  try {
+    const parsed = JSON.parse(json) as { autoGenerateCustomFields?: unknown };
+    if (parsed && typeof parsed === 'object') {
+      const v = parsed.autoGenerateCustomFields;
+      if (typeof v === 'boolean') return v;
+    }
+  } catch {
+    /* ignore */
+  }
+  return true;
+}
+
+function setAutoGenerateInWrapper(json: string, value: boolean): string {
+  try {
+    const parsed = JSON.parse(json);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      (parsed as Record<string, unknown>).autoGenerateCustomFields = value;
+      return JSON.stringify(parsed, null, 2);
+    }
+  } catch {
+    /* fall through */
+  }
+  return json;
+}
 
 export function SurveyTemplateEditor({
   settingKey,
   title,
   initialJson,
 }: SurveyTemplateEditorProps) {
+  const isTicketDetail = TICKET_DETAIL_KEYS.has(settingKey);
   const [state, saveAction, isSaving] = useActionState<SurveyUiSaveResult | null, FormData>(
     saveSurveyTemplate,
     null,
@@ -48,12 +93,35 @@ export function SurveyTemplateEditor({
   const hiddenJsonRef = useRef<HTMLInputElement>(null);
   const valueRef = useRef<string>(initialJson);
 
-  const initialData = useMemo(() => ({ template_json: initialJson }), [initialJson]);
+  const initialAutoGen = useMemo(
+    () => (isTicketDetail ? readAutoGenerateFromWrapper(initialJson) : true),
+    [initialJson, isTicketDetail],
+  );
+
+  const schema = useMemo(() => buildEditorSchema(isTicketDetail), [isTicketDetail]);
+
+  const initialData = useMemo(
+    () => ({
+      template_json: initialJson,
+      ...(isTicketDetail ? { auto_generate_custom_fields: initialAutoGen } : {}),
+    }),
+    [initialJson, isTicketDetail, initialAutoGen],
+  );
 
   const onValueChanged = (data: Record<string, unknown>) => {
     if (typeof data.template_json === 'string') {
       valueRef.current = data.template_json;
       if (hiddenJsonRef.current) hiddenJsonRef.current.value = data.template_json;
+    }
+    if (isTicketDetail && typeof data.auto_generate_custom_fields === 'boolean') {
+      const merged = setAutoGenerateInWrapper(
+        valueRef.current,
+        data.auto_generate_custom_fields,
+      );
+      if (merged !== valueRef.current) {
+        valueRef.current = merged;
+        if (hiddenJsonRef.current) hiddenJsonRef.current.value = merged;
+      }
     }
   };
 
@@ -90,13 +158,19 @@ export function SurveyTemplateEditor({
         </form>
       </div>
 
+      {isTicketDetail && (
+        <p className="text-xs text-gray-500" data-testid="survey-template-autogen-hint">
+          {AUTO_GEN_HINTS[settingKey]}
+        </p>
+      )}
+
       <form ref={formRef} action={saveAction} className="hidden">
         <input type="hidden" name="setting_key" value={settingKey} />
         <input ref={hiddenJsonRef} type="hidden" name="config_json" defaultValue={initialJson} />
       </form>
 
       <SurveyJsonForm
-        schema={EDITOR_SCHEMA as unknown as Record<string, unknown>}
+        schema={schema}
         data={initialData}
         onValueChanged={onValueChanged}
         mode="autosave"

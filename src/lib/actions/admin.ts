@@ -1,7 +1,6 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
 import { createServerClient, createServiceRoleClient } from '@/lib/supabase/server';
 import { requireAdminRole, logAudit } from './_admin-helpers';
 import {
@@ -10,6 +9,8 @@ import {
   DEFAULT_TICKET_DETAIL_USER_TEMPLATE,
   findInvalidAgentDashboardQuestionNames,
   findInvalidTicketDetailQuestionNames,
+  collectCustomFieldQuestionNames,
+  customFieldNameFromQuestion,
 } from '@/lib/constants/survey-ui-config';
 
 
@@ -1045,19 +1046,19 @@ export async function updateCsatSettings(formData: FormData): Promise<void> {
 export async function updateCustomFieldValue(formData: FormData): Promise<void> {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  if (!user) throw new Error('Not authenticated.');
 
   const { data: profile } = await supabase
     .from('profiles')
     .select('id, role')
     .eq('id', user.id)
     .single();
-  if (!profile) return;
+  if (!profile) throw new Error('Profile not found.');
 
   const ticketId = formData.get('ticket_id') as string;
   const fieldName = formData.get('field_name') as string;
   const value = formData.get('value') as string;
-  if (!ticketId || !fieldName) return;
+  if (!ticketId || !fieldName) throw new Error('Missing ticket_id or field_name.');
 
   // Check user is owner or agent
   const isAgent = profile.role === 'agent' || profile.role === 'admin';
@@ -1066,8 +1067,10 @@ export async function updateCustomFieldValue(formData: FormData): Promise<void> 
     .select('id, creator_id, custom_fields, slug')
     .eq('id', ticketId)
     .single();
-  if (!ticket) return;
-  if (!isAgent && ticket.creator_id !== user.id) return;
+  if (!ticket) throw new Error('Ticket not found.');
+  if (!isAgent && ticket.creator_id !== user.id) {
+    throw new Error('Not authorized to update custom fields on this ticket.');
+  }
 
   // Validate against field definition
   const { data: fieldDef } = await supabase
@@ -1075,24 +1078,30 @@ export async function updateCustomFieldValue(formData: FormData): Promise<void> 
     .select('*')
     .eq('name', fieldName)
     .single();
-  if (!fieldDef) return;
+  if (!fieldDef) throw new Error(`Custom field "${fieldName}" does not exist.`);
 
   // Type validation
   let parsedValue: unknown = value;
   if (fieldDef.field_type === 'number') {
     const num = parseFloat(value);
-    if (isNaN(num)) return;
+    if (isNaN(num)) throw new Error(`Invalid number for custom field "${fieldName}".`);
     parsedValue = num;
   } else if (fieldDef.field_type === 'checkbox') {
     parsedValue = value === 'true' || value === 'on';
   } else if (fieldDef.field_type === 'dropdown') {
     const opts = fieldDef.options as string[];
-    if (opts && !opts.includes(value)) return;
+    if (value !== '' && opts && !opts.includes(value)) {
+      throw new Error(`"${value}" is not an allowed option for "${fieldName}".`);
+    }
   } else if (fieldDef.field_type === 'text') {
-    if (typeof value === 'string' && value.length > 1000) return;
+    if (typeof value === 'string' && value.length > 1000) {
+      throw new Error(`Value for "${fieldName}" exceeds 1000 characters.`);
+    }
   }
 
-  if (fieldDef.is_required && !value && fieldDef.field_type !== 'checkbox') return;
+  if (fieldDef.is_required && !value && fieldDef.field_type !== 'checkbox') {
+    throw new Error(`"${fieldName}" is required.`);
+  }
 
   const cf = (ticket.custom_fields ?? {}) as Record<string, unknown>;
   cf[fieldName] = parsedValue;
@@ -1423,6 +1432,37 @@ export async function saveSurveyTemplate(
         ok: false,
         error: `Template contains question name(s) not allowed: ${invalid.join(', ')}.`,
       };
+    }
+
+    // When the admin opts out of auto-generated custom fields, validate
+    // that every `custom_fields.<name>` question in the JSON refers to an
+    // existing `custom_fields.name` row.
+    const wrapper = parsed as Record<string, unknown>;
+    const autoGenRaw = wrapper.autoGenerateCustomFields;
+    const autoGen = typeof autoGenRaw === 'boolean' ? autoGenRaw : true;
+    if (!autoGen) {
+      const cfQuestionNames = collectCustomFieldQuestionNames(template);
+      if (cfQuestionNames.length > 0) {
+        const bareNames = Array.from(
+          new Set(
+            cfQuestionNames
+              .map((n) => customFieldNameFromQuestion(n))
+              .filter((n): n is string => !!n),
+          ),
+        );
+        const { data: rows } = await supabase
+          .from('custom_fields')
+          .select('name')
+          .in('name', bareNames);
+        const known = new Set((rows ?? []).map((r) => String(r.name)));
+        const missing = bareNames.filter((n) => !known.has(n));
+        if (missing.length > 0) {
+          return {
+            ok: false,
+            error: `Unknown custom field(s): ${missing.join(', ')}.`,
+          };
+        }
+      }
     }
   } else if (isAgentDashboardTemplateKey(settingKey)) {
     const invalid = findInvalidAgentDashboardQuestionNames(parsed);

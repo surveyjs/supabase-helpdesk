@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { Model } from 'survey-core';
-import { ticketDetailDispatch } from '@/lib/tickets/ticket-detail-dispatch';
+import { getDispatcher } from '@/lib/tickets/ticket-detail-dispatch';
 import { dispatchTicketDetailFieldChange } from '@/lib/tickets/ticket-detail-events';
 import type { SurveyJsonDefinition } from '@/lib/constants/survey-ui-config';
 
@@ -46,7 +46,7 @@ export function TicketSidebarSurvey({ ticketId, templateJson, initial }: TicketS
         return;
       }
 
-      const dispatcher = ticketDetailDispatch[options.name];
+      const dispatcher = getDispatcher(options.name);
       if (!dispatcher) return;
       const prev = previousRef.current[options.name];
       const tasks = dispatcher(ticketId, options.value, prev);

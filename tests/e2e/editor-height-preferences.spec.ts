@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { createServiceRoleClient } from '../helpers/supabase';
-import { loginViaForm } from '../helpers/auth';
+import { loginViaForm, gotoAuthed } from '../helpers/auth';
 
 const SEED_PASSWORD = 'Password123';
 // Dedicated test user so concurrent specs (which mutate the seeded users'
@@ -60,14 +60,14 @@ test.describe('Editor height preferences', () => {
     await loginAs(page);
 
     // Configure non-default heights via the profile form.
-    await page.goto('/profile');
+    await gotoAuthed(page, '/profile', () => loginAs(page));
     const minInput = page.getByTestId('editor-min-height-input');
     const maxInput = page.getByTestId('editor-max-height-input');
     await expect(minInput).toBeVisible({ timeout: 10000 });
     await minInput.fill('350');
     await maxInput.fill('600');
     await page.getByRole('button', { name: /Save Preference/i }).click();
-    await expect(page.getByText('Editor preference saved.')).toBeVisible();
+    await expect(page.getByText('Editor preference saved.')).toBeVisible({ timeout: 10000 });
 
     // Reload — values persist.
     await page.reload();
@@ -89,7 +89,7 @@ test.describe('Editor height preferences', () => {
 
   test('rejects min greater than max with an inline error', async ({ page }) => {
     await loginAs(page);
-    await page.goto('/profile');
+    await gotoAuthed(page, '/profile', () => loginAs(page));
     await page.getByTestId('editor-min-height-input').fill('800');
     await page.getByTestId('editor-max-height-input').fill('400');
     await expect(

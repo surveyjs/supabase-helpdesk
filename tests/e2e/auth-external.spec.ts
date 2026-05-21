@@ -395,7 +395,19 @@ test.describe('Auth External', () => {
     await svc.from('app_settings').update({ value: 'external' }).eq('key', 'auth_mode');
     await svc.from('app_settings').update({ value: 'Corp SSO' }).eq('key', 'auth_external_provider_name');
 
-    await page.goto('/signup');
+    // The signup page is dynamically rendered but Next can briefly serve a
+    // stale render right after an app_settings flip. Poll a fresh navigation
+    // until the external-mode marker appears.
+    await expect
+      .poll(
+        async () => {
+          await page.goto('/signup', { waitUntil: 'domcontentloaded' });
+          return await page.getByTestId('external-signup-btn').isVisible().catch(() => false);
+        },
+        { timeout: 15000, intervals: [500, 1000, 2000] },
+      )
+      .toBe(true);
+
     await expect(page.getByText('Account creation is managed')).toBeVisible({ timeout: 10000 });
     await expect(page.getByTestId('external-signup-btn')).toBeVisible();
 

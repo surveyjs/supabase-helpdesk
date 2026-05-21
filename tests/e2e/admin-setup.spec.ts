@@ -1,16 +1,13 @@
 import { test, expect, Page } from '@playwright/test';
 import { createServiceRoleClient } from '../helpers/supabase';
+import { loginViaForm } from '../helpers/auth';
 
 /**
- * Helper: log in via the login form.
+ * Helper: log in via the login form. Delegates to the shared resilient
+ * helper so we get the same retry/cookie-reset behavior as other specs.
  */
 async function loginAs(page: Page, email: string, password = 'Password123') {
-  await page.goto('/login');
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Log in' }).click();
-  await expect(page).toHaveURL('/', { timeout: 10000 });
-  await expect(page.locator('summary[aria-haspopup="true"]')).toBeVisible({ timeout: 10000 });
+  await loginViaForm(page, email, password);
 }
 
 /** Navigate to an admin page, retrying once if requireAdmin() redirect race occurs. */
@@ -153,7 +150,11 @@ test.describe('Custom fields', () => {
     await gotoAdmin(page, '/admin/custom-fields');
     await expect(page.getByTestId('custom-fields-survey-form')).toBeVisible();
 
-    await page.getByRole('button', { name: 'Add Field' }).click();
+    // SurveyJS is lazy-loaded via next/dynamic { ssr: false }; wait for the
+    // matrix toolbar to hydrate before interacting.
+    const addFieldBtn = page.getByRole('button', { name: 'Add Field' });
+    await expect(addFieldBtn).toBeVisible({ timeout: 20000 });
+    await addFieldBtn.click();
     const nameInputs = page.locator('input[aria-label*="Name"]');
     const nameCount = await nameInputs.count();
     await nameInputs.nth(nameCount - 1).fill('E2E Conditional');
@@ -181,6 +182,10 @@ test.describe('Custom fields', () => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/custom-fields');
     await expect(page.getByTestId('custom-fields-survey-form')).toBeVisible();
+
+    // Wait for SurveyJS to hydrate (lazy-loaded via next/dynamic) before
+    // clicking — otherwise the matrix toolbar may not be in the DOM yet.
+    await expect(page.getByRole('button', { name: 'Add Field' })).toBeVisible({ timeout: 20000 });
 
     // Row 1: text (default)
     await page.getByRole('button', { name: 'Add Field' }).click();

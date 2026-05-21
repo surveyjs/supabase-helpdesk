@@ -1,5 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import { createServiceRoleClient } from '../helpers/supabase';
+import { loginViaForm } from '../helpers/auth';
 
 // Multiple describes in this file mutate the same `app_settings` rows
 // (`inbound_email_enabled`, `inbound_email_reply_to_address`). Under
@@ -8,59 +9,14 @@ import { createServiceRoleClient } from '../helpers/supabase';
 test.describe.configure({ mode: 'serial' });
 
 /**
- * Helper: log in via the login form.
+ * Helper: log in via the shared, resilient login flow. Delegates to
+ * `loginViaForm` so we benefit from its cookie reset, auth-mode guard,
+ * throttle clear, and per-attempt retry — eliminating the CI flakes
+ * we previously saw at /login's Email label and at the post-login
+ * navbar summary visibility check.
  */
 async function loginAs(page: Page, email: string, password = 'Password123') {
-  const svc = createServiceRoleClient();
-  await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
-
-  // Ensure app is reachable before interacting with the login form.
-  await expect.poll(async () => {
-    try {
-      const resp = await page.request.get('/login');
-      return resp.status();
-    } catch {
-      return 0;
-    }
-  }, { timeout: 15000 }).toBe(200);
-
-  // Reach login form with a small retry to reduce transient nav/form race flakes.
-  let hasLoginForm = false;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    await page.goto('/login');
-    try {
-      await expect(page.getByLabel('Email')).toBeVisible({ timeout: 5000 });
-      hasLoginForm = true;
-      break;
-    } catch {
-      // Retry once; if already authenticated, URL will no longer be /login.
-      if (!page.url().includes('/login')) break;
-    }
-  }
-
-  if (hasLoginForm) {
-    await page.getByLabel('Email').fill(email);
-    await page.getByLabel('Password').fill(password);
-    await page.getByRole('button', { name: 'Log in' }).click();
-  }
-
-  // Retry once on transient auth failure (rate-limit / timing)
-  try {
-    await expect(page).toHaveURL('/', { timeout: 10000 });
-  } catch {
-    // Only retry if we're actually on the login page (not already logged in)
-    if (page.url().includes('/login')) {
-      await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
-      await page.goto('/login');
-      await expect(page.getByLabel('Email')).toBeVisible({ timeout: 10000 });
-      await page.getByLabel('Email').fill(email);
-      await page.getByLabel('Password').fill(password);
-      await page.getByRole('button', { name: 'Log in' }).click();
-      await expect(page).toHaveURL('/', { timeout: 15000 });
-    }
-  }
-
-  await expect(page.locator('summary[aria-haspopup="true"]')).toBeVisible({ timeout: 15000 });
+  await loginViaForm(page, email, password);
 }
 
 /** Navigate to an admin page, retrying once if requireAdmin() redirect race occurs. */

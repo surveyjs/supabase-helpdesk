@@ -1,5 +1,4 @@
 import { createServerClient } from '@/lib/supabase/server';
-import 'survey-core/survey-core.min.css';
 import { AdminPaginationSurveyForm } from './AdminPaginationSurveyForm';
 
 export default async function AdminPaginationPage() {

@@ -3,9 +3,6 @@
 import { useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { Model } from 'survey-core';
-import surveyTheme from './theme.json';
-import 'survey-core/survey-core.min.css';
-import './survey-overrides.css';
 
 const Survey = dynamic(() => import('survey-react-ui').then((mod) => mod.Survey), { ssr: false });
 
@@ -28,7 +25,6 @@ export function SurveyJsonForm({
 }: SurveyJsonFormProps) {
   const model = useMemo(() => {
     const next = new Model(schema);
-    next.applyTheme(surveyTheme as Parameters<Model['applyTheme']>[0]);
     next.showCompletedPage = false;
 
     if (typeof next.completeText !== 'string' || next.completeText.trim().length === 0) {

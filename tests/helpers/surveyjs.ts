@@ -56,7 +56,8 @@ export async function selectSurveyDropdown(
       // Let async choicesByUrl populate / re-populate before clicking. We
       // wait for two consecutive snapshots of the option count to match so
       // we don't click a row that's about to be re-rendered.
-      const items = visiblePopup.locator('.sv-list__item');
+      // SurveyJS v2 uses `.sv-list__item`, v3 uses `.sd-selectlist__item`.
+      const items = visiblePopup.locator('.sv-list__item, .sd-selectlist__item');
       let prev = -1;
       for (let i = 0; i < 10; i++) {
         const cur = await items.count();
@@ -74,8 +75,27 @@ export async function selectSurveyDropdown(
       // and our click landed on a stale <li> that detached, the trigger text
       // won't have changed — fall through to retry.
       await page.waitForTimeout(150);
-      const triggerText =
-        (await q.locator('.sd-dropdown__value, [role="combobox"]').first().textContent())?.trim() ?? '';
+      // v2 exposes the current value via `.sd-dropdown__value`; v3 renders
+      // it inside `.sd-dropdown__input` (the controlValue div) — typically
+      // as a SurveyLocStringViewer span. The `[role="combobox"]` input is
+      // the filter, whose textContent is always empty.
+      const valueLocator = q
+        .locator('.sd-dropdown__input, .sd-dropdown__value, .sd-dropdown__hint-suffix span')
+        .first();
+      let triggerText = '';
+      if (await valueLocator.count()) {
+        triggerText = (
+          (await valueLocator.textContent({ timeout: 2000 }).catch(() => '')) ?? ''
+        ).trim();
+      }
+      if (!triggerText) {
+        const filterInput = q
+          .locator('input.sd-dropdown__filter-string-input, input.sd-tagbox__filter-string-input')
+          .first();
+        if (await filterInput.count()) {
+          triggerText = (await filterInput.inputValue().catch(() => '')).trim();
+        }
+      }
       if (optionRegex.test(triggerText)) {
         await page.keyboard.press('Escape').catch(() => {});
         return;
@@ -175,7 +195,7 @@ export async function addSurveyTag(
     }
 
     const option = page
-      .locator('.sv-popup__container .sv-list__item')
+      .locator('.sv-popup__container .sv-list__item, .sv-popup__container .sd-selectlist__item')
       .filter({ hasText: optionText, visible: true })
       .first();
     try {

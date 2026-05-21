@@ -1,5 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-import { loginViaForm } from '../helpers/auth';
+import { ensureBuiltInAuthMode, loginViaForm } from '../helpers/auth';
 
 const SEED_PASSWORD = 'Password123';
 
@@ -36,6 +36,9 @@ async function loginAs(page: Page, email: string) {
 
 test.describe('Cross-Browser Smoke Tests', () => {
   test('login page loads and shows form', async ({ page }) => {
+    // A parallel auth-external test may have left auth_mode='external', which
+    // hides the email/password form on /login. Force built-in before navigating.
+    await ensureBuiltInAuthMode();
     await page.goto('/login');
     await expect(page.getByLabel('Email')).toBeVisible();
     await expect(page.getByLabel('Password')).toBeVisible();

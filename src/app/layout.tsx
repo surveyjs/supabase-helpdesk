@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import "./globals.css";
+import "survey-core/survey-core.css";
+import "@/styles/surveyjs-bridge.css";
 
 export const metadata: Metadata = {
   title: "HelpDesk",

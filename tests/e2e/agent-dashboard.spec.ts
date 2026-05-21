@@ -230,10 +230,29 @@ test.describe('Agent Ticket Detail Controls', () => {
         q.locator('.sd-dropdown_clean-button, .sd-dropdown__clean-button'),
       ).toHaveCount(0);
       // The dropdown shows a non-empty selected value (defaultValue or DB value).
-      const valueText = (
-        await q.locator('.sd-dropdown__value, [role="combobox"]').first().textContent()
-      )?.trim();
-      expect(valueText && valueText.length > 0).toBeTruthy();
+      // SurveyJS v2 exposes the value via `.sd-dropdown__value`; v3 renders it
+      // inside `.sd-dropdown__input` (the controlValue div which contains a
+      // SurveyLocStringViewer span plus the empty filter <input>). Use a
+      // bounded textContent timeout so a missing selector can't burn the
+      // entire test budget.
+      const valueLocator = q
+        .locator('.sd-dropdown__input, .sd-dropdown__value, .sd-dropdown__hint-suffix span')
+        .first();
+      let valueText = '';
+      if (await valueLocator.count()) {
+        valueText = (
+          (await valueLocator.textContent({ timeout: 2000 }).catch(() => '')) ?? ''
+        ).trim();
+      }
+      if (!valueText) {
+        const filterInput = q
+          .locator('input.sd-dropdown__filter-string-input, [role="combobox"]')
+          .first();
+        if (await filterInput.count()) {
+          valueText = (await filterInput.inputValue().catch(() => '')).trim();
+        }
+      }
+      expect(valueText.length > 0).toBeTruthy();
     }
   });
 

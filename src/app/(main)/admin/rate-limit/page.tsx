@@ -1,5 +1,4 @@
 import { createServerClient } from '@/lib/supabase/server';
-import 'survey-core/survey-core.min.css';
 import { AdminRateLimitSurveyForm } from './AdminRateLimitSurveyForm';
 
 export default async function AdminRateLimitPage() {

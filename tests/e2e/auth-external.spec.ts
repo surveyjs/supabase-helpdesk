@@ -150,7 +150,9 @@ test.describe('Auth External', () => {
     // Should now show external provider config. A parallel worker's
     // loginViaForm() may have just reset auth_mode back to 'built-in' between
     // our click and the page re-render, so self-heal: re-set 'external' via
-    // service role and reload until the external config card appears.
+    // service role and re-navigate until the external config card appears.
+    // Use page.goto() instead of page.reload() — reload races with concurrent
+    // worker navigations and aborts with ERR_ABORTED when the frame detaches.
     const svc = createServiceRoleClient();
     let visible = false;
     for (let i = 0; i < 5; i++) {
@@ -160,8 +162,8 @@ test.describe('Auth External', () => {
         .catch(() => false);
       if (visible) break;
       await svc.from('app_settings').update({ value: 'external' }).eq('key', 'auth_mode');
-      await page.reload();
-      await page.waitForLoadState('domcontentloaded');
+      await page.goto('/admin/auth').catch(() => {});
+      await page.waitForLoadState('domcontentloaded').catch(() => {});
     }
     expect(visible).toBe(true);
 
@@ -196,6 +198,21 @@ test.describe('Auth External', () => {
     }
 
     // SurveyJS renders the boolean question with the label "Auto-redirect to external provider".
+    // A parallel worker's loginViaForm() can reset auth_mode back to 'built-in'
+    // between the click above and the page re-render. Self-heal by re-setting
+    // 'external' via service role and re-navigating until the toggle appears.
+    const svc = createServiceRoleClient();
+    let visible = false;
+    for (let i = 0; i < 5; i++) {
+      visible = await page
+        .getByText('Auto-redirect to external provider')
+        .isVisible()
+        .catch(() => false);
+      if (visible) break;
+      await svc.from('app_settings').update({ value: 'external' }).eq('key', 'auth_mode');
+      await page.goto('/admin/auth').catch(() => {});
+      await page.waitForLoadState('domcontentloaded').catch(() => {});
+    }
     await expect(
       page.getByText('Auto-redirect to external provider'),
     ).toBeVisible({ timeout: 10000 });
@@ -214,15 +231,17 @@ test.describe('Auth External', () => {
     // A parallel worker's loginViaForm() can reset auth_mode back to 'built-in'
     // between the click above and the page re-render, causing the external
     // provider survey to never appear. Self-heal by re-setting external and
-    // reloading until the survey is visible.
+    // re-navigating until the survey is visible. Use page.goto() instead of
+    // page.reload() — reload races with concurrent worker navigations and can
+    // abort with ERR_ABORTED when the frame detaches.
     const svc = createServiceRoleClient();
     let surveyVisible = false;
     for (let i = 0; i < 5; i++) {
       surveyVisible = await page.getByTestId('external-provider-survey').isVisible().catch(() => false);
       if (surveyVisible) break;
       await svc.from('app_settings').update({ value: 'external' }).eq('key', 'auth_mode');
-      await page.reload();
-      await page.waitForLoadState('domcontentloaded');
+      await page.goto('/admin/auth').catch(() => {});
+      await page.waitForLoadState('domcontentloaded').catch(() => {});
     }
 
     const survey = page.getByTestId('external-provider-survey');
@@ -242,7 +261,9 @@ test.describe('Auth External', () => {
 
     // A parallel worker's loginViaForm() can reset auth_mode back to 'built-in'
     // between the click above and the page re-render. Self-heal by re-setting
-    // 'external' via service role and reloading until the test button appears.
+    // 'external' via service role and re-navigating until the test button
+    // appears. Use page.goto() instead of page.reload() — reload races with
+    // concurrent worker navigations and can abort with ERR_ABORTED.
     const svc = createServiceRoleClient();
     let visible = false;
     for (let i = 0; i < 5; i++) {
@@ -252,8 +273,8 @@ test.describe('Auth External', () => {
         .catch(() => false);
       if (visible) break;
       await svc.from('app_settings').update({ value: 'external' }).eq('key', 'auth_mode');
-      await page.reload();
-      await page.waitForLoadState('domcontentloaded');
+      await page.goto('/admin/auth').catch(() => {});
+      await page.waitForLoadState('domcontentloaded').catch(() => {});
     }
     await expect(page.getByTestId('test-external')).toBeVisible();
   });
@@ -374,7 +395,19 @@ test.describe('Auth External', () => {
     await svc.from('app_settings').update({ value: 'external' }).eq('key', 'auth_mode');
     await svc.from('app_settings').update({ value: 'Corp SSO' }).eq('key', 'auth_external_provider_name');
 
-    await page.goto('/signup');
+    // The signup page is dynamically rendered but Next can briefly serve a
+    // stale render right after an app_settings flip. Poll a fresh navigation
+    // until the external-mode marker appears.
+    await expect
+      .poll(
+        async () => {
+          await page.goto('/signup', { waitUntil: 'domcontentloaded' });
+          return await page.getByTestId('external-signup-btn').isVisible().catch(() => false);
+        },
+        { timeout: 15000, intervals: [500, 1000, 2000] },
+      )
+      .toBe(true);
+
     await expect(page.getByText('Account creation is managed')).toBeVisible({ timeout: 10000 });
     await expect(page.getByTestId('external-signup-btn')).toBeVisible();
 

@@ -134,6 +134,24 @@ test.describe('Posts, Comments & Notes', () => {
     await expect(page.getByTestId('main-reply-btn')).toBeVisible();
   });
 
+  test('Reply form auto-closes after successful submit', async ({ page }) => {
+    await loginAs(page, 'alice@example.com');
+    await page.goto(ticketUrl || await resolveTicketUrl());
+
+    await page.getByTestId('main-reply-btn').click();
+    const replyPanel = page.getByTestId('main-reply-panel');
+    await expect(replyPanel).toBeVisible({ timeout: 5000 });
+
+    const replyText = `Auto-close reply ${Date.now()}.`;
+    await replyPanel.locator('[data-testid="markdown-editor"]').locator('textarea[name="textarea"]').fill(replyText);
+    await replyPanel.getByRole('button', { name: 'Add a reply' }).click();
+
+    // After a successful submission the composer collapses back to the trigger.
+    await expect(replyPanel).toBeHidden({ timeout: 10000 });
+    await expect(page.getByTestId('main-reply-btn')).toBeVisible();
+    await expect(page.getByText(replyText).first()).toBeVisible({ timeout: 10000 });
+  });
+
   test('add a comment on a post → comment appears indented', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
     await page.goto(ticketUrl || await resolveTicketUrl());
@@ -152,7 +170,7 @@ test.describe('Posts, Comments & Notes', () => {
     }
 
     // Open the comment form on the known root reply card only.
-    const rootReplyCard = page.locator('div[data-testid^="post-"]').filter({ hasText: rootReplyText }).first();
+    const rootReplyCard = page.locator('[data-testid^="post-"]').filter({ hasText: rootReplyText }).first();
     await expect(rootReplyCard).toBeVisible({ timeout: 10000 });
     await rootReplyCard.locator('[data-testid="add-comment-btn"]').click();
     await expect(rootReplyCard.locator('[data-testid="add-comment-btn"]')).toHaveCount(0);
@@ -169,88 +187,61 @@ test.describe('Posts, Comments & Notes', () => {
     // Wait for the comment text to appear on the page (server action + RSC revalidation).
     await expect(page.getByText('A threaded comment on the reply.').first()).toBeVisible({ timeout: 30000 });
 
-    // The comment should render as a level-1 card (ml-6 indent).
+    // The comment renders inside the parent post's comments rail as a
+    // post-card marked with data-post-kind="comment".
     const commentCard = page
-      .locator('div[data-testid^="post-"].ml-6')
+      .locator('[data-testid^="post-"][data-post-kind="comment"]')
       .filter({ hasText: 'A threaded comment on the reply.' })
       .first();
     await expect(commentCard).toBeVisible({ timeout: 10000 });
   });
 
-  test('reply to a comment → reply appears at level 2', async ({ page }) => {
+  test('comment has no Reply action', async ({ page }) => {
+    await loginAs(page, 'alice@example.com');
+    await page.goto(ticketUrl || await resolveTicketUrl());
+
+    const commentText = 'A threaded comment on the reply.';
+    const commentCard = page
+      .locator('[data-testid^="post-"][data-post-kind="comment"]')
+      .filter({ hasText: commentText })
+      .first();
+    await expect(commentCard).toBeVisible({ timeout: 10000 });
+
+    // The redesigned thread renders only two levels (post → comment).
+    // Comments themselves must not expose a Reply / add-comment trigger.
+    await expect(commentCard.locator('[data-testid="add-comment-btn"]')).toHaveCount(0);
+  });
+
+  test('Comment form auto-closes after successful submit', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
     await page.goto(ticketUrl || await resolveTicketUrl());
 
     const rootReplyText = 'A root reply to the ticket.';
-    const level1CommentText = 'A threaded comment on the reply.';
-
-    // Self-heal for isolated runs: ensure a root reply exists.
-    const rootReplyCard = page.locator('div[data-testid^="post-"]').filter({ hasText: rootReplyText }).first();
-    if (!(await rootReplyCard.isVisible().catch(() => false))) {
-      await page.getByTestId('main-reply-btn').click();
-      const replyPanel = page.getByTestId('main-reply-panel');
-      await expect(replyPanel).toBeVisible({ timeout: 10000 });
-      await replyPanel.locator('[data-testid="markdown-editor"]').locator('textarea[name="textarea"]').fill(rootReplyText);
-      await replyPanel.getByRole('button', { name: 'Add a reply' }).click();
-      await expect(page.getByText(rootReplyText).first()).toBeVisible({ timeout: 10000 });
-    }
-
-    // Self-heal for isolated runs: ensure level-1 comment exists on that root reply.
-    const level1CommentCard = page
-      .locator('div[data-testid^="post-"].ml-6')
-      .filter({ hasText: level1CommentText })
+    const rootReplyCard = page
+      .locator('[data-testid^="post-"]')
+      .filter({ hasText: rootReplyText })
       .first();
-    if (!(await level1CommentCard.isVisible().catch(() => false))) {
-      const currentRootReplyCard = page.locator('div[data-testid^="post-"]').filter({ hasText: rootReplyText }).first();
-      await expect(currentRootReplyCard).toBeVisible({ timeout: 10000 });
-      await currentRootReplyCard.locator('[data-testid="add-comment-btn"]').click();
+    await expect(rootReplyCard).toBeVisible({ timeout: 10000 });
 
-      const commentForm = currentRootReplyCard.locator('form').last();
-      await expect(commentForm).toBeVisible({ timeout: 10000 });
-      await commentForm.locator('textarea[name="textarea"]').fill(level1CommentText);
-      const commentButton = commentForm.getByRole('button', { name: 'Add a comment' });
-      await expect(commentButton).toBeEnabled();
-      await commentButton.click();
-      await expect(
-        page.locator('div[data-testid^="post-"].ml-6').filter({ hasText: level1CommentText }).first(),
-      ).toBeVisible({ timeout: 10000 });
-    }
+    await rootReplyCard.locator('[data-testid="add-comment-btn"]').click();
+    // While open, the trigger button is removed from the DOM.
+    await expect(rootReplyCard.locator('[data-testid="add-comment-btn"]')).toHaveCount(0);
 
-    const targetLevel1CommentCard = page
-      .locator('div[data-testid^="post-"].ml-6')
-      .filter({ hasText: level1CommentText })
-      .first();
-    await expect(targetLevel1CommentCard).toBeVisible({ timeout: 10000 });
-    await targetLevel1CommentCard.locator('[data-testid="add-comment-btn"]').click();
+    const commentForm = rootReplyCard.locator('form').last();
+    await expect(commentForm).toBeVisible({ timeout: 10000 });
 
-    // Level-2 reply uses the comment form rendered by ReplyToggle under this level-1 card.
-    const level2Form = targetLevel1CommentCard.locator('form').last();
-    await expect(level2Form).toBeVisible({ timeout: 10000 });
-    await level2Form.locator('textarea[name="textarea"]').fill('A level-2 reply to the comment.');
-    const level2Submit = level2Form.getByRole('button', { name: 'Add a comment' });
-    await expect(level2Submit).toBeEnabled();
-    await level2Submit.click();
+    const commentText = `Auto-close comment ${Date.now()}.`;
+    await commentForm.locator('textarea[name="textarea"]').fill(commentText);
+    const submitBtn = commentForm.getByRole('button', { name: 'Add a comment' });
+    await submitBtn.scrollIntoViewIfNeeded();
+    await expect(submitBtn).toBeEnabled();
+    await submitBtn.click();
 
-    await expect(
-      page.locator('div[data-testid^="post-"].ml-12').filter({ hasText: 'A level-2 reply to the comment.' }).first(),
-    ).toBeVisible({ timeout: 10000 });
-  });
-
-  test('level-2 comment has no Reply action', async ({ page }) => {
-    await loginAs(page, 'alice@example.com');
-    await page.goto(ticketUrl || await resolveTicketUrl());
-
-    // The level-2 reply should exist
-    await expect(page.getByText('A level-2 reply to the comment.')).toBeVisible();
-
-    // There should be no reply button for level-2 comments (ml-12 has no further reply-btn)
-    // Count reply buttons before and confirm there's no additional one near the level-2 comment
-    const level2Comment = page.getByText('A level-2 reply to the comment.');
-    // The level-2 comment's container should not have a reply button after it
-    const level2Parent = level2Comment.locator('xpath=ancestor::div[contains(@class, "ml-12")]').first();
-    // There should be no reply-btn within or after the level-2 block
-    const replyBtnsInLevel2 = level2Parent.locator('[data-testid="add-comment-btn"]');
-    await expect(replyBtnsInLevel2).toHaveCount(0);
+    // After a successful submission the comment form collapses back to the
+    // Reply trigger on the parent post card.
+    await expect(rootReplyCard.locator('[data-testid="add-comment-btn"]')).toBeVisible({ timeout: 15000 });
+    await expect(rootReplyCard.locator('form')).toHaveCount(0);
+    await expect(page.getByText(commentText).first()).toBeVisible({ timeout: 15000 });
   });
 
   test('agent can add an internal note → note visible to agent, not to regular user', async ({ page }) => {
@@ -696,7 +687,7 @@ test.describe('Ticket Detail Layout & Tabs', () => {
     const notesTab = page.getByTestId('notes-tab');
     await expect(notesTab).toBeVisible({ timeout: 10000 });
     // The badge inside the Notes tab should display the note count
-    const badge = notesTab.locator('span');
+    const badge = notesTab.getByTestId('notes-count-badge');
     await expect(badge).toBeVisible();
     // Should contain a number (at least 1 note exists from earlier test)
     await expect(badge).toHaveText(/\d+/);

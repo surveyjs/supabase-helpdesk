@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, type ReactNode } from 'react';
+import { useActionState, useEffect, useRef, type ReactNode } from 'react';
 import type { TicketActionState } from '@/lib/actions/tickets';
 import { MarkdownEditor } from '@/components/features/tickets/MarkdownEditor';
 import { uploadInlineImageFromEditor } from '@/components/features/tickets/inlineImageUpload';
@@ -60,6 +60,24 @@ export function MarkdownActionForm({
   errorClassName = 'p-2 rounded bg-red-50 border border-red-200 text-red-700 text-xs',
 }: MarkdownActionFormProps) {
   const [state, formAction, pending] = useActionState(action, initialState);
+
+  // After a successful submission (pending false, no error/fieldErrors after a
+  // submit-in-flight), collapse the composer back to its trigger.
+  const wasPendingRef = useRef(false);
+  useEffect(() => {
+    if (wasPendingRef.current && !pending) {
+      wasPendingRef.current = false;
+      const hasError = Boolean(state.error);
+      const hasFieldErrors =
+        state.fieldErrors && Object.keys(state.fieldErrors).length > 0;
+      if (!hasError && !hasFieldErrors) {
+        onCancel?.();
+      }
+    }
+    if (pending) {
+      wasPendingRef.current = true;
+    }
+  }, [pending, state, onCancel]);
 
   return (
     <form action={formAction} className={formClassName}>

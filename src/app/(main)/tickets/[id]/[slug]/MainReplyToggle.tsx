@@ -21,11 +21,25 @@ export function MainReplyToggle({
 }) {
   return (
     <ComposerToggle
-      triggerLabel="Add a reply"
-      triggerTestId="main-reply-btn"
       panelTestId="main-reply-panel"
-      triggerClassName="px-3 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700"
       panelClassName="bg-white rounded-lg border border-gray-200 p-6"
+      trigger={({ open }) => (
+        <button
+          type="button"
+          onClick={open}
+          data-testid="main-reply-btn"
+          className="w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-lg border border-gray-300 bg-white text-sm text-gray-500 hover:border-blue-500 hover:text-gray-700"
+        >
+          <span
+            aria-hidden="true"
+            className="shrink-0 w-7 h-7 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-xs font-semibold"
+          >
+            ↩
+          </span>
+          <span>Reply to this ticket…</span>
+          <span className="ml-auto text-xs text-gray-400">Markdown supported</span>
+        </button>
+      )}
     >
       {({ close }) => (
         <>

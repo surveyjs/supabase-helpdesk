@@ -43,7 +43,7 @@ export function TicketTabs({
           }`}
           data-testid="thread-tab"
         >
-          Thread
+          Conversation
         </button>
         {hasNotes && (
           <button
@@ -58,9 +58,27 @@ export function TicketTabs({
             }`}
             data-testid="notes-tab"
           >
-            Notes
+            <span className="inline-flex items-center gap-1.5">
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-3.5 w-3.5"
+              >
+                <rect x="5" y="11" width="14" height="10" rx="2" />
+                <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+              </svg>
+              Internal notes
+            </span>
             {(noteCount ?? 0) > 0 && (
-              <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+              <span
+                data-testid="notes-count-badge"
+                className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700"
+              >
                 {noteCount}
               </span>
             )}

@@ -8,32 +8,47 @@ export function ReplyToggle({
   editorViewMode = 'both',
   editorMinHeightPx,
   editorMaxHeightPx,
+  commentCount,
 }: {
   parentPostId: string;
   editorViewMode?: 'both' | 'preview' | 'editor';
   editorMinHeightPx?: number;
   editorMaxHeightPx?: number;
+  commentCount?: number;
 }) {
   return (
     <ComposerToggle
-      triggerLabel="Reply"
-      triggerTestId="add-comment-btn"
-      triggerClassName="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-gray-600 hover:bg-gray-50 hover:text-blue-700"
-      triggerIcon={
-        <svg
-          aria-hidden="true"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="h-3.5 w-3.5"
-        >
-          <path d="M9 17l-5-5 5-5" />
-          <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
-        </svg>
-      }
+      panelClassName="w-full"
+      trigger={({ open }) => (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={open}
+            data-testid="add-comment-btn"
+            className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-gray-600 hover:bg-gray-50 hover:text-blue-700"
+          >
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-3.5 w-3.5"
+            >
+              <path d="M9 17l-5-5 5-5" />
+              <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+            </svg>
+            Reply
+          </button>
+          {commentCount !== undefined && commentCount > 0 && (
+            <span className="text-[11px] text-gray-500">
+              · {commentCount} {commentCount === 1 ? 'comment' : 'comments'}
+            </span>
+          )}
+        </div>
+      )}
     >
       {({ close }) => (
         <CommentForm

@@ -187,7 +187,7 @@ export default async function TicketDetailPage({
     .select(`
       id, body, is_original, created_at, post_type, is_private, is_draft, edited_at,
       parent_post_id, parent_comment_id,
-      author:profiles!posts_author_id_fkey(id, display_name)
+      author:profiles!posts_author_id_fkey(id, display_name, role)
     `)
     .eq('ticket_id', ticket.id)
     .order('created_at', { ascending: true });
@@ -204,7 +204,6 @@ export default async function TicketDetailPage({
     .from('app_settings')
     .select('key, value')
     .in('key', [
-      'visible_posts_threshold',
       'visible_comments_threshold',
       'ai_suggested_reply_enabled',
       'ai_ticket_summary_enabled',
@@ -253,27 +252,26 @@ export default async function TicketDetailPage({
   // Flatten comment hierarchy: re-parent any comment-of-comment to its
   // grandparent post so the redesigned thread has exactly two levels
   // (post → comment). Render-only flatten, no schema change.
-  const postIds = new Set(renderedPosts.map((p) => p.id));
+  const postById = new Map(renderedPosts.map((p) => [p.id, p] as const));
   const commentsByParentPost = new Map<string, typeof renderedPosts>();
 
   for (const p of renderedPosts) {
     if (p.post_type !== 'comment') continue;
     let parentPostId = p.parent_post_id ?? undefined;
     if (!parentPostId && p.parent_comment_id) {
-      // Walk up through comment chain to find a parent post
-      let cursor: (typeof renderedPosts)[number] | undefined = renderedPosts.find(
-        (q) => q.id === p.parent_comment_id,
-      );
-      while (cursor && !parentPostId) {
-        if (cursor.parent_post_id && postIds.has(cursor.parent_post_id)) {
+      // Walk up through comment chain to find a parent post.
+      // Visited set + depth cap guard against pathological cycles.
+      const visited = new Set<string>();
+      let cursor: (typeof renderedPosts)[number] | undefined = postById.get(p.parent_comment_id);
+      let depth = 0;
+      while (cursor && !parentPostId && depth < 64 && !visited.has(cursor.id)) {
+        visited.add(cursor.id);
+        depth++;
+        if (cursor.parent_post_id && postById.has(cursor.parent_post_id)) {
           parentPostId = cursor.parent_post_id;
           break;
         }
-        if (cursor.parent_comment_id) {
-          cursor = renderedPosts.find((q) => q.id === cursor!.parent_comment_id);
-        } else {
-          cursor = undefined;
-        }
+        cursor = cursor.parent_comment_id ? postById.get(cursor.parent_comment_id) : undefined;
       }
     }
     if (parentPostId) {
@@ -591,19 +589,14 @@ export default async function TicketDetailPage({
                 )}
                 {shownComments.map((c) => renderPostCard(c, 'comment'))}
                 {canReplyToPost && (
-                  <div className="pt-1 flex items-center gap-2">
+                  <div className="pt-1">
                     <ReplyToggle
                       parentPostId={post.id}
                       editorViewMode={ticketDetailEditorViewMode}
                       editorMinHeightPx={editorMinHeightPx}
                       editorMaxHeightPx={editorMaxHeightPx}
+                      commentCount={postComments.length}
                     />
-                    {postComments.length > 0 && (
-                      <span className="text-[11px] text-gray-500">
-                        · {postComments.length}{' '}
-                        {postComments.length === 1 ? 'comment' : 'comments'}
-                      </span>
-                    )}
                   </div>
                 )}
               </div>

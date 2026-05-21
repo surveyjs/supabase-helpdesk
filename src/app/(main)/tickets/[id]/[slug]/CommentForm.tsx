@@ -35,7 +35,6 @@ export function CommentForm({
         </>
       }
       placeholder="Write a comment… (Markdown supported)"
-      compact
       editorViewMode={editorViewMode}
       editorMinHeightPx={editorMinHeightPx}
       editorMaxHeightPx={editorMaxHeightPx}

@@ -5,7 +5,6 @@ import { requireAuth } from '@/lib/supabase/auth';
 import { generateSlug } from '@/lib/utils/slug';
 import { renderMarkdown } from '@/lib/utils/markdown';
 import { formatRelativeTime } from '@/lib/utils/time';
-import { Badge } from '@/components/ui/Badge';
 import { DisplayName } from '@/components/features/users/DisplayName';
 import { MainReplyToggle } from './MainReplyToggle';
 import { EditablePost } from './EditablePost';
@@ -222,7 +221,6 @@ export default async function TicketDetailPage({
   const aiTicketSummaryMinPosts = parseInt(settingsMap.get('ai_ticket_summary_min_posts') ?? '10', 10) || 10;
   const aiGenerateKbArticleEnabled = settingsMap.get('ai_generate_kb_article_enabled') === 'true';
 
-  const visiblePostsThreshold = parseInt(settingsMap.get('visible_posts_threshold') ?? '10', 10) || 10;
   const visibleCommentsThreshold = parseInt(settingsMap.get('visible_comments_threshold') ?? '3', 10) || 3;
   const detailAgentTemplate = parseTicketDetailAgentTemplate(settingsMap.get('survey_ticket_detail_agent_template'));
   const detailUserTemplate = parseTicketDetailUserTemplate(settingsMap.get('survey_ticket_detail_user_template'));
@@ -251,21 +249,43 @@ export default async function TicketDetailPage({
   const rootPosts = nonNotePosts.filter(
     (p) => !p.is_original && !p.parent_post_id && !p.parent_comment_id && p.post_type !== 'comment',
   );
+
+  // Flatten comment hierarchy: re-parent any comment-of-comment to its
+  // grandparent post so the redesigned thread has exactly two levels
+  // (post → comment). Render-only flatten, no schema change.
+  const postIds = new Set(renderedPosts.map((p) => p.id));
   const commentsByParentPost = new Map<string, typeof renderedPosts>();
-  const commentsByParentComment = new Map<string, typeof renderedPosts>();
 
   for (const p of renderedPosts) {
-    if (p.post_type === 'comment' && p.parent_post_id) {
-      if (p.parent_comment_id) {
-        const arr = commentsByParentComment.get(p.parent_comment_id) ?? [];
-        arr.push(p);
-        commentsByParentComment.set(p.parent_comment_id, arr);
-      } else {
-        const arr = commentsByParentPost.get(p.parent_post_id) ?? [];
-        arr.push(p);
-        commentsByParentPost.set(p.parent_post_id, arr);
+    if (p.post_type !== 'comment') continue;
+    let parentPostId = p.parent_post_id ?? undefined;
+    if (!parentPostId && p.parent_comment_id) {
+      // Walk up through comment chain to find a parent post
+      let cursor: (typeof renderedPosts)[number] | undefined = renderedPosts.find(
+        (q) => q.id === p.parent_comment_id,
+      );
+      while (cursor && !parentPostId) {
+        if (cursor.parent_post_id && postIds.has(cursor.parent_post_id)) {
+          parentPostId = cursor.parent_post_id;
+          break;
+        }
+        if (cursor.parent_comment_id) {
+          cursor = renderedPosts.find((q) => q.id === cursor!.parent_comment_id);
+        } else {
+          cursor = undefined;
+        }
       }
     }
+    if (parentPostId) {
+      const arr = commentsByParentPost.get(parentPostId) ?? [];
+      arr.push(p);
+      commentsByParentPost.set(parentPostId, arr);
+    }
+  }
+  // Stable order: by created_at ascending within a post
+  for (const [k, arr] of commentsByParentPost) {
+    arr.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    commentsByParentPost.set(k, arr);
   }
 
   // Separate activity log entries visible to this viewer
@@ -274,21 +294,29 @@ export default async function TicketDetailPage({
     return true;
   });
 
-  // Thread items: only root posts (non-original), sorted by date
+  // Thread items: original post (if any) first, then root reply posts sorted by date.
   type ThreadItem = { kind: 'post'; data: (typeof renderedPosts)[number] };
-  const threadItems: ThreadItem[] = rootPosts
+  const replyItems: ThreadItem[] = rootPosts
     .slice()
     .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
     .map((p) => ({ kind: 'post' as const, data: p }));
+  const threadItems: ThreadItem[] = originalPost
+    ? [{ kind: 'post' as const, data: originalPost }, ...replyItems]
+    : replyItems;
 
-  // Collapsible: determine hidden vs visible thread items
-  const postItemsCount = threadItems.length;
-  const shouldCollapse = postItemsCount > visiblePostsThreshold;
+  // Fold pattern: when more than POST_INLINE_MAX items, keep the first item
+  // (the original post / earliest reply) plus the last POST_TAIL items inline,
+  // and hide the middle behind a single timeline collapse node.
+  const POST_INLINE_MAX = 4;
+  const POST_TAIL = 2;
+  const shouldCollapse = threadItems.length > POST_INLINE_MAX;
+  let leadingItems: ThreadItem[] = threadItems;
   let hiddenItems: ThreadItem[] = [];
-  let visibleItems: ThreadItem[] = threadItems;
+  let tailItems: ThreadItem[] = [];
   if (shouldCollapse) {
-    hiddenItems = threadItems.slice(0, threadItems.length - visiblePostsThreshold);
-    visibleItems = threadItems.slice(threadItems.length - visiblePostsThreshold);
+    leadingItems = threadItems.slice(0, 1);
+    tailItems = threadItems.slice(threadItems.length - POST_TAIL);
+    hiddenItems = threadItems.slice(1, threadItems.length - POST_TAIL);
   }
 
   const hiddenPostCount = hiddenItems.length;
@@ -372,7 +400,7 @@ export default async function TicketDetailPage({
 
   function renderPostCard(
     post: (typeof renderedPosts)[number],
-    level: 0 | 1 | 2 = 0,
+    context: 'thread' | 'comment' | 'note' = 'thread',
   ) {
     const author = Array.isArray(post.author) ? post.author[0] : post.author;
     const authorName = author?.display_name ?? 'Unknown';
@@ -380,6 +408,8 @@ export default async function TicketDetailPage({
     const isNote = post.post_type === 'note';
     const isDraft = post.is_draft;
     const isOriginal = post.is_original;
+    const authorRole = (author && 'role' in author ? (author as { role?: string }).role : undefined) ?? '';
+    const authorIsAgent = authorRole === 'agent' || authorRole === 'admin';
 
     // Permission checks
     // Editing the original post is allowed for the ticket creator (its author)
@@ -395,156 +425,192 @@ export default async function TicketDetailPage({
       || (profile?.role === 'admin' && post.post_type === 'note')
     );
     const canTogglePrivacy = isAgent && !isOriginal && !isNote;
-    const canReplyToPost = canReply && !isDraft && !isNote && level < 2;
+    const canReplyToPost = canReply && !isDraft && !isNote && context === 'thread';
 
-    const indentClass = level === 1 ? 'ml-6' : level === 2 ? 'ml-12' : '';
     const bgClass = isNote
       ? 'bg-amber-50 border-amber-200'
       : isDraft
         ? 'bg-white border-dashed border-gray-400'
-        : isOriginal
-          ? 'bg-white border-gray-200'
-          : isCurrentUser
-            ? 'bg-blue-50 border-blue-200'
-            : 'bg-white border-gray-200';
+        : 'bg-white border-gray-200';
 
-    // Comments on this post
-    const postComments = commentsByParentPost.get(post.id) ?? [];
+    const initials =
+      (authorName.match(/\b\w/g) ?? []).slice(0, 2).join('').toUpperCase() || '?';
+    const avatarTone = isNote
+      ? 'bg-amber-100 text-amber-700'
+      : authorIsAgent
+        ? 'bg-blue-100 text-blue-700'
+        : 'bg-teal-100 text-teal-700';
+
+    // Comments on this post (only relevant for top-level thread posts)
+    const postComments = context === 'thread' ? (commentsByParentPost.get(post.id) ?? []) : [];
     const visibleCommentCount = visibleCommentsThreshold;
     const shouldCollapseComments = postComments.length > visibleCommentCount;
     const hiddenComments = shouldCollapseComments ? postComments.slice(0, postComments.length - visibleCommentCount) : [];
     const shownComments = shouldCollapseComments ? postComments.slice(postComments.length - visibleCommentCount) : postComments;
 
-    return (
-      <div key={post.id} className={indentClass} data-testid={`post-${post.id}`}>
-        <div className={`rounded-lg border p-4 ${bgClass}`}>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-gray-900">
-              <DisplayName
-                userId={author?.id ?? ticket!.creator_id}
-                displayName={authorName}
-                isCurrentUserAgent={isAgent}
-              />
-              {isOriginal && (
-                <span className="ml-2 text-xs text-gray-500">(Original post)</span>
-              )}
-              {isNote && (
-                <span className="ml-2 text-xs text-amber-600 font-medium">(Internal note)</span>
-              )}
-              {isDraft && (
-                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                  Draft
-                </span>
-              )}
-              {post.is_private && !isNote && (
-                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                  Private
-                </span>
-              )}
-              {post.edited_at && (
-                <span className="ml-2 text-xs text-gray-500">(edited)</span>
-              )}
-            </span>
-            <time dateTime={post.created_at} className="text-xs text-gray-500">
-              {formatTime(post.created_at)}
-            </time>
-          </div>
-
-          <EditablePost
-            postId={post.id}
-            htmlBody={post.htmlBody}
-            rawBody={post.body}
-            canEdit={canEditPost}
-              editorViewMode={ticketDetailEditorViewMode}
-              editorMinHeightPx={editorMinHeightPx}
-              editorMaxHeightPx={editorMaxHeightPx}
-          />
-
-          {/* Action buttons */}
-          <div className="flex items-center gap-3 mt-2">
-            {canDeletePost && (
-              <form action={deletePost} className="inline">
-                <input type="hidden" name="post_id" value={post.id} />
-                <button
-                  type="submit"
-                  className="text-xs text-red-600 hover:text-red-800"
-                  data-testid="delete-post-btn"
-                >
-                  Delete
-                </button>
-              </form>
+    const card = (
+      <article className={`rounded-lg border p-4 ${bgClass}`}>
+        <header className="flex items-center justify-between mb-2">
+          <span className="text-sm font-medium text-gray-900">
+            <DisplayName
+              userId={author?.id ?? ticket!.creator_id}
+              displayName={authorName}
+              isCurrentUserAgent={isAgent}
+            />
+            {isOriginal && (
+              <span className="ml-2 text-xs text-gray-500">(Original post)</span>
             )}
-            {canTogglePrivacy && (
-              <form action={togglePostPrivacy} className="inline">
-                <input type="hidden" name="post_id" value={post.id} />
-                <button
-                  type="submit"
-                  className="text-xs text-gray-600 hover:text-gray-800"
-                >
-                  {post.is_private ? 'Make Public' : 'Make Private'}
-                </button>
-              </form>
+            {isNote && (
+              <span className="ml-2 text-xs text-amber-600 font-medium">(Internal note)</span>
             )}
-            {isDraft && isCurrentUser && (
-              <form action={publishDraft} className="inline">
-                <input type="hidden" name="post_id" value={post.id} />
-                <button
-                  type="submit"
-                  className="text-xs text-green-600 hover:text-green-800 font-medium"
-                  data-testid="publish-draft-btn"
-                >
-                  Publish
-                </button>
-              </form>
+            {isDraft && (
+              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                Draft
+              </span>
             )}
-          </div>
+            {post.is_private && !isNote && (
+              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                Private
+              </span>
+            )}
+            {post.edited_at && (
+              <span className="ml-2 text-xs text-gray-500">(edited)</span>
+            )}
+          </span>
+          <time dateTime={post.created_at} className="text-xs text-gray-500">
+            {formatTime(post.created_at)}
+          </time>
+        </header>
 
-          {/* Attachments */}
-          <AttachmentList
-            postId={post.id}
-            canDelete={isCurrentUser || isAgent}
-          />
+        <EditablePost
+          postId={post.id}
+          htmlBody={post.htmlBody}
+          rawBody={post.body}
+          canEdit={canEditPost}
+          editorViewMode={ticketDetailEditorViewMode}
+          editorMinHeightPx={editorMinHeightPx}
+          editorMaxHeightPx={editorMaxHeightPx}
+        />
+
+        {/* Action buttons */}
+        <div className="flex items-center gap-3 mt-2">
+          {canDeletePost && (
+            <form action={deletePost} className="inline">
+              <input type="hidden" name="post_id" value={post.id} />
+              <button
+                type="submit"
+                className="text-xs text-red-600 hover:text-red-800"
+                data-testid="delete-post-btn"
+              >
+                Delete
+              </button>
+            </form>
+          )}
+          {canTogglePrivacy && (
+            <form action={togglePostPrivacy} className="inline">
+              <input type="hidden" name="post_id" value={post.id} />
+              <button
+                type="submit"
+                className="text-xs text-gray-600 hover:text-gray-800"
+              >
+                {post.is_private ? 'Make Public' : 'Make Private'}
+              </button>
+            </form>
+          )}
+          {isDraft && isCurrentUser && (
+            <form action={publishDraft} className="inline">
+              <input type="hidden" name="post_id" value={post.id} />
+              <button
+                type="submit"
+                className="text-xs text-green-600 hover:text-green-800 font-medium"
+                data-testid="publish-draft-btn"
+              >
+                Publish
+              </button>
+            </form>
+          )}
         </div>
 
-        {/* Comments on this post (only for root-level / level-1) */}
-        {level === 0 && postComments.length > 0 && (
-          <div className="mt-1 space-y-1">
-            {shouldCollapseComments && (
-              <CollapsibleComments hiddenCount={hiddenComments.length}>
-                {hiddenComments.map((c) => renderPostCard(c, 1))}
-              </CollapsibleComments>
-            )}
-            {shownComments.map((c) => renderPostCard(c, 1))}
-          </div>
-        )}
+        {/* Attachments */}
+        <AttachmentList
+          postId={post.id}
+          canDelete={isCurrentUser || isAgent}
+        />
+      </article>
+    );
 
-        {/* Level-1 comments: render their replies (level 2) */}
-        {level === 1 && (commentsByParentComment.get(post.id) ?? []).length > 0 && (
-          <div className="mt-1 space-y-1">
-            {(commentsByParentComment.get(post.id) ?? []).map((c) =>
-              renderPostCard(c, 2),
+    if (context === 'comment') {
+      return (
+        <div
+          key={post.id}
+          data-testid={`post-${post.id}`}
+          data-post-kind="comment"
+        >
+          {card}
+        </div>
+      );
+    }
+
+    if (context === 'note') {
+      return (
+        <div key={post.id} data-testid={`post-${post.id}`} data-post-kind="note">
+          {card}
+        </div>
+      );
+    }
+
+    // context === 'thread'
+    return (
+      <li
+        key={post.id}
+        className="relative list-none"
+        data-testid={`post-${post.id}`}
+        data-post-kind="post"
+      >
+        <div className="flex gap-3">
+          <div className="shrink-0 flex flex-col items-center">
+            <span
+              aria-hidden="true"
+              className={`w-10 h-10 rounded-full flex items-center justify-center text-xs font-semibold ${avatarTone}`}
+            >
+              {initials}
+            </span>
+          </div>
+          <div className="flex-1 min-w-0">
+            {card}
+
+            {(postComments.length > 0 || canReplyToPost) && (
+              <div
+                className="mt-2 ml-5 pl-4 border-l-2 border-gray-100 space-y-2"
+                data-comments-rail="true"
+              >
+                {shouldCollapseComments && (
+                  <CollapsibleComments hiddenCount={hiddenComments.length}>
+                    {hiddenComments.map((c) => renderPostCard(c, 'comment'))}
+                  </CollapsibleComments>
+                )}
+                {shownComments.map((c) => renderPostCard(c, 'comment'))}
+                {canReplyToPost && (
+                  <div className="pt-1 flex items-center gap-2">
+                    <ReplyToggle
+                      parentPostId={post.id}
+                      editorViewMode={ticketDetailEditorViewMode}
+                      editorMinHeightPx={editorMinHeightPx}
+                      editorMaxHeightPx={editorMaxHeightPx}
+                    />
+                    {postComments.length > 0 && (
+                      <span className="text-[11px] text-gray-500">
+                        · {postComments.length}{' '}
+                        {postComments.length === 1 ? 'comment' : 'comments'}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
             )}
           </div>
-        )}
-
-        {/* Reply button */}
-        {canReplyToPost && level === 0 && (
-          <div className="mt-1 ml-6">
-            <ReplyToggle parentPostId={post.id} editorViewMode={ticketDetailEditorViewMode} editorMinHeightPx={editorMinHeightPx} editorMaxHeightPx={editorMaxHeightPx} />
-          </div>
-        )}
-        {canReplyToPost && level === 1 && (
-          <div className="mt-1 ml-12">
-            <ReplyToggle
-              parentPostId={post.parent_post_id!}
-              parentCommentId={post.id}
-              editorViewMode={ticketDetailEditorViewMode}
-              editorMinHeightPx={editorMinHeightPx}
-              editorMaxHeightPx={editorMaxHeightPx}
-            />
-          </div>
-        )}
-      </div>
+        </div>
+      </li>
     );
   }
 
@@ -558,7 +624,7 @@ export default async function TicketDetailPage({
   }
 
   function renderTimelineItems(items: TimelineItem[]) {
-    return items.map((item) => renderPostCard(item.data, 0));
+    return items.map((item) => renderPostCard(item.data, 'thread'));
   }
 
   // Fetch agent-specific data only if agent
@@ -791,23 +857,19 @@ export default async function TicketDetailPage({
             </div>
           </div>
 
-          {/* Original post — always visible above tabs */}
-          {originalPost && (
-            <div className="mb-4">
-              {renderPostCard(originalPost, 0)}
-            </div>
-          )}
-
           {/* Thread / Notes / Logs tabs */}
           <TicketTabs
             threadContent={
               <div className="space-y-4">
-                {shouldCollapse && hiddenPostCount > 0 && (
-                  <CollapsibleTimeline hiddenCount={hiddenPostCount}>
-                    {renderTimelineItems(hiddenItems)}
-                  </CollapsibleTimeline>
-                )}
-                {renderTimelineItems(visibleItems)}
+                <ul className="list-none p-0 m-0 space-y-4">
+                  {renderTimelineItems(leadingItems)}
+                  {hiddenPostCount > 0 && (
+                    <CollapsibleTimeline hiddenCount={hiddenPostCount}>
+                      {renderTimelineItems(hiddenItems)}
+                    </CollapsibleTimeline>
+                  )}
+                  {renderTimelineItems(tailItems)}
+                </ul>
                 {canReply && !ticket.merged_into_id && (
                   <MainReplyToggle
                     ticketId={ticket.id}
@@ -823,7 +885,7 @@ export default async function TicketDetailPage({
             notesContent={isAgent ? (
               <div className="space-y-4">
                 {notePosts.length > 0 ? (
-                  notePosts.map((note) => renderPostCard(note, 0))
+                  notePosts.map((note) => renderPostCard(note, 'note'))
                 ) : (
                   <p className="text-sm text-gray-500 italic">No internal notes yet.</p>
                 )}
@@ -845,10 +907,9 @@ export default async function TicketDetailPage({
         {/* RIGHT: Sidebar */}
         <aside className="w-full lg:w-[400px] lg:min-w-[400px] lg:max-w-[400px] flex-shrink-0 lg:sticky lg:top-4 lg:self-start" data-testid="ticket-sidebar">
           <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
-            {/* Ticket # and status */}
-            <div className="flex items-center justify-between mb-3">
+            {/* Ticket # */}
+            <div className="mb-3">
               <span className="text-xs text-gray-500 font-mono">#{ticket.id}</span>
-              <Badge variant="status" value={ticket.status} />
             </div>
 
             {ticket.merged_into_id && (

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildCustomFieldsPanel,
+  buildCustomFieldQuestions,
   CUSTOM_FIELDS_PANEL_NAME,
   injectCustomFieldsPanel,
   type CustomFieldDef,
@@ -18,23 +18,20 @@ function def(partial: Partial<CustomFieldDef> & { name: string; field_type: Cust
   };
 }
 
-describe('buildCustomFieldsPanel', () => {
-  it('returns null on empty input', () => {
-    expect(buildCustomFieldsPanel([])).toBeNull();
+describe('buildCustomFieldQuestions', () => {
+  it('returns empty array on empty input', () => {
+    expect(buildCustomFieldQuestions([])).toEqual([]);
   });
 
-  it('builds questions per type with correct mapping', () => {
-    const panel = buildCustomFieldsPanel([
+  it('builds questions per type with correct mapping (no panel wrapper)', () => {
+    const els = buildCustomFieldQuestions([
       def({ name: 'priority', field_type: 'dropdown', options: ['low', 'high'], is_required: true }),
       def({ name: 'count', field_type: 'number', default_value: '5' }),
       def({ name: 'note', field_type: 'text' }),
       def({ name: 'urgent', field_type: 'checkbox', default_value: 'true' }),
       def({ name: 'due', field_type: 'date' }),
     ]);
-    expect(panel).not.toBeNull();
-    expect(panel!.name).toBe(CUSTOM_FIELDS_PANEL_NAME);
-    const els = (panel!.elements as Array<Record<string, unknown>>);
-    const byName = Object.fromEntries(els.map((e) => [e.name, e]));
+    const byName = Object.fromEntries(els.map((e) => [e.name as string, e]));
 
     expect(byName['custom_fields.priority']).toMatchObject({
       type: 'dropdown',
@@ -62,18 +59,17 @@ describe('buildCustomFieldsPanel', () => {
   });
 
   it('sorts by display_order then name', () => {
-    const panel = buildCustomFieldsPanel([
+    const els = buildCustomFieldQuestions([
       def({ name: 'b', field_type: 'text', display_order: 2 }),
       def({ name: 'c', field_type: 'text', display_order: 1 }),
       def({ name: 'a', field_type: 'text', display_order: 1 }),
     ]);
-    const names = (panel!.elements as Array<Record<string, unknown>>).map((e) => e.name);
-    expect(names).toEqual(['custom_fields.a', 'custom_fields.c', 'custom_fields.b']);
+    expect(els.map((e) => e.name)).toEqual(['custom_fields.a', 'custom_fields.c', 'custom_fields.b']);
   });
 });
 
 describe('injectCustomFieldsPanel', () => {
-  it('strips pre-existing panel and stray questions then re-injects', () => {
+  it('strips legacy panel and stray questions then appends flat questions', () => {
     const tpl = {
       pages: [
         {
@@ -89,10 +85,12 @@ describe('injectCustomFieldsPanel', () => {
     const pageEls = (out as { pages: Array<{ elements: Array<Record<string, unknown>> }> }).pages[0].elements;
     expect(pageEls.find((e) => e.name === 'status')).toBeTruthy();
     expect(pageEls.find((e) => e.name === 'custom_fields.stale')).toBeUndefined();
-    const panels = pageEls.filter((e) => e.name === CUSTOM_FIELDS_PANEL_NAME);
-    expect(panels).toHaveLength(1);
-    const els = panels[0].elements as Array<Record<string, unknown>>;
-    expect(els.map((e) => e.name)).toEqual(['custom_fields.fresh']);
+    // Legacy wrapper panel must be stripped.
+    expect(pageEls.find((e) => e.name === CUSTOM_FIELDS_PANEL_NAME)).toBeUndefined();
+    // Fresh question is appended flat (no wrapper).
+    const fresh = pageEls.find((e) => e.name === 'custom_fields.fresh');
+    expect(fresh).toBeTruthy();
+    expect(fresh!.type).toBe('text');
   });
 
   it('is a no-op (apart from stripping) when defs is empty', () => {
@@ -100,5 +98,6 @@ describe('injectCustomFieldsPanel', () => {
     const out = injectCustomFieldsPanel(tpl, []);
     const els = (out as { pages: Array<{ elements: Array<Record<string, unknown>> }> }).pages[0].elements;
     expect(els.find((e) => e.name === CUSTOM_FIELDS_PANEL_NAME)).toBeUndefined();
+    expect(els.some((e) => typeof e.name === 'string' && (e.name as string).startsWith('custom_fields.'))).toBe(false);
   });
 });

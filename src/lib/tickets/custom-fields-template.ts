@@ -80,24 +80,21 @@ function buildQuestion(def: CustomFieldDef): Record<string, unknown> {
 }
 
 /**
- * Build a SurveyJS `panel` element containing one question per custom
+ * Build a flat list of SurveyJS question elements, one per custom
  * field definition, ordered by `display_order` then `name`. Returns
- * `null` when there are no definitions.
+ * an empty array when there are no definitions. The questions are
+ * appended directly to the page (no wrapping panel) so no extra
+ * label or separator is rendered.
  */
-export function buildCustomFieldsPanel(
+export function buildCustomFieldQuestions(
   defs: CustomFieldDef[],
-): Record<string, unknown> | null {
-  if (defs.length === 0) return null;
+): Array<Record<string, unknown>> {
+  if (defs.length === 0) return [];
   const sorted = [...defs].sort((a, b) => {
     if (a.display_order !== b.display_order) return a.display_order - b.display_order;
     return a.name.localeCompare(b.name);
   });
-  return {
-    type: 'panel',
-    name: CUSTOM_FIELDS_PANEL_NAME,
-    title: 'Custom Fields',
-    elements: sorted.map(buildQuestion),
-  };
+  return sorted.map(buildQuestion);
 }
 
 function stripExistingCustomFieldNodes(elements: unknown[]): unknown[] {
@@ -116,9 +113,11 @@ function stripExistingCustomFieldNodes(elements: unknown[]): unknown[] {
 
 /**
  * Clone `template`, strip any pre-existing `custom_fields_panel` panel
- * and stray `custom_fields.*` questions, then append a freshly
- * generated panel to the last page (creating a page if none exists).
- * No-op when `defs` is empty (the strip still runs to remove stale
+ * (legacy) and stray `custom_fields.*` questions, then append freshly
+ * generated custom-field questions directly to the last page (creating
+ * a page if none exists). No wrapper panel or section title is added,
+ * so no extra label or separator appears in the rendered form. No-op
+ * when `defs` is empty (the strip still runs to remove stale
  * authoring).
  */
 export function injectCustomFieldsPanel(
@@ -142,19 +141,19 @@ export function injectCustomFieldsPanel(
 
   if (defs.length === 0) return cloned as SurveyJsonDefinition;
 
-  const panel = buildCustomFieldsPanel(defs);
-  if (!panel) return cloned as SurveyJsonDefinition;
+  const questions = buildCustomFieldQuestions(defs);
+  if (questions.length === 0) return cloned as SurveyJsonDefinition;
 
   if (pages && pages.length > 0) {
     const lastPage = pages[pages.length - 1];
     if (isRecord(lastPage)) {
       const els = Array.isArray(lastPage.elements) ? (lastPage.elements as unknown[]) : [];
-      lastPage.elements = [...els, panel];
+      lastPage.elements = [...els, ...questions];
     }
   } else if (Array.isArray(cloned.elements)) {
-    cloned.elements = [...(cloned.elements as unknown[]), panel];
+    cloned.elements = [...(cloned.elements as unknown[]), ...questions];
   } else {
-    cloned.pages = [{ name: 'page1', elements: [panel] }];
+    cloned.pages = [{ name: 'page1', elements: questions }];
   }
 
   return cloned as SurveyJsonDefinition;

@@ -2,7 +2,6 @@ import { test, expect, Page } from '@playwright/test';
 import { createServiceRoleClient } from '../helpers/supabase';
 import { loginViaForm } from '../helpers/auth';
 import {
-  selectSurveyDropdown,
   waitForSidebarSurveyAutosave,
 } from '../helpers/surveyjs';
 
@@ -127,7 +126,7 @@ test.describe('Ticket detail custom fields (SurveyJS)', () => {
     ).toBe('hello-world');
   });
 
-  test('agent can edit auto-generated dropdown custom field', async ({ page }) => {
+  test('agent can edit auto-generated custom field', async ({ page }) => {
     const { url, id } = await getAliceTicketUrl();
     const svc = createServiceRoleClient();
     await svc.from('tickets').update({ custom_fields: {} }).eq('id', id);
@@ -138,7 +137,16 @@ test.describe('Ticket detail custom fields (SurveyJS)', () => {
     const survey = page.getByTestId('ticket-sidebar-survey');
     await expect(survey).toBeVisible({ timeout: 15000 });
 
-    await selectSurveyDropdown(survey, `custom_fields.${TEST_CF_DROPDOWN}`, 'Alpha');
+    const cfQuestion = survey.locator(
+      `.sd-question[data-name="custom_fields.${TEST_CF_TEXT}"]`,
+    );
+    await expect(cfQuestion).toBeVisible({ timeout: 10000 });
+    // Question must be editable for agents (not marked readonly).
+    await expect(cfQuestion).not.toHaveClass(/--readonly|sd-question--readonly/);
+
+    const input = cfQuestion.locator('input').first();
+    await input.fill('agent-edit');
+    await input.blur();
     await waitForSidebarSurveyAutosave(page);
 
     await expect.poll(
@@ -148,10 +156,10 @@ test.describe('Ticket detail custom fields (SurveyJS)', () => {
           .select('custom_fields')
           .eq('id', id)
           .single();
-        return ((data?.custom_fields ?? {}) as Record<string, unknown>)[TEST_CF_DROPDOWN];
+        return ((data?.custom_fields ?? {}) as Record<string, unknown>)[TEST_CF_TEXT];
       },
       { timeout: 15000 },
-    ).toBe('Alpha');
+    ).toBe('agent-edit');
   });
 
   test('non-owner non-agent sees custom fields read-only', async ({ page }) => {

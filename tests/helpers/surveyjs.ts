@@ -76,13 +76,18 @@ export async function selectSurveyDropdown(
       // won't have changed — fall through to retry.
       await page.waitForTimeout(150);
       // v2 exposes the current value via `.sd-dropdown__value`; v3 renders
-      // it inside `.sd-dropdown__hint-suffix span` (and `[role="combobox"]`
-      // is the filter input, whose textContent is always empty).
-      let triggerText =
-        (await q
-          .locator('.sd-dropdown__value, .sd-dropdown__hint-suffix span')
-          .first()
-          .textContent())?.trim() ?? '';
+      // it inside `.sd-dropdown__input` (the controlValue div) — typically
+      // as a SurveyLocStringViewer span. The `[role="combobox"]` input is
+      // the filter, whose textContent is always empty.
+      const valueLocator = q
+        .locator('.sd-dropdown__input, .sd-dropdown__value, .sd-dropdown__hint-suffix span')
+        .first();
+      let triggerText = '';
+      if (await valueLocator.count()) {
+        triggerText = (
+          (await valueLocator.textContent({ timeout: 2000 }).catch(() => '')) ?? ''
+        ).trim();
+      }
       if (!triggerText) {
         const filterInput = q
           .locator('input.sd-dropdown__filter-string-input, input.sd-tagbox__filter-string-input')

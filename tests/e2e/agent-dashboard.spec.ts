@@ -231,16 +231,19 @@ test.describe('Agent Ticket Detail Controls', () => {
       ).toHaveCount(0);
       // The dropdown shows a non-empty selected value (defaultValue or DB value).
       // SurveyJS v2 exposes the value via `.sd-dropdown__value`; v3 renders it
-      // inside `.sd-dropdown__hint-suffix span`. The `[role="combobox"]` input
-      // has empty textContent in both versions, so fall back to its `value`
-      // attribute as a last resort.
-      let valueText = (
-        await q
-          .locator('.sd-dropdown__value, .sd-dropdown__hint-suffix span')
-          .first()
-          .textContent()
-          .catch(() => '')
-      )?.trim() ?? '';
+      // inside `.sd-dropdown__input` (the controlValue div which contains a
+      // SurveyLocStringViewer span plus the empty filter <input>). Use a
+      // bounded textContent timeout so a missing selector can't burn the
+      // entire test budget.
+      const valueLocator = q
+        .locator('.sd-dropdown__input, .sd-dropdown__value, .sd-dropdown__hint-suffix span')
+        .first();
+      let valueText = '';
+      if (await valueLocator.count()) {
+        valueText = (
+          (await valueLocator.textContent({ timeout: 2000 }).catch(() => '')) ?? ''
+        ).trim();
+      }
       if (!valueText) {
         const filterInput = q
           .locator('input.sd-dropdown__filter-string-input, [role="combobox"]')

@@ -134,6 +134,24 @@ test.describe('Posts, Comments & Notes', () => {
     await expect(page.getByTestId('main-reply-btn')).toBeVisible();
   });
 
+  test('Reply form auto-closes after successful submit', async ({ page }) => {
+    await loginAs(page, 'alice@example.com');
+    await page.goto(ticketUrl || await resolveTicketUrl());
+
+    await page.getByTestId('main-reply-btn').click();
+    const replyPanel = page.getByTestId('main-reply-panel');
+    await expect(replyPanel).toBeVisible({ timeout: 5000 });
+
+    const replyText = `Auto-close reply ${Date.now()}.`;
+    await replyPanel.locator('[data-testid="markdown-editor"]').locator('textarea[name="textarea"]').fill(replyText);
+    await replyPanel.getByRole('button', { name: 'Add a reply' }).click();
+
+    // After a successful submission the composer collapses back to the trigger.
+    await expect(replyPanel).toBeHidden({ timeout: 10000 });
+    await expect(page.getByTestId('main-reply-btn')).toBeVisible();
+    await expect(page.getByText(replyText).first()).toBeVisible({ timeout: 10000 });
+  });
+
   test('add a comment on a post → comment appears indented', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
     await page.goto(ticketUrl || await resolveTicketUrl());
@@ -192,6 +210,38 @@ test.describe('Posts, Comments & Notes', () => {
     // The redesigned thread renders only two levels (post → comment).
     // Comments themselves must not expose a Reply / add-comment trigger.
     await expect(commentCard.locator('[data-testid="add-comment-btn"]')).toHaveCount(0);
+  });
+
+  test('Comment form auto-closes after successful submit', async ({ page }) => {
+    await loginAs(page, 'alice@example.com');
+    await page.goto(ticketUrl || await resolveTicketUrl());
+
+    const rootReplyText = 'A root reply to the ticket.';
+    const rootReplyCard = page
+      .locator('[data-testid^="post-"]')
+      .filter({ hasText: rootReplyText })
+      .first();
+    await expect(rootReplyCard).toBeVisible({ timeout: 10000 });
+
+    await rootReplyCard.locator('[data-testid="add-comment-btn"]').click();
+    // While open, the trigger button is removed from the DOM.
+    await expect(rootReplyCard.locator('[data-testid="add-comment-btn"]')).toHaveCount(0);
+
+    const commentForm = rootReplyCard.locator('form').last();
+    await expect(commentForm).toBeVisible({ timeout: 10000 });
+
+    const commentText = `Auto-close comment ${Date.now()}.`;
+    await commentForm.locator('textarea[name="textarea"]').fill(commentText);
+    const submitBtn = commentForm.getByRole('button', { name: 'Add a comment' });
+    await submitBtn.scrollIntoViewIfNeeded();
+    await expect(submitBtn).toBeEnabled();
+    await submitBtn.click();
+
+    // After a successful submission the comment form collapses back to the
+    // Reply trigger on the parent post card.
+    await expect(rootReplyCard.locator('[data-testid="add-comment-btn"]')).toBeVisible({ timeout: 15000 });
+    await expect(rootReplyCard.locator('form')).toHaveCount(0);
+    await expect(page.getByText(commentText).first()).toBeVisible({ timeout: 15000 });
   });
 
   test('agent can add an internal note → note visible to agent, not to regular user', async ({ page }) => {

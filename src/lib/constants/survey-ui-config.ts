@@ -54,6 +54,16 @@ export type TicketDetailTemplateWrapper = {
 export const CUSTOM_FIELD_QUESTION_PREFIX = 'custom_fields.';
 
 /**
+ * Allowed character set for a custom-field name (the portion that
+ * follows `custom_fields.` in a SurveyJS question name). Letters,
+ * digits, spaces, underscores, and hyphens — kept in sync with
+ * `CUSTOM_FIELD_QUESTION_NAME_REGEX` and enforced by `saveCustomFields`
+ * so any stored row produces a question name detectable by the
+ * autosave / admin-validation pipelines.
+ */
+export const CUSTOM_FIELD_NAME_CHARSET_REGEX = /^[A-Za-z0-9_\- ]+$/;
+
+/**
  * Regex that matches a syntactically valid custom-field question name.
  * The portion after the prefix may contain letters, digits, spaces,
  * underscores, and hyphens; existence of the matching custom-field row

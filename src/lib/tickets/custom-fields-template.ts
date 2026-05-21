@@ -14,6 +14,12 @@ export type CustomFieldDef = {
   display_order: number;
 };
 
+/**
+ * Legacy panel name retained for backwards-compatible stripping of
+ * previously-injected `custom_fields_panel` containers from stored
+ * templates. Current injection appends questions flat (no wrapper
+ * panel), so this constant is only used by `stripExistingCustomFieldNodes`.
+ */
 export const CUSTOM_FIELDS_PANEL_NAME = 'custom_fields_panel';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -119,6 +125,10 @@ function stripExistingCustomFieldNodes(elements: unknown[]): unknown[] {
  * so no extra label or separator appears in the rendered form. No-op
  * when `defs` is empty (the strip still runs to remove stale
  * authoring).
+ *
+ * NOTE: despite the name, this function no longer wraps questions in a
+ * panel. The name is retained to avoid a churny rename across call sites
+ * and tests; see `CUSTOM_FIELDS_PANEL_NAME` for the legacy-strip target.
  */
 export function injectCustomFieldsPanel(
   template: SurveyJsonDefinition,

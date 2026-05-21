@@ -109,19 +109,25 @@ export function SurveyTemplateEditor({
   );
 
   const onValueChanged = (data: Record<string, unknown>) => {
+    let nextJson: string | null = null;
     if (typeof data.template_json === 'string') {
-      valueRef.current = data.template_json;
-      if (hiddenJsonRef.current) hiddenJsonRef.current.value = data.template_json;
+      nextJson = data.template_json;
     }
-    if (isTicketDetail && typeof data.auto_generate_custom_fields === 'boolean') {
-      const merged = setAutoGenerateInWrapper(
-        valueRef.current,
-        data.auto_generate_custom_fields,
-      );
-      if (merged !== valueRef.current) {
-        valueRef.current = merged;
-        if (hiddenJsonRef.current) hiddenJsonRef.current.value = merged;
-      }
+    // For ticket-detail templates, ALWAYS re-apply the auto-generate flag
+    // to the JSON on every change so that subsequent textarea edits (which
+    // re-emit `template_json` from the SurveyJS model) don't silently drop
+    // the wrapper field.
+    if (isTicketDetail) {
+      const base = nextJson ?? valueRef.current;
+      const autoGen =
+        typeof data.auto_generate_custom_fields === 'boolean'
+          ? data.auto_generate_custom_fields
+          : readAutoGenerateFromWrapper(base);
+      nextJson = setAutoGenerateInWrapper(base, autoGen);
+    }
+    if (nextJson !== null && nextJson !== valueRef.current) {
+      valueRef.current = nextJson;
+      if (hiddenJsonRef.current) hiddenJsonRef.current.value = nextJson;
     }
   };
 

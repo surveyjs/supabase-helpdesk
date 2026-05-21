@@ -10,7 +10,7 @@ import {
   findInvalidAgentDashboardQuestionNames,
   findInvalidTicketDetailQuestionNames,
   collectCustomFieldQuestionNames,
-  customFieldNameFromQuestion,
+  CUSTOM_FIELD_NAME_CHARSET_REGEX,
 } from '@/lib/constants/survey-ui-config';
 
 
@@ -310,6 +310,14 @@ export async function saveCustomFields(
     const name = typeof row.name === 'string' ? row.name.trim() : '';
     if (!name || name.length > 100) {
       return { error: `Invalid field name: ${JSON.stringify(row.name)}` };
+    }
+    // Names must match the SurveyJS question-name charset so that the
+    // generated `custom_fields.<name>` question name is detectable by
+    // `CUSTOM_FIELD_QUESTION_NAME_REGEX` (autosave + admin validation).
+    if (!CUSTOM_FIELD_NAME_CHARSET_REGEX.test(name)) {
+      return {
+        error: `Invalid field name "${name}": only letters, digits, spaces, underscores, and hyphens are allowed.`,
+      };
     }
     const lower = name.toLowerCase();
     if (seenNames.has(lower)) {
@@ -1050,10 +1058,13 @@ export async function updateCustomFieldValue(formData: FormData): Promise<void> 
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('id, role')
+    .select('id, role, is_blocked')
     .eq('id', user.id)
     .single();
   if (!profile) throw new Error('Profile not found.');
+  if (profile.is_blocked) {
+    throw new Error('Account is blocked.');
+  }
 
   const ticketId = formData.get('ticket_id') as string;
   const fieldName = formData.get('field_name') as string;
@@ -1064,12 +1075,15 @@ export async function updateCustomFieldValue(formData: FormData): Promise<void> 
   const isAgent = profile.role === 'agent' || profile.role === 'admin';
   const { data: ticket } = await supabase
     .from('tickets')
-    .select('id, creator_id, custom_fields, slug')
+    .select('id, creator_id, custom_fields, slug, merged_into_id')
     .eq('id', ticketId)
     .single();
   if (!ticket) throw new Error('Ticket not found.');
   if (!isAgent && ticket.creator_id !== user.id) {
     throw new Error('Not authorized to update custom fields on this ticket.');
+  }
+  if (ticket.merged_into_id != null) {
+    throw new Error('Cannot edit custom fields on a merged ticket.');
   }
 
   // Validate against field definition
@@ -1120,7 +1134,12 @@ export async function updateCustomFieldValue(formData: FormData): Promise<void> 
     details: { field: fieldName, value: parsedValue },
   });
 
-  revalidatePath(`/tickets/${ticketId}`);
+  // Canonical ticket route is `/tickets/{id}/{slug}` — revalidate that.
+  if (ticket.slug) {
+    revalidatePath(`/tickets/${ticketId}/${ticket.slug}`);
+  } else {
+    revalidatePath(`/tickets/${ticketId}`);
+  }
 }
 
 // ============================================================
@@ -1441,15 +1460,10 @@ export async function saveSurveyTemplate(
     const autoGenRaw = wrapper.autoGenerateCustomFields;
     const autoGen = typeof autoGenRaw === 'boolean' ? autoGenRaw : true;
     if (!autoGen) {
-      const cfQuestionNames = collectCustomFieldQuestionNames(template);
-      if (cfQuestionNames.length > 0) {
-        const bareNames = Array.from(
-          new Set(
-            cfQuestionNames
-              .map((n) => customFieldNameFromQuestion(n))
-              .filter((n): n is string => !!n),
-          ),
-        );
+      // `collectCustomFieldQuestionNames` already returns bare names
+      // (prefix stripped); dedupe and check existence directly.
+      const bareNames = Array.from(new Set(collectCustomFieldQuestionNames(template)));
+      if (bareNames.length > 0) {
         const { data: rows } = await supabase
           .from('custom_fields')
           .select('name')

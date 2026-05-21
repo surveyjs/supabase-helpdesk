@@ -1112,9 +1112,10 @@ export default async function TicketDetailPage({
               </div>
             )}
 
-            {/* Custom fields are now rendered inside the SurveyJS sidebar via
-                the auto-generated `custom_fields_panel` (see `customFieldDefs`
-                injection above). The legacy inline form has been removed. */}
+            {/* Custom fields are now rendered inside the SurveyJS sidebar as
+                auto-generated `custom_fields.<name>` questions appended to the
+                template (see `customFieldDefs` / `injectCustomFieldsPanel`
+                above). The legacy inline form has been removed. */}
 
           </div>
 

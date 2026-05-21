@@ -1,5 +1,6 @@
 import {
   canTierUseControl,
+  CUSTOM_FIELD_QUESTION_PREFIX,
   TICKET_DETAIL_ALLOWED_QUESTION_NAMES,
   type TicketDetailQuestionName,
   type TicketDetailTierControlRules,
@@ -26,6 +27,14 @@ export type TicketDetailPolicyInput = {
     change_visibility: boolean;
   };
   tierRules: TicketDetailTierControlRules;
+  /**
+   * Bare custom-field names (without the `custom_fields.` prefix) for
+   * which a policy entry should be produced. Custom fields are visible
+   * to all viewers; editing is restricted to the ticket owner and
+   * agents (and disabled when the ticket is merged or the viewer is
+   * blocked).
+   */
+  customFieldNames?: string[];
 };
 
 /**
@@ -123,6 +132,17 @@ export function computeTicketDetailFieldPolicy(
   // Ensure every allowed name has an entry.
   for (const name of TICKET_DETAIL_ALLOWED_QUESTION_NAMES as readonly TicketDetailQuestionName[]) {
     if (!policy[name]) policy[name] = { visible: false, editable: false };
+  }
+
+  // Custom fields are visible to every viewer; editing is restricted
+  // to the ticket owner and agents, and is disabled when the ticket is
+  // merged or the viewer is blocked.
+  const customEditable = !isMerged && !isBlocked && (isAgent || isOwner);
+  for (const cfName of input.customFieldNames ?? []) {
+    policy[`${CUSTOM_FIELD_QUESTION_PREFIX}${cfName}`] = {
+      visible: true,
+      editable: customEditable,
+    };
   }
 
   return policy;

@@ -22,7 +22,6 @@ import {
 } from '@/lib/actions/tickets';
 import { getCsatRating, requestCsatToken } from '@/lib/actions/csat';
 import { getSlaStatus, type SlaTimer, type SlaIndicatorStatus } from '@/lib/utils/sla';
-import { updateCustomFieldValue } from '@/lib/actions/admin';
 import { removeDuplicateLink } from '@/lib/actions/duplicate';
 import { DeleteTicketButton } from './DeleteTicketButton';
 import { AiTicketSummary } from './AiTicketSummary';
@@ -38,6 +37,10 @@ import {
 } from '@/lib/constants/survey-ui-config';
 import { computeTicketDetailFieldPolicy } from '@/lib/tickets/ticket-detail-policy';
 import { applyTemplatePolicy, injectTemplateChoices } from '@/lib/tickets/apply-template-policy';
+import {
+  injectCustomFieldsPanel,
+  type CustomFieldDef,
+} from '@/lib/tickets/custom-fields-template';
 
 const SLA_DOT_COLORS: Record<SlaIndicatorStatus, string> = {
   on_track: 'bg-green-500',
@@ -655,10 +658,20 @@ export default async function TicketDetailPage({
 
 
   // Fetch custom fields definitions and ticket custom field values
-  const { data: customFieldDefs } = await supabase
+  const { data: customFieldDefsRaw } = await supabase
     .from('custom_fields')
     .select('*')
     .order('display_order');
+
+  const customFieldDefs: CustomFieldDef[] = (customFieldDefsRaw ?? []).map((row) => ({
+    id: String(row.id),
+    name: String(row.name),
+    field_type: row.field_type as CustomFieldDef['field_type'],
+    is_required: !!row.is_required,
+    options: Array.isArray(row.options) ? (row.options as string[]) : null,
+    default_value: row.default_value == null ? null : String(row.default_value),
+    display_order: typeof row.display_order === 'number' ? row.display_order : 0,
+  }));
 
   const ticketCustomFields = (ticket.custom_fields ?? {}) as Record<string, unknown>;
   const isOwner = ticket.creator_id === user.id;
@@ -748,10 +761,15 @@ export default async function TicketDetailPage({
     tierKey: viewerTierKey,
     tierCaps,
     tierRules: detailUserTemplate.tierControlRules,
+    customFieldNames: customFieldDefs.map((d) => d.name),
   });
 
+  const templateWithCustomFields = detailTemplateWrapper.autoGenerateCustomFields
+    ? injectCustomFieldsPanel(detailTemplateWrapper.template, customFieldDefs)
+    : detailTemplateWrapper.template;
+
   const trimmedTemplate = applyTemplatePolicy(
-    detailTemplateWrapper.template,
+    templateWithCustomFields,
     detailFieldPolicy,
   );
 
@@ -785,6 +803,12 @@ export default async function TicketDetailPage({
     is_following: isFollowing,
     tag_ids: ticketTags.map((t) => t.id),
   };
+  for (const def of customFieldDefs) {
+    const v = ticketCustomFields[def.name];
+    if (v !== undefined) {
+      sidebarTemplateInitial[`custom_fields.${def.name}`] = v;
+    }
+  }
 
   const hasAnySidebarSurveyField = Object.values(detailFieldPolicy).some((p) => p.visible);
 
@@ -1088,61 +1112,10 @@ export default async function TicketDetailPage({
               </div>
             )}
 
-            {/* Custom fields */}
-            {customFieldDefs && customFieldDefs.length > 0 && (
-              <div className="mt-3 border-t border-gray-200 pt-3" data-testid="custom-fields">
-                <h3 className="text-xs font-medium text-gray-500 mb-1">Custom Fields</h3>
-                <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-                  {customFieldDefs.map((field) => {
-                    const val = ticketCustomFields[field.name];
-                    const displayVal = field.field_type === 'checkbox'
-                      ? (val ? 'Yes' : 'No')
-                      : val != null ? String(val) : '—';
-                    return (
-                      <div key={field.id} className="contents">
-                        <dt className="text-gray-500">{field.name}</dt>
-                        <dd className="text-gray-900 flex items-center gap-1">
-                          <span>{displayVal}</span>
-                          {(isAgent || isOwner) && (
-                            <details className="inline">
-                              <summary className="text-xs text-blue-600 cursor-pointer">✎</summary>
-                              <form action={updateCustomFieldValue} className="mt-1 flex gap-1 items-center">
-                                <input type="hidden" name="ticket_id" value={ticket.id} />
-                                <input type="hidden" name="field_name" value={field.name} />
-                                {field.field_type === 'text' && (
-                                  <input type="text" name="value" defaultValue={val != null ? String(val) : ''} maxLength={1000} className="rounded border border-gray-300 px-1.5 py-0.5 text-xs w-24" />
-                                )}
-                                {field.field_type === 'number' && (
-                                  <input type="number" name="value" defaultValue={val != null ? String(val) : ''} className="rounded border border-gray-300 px-1.5 py-0.5 text-xs w-20" />
-                                )}
-                                {field.field_type === 'dropdown' && (
-                                  <select name="value" defaultValue={val != null ? String(val) : ''} className="rounded border border-gray-300 px-1.5 py-0.5 text-xs">
-                                    <option value="">Select…</option>
-                                    {(field.options as string[] | null)?.map((opt: string) => (
-                                      <option key={opt} value={opt}>{opt}</option>
-                                    ))}
-                                  </select>
-                                )}
-                                {field.field_type === 'checkbox' && (
-                                  <select name="value" defaultValue={val ? 'true' : 'false'} className="rounded border border-gray-300 px-1.5 py-0.5 text-xs">
-                                    <option value="true">Yes</option>
-                                    <option value="false">No</option>
-                                  </select>
-                                )}
-                                {field.field_type === 'date' && (
-                                  <input type="date" name="value" defaultValue={val != null ? String(val) : ''} className="rounded border border-gray-300 px-1.5 py-0.5 text-xs" />
-                                )}
-                                <button type="submit" className="px-1.5 py-0.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200">Save</button>
-                              </form>
-                            </details>
-                          )}
-                        </dd>
-                      </div>
-                    );
-                  })}
-                </dl>
-              </div>
-            )}
+            {/* Custom fields are now rendered inside the SurveyJS sidebar as
+                auto-generated `custom_fields.<name>` questions appended to the
+                template (see `customFieldDefs` / `injectCustomFieldsPanel`
+                above). The legacy inline form has been removed. */}
 
           </div>
 

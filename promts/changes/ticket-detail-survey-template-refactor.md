@@ -1,5 +1,12 @@
 # Change: Refactor Ticket Detail SurveyJS Form (Template-driven, No Mapping)
 
+> **Update — superseded for custom fields by
+> [`ticket-detail-custom-fields-surveyjs.md`](./ticket-detail-custom-fields-surveyjs.md).**
+> Custom fields are now rendered inside the SurveyJS sidebar as
+> auto-generated `custom_fields.<name>` questions controlled by the
+> `autoGenerateCustomFields` wrapper flag, rather than via the legacy
+> inline form described below.
+
 ## Summary
 
 Refactor the Ticket Detail editable sidebar from a hard-coded SurveyJS schema

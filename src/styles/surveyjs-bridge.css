@@ -365,19 +365,36 @@
  *     recalculates all x-multiples on the same element automatically.
  * ===================================================================== */
 
-/* Reduce the spacing base unit from 8px → 5px so all derived x-multiples
- * (including the 16px row gap --sjs2-spacing-x200) shrink proportionally. */
-.sd-root-modern {
-  --sjs2-base-unit-spacing: 5px !important;
+/* Reduce the spacing base unit from 8px → 3px so all derived x-multiples
+ * (including the row gap --sjs2-spacing-x200) shrink proportionally.
+ * Reduce font-size / line-height base units from 8px → 7px so body text
+ * (--sjs2-font-size-x200 = 14px) and titles (x250 = 17.5px) match the
+ * surrounding Tailwind UI which uses text-sm (14px) by default. */
+.sd-root-modern,
+.sd-container-modern {
+  --sjs2-base-unit-spacing: 3px !important;
+  --sjs2-base-unit-font-size: 7px !important;
+  --sjs2-base-unit-line-height: 9px !important;
 }
 
 /* Mirror the survey-core.css selector so .sd-container-modern gets the
  * direct overrides, not the inherited (and therefore ignored) values. */
 .sd-root-modern,
 .sd-container-modern {
-  --sd-base-padding: 12px !important;
-  --sd-base-vertical-padding: 8px !important;
+  --sd-base-padding: 8px !important;
+  --sd-base-vertical-padding: 4px !important;
   --sd-page-vertical-padding: 0px !important;
+}
+
+/* Tighten the inter-row gap directly: survey-core.css applies
+ * `.sd-row.sd-page__row { margin-top: var(--sjs2-spacing-x200); }` (= 6px
+ * with base 3) plus question-header padding-bottom; collapse the row gap
+ * further so stacked dropdowns sit close together. */
+.sd-root-modern .sd-row.sd-page__row {
+  margin-top: var(--sjs2-spacing-x100) !important;
+}
+.sd-root-modern .sd-question__header--location-top {
+  padding-bottom: calc(0.25 * var(--sd-base-vertical-padding)) !important;
 }
 
 /* =====================================================================

@@ -9,7 +9,7 @@
           "title": "Custom Fields",
           "titleLocation": "hidden",
           "keyName": "id",
-          "rowCount": 0,
+          "rowCount": 1,
           "addRowText": "Add Field",
           "removeRowText": "Delete",
           "confirmDelete": false,

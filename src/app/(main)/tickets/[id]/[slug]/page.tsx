@@ -880,14 +880,16 @@ export default async function TicketDetailPage({
                   {renderTimelineItems(tailItems)}
                 </ul>
                 {canReply && !ticket.merged_into_id && (
-                  <MainReplyToggle
-                    ticketId={ticket.id}
-                    isAgent={isAgent}
-                    editorViewMode={ticketDetailEditorViewMode}
-                    editorMinHeightPx={editorMinHeightPx}
-                    editorMaxHeightPx={editorMaxHeightPx}
-                    aiSuggestedReplyEnabled={aiSuggestedReplyEnabled}
-                  />
+                  <div className="mt-4">
+                    <MainReplyToggle
+                      ticketId={ticket.id}
+                      isAgent={isAgent}
+                      editorViewMode={ticketDetailEditorViewMode}
+                      editorMinHeightPx={editorMinHeightPx}
+                      editorMaxHeightPx={editorMaxHeightPx}
+                      aiSuggestedReplyEnabled={aiSuggestedReplyEnabled}
+                    />
+                  </div>
                 )}
               </div>
             }

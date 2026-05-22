@@ -3,6 +3,32 @@ import { expect } from '@playwright/test';
 import { createServiceRoleClient } from './supabase';
 
 /**
+ * `page.goto` with retries for transient `ERR_CONNECTION_REFUSED`. The
+ * Next.js prod server occasionally crashes mid-run on Windows with a libuv
+ * `UV_HANDLE_CLOSING` assertion (exit code 0xC0000409). The wrapper script
+ * `tests/e2e/run-server.mjs` auto-restarts `next start` when this happens;
+ * this helper waits for the restart so in-flight tests survive it.
+ */
+async function gotoWithRetry(page: Page, url: string, attempts = 5): Promise<void> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      await page.goto(url);
+      return;
+    } catch (err) {
+      lastErr = err;
+      const msg = (err as Error)?.message ?? '';
+      if (!/ERR_CONNECTION_REFUSED|ERR_EMPTY_RESPONSE|net::ERR/.test(msg)) {
+        throw err;
+      }
+      // Server restart usually takes a few seconds; back off then retry.
+      await new Promise((resolve) => setTimeout(resolve, 2000 * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
+/**
  * Reset auth-mode-related app_settings to the built-in defaults.
  *
  * Some specs (notably auth-external.spec.ts) flip `auth_mode` to `external`
@@ -52,7 +78,7 @@ export async function loginViaForm(
   await page.context().clearCookies();
 
   const submit = async (): Promise<boolean> => {
-    await page.goto('/login');
+    await gotoWithRetry(page, '/login');
     // Another worker (typically auth-external.spec.ts) can flip `auth_mode`
     // back to `external` between our ensureBuiltInAuthMode() call above and
     // this navigation, in which case `/login` renders only the SSO button
@@ -61,7 +87,7 @@ export async function loginViaForm(
       await expect(page.getByLabel('Email')).toBeVisible({ timeout: 5000 });
     } catch {
       await ensureBuiltInAuthMode();
-      await page.goto('/login');
+      await gotoWithRetry(page, '/login');
       await expect(page.getByLabel('Email')).toBeVisible({ timeout: 10000 });
     }
     await page.getByLabel('Email').fill(email);

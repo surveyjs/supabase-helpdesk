@@ -77,9 +77,41 @@ function run(cmd, args) {
     ...process.env,
     NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --max-old-space-size=4096`.trim(),
   };
-  const start = spawn('npm', ['run', 'start'], { shell: true, env: startEnv });
-  tee(start, 'next-start');
-  logLine(`=== next start spawned pid=${start.pid} NODE_OPTIONS="${startEnv.NODE_OPTIONS}" ===\n`);
+
+  // `next start` on Windows occasionally crashes early with a libuv
+  // assertion ("UV_HANDLE_CLOSING", exit code 3221226505 = 0xC0000409),
+  // killing the server mid-suite and producing ERR_CONNECTION_REFUSED in
+  // every subsequent test. Auto-restart it so the suite can recover.
+  let shuttingDown = false;
+  let currentStart = null;
+  const MAX_RESTARTS = 8;
+  let restartCount = 0;
+
+  function spawnNextStart() {
+    const child = spawn('npm', ['run', 'start'], { shell: true, env: startEnv });
+    currentStart = child;
+    tee(child, 'next-start');
+    logLine(`=== next start spawned pid=${child.pid} NODE_OPTIONS="${startEnv.NODE_OPTIONS}" restart=${restartCount} ===\n`);
+
+    child.on('exit', (code, signal) => {
+      logLine(`=== next start exited code=${code} signal=${signal} ===\n`);
+      if (shuttingDown) {
+        logStream.end(() => process.exit(code ?? 0));
+        return;
+      }
+      if (restartCount >= MAX_RESTARTS) {
+        logLine(`=== next start exceeded ${MAX_RESTARTS} restarts; giving up ===\n`);
+        logStream.end(() => process.exit(code ?? 1));
+        return;
+      }
+      restartCount += 1;
+      logLine(`=== restarting next start (attempt ${restartCount}/${MAX_RESTARTS}) ===\n`);
+      // Small delay so the OS releases port 3000 cleanly.
+      setTimeout(spawnNextStart, 1000);
+    });
+  }
+
+  spawnNextStart();
 
   // Periodic memory snapshot of the wrapper itself (not next start, but useful
   // to confirm the wrapper is alive).
@@ -89,16 +121,12 @@ function run(cmd, args) {
   }, 30_000);
   memInterval.unref();
 
-  start.on('exit', (code, signal) => {
-    logLine(`=== next start exited code=${code} signal=${signal} ===\n`);
-    logStream.end(() => process.exit(code ?? 1));
-  });
-
   // Forward signals so Playwright can stop the server cleanly.
   for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
     process.on(sig, () => {
       logLine(`=== wrapper received ${sig} ===\n`);
-      start.kill(sig);
+      shuttingDown = true;
+      if (currentStart) currentStart.kill(sig);
     });
   }
 })();

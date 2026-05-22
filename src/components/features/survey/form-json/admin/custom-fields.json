@@ -9,11 +9,12 @@
           "title": "Custom Fields",
           "titleLocation": "hidden",
           "keyName": "id",
-          "rowCount": 1,
+          "rowCount": 0,
           "addRowText": "Add Field",
           "removeRowText": "Delete",
           "confirmDelete": false,
           "allowRowsDragAndDrop": true,
+          "defaultRowValue": { "field_type": "text" },
           "columns": [
             {
               "name": "name",
@@ -27,7 +28,6 @@
               "cellType": "dropdown",
               "renderAs": "select",
               "isRequired": true,
-              "defaultValue": "text",
               "choices": [
                 { "value": "text", "text": "Text" },
                 { "value": "number", "text": "Number" },

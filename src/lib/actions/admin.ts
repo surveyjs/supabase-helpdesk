@@ -325,7 +325,9 @@ export async function saveCustomFields(
     }
     seenNames.add(lower);
 
-    const fieldType = typeof row.field_type === 'string' ? row.field_type : '';
+    const fieldType = typeof row.field_type === 'string' && row.field_type.length > 0
+      ? row.field_type
+      : 'text';
     if (!SUPPORTED_FIELD_TYPES.includes(fieldType as SupportedFieldType)) {
       return { error: `Invalid field_type for "${name}": ${JSON.stringify(row.field_type)}` };
     }

@@ -21,7 +21,11 @@ export function CustomFieldsSurveyForm({ initial }: { initial: CustomFieldRow[] 
     >
       <AdminSurveyForm
         schema={customFieldsSchema as Record<string, unknown>}
-        data={{ fields: initial }}
+        // When there are no existing rows, pass {} instead of { fields: [] }
+        // so SurveyJS honours the matrix `rowCount: 1` default and renders an
+        // empty starter row + the Add button. Explicitly setting `fields: []`
+        // tells the matrix "the user has zero rows" and suppresses both.
+        data={initial.length > 0 ? { fields: initial } : {}}
         mode="complete"
         saveAction={saveCustomFields}
         toFormData={(d) => {

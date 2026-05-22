@@ -24,7 +24,13 @@ export function SurveyJsonForm({
   className,
 }: SurveyJsonFormProps) {
   const model = useMemo(() => {
-    const next = new Model(schema);
+    // SurveyJS `new Model(schema)` mutates the schema object. The JSON
+    // schemas are imported as modules and shared across renders/mounts,
+    // so we must deep-clone before construction to avoid corrupting the
+    // shared reference on subsequent visits (which breaks features like
+    // the matrixdynamic Add button on a second navigation).
+    const clonedSchema = JSON.parse(JSON.stringify(schema));
+    const next = new Model(clonedSchema);
     next.showCompletedPage = false;
 
     if (typeof next.completeText !== 'string' || next.completeText.trim().length === 0) {
@@ -35,9 +41,20 @@ export function SurveyJsonForm({
       next.showCompleteButton = false;
     }
 
-    next.data = data;
+    // Only seed `data` when the caller actually has values. Assigning an
+    // empty `{}` causes SurveyJS V3 matrixdynamic to materialise an empty
+    // value array (`fields: []`) which suppresses the schema-level
+    // `rowCount` default AND the matrix toolbar's Add button on hydration.
+    if (data && Object.keys(data).length > 0) {
+      next.data = data;
+    }
     return next;
-  }, [data, mode, schema]);
+    // Only rebuild the model when the schema or mode changes. Rebuilding on
+    // every `data` reference change (the parent passes a fresh object literal
+    // each render) caused SurveyJS V3 matrixdynamic toolbars to lose their
+    // Add button on subsequent navigations.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, schema]);
 
   useEffect(() => {
     if (!onComplete) return;

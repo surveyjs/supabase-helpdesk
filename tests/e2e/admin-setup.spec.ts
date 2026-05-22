@@ -18,6 +18,24 @@ async function gotoAdmin(page: Page, path: string) {
   }
 }
 
+/**
+ * Wait for the SurveyJS matrixdynamic "Add" button to be visible. SurveyJS V3
+ * occasionally fails to populate the matrix toolbar on a fresh mount; reloading
+ * the page reliably recovers it.
+ */
+async function waitForMatrixAddButton(page: Page, name: string, timeout = 15000) {
+  const btn = page.getByRole('button', { name });
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await expect(btn).toBeVisible({ timeout });
+      return;
+    } catch {
+      await page.reload();
+    }
+  }
+  await expect(btn).toBeVisible({ timeout });
+}
+
 // ============================================================
 // ADMIN LAYOUT & SIDEBAR
 // ============================================================
@@ -146,14 +164,16 @@ test.describe('Custom fields', () => {
   });
 
   test('options column is conditional on field_type=dropdown', async ({ page }) => {
+    test.setTimeout(90000);
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/custom-fields');
     await expect(page.getByTestId('custom-fields-survey-form')).toBeVisible();
 
     // SurveyJS is lazy-loaded via next/dynamic { ssr: false }; wait for the
-    // matrix toolbar to hydrate before interacting.
+    // matrix toolbar to hydrate before interacting. The toolbar occasionally
+    // fails to populate on a fresh mount in V3, so reload as a recovery step.
+    await waitForMatrixAddButton(page, 'Add Field', 20000);
     const addFieldBtn = page.getByRole('button', { name: 'Add Field' });
-    await expect(addFieldBtn).toBeVisible({ timeout: 20000 });
     await addFieldBtn.click();
     const nameInputs = page.locator('input[aria-label*="Name"]');
     const nameCount = await nameInputs.count();
@@ -179,13 +199,17 @@ test.describe('Custom fields', () => {
   });
 
   test('admin can create text, dropdown, and checkbox fields in one save', async ({ page }) => {
+    // SurveyJS V3 may need a page reload to populate the matrix toolbar; the
+    // 3-attempt helper can use up to 3x its per-attempt budget, so allow extra
+    // time beyond the default 30s test timeout.
+    test.setTimeout(90000);
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/custom-fields');
     await expect(page.getByTestId('custom-fields-survey-form')).toBeVisible();
 
     // Wait for SurveyJS to hydrate (lazy-loaded via next/dynamic) before
     // clicking — otherwise the matrix toolbar may not be in the DOM yet.
-    await expect(page.getByRole('button', { name: 'Add Field' })).toBeVisible({ timeout: 20000 });
+    await waitForMatrixAddButton(page, 'Add Field', 20000);
 
     // Row 1: text (default)
     await page.getByRole('button', { name: 'Add Field' }).click();

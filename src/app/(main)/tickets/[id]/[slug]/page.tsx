@@ -373,9 +373,10 @@ export default async function TicketDetailPage({
       case 'tag_removed':
         return `${actorName} removed tag "${d?.tag_name ?? ''}"`;
       case 'ticket_privacy_changed':
-        return `${actorName} changed ticket privacy`;
+      case 'privacy_changed':
+        return `${actorName} changed ticket privacy from ${d?.from ? 'private' : 'public'} to ${d?.to ? 'private' : 'public'}`;
       case 'post_privacy_changed':
-        return `${actorName} changed post privacy`;
+        return `${actorName} changed post privacy to ${d?.is_private ? 'private' : 'public'}`;
       case 'draft_published':
         return `${actorName} published a draft`;
       case 'marked_duplicate':

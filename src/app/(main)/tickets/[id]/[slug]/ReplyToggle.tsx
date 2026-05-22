@@ -37,10 +37,9 @@ export function ReplyToggle({
               strokeLinejoin="round"
               className="h-3.5 w-3.5"
             >
-              <path d="M9 17l-5-5 5-5" />
-              <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
             </svg>
-            Reply
+            Add comment
           </button>
           {commentCount !== undefined && commentCount > 0 && (
             <span className="text-[11px] text-gray-500">

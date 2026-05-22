@@ -442,11 +442,14 @@ test.describe('Posts, Comments & Notes', () => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(ticketUrl || await resolveTicketUrl());
 
-    // Look for the "Make Private" button on a non-original post
-    const makePrivateBtn = page.getByRole('button', { name: 'Make Private' }).first();
-    if (await makePrivateBtn.isVisible()) {
-      await makePrivateBtn.click();
-      await expect(page.getByText('Private').first()).toBeVisible({ timeout: 10000 });
+    // Look for an unchecked "Private" checkbox on a non-original post
+    const privateCheckbox = page.getByRole('checkbox', { name: 'Private' }).first();
+    if (await privateCheckbox.isVisible()) {
+      const wasChecked = await privateCheckbox.isChecked();
+      if (!wasChecked) {
+        await privateCheckbox.click();
+        await expect(page.locator('[data-testid="private-badge"]').first()).toBeVisible({ timeout: 10000 });
+      }
     }
   });
 

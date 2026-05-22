@@ -8,6 +8,7 @@ import { formatRelativeTime } from '@/lib/utils/time';
 import { DisplayName } from '@/components/features/users/DisplayName';
 import { MainReplyToggle } from './MainReplyToggle';
 import { EditablePost } from './EditablePost';
+import { PrivacyCheckbox } from './PrivacyCheckbox';
 import { EditableTitle } from './EditableTitle';
 import { ReplyToggle } from './ReplyToggle';
 import { NoteForm } from './NoteForm';
@@ -16,7 +17,6 @@ import { AttachmentList } from '@/components/features/attachments/AttachmentList
 import { RealtimeTicketUpdates } from '@/components/features/tickets/RealtimeTicketUpdates';
 import {
   deletePost,
-  togglePostPrivacy,
   publishDraft,
   getFollowers,
 } from '@/lib/actions/tickets';
@@ -373,9 +373,10 @@ export default async function TicketDetailPage({
       case 'tag_removed':
         return `${actorName} removed tag "${d?.tag_name ?? ''}"`;
       case 'ticket_privacy_changed':
-        return `${actorName} changed ticket privacy`;
+      case 'privacy_changed':
+        return `${actorName} changed ticket privacy from ${d?.from ? 'private' : 'public'} to ${d?.to ? 'private' : 'public'}`;
       case 'post_privacy_changed':
-        return `${actorName} changed post privacy`;
+        return `${actorName} changed post privacy to ${d?.is_private ? 'private' : 'public'}`;
       case 'draft_published':
         return `${actorName} published a draft`;
       case 'marked_duplicate':
@@ -470,7 +471,7 @@ export default async function TicketDetailPage({
               </span>
             )}
             {post.is_private && !isNote && (
-              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+              <span data-testid="private-badge" className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
                 Private
               </span>
             )}
@@ -508,15 +509,7 @@ export default async function TicketDetailPage({
             </form>
           )}
           {canTogglePrivacy && (
-            <form action={togglePostPrivacy} className="inline">
-              <input type="hidden" name="post_id" value={post.id} />
-              <button
-                type="submit"
-                className="text-xs text-gray-600 hover:text-gray-800"
-              >
-                {post.is_private ? 'Make Public' : 'Make Private'}
-              </button>
-            </form>
+            <PrivacyCheckbox postId={post.id} isPrivate={post.is_private} />
           )}
           {isDraft && isCurrentUser && (
             <form action={publishDraft} className="inline">
@@ -888,14 +881,16 @@ export default async function TicketDetailPage({
                   {renderTimelineItems(tailItems)}
                 </ul>
                 {canReply && !ticket.merged_into_id && (
-                  <MainReplyToggle
-                    ticketId={ticket.id}
-                    isAgent={isAgent}
-                    editorViewMode={ticketDetailEditorViewMode}
-                    editorMinHeightPx={editorMinHeightPx}
-                    editorMaxHeightPx={editorMaxHeightPx}
-                    aiSuggestedReplyEnabled={aiSuggestedReplyEnabled}
-                  />
+                  <div className="mt-4">
+                    <MainReplyToggle
+                      ticketId={ticket.id}
+                      isAgent={isAgent}
+                      editorViewMode={ticketDetailEditorViewMode}
+                      editorMinHeightPx={editorMinHeightPx}
+                      editorMaxHeightPx={editorMaxHeightPx}
+                      aiSuggestedReplyEnabled={aiSuggestedReplyEnabled}
+                    />
+                  </div>
                 )}
               </div>
             }

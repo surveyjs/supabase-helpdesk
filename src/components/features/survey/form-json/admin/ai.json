@@ -24,7 +24,7 @@
               "name": "ai_api_key",
               "title": "API Key",
               "inputType": "password",
-              "description": "Stored encrypted in Supabase Vault. Leave blank to keep existing key."
+              "description": "Stored encrypted in Supabase Vault. Leave blank to keep the existing key, or to use the key from the AI_API_KEY environment variable."
             },
             {
               "type": "text",

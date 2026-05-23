@@ -565,22 +565,28 @@ export async function getAiSettings(): Promise<Record<string, string>> {
 
   // Check if API key exists in Vault
   const serviceClient = createServiceRoleClient();
-  let keyPresent = false;
+  let vaultKeyPresent = false;
   const { data: secret } = await serviceClient.rpc('get_ai_api_key');
   if (secret && typeof secret === 'string' && secret.length > 0) {
-    keyPresent = true;
+    vaultKeyPresent = true;
   }
-  if (!keyPresent) {
+  if (!vaultKeyPresent) {
     const { data: vaultRows } = await serviceClient
       .from('vault.decrypted_secrets' as string)
       .select('decrypted_secret')
       .eq('name', 'ai_api_key')
       .limit(1);
     if (vaultRows && vaultRows.length > 0) {
-      keyPresent = !!(vaultRows[0] as Record<string, string>).decrypted_secret;
+      vaultKeyPresent = !!(vaultRows[0] as Record<string, string>).decrypted_secret;
     }
   }
-  map.ai_api_key_present = keyPresent ? 'true' : 'false';
+
+  const envKeyPresent = !!(process.env.AI_API_KEY);
+  const keySource = vaultKeyPresent ? 'vault' : (envKeyPresent ? 'env' : 'none');
+
+  map.ai_api_key_present = (vaultKeyPresent || envKeyPresent) ? 'true' : 'false';
+  map.ai_api_key_source = keySource;
+  map.ai_env_key_present = envKeyPresent ? 'true' : 'false';
 
   return map;
 }

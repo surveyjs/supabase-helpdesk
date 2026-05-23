@@ -32,11 +32,8 @@ export async function getAiConfig(): Promise<AiConfig | null> {
     .in('key', ['ai_provider', 'ai_model', 'ai_request_timeout', 'ai_custom_endpoint_url']);
 
   const map = new Map(settings?.map((s) => [s.key, s.value]) ?? []);
-  const provider = map.get('ai_provider') as AiConfig['provider'] | '';
-  if (!provider || !['openai', 'anthropic', 'custom'].includes(provider)) return null;
-
-  const model = map.get('ai_model') ?? '';
-  if (!model) return null;
+  const dbProvider = map.get('ai_provider') ?? '';
+  const dbModel = map.get('ai_model') ?? '';
 
   // Read API key from Supabase Vault
   const serviceClient = createServiceRoleClient();
@@ -61,15 +58,33 @@ export async function getAiConfig(): Promise<AiConfig | null> {
     }
   }
 
+  // Fallback to environment variable when Vault has no key
+  if (!apiKey) {
+    apiKey = process.env.AI_API_KEY ?? '';
+  }
+
   if (!apiKey) return null;
 
+  // DB values take precedence; env vars fill in only what is not set in DB.
+  // Validation is deferred until after resolving so env vars can substitute.
+  const resolvedProvider = (['openai', 'anthropic', 'custom'].includes(dbProvider))
+    ? dbProvider as AiConfig['provider']
+    : (['openai', 'anthropic', 'custom'].includes(process.env.AI_PROVIDER ?? '')
+      ? process.env.AI_PROVIDER as AiConfig['provider']
+      : null);
+
+  if (!resolvedProvider) return null;
+
+  const resolvedModel = dbModel || (process.env.AI_MODEL ?? '');
+  if (!resolvedModel) return null;
+
   const timeout = parseInt(map.get('ai_request_timeout') ?? '60', 10) || 60;
-  const endpointUrl = map.get('ai_custom_endpoint_url') || undefined;
+  const endpointUrl = map.get('ai_custom_endpoint_url') || process.env.AI_CUSTOM_ENDPOINT_URL || undefined;
 
   return {
-    provider: provider as AiConfig['provider'],
+    provider: resolvedProvider,
     apiKey,
-    model,
+    model: resolvedModel,
     endpointUrl,
     timeout,
   };

@@ -321,7 +321,7 @@ Add a new sidebar section to the admin setup page:
 
 **Connection settings card:**
 - **AI Provider** — dropdown: "None (unconfigured)", "OpenAI", "Anthropic", "Custom (OpenAI-compatible)"
-- **API Key** — password input, stored via Supabase Vault. Show masked after saving. "Test Connection" button that makes a minimal API call to verify the key and returns success/error.
+- **API Key** — password input, stored via Supabase Vault. Show masked after saving. "Test Connection" button that makes a minimal API call to verify the key and returns success/error. If `AI_API_KEY` is set in the environment and no Vault key exists, show an amber info note below the field: "Key loaded from AI_API_KEY environment variable — enter a value here to override it and store it in Vault." If a Vault key exists, show a grey note: "API key is stored in Supabase Vault. Leave the field blank to keep the existing key."
 - **Custom endpoint URL** — text input, shown only when "Custom" is selected
 - **Model** — dropdown populated after API key is verified (fetched from provider's model list endpoint). If auto-fetch fails or provider is "Custom", show a freeform text input instead.
 - **Request timeout** — numeric input (10–300 seconds, default 60)
@@ -416,6 +416,7 @@ Add a new sidebar section to the admin setup page:
 - **Timeout handling:** Use `AbortController` with the configured timeout. On timeout, return a graceful fallback (empty suggestions, error message) rather than crashing.
 - **Provider abstraction:** The `callAi()` function should abstract over different providers. All three providers (OpenAI, Anthropic, Custom) use similar request/response patterns. The main differences are endpoint URLs, authentication headers, and response parsing.
 - **Vault integration for API key:** Use `supabase.rpc('vault.create_secret', { secret: apiKey, name: 'ai_api_key' })` for storage and query `vault.decrypted_secrets` for retrieval. Never log or expose the decrypted key.
+- **Environment variable fallback for API key:** `getAiConfig()` in `src/lib/ai/client.ts` must check `process.env.AI_API_KEY` when the Vault returns empty. If found, it combines with `process.env.AI_PROVIDER`, `process.env.AI_MODEL`, and `process.env.AI_CUSTOM_ENDPOINT_URL` as fallbacks — DB values always take precedence over env vars for provider, model, and endpoint URL. `getAiSettings()` must return `ai_api_key_source` (`'vault' | 'env' | 'none'`) and `ai_env_key_present` (`'true' | 'false'`) so the admin UI can show the key source. The `.env.local.example` file documents the four optional vars.
 - **Structured output (JSON mode):** For auto-categorization, duplicate detection, and KB article generation, request JSON output format from the AI. OpenAI supports `response_format: { type: "json_object" }`. Anthropic supports structured output via system prompts. Always validate the parsed JSON against expected schema.
 - **PII stripping for KB articles:** The AI prompt explicitly instructs PII removal. Additionally, perform a post-processing pass to detect and replace common PII patterns (email addresses, phone numbers) as a safety net.
 - **Rate limiting for suggested reply:** Track per-agent requests in `ai_rate_limit_log`. The rate limit resets on a rolling 1-hour window (not fixed hourly slots).
@@ -447,6 +448,12 @@ Add a new sidebar section to the admin setup page:
 - [ ] Generate KB article: PII stripped from generated body
 - [ ] Generate KB article: creates draft with source ticket reference
 - [ ] Usage counter: shows monthly API calls and token usage by feature
+- [ ] `AI_API_KEY` env var is used when Vault is empty
+- [ ] DB/Vault key takes precedence over env key when both are set
+- [ ] Admin UI shows amber "Loaded from environment" note when source is env
+- [ ] Admin UI shows grey "Stored in Vault" note when source is vault
+- [ ] Entering a key in the admin form stores it in Vault and overrides the env key
+- [ ] `.env.local.example` documents `AI_PROVIDER`, `AI_API_KEY`, `AI_MODEL`, `AI_CUSTOM_ENDPOINT_URL`
 - [ ] All AI failures handled gracefully (empty suggestions, error messages)
 - [ ] Timeout configured and enforced per feature
 - [ ] `npm run typecheck` passes with no errors

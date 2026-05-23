@@ -72,7 +72,7 @@ function buildData(settings: Record<string, string>): Record<string, unknown> {
 
 export function AiConfigSurveyForm({ settings, usage }: Props) {
   const data = buildData(settings);
-  const hasApiKey = settings.ai_api_key_present === 'true';
+  const keySource = settings.ai_api_key_source ?? 'none';
 
   const [testResult, setTestResult] = useState<{ success?: boolean; error?: string; model?: string } | null>(null);
   const [testing, startTesting] = useTransition();
@@ -103,9 +103,14 @@ export function AiConfigSurveyForm({ settings, usage }: Props) {
           }}
           successMessage="AI settings saved."
         />
-        {hasApiKey && (
+        {keySource === 'vault' && (
           <p className="text-xs text-gray-500">
-            API key is stored in Supabase Vault. Leave the API key field blank to keep the existing key.
+            API key is stored in Supabase Vault. Leave the field blank to keep the existing key.
+          </p>
+        )}
+        {keySource === 'env' && (
+          <p className="text-xs text-amber-600">
+            API key is loaded from the <code className="font-mono">AI_API_KEY</code> environment variable. Enter a key here to override it and store it in Vault.
           </p>
         )}
       </div>

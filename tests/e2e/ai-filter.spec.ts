@@ -20,8 +20,13 @@ async function enableAiFilter(enabled: boolean) {
 
 /**
  * Intercept the Next.js Server Action for translateAiFilterPrompt.
- * Server Actions are POSTed with a `Next-Action` header; we match on
- * that header and short-circuit with a mock response.
+ *
+ * Next.js Server Actions POST to the page URL with a `Next-Action` header.
+ * The client uses React's RSC wire protocol (`createFromFetch`) to deserialize
+ * the response — plain JSON is not valid; the body must start with a row-ID
+ * prefix (`0:<json>`).  Without it React fails to decode the return value,
+ * the Promise returned by the server action never resolves to a useful value,
+ * and `setAiChips` is never called.
  */
 async function mockAiFilterAction(
   page: Page,
@@ -29,11 +34,14 @@ async function mockAiFilterAction(
 ) {
   await page.route('**/agent**', async (route) => {
     const req = route.request();
+    // Playwright normalises all headers to lowercase.
     if (req.method() === 'POST' && req.headers()['next-action']) {
       await route.fulfill({
         status: 200,
         contentType: 'text/x-component',
-        body: JSON.stringify(response),
+        // RSC wire format: each "row" is  <id>:<json>\n
+        // Row 0 is the root return value.
+        body: `0:${JSON.stringify(response)}\n`,
       });
     } else {
       await route.continue();

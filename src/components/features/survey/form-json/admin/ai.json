@@ -132,6 +132,12 @@
               "name": "ai_generate_kb_article_enabled",
               "title": "Generate KB article from ticket",
               "renderAs": "checkbox"
+            },
+            {
+              "type": "boolean",
+              "name": "ai_filter_enabled",
+              "title": "AI-powered dashboard filter",
+              "renderAs": "checkbox"
             }
           ]
         }

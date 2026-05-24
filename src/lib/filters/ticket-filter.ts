@@ -32,12 +32,14 @@ export type TicketFilterData = {
 export type TicketFilterDefinition = {
   /** Display name. Empty / missing => "Default". */
   name: string;
-  /** Generator type. Only `'json'` is implemented in this change. */
+  /** Generator type. */
   type: TicketFilterType;
   /** SurveyJS response JSON. Question names match SQL filter keys. */
   data: TicketFilterData;
   /** Generated SQL (informational; query layer parameterises real values). */
   sql: string;
+  /** Original natural-language prompt used when type === 'ai'. */
+  prompt?: string;
 };
 
 export const DEFAULT_VIEW_NAME = 'Default';
@@ -123,8 +125,8 @@ export function generateSqlFromJson(data: TicketFilterData): string {
   return `SELECT * FROM agent_tickets t ${where} ${order}`.replace(/\s+/g, ' ').trim();
 }
 
-export function generateSqlFromAi(): string {
-  throw new Error('AI filter generation is not implemented');
+export function generateSqlFromAi(data: TicketFilterData): string {
+  return generateSqlFromJson(data);
 }
 
 export function generateSqlFromDefinition(def: TicketFilterDefinition): string {
@@ -132,7 +134,7 @@ export function generateSqlFromDefinition(def: TicketFilterDefinition): string {
     case 'json':
       return generateSqlFromJson(def.data);
     case 'ai':
-      return generateSqlFromAi();
+      return generateSqlFromAi(def.data);
     default: {
       const _exhaustive: never = def.type;
       throw new Error(`Unknown filter type: ${String(_exhaustive)}`);
@@ -165,13 +167,17 @@ export function normalizeStoredDefinition(
     const normalizedData = normalizeFilterData(data);
     const sql = typeof obj.sql === 'string' && obj.sql.length > 0
       ? obj.sql
-      : (obj.type === 'json' ? generateSqlFromJson(normalizedData) : '');
-    return {
+      : (obj.type === 'json' ? generateSqlFromJson(normalizedData) : generateSqlFromAi(normalizedData));
+    const def: TicketFilterDefinition = {
       name,
       type: obj.type,
       data: normalizedData,
       sql,
     };
+    if (obj.type === 'ai' && typeof obj.prompt === 'string') {
+      def.prompt = obj.prompt;
+    }
+    return def;
   }
 
   // Legacy flat shape — wrap and migrate.

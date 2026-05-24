@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { createServerClient } from '@/lib/supabase/server';
 import {
   generateSqlFromJson,
+  generateSqlFromAi,
   normalizeFilterData,
   type TicketFilterData,
   type TicketFilterType,
@@ -40,9 +41,7 @@ function parseDefinitionForm(formData: FormData): {
     parsed = {};
   }
   const data = normalizeFilterData(parsed);
-  // SQL is regenerated server-side from JSON to keep it authoritative for the
-  // `json` type. The `ai` generator is not implemented yet.
-  const sql = type === 'json' ? generateSqlFromJson(data) : '';
+  const sql = type === 'json' ? generateSqlFromJson(data) : generateSqlFromAi(data);
   return { type, data, sql };
 }
 
@@ -81,17 +80,20 @@ export async function updateSavedViewDefinition(args: {
   viewId: string;
   type?: TicketFilterType;
   data: unknown;
+  prompt?: string;
 }): Promise<void> {
   const { supabase, user } = await requireAgentRole();
   if (!args.viewId) return;
 
   const type: TicketFilterType = args.type === 'ai' ? 'ai' : 'json';
   const data = normalizeFilterData(args.data);
-  const sql = type === 'json' ? generateSqlFromJson(data) : '';
+  const sql = type === 'json' ? generateSqlFromJson(data) : generateSqlFromAi(data);
+  const filters: Record<string, unknown> = { type, data, sql };
+  if (type === 'ai' && args.prompt) filters.prompt = args.prompt;
 
   await supabase
     .from('saved_views')
-    .update({ filters: { type, data, sql }, updated_at: new Date().toISOString() })
+    .update({ filters, updated_at: new Date().toISOString() })
     .eq('id', args.viewId)
     .eq('agent_id', user.id);
 
@@ -137,6 +139,7 @@ export async function createSavedViewReturnId(args: {
   name: string;
   type?: TicketFilterType;
   data: unknown;
+  prompt?: string;
 }): Promise<{ id: string | null }> {
   const { supabase, user } = await requireAgentRole();
 
@@ -145,14 +148,16 @@ export async function createSavedViewReturnId(args: {
 
   const type: TicketFilterType = args.type === 'ai' ? 'ai' : 'json';
   const data = normalizeFilterData(args.data);
-  const sql = type === 'json' ? generateSqlFromJson(data) : '';
+  const sql = type === 'json' ? generateSqlFromJson(data) : generateSqlFromAi(data);
+  const filters: Record<string, unknown> = { type, data, sql };
+  if (type === 'ai' && args.prompt) filters.prompt = args.prompt;
 
   const { data: inserted } = await supabase
     .from('saved_views')
     .insert({
       agent_id: user.id,
       name,
-      filters: { type, data, sql },
+      filters,
     })
     .select('id')
     .single();

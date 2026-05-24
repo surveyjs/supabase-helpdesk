@@ -55,8 +55,8 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
   const [busy, setBusy] = useState(false);
   const dataRef = useRef<TicketFilterData>(initialData);
 
-  // AI mode state
-  const startsInAiMode = activeDefinition.type === 'ai';
+  // AI mode state — respect the feature flag even for pre-existing AI saved views.
+  const startsInAiMode = aiFilterEnabled && activeDefinition.type === 'ai';
   const [filterMode, setFilterMode] = useState<'standard' | 'ai'>(
     startsInAiMode ? 'ai' : 'standard',
   );

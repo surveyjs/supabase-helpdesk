@@ -558,11 +558,10 @@ export type AiFilterResult = {
 };
 
 export async function translateAiFilterPrompt(formData: FormData): Promise<AiFilterResult> {
-  const { profile } = await requireAgentRole();
+  const { supabase, profile } = await requireAgentRole();
   const prompt = (formData.get('prompt') as string)?.trim() ?? '';
   if (!prompt) return { data: {} };
 
-  const supabase = await createServerClient();
   const settings = await getSettingsMap(supabase, ['ai_filter_enabled']);
   if (settings.get('ai_filter_enabled') !== 'true') {
     return { data: {}, error: 'AI filter is not enabled.' };

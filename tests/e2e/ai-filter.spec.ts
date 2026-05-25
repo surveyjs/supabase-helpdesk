@@ -22,31 +22,45 @@ async function enableAiFilter(enabled: boolean) {
  * Intercept the Next.js Server Action for translateAiFilterPrompt.
  *
  * Next.js Server Actions POST to the page URL with a `Next-Action` header.
- * The client uses React's RSC wire protocol (`createFromFetch`) to deserialize
- * the response — plain JSON is not valid; the body must start with a row-ID
- * prefix (`0:<json>`).  Without it React fails to decode the return value,
- * the Promise returned by the server action never resolves to a useful value,
- * and `setAiChips` is never called.
+ * The client calls `createFromFetch` (react-server-dom-webpack) to decode the
+ * response and reads `response.a` as the action return value.  In the RSC wire
+ * protocol `response.a` is a deferred chunk reference (`$@<hex-id>`), so the
+ * body needs at least two rows:
+ *
+ *   Row 0  – root object:  `0:{"a":"$@1"}`
+ *   Row 1  – return value: `1:<return-value-json>`
+ *
+ * Using a plain-JSON row 0 makes `.a` undefined and the Promise never resolves.
+ *
+ * Route pattern: we match only the exact /agent pathname so that
+ * /_next/static/chunks/agent-*.js bundle requests are not accidentally
+ * intercepted and served as RSC text (which breaks page hydration).
  */
 async function mockAiFilterAction(
   page: Page,
   response: { data: Record<string, unknown>; error?: string },
 ) {
-  await page.route('**/agent**', async (route) => {
-    const req = route.request();
-    // Playwright normalises all headers to lowercase.
-    if (req.method() === 'POST' && req.headers()['next-action']) {
-      await route.fulfill({
-        status: 200,
-        contentType: 'text/x-component',
-        // RSC wire format: each "row" is  <id>:<json>\n
-        // Row 0 is the root return value.
-        body: `0:${JSON.stringify(response)}\n`,
-      });
-    } else {
-      await route.continue();
-    }
-  });
+  await page.route(
+    (url) => url.pathname === '/agent',
+    async (route) => {
+      const req = route.request();
+      // Playwright normalises all headers to lowercase.
+      if (req.method() === 'POST' && req.headers()['next-action']) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'text/x-component',
+          // RSC wire format (react-server-dom-webpack):
+          //   Row 0: root object — "a" is a deferred ref to row 1
+          //   Row 1: the action's return value
+          // Row 0: root — "a" is deferred ref to row 1, "f":"" means no page
+          // re-render needed (avoids normalizeFlightData TypeError on undefined).
+          body: `0:{"a":"$@1","f":""}\n1:${JSON.stringify(response)}\n`,
+        });
+      } else {
+        await route.continue();
+      }
+    },
+  );
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -195,7 +209,10 @@ test.describe('AI Filter — enabled state', () => {
     await page.getByPlaceholder("Describe what you're looking for…").fill('???');
     await page.getByRole('button', { name: /Ask AI/i }).click();
 
-    await expect(page.getByRole('alert')).toContainText(/try rephrasing/i, { timeout: 10000 });
+    // Filter out the Next.js route announcer (also role="alert") to avoid strict-mode violation.
+    await expect(
+      page.getByRole('alert').filter({ hasText: /try rephrasing/i }),
+    ).toBeVisible({ timeout: 10000 });
   });
 
   test('chips are not shown when AI call returns an error', async ({ page }) => {

@@ -20,6 +20,7 @@ const FEATURE_LABELS: Record<string, string> = {
   suggested_reply: 'Suggested reply',
   ticket_summary: 'Ticket summary',
   generate_kb_article: 'Generate KB article',
+  ai_filter: 'AI dashboard filter',
 };
 
 const BOOLEAN_KEYS = [
@@ -28,6 +29,7 @@ const BOOLEAN_KEYS = [
   'ai_suggested_reply_enabled',
   'ai_ticket_summary_enabled',
   'ai_generate_kb_article_enabled',
+  'ai_filter_enabled',
 ] as const;
 
 const NUMBER_KEYS = [

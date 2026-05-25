@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { createServerClient, createServiceRoleClient } from '@/lib/supabase/server';
 import { callAi, callAiText, logAiUsage, getAiConfig } from '@/lib/ai/client';
 import { generateSlug } from '@/lib/utils/slug';
+import { normalizeFilterData, type TicketFilterData } from '@/lib/filters/ticket-filter';
 
 // ============================================================
 // Helpers
@@ -548,7 +549,49 @@ Available KB categories: ${JSON.stringify((kbCategories ?? []).map((c) => ({ id:
 }
 
 // ============================================================
-// 6. Admin: AI Settings
+// 6. AI-powered Dashboard Filter
+// ============================================================
+
+export type AiFilterResult = {
+  data: TicketFilterData;
+  error?: string;
+};
+
+export async function translateAiFilterPrompt(formData: FormData): Promise<AiFilterResult> {
+  const { supabase, profile } = await requireAgentRole();
+  const prompt = (formData.get('prompt') as string)?.trim() ?? '';
+  if (!prompt) return { data: {} };
+
+  const settings = await getSettingsMap(supabase, ['ai_filter_enabled']);
+  if (settings.get('ai_filter_enabled') !== 'true') {
+    return { data: {}, error: 'AI filter is not enabled.' };
+  }
+
+  const systemPrompt = `You are a helpdesk ticket filter assistant.
+Convert the user's description into a JSON object matching this TypeScript type:
+{
+  q?: string;
+  email?: string;
+  status?: ('open' | 'pending' | 'closed')[];
+  urgency?: 'low' | 'medium' | 'high' | 'critical';
+  severity?: 'low' | 'medium' | 'high' | 'critical';
+  sort?: 'updated' | 'created' | 'sla';
+}
+Omit any field you cannot confidently infer. Respond with JSON only — no prose.`;
+
+  try {
+    const { content, tokensUsed } = await callAi(systemPrompt, prompt);
+    const raw = JSON.parse(content);
+    const data = normalizeFilterData(raw);
+    await logAiUsage(profile.id, 'ai_filter', tokensUsed);
+    return { data };
+  } catch {
+    return { data: {}, error: "Couldn't interpret that — try rephrasing." };
+  }
+}
+
+// ============================================================
+// 7. Admin: AI Settings
 // ============================================================
 
 export async function getAiSettings(): Promise<Record<string, string>> {
@@ -680,6 +723,8 @@ export async function saveAiSettings(formData: FormData): Promise<{ error?: stri
   settingsToUpdate.ai_ticket_summary_min_posts = String(Math.max(5, minPosts || 10));
 
   settingsToUpdate.ai_generate_kb_article_enabled = formData.get('ai_generate_kb_article_enabled') === 'on' ? 'true' : 'false';
+
+  settingsToUpdate.ai_filter_enabled = formData.get('ai_filter_enabled') === 'on' ? 'true' : 'false';
 
   // Save all settings
   for (const [key, value] of Object.entries(settingsToUpdate)) {

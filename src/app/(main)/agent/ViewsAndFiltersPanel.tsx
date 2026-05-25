@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { Model } from 'survey-core';
@@ -9,10 +9,13 @@ import {
   deleteSavedView,
   updateSavedViewDefinition,
 } from '@/lib/actions/saved-views';
+import { translateAiFilterPrompt } from '@/lib/actions/ai';
 import {
   generateSqlFromJson,
   normalizeFilterData,
+  dataToUrlParams,
   type TicketFilterData,
+  type TicketFilterDefinition,
 } from '@/lib/filters/ticket-filter';
 import {
   buildTicketFilterSurveyJson,
@@ -30,6 +33,8 @@ type ViewsAndFiltersPanelProps = {
   activeViewId: string | null;
   activeViewName: string;
   initialData: TicketFilterData;
+  activeDefinition: TicketFilterDefinition;
+  aiFilterEnabled: boolean;
 };
 
 export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
@@ -40,6 +45,8 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
     activeViewId,
     activeViewName,
     initialData,
+    activeDefinition,
+    aiFilterEnabled,
   } = props;
 
   const router = useRouter();
@@ -47,6 +54,20 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
   const [newViewName, setNewViewName] = useState('');
   const [busy, setBusy] = useState(false);
   const dataRef = useRef<TicketFilterData>(initialData);
+
+  // AI mode state — respect the feature flag even for pre-existing AI saved views.
+  const startsInAiMode = aiFilterEnabled && activeDefinition.type === 'ai';
+  const [filterMode, setFilterMode] = useState<'standard' | 'ai'>(
+    startsInAiMode ? 'ai' : 'standard',
+  );
+  const [aiPrompt, setAiPrompt] = useState(
+    startsInAiMode ? (activeDefinition.prompt ?? '') : '',
+  );
+  const [aiChips, setAiChips] = useState<TicketFilterData | null>(
+    startsInAiMode ? activeDefinition.data : null,
+  );
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiPending, startAiTransition] = useTransition();
 
   const schema = useMemo(
     () => buildTicketFilterSurveyJson(filterOptions, template),
@@ -64,13 +85,9 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
     m.completeText = 'Apply Filters';
     m.data = surveyData;
 
-    // Custom navigation button per spec.
     m.addNavigationItem({
       id: 'sv-nav-clear-filtering',
       title: 'Clear All',
-      // "Clear All" means "no filters" — for the status checkbox that
-      // translates to all-selected (the only legal "no filter" state now
-      // that minSelectedChoices: 1 forbids an empty selection).
       action: () => {
         m.data = { status: ['open', 'pending', 'closed'] };
       },
@@ -93,7 +110,7 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
     const handler = () => {
       const data = normalizeFilterData(model.data ?? {});
       const sql = generateSqlFromJson(data);
-      applyFilters(data, sql);
+      applyStandardFilters(data, sql);
     };
     model.onComplete.add(handler);
     return () => { model.onComplete.remove(handler); };
@@ -101,45 +118,40 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
   }, [model, activeViewId]);
 
   function buildUrlForData(data: TicketFilterData, viewId: string | null): string {
-    const params = new URLSearchParams();
-    if (viewId) params.set('view', viewId);
-    else {
-      // Encode for Default view
-      if (data.q) params.set('q', data.q);
-      if (data.email) params.set('email', data.email);
-      if (data.urgency) params.set('urgency', data.urgency);
-      if (data.severity) params.set('severity', data.severity);
-      if (data.category) params.set('category', data.category);
-      if (data.type) params.set('type', data.type);
-      if (data.agent) params.set('agent', data.agent);
-      if (data.team) params.set('team', data.team);
-      if (data.tier) params.set('tier', data.tier);
-      if (data.sort) params.set('sort', data.sort);
-      if (data.tags && data.tags.length > 0) params.set('tags', data.tags.join(','));
-      if (data.status && data.status.length > 0 && data.status.length < 3) {
-        params.set('status', data.status.join(','));
-      }
-    }
+    if (viewId) return `/agent?view=${viewId}`;
+    const params = dataToUrlParams(data);
     const qs = params.toString();
     return qs ? `/agent?${qs}` : '/agent';
   }
 
-  function applyFilters(data: TicketFilterData, sql: string) {
+  function applyStandardFilters(data: TicketFilterData, sql: string) {
     if (activeViewId) {
       setBusy(true);
       void updateSavedViewDefinition({ viewId: activeViewId, type: 'json', data })
         .catch((err) => { console.error('updateSavedViewDefinition failed', err); })
         .finally(() => {
           setBusy(false);
-          // URL is unchanged when re-applying to the same view, so a plain
-          // router.push is a no-op. router.refresh() forces the server
-          // component to re-run with the freshly persisted definition.
           router.push(buildUrlForData(data, activeViewId));
           router.refresh();
         });
     } else {
-      // sql is intentionally regenerated server-side; ignore client copy.
       void sql;
+      router.push(buildUrlForData(data, null));
+    }
+  }
+
+  function applyAiFilters() {
+    const data = aiChips ?? {};
+    if (activeViewId) {
+      setBusy(true);
+      void updateSavedViewDefinition({ viewId: activeViewId, type: 'ai', data, prompt: aiPrompt })
+        .catch((err) => { console.error('updateSavedViewDefinition failed', err); })
+        .finally(() => {
+          setBusy(false);
+          router.push(buildUrlForData(data, activeViewId));
+          router.refresh();
+        });
+    } else {
       router.push(buildUrlForData(data, null));
     }
   }
@@ -169,9 +181,14 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
   function handleAddOk() {
     const trimmed = newViewName.trim();
     if (!trimmed) return;
-    const data = dataRef.current;
+
     setBusy(true);
-    void createSavedViewReturnId({ name: trimmed, type: 'json', data })
+    const isAi = filterMode === 'ai' && aiChips !== null;
+    const args = isAi
+      ? { name: trimmed, type: 'ai' as const, data: aiChips!, prompt: aiPrompt }
+      : { name: trimmed, type: 'json' as const, data: dataRef.current };
+
+    void createSavedViewReturnId(args)
       .then(({ id }) => {
         setIsAdding(false);
         setNewViewName('');
@@ -190,6 +207,34 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
     setNewViewName('');
   }
 
+  function handleAskAi() {
+    setAiError(null);
+    const fd = new FormData();
+    fd.set('prompt', aiPrompt);
+    startAiTransition(async () => {
+      const result = await translateAiFilterPrompt(fd);
+      if (result.error) {
+        setAiError(result.error);
+      } else {
+        setAiChips(result.data);
+      }
+    });
+  }
+
+  function handleAiClear() {
+    setAiChips(null);
+    setAiPrompt('');
+    setAiError(null);
+  }
+
+  const chipEntries = aiChips
+    ? Object.entries(aiChips).filter(([, v]) => {
+        if (v === undefined || v === null) return false;
+        if (Array.isArray(v)) return v.length > 0;
+        return String(v).length > 0;
+      })
+    : [];
+
   return (
     <div data-testid="views-and-filters-panel">
       {/* Saved Views Section */}
@@ -197,7 +242,6 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium text-gray-700">Saved Views:</span>
 
-          {/* Default view (always present, non-removable) */}
           <button
             type="button"
             onClick={() => handleSelectView(null)}
@@ -238,7 +282,6 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
             );
           })}
 
-          {/* Add new view affordance — link OR inline editor */}
           {isAdding ? (
             <span className="inline-flex items-center gap-1">
               <input
@@ -285,8 +328,110 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
         </div>
       </div>
 
-      {/* Filter Controls Section */}
-      <div className="pt-4 border-t border-gray-200" data-testid="agent-filter-survey">
+      {/* Filter Mode Toggle (only when AI filter is enabled) */}
+      {aiFilterEnabled && (
+        <div className="flex gap-1 mb-4" role="group" aria-label="Filter mode">
+          <button
+            type="button"
+            aria-pressed={filterMode === 'standard'}
+            onClick={() => setFilterMode('standard')}
+            className={`text-sm px-3 py-1 rounded-l border ${
+              filterMode === 'standard'
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+            }`}
+          >
+            Standard
+          </button>
+          <button
+            type="button"
+            aria-pressed={filterMode === 'ai'}
+            onClick={() => setFilterMode('ai')}
+            className={`text-sm px-3 py-1 rounded-r border-t border-b border-r ${
+              filterMode === 'ai'
+                ? 'bg-blue-600 text-white border-blue-600'
+                : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+            }`}
+          >
+            ✨ AI
+          </button>
+        </div>
+      )}
+
+      {/* AI Filter Panel */}
+      {filterMode === 'ai' && (
+        <div className="space-y-3">
+          <div className="flex flex-col gap-2">
+            <textarea
+              value={aiPrompt}
+              onChange={(e) => setAiPrompt(e.target.value)}
+              placeholder="Describe what you're looking for…"
+              rows={3}
+              className="w-full text-sm rounded border border-gray-300 px-3 py-2 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-none"
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleAskAi}
+                disabled={aiPending || !aiPrompt.trim()}
+                className="text-sm px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {aiPending ? (
+                  <>
+                    <svg className="animate-spin h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                    </svg>
+                    Thinking…
+                  </>
+                ) : 'Ask AI ▶'}
+              </button>
+              <button
+                type="button"
+                onClick={handleAiClear}
+                className="text-sm px-3 py-1.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-50"
+              >
+                Clear
+              </button>
+              {aiChips && (
+                <button
+                  type="button"
+                  onClick={applyAiFilters}
+                  disabled={busy}
+                  className="text-sm px-3 py-1.5 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+                >
+                  Apply
+                </button>
+              )}
+            </div>
+          </div>
+
+          {aiError && (
+            <p role="alert" className="text-sm text-red-600">
+              {aiError}
+            </p>
+          )}
+
+          {chipEntries.length > 0 && (
+            <div aria-label="Generated filters" className="flex flex-wrap gap-1.5">
+              {chipEntries.map(([k, v]) => (
+                <span
+                  key={k}
+                  className="inline-flex items-center text-xs bg-blue-50 text-blue-700 border border-blue-200 rounded px-2 py-0.5"
+                >
+                  {k}: {Array.isArray(v) ? v.join(', ') : String(v)}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Standard filter survey (hidden in AI mode) */}
+      <div
+        className={`pt-4 border-t border-gray-200 ${filterMode === 'ai' ? 'hidden' : ''}`}
+        data-testid="filter-survey"
+      >
         <Survey model={model} />
       </div>
     </div>

@@ -165,7 +165,7 @@ export async function createSavedViewReturnId(args: {
   const filters: Record<string, unknown> = { type, data, sql };
   if (type === 'ai' && args.prompt) filters.prompt = args.prompt;
 
-  const { data: inserted } = await supabase
+  const { data: inserted, error } = await supabase
     .from('saved_views')
     .insert({
       agent_id: user.id,
@@ -175,6 +175,22 @@ export async function createSavedViewReturnId(args: {
     .select('id')
     .single();
 
+  if (error) {
+    throw new Error(`Failed to create saved view: ${error.message}`);
+  }
+
+  const insertedId = inserted?.id as string | undefined;
+  if (insertedId) {
+    const { error: activeViewError } = await supabase
+      .from('profiles')
+      .update({ active_view_id: insertedId })
+      .eq('id', user.id);
+
+    if (activeViewError) {
+      throw new Error(`Failed to activate saved view: ${activeViewError.message}`);
+    }
+  }
+
   revalidatePath('/agent');
-  return { id: (inserted?.id as string | undefined) ?? null };
+  return { id: insertedId ?? null };
 }

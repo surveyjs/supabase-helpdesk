@@ -6,6 +6,8 @@ async function loginAsAgent(page: Page) {
   await loginViaForm(page, 'agent.smith@example.com');
 }
 
+test.describe.configure({ mode: 'serial' });
+
 // ─────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────

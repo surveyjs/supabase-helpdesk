@@ -28,8 +28,11 @@ export function ViewSwitcherDropdown({ savedViews, activeViewId, activeViewName 
 
   function handleSelect(viewId: string | null) {
     setOpen(false);
-    void setAgentActiveView(viewId);
-    router.push(viewId ? `/agent?view=${viewId}` : '/agent');
+    void setAgentActiveView(viewId)
+      .catch((err) => { console.error('setAgentActiveView failed', err); })
+      .finally(() => {
+        router.push(viewId ? `/agent?view=${viewId}` : '/agent');
+      });
   }
 
   return (

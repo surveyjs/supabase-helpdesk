@@ -137,7 +137,13 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
         });
     } else {
       void sql;
-      router.push(buildUrlForData(data, null));
+      setBusy(true);
+      void setAgentActiveView(null)
+        .catch((err) => { console.error('setAgentActiveView failed', err); })
+        .finally(() => {
+          setBusy(false);
+          router.push(buildUrlForData(data, null));
+        });
     }
   }
 
@@ -153,31 +159,44 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
           router.refresh();
         });
     } else {
-      router.push(buildUrlForData(data, null));
+      setBusy(true);
+      void setAgentActiveView(null)
+        .catch((err) => { console.error('setAgentActiveView failed', err); })
+        .finally(() => {
+          setBusy(false);
+          router.push(buildUrlForData(data, null));
+        });
     }
   }
 
   function handleSelectView(viewId: string | null) {
-    void setAgentActiveView(viewId);
-    if (viewId === null) {
-      router.push('/agent');
-    } else {
-      router.push(`/agent?view=${viewId}`);
-    }
+    setBusy(true);
+    void setAgentActiveView(viewId)
+      .catch((err) => { console.error('setAgentActiveView failed', err); })
+      .finally(() => {
+        setBusy(false);
+        router.push(viewId === null ? '/agent' : `/agent?view=${viewId}`);
+      });
   }
 
   function handleDelete(viewId: string) {
     const fd = new FormData();
     fd.set('view_id', viewId);
     setBusy(true);
-    void deleteSavedView(fd).finally(() => {
-      setBusy(false);
-      if (activeViewId === viewId) {
-        router.push('/agent');
-      } else {
-        router.refresh();
-      }
-    });
+    void deleteSavedView(fd)
+      .then(async () => {
+        if (activeViewId === viewId) {
+          await setAgentActiveView(null);
+        }
+      })
+      .finally(() => {
+        setBusy(false);
+        if (activeViewId === viewId) {
+          router.push('/agent');
+        } else {
+          router.refresh();
+        }
+      });
   }
 
   function handleAddOk() {
@@ -194,11 +213,11 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
       .then(({ id }) => {
         setIsAdding(false);
         setNewViewName('');
-        setBusy(false);
         if (id) {
-          void setAgentActiveView(id);
+          setBusy(false);
           router.push(`/agent?view=${id}`);
         } else {
+          setBusy(false);
           router.refresh();
         }
       })

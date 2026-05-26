@@ -58,6 +58,8 @@ export default async function AgentDashboardPage({
 
   const requestedViewId = typeof params.view === 'string' ? params.view : null;
   const pageParam = typeof params.page === 'string' ? params.page : '1';
+  const urlFilterData: TicketFilterData = urlParamsToData(params);
+  const hasUrlFilters = Object.keys(urlFilterData).length > 0;
 
   const savedViews = await getSavedViews(user.id);
 
@@ -80,15 +82,15 @@ export default async function AgentDashboardPage({
       ? { id: found.id, name: found.name, definition: found.definition }
       : defaultActiveView; // Stale/unknown id — fall through to Default.
   } else {
-    const data: TicketFilterData = urlParamsToData(params);
-    const hasUrlFilters = Object.keys(data).length > 0;
-
     if (!hasUrlFilters && profile.active_view_id) {
       // No URL filter params — restore the last view the agent explicitly selected.
       const stored = savedViews.find((v) => v.id === profile.active_view_id);
-      activeView = stored
-        ? { id: stored.id, name: stored.name, definition: stored.definition }
-        : defaultActiveView; // View was deleted — fall back to Default.
+      if (stored) {
+        activeView = { id: stored.id, name: stored.name, definition: stored.definition };
+      } else {
+        await supabase.from('profiles').update({ active_view_id: null }).eq('id', user.id);
+        activeView = defaultActiveView; // View was deleted — fall back to Default.
+      }
     } else {
       activeView = hasUrlFilters
         ? {
@@ -97,8 +99,8 @@ export default async function AgentDashboardPage({
             definition: {
               name: DEFAULT_VIEW_NAME,
               type: 'json',
-              data,
-              sql: generateSqlFromJson(data),
+              data: urlFilterData,
+              sql: generateSqlFromJson(urlFilterData),
             },
           }
         : defaultActiveView;

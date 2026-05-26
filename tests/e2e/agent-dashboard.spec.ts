@@ -901,10 +901,18 @@ test.describe('View Switcher Dropdown', () => {
 test.describe('Active View Persistence', () => {
   test.describe.configure({ mode: 'serial' });
 
+  const ACTIVE_VIEW_EMAIL = 'admin@example.com';
+  const ACTIVE_VIEW_AGENT_ID = '00000000-0000-0000-0000-000000000011';
+
   let ticketUrl: string;
 
   test.beforeAll(async () => {
     const admin = createServiceRoleClient();
+    await admin.from('saved_views').delete().eq('agent_id', ACTIVE_VIEW_AGENT_ID).like('name', 'Persist %');
+    await admin.from('saved_views').delete().eq('agent_id', ACTIVE_VIEW_AGENT_ID).like('name', 'Delete Persist %');
+    await admin.from('saved_views').delete().eq('agent_id', ACTIVE_VIEW_AGENT_ID).like('name', 'Temp View %');
+    await admin.from('profiles').update({ active_view_id: null }).eq('id', ACTIVE_VIEW_AGENT_ID);
+
     const { data: ticket } = await admin
       .from('tickets')
       .select('id, slug')
@@ -916,17 +924,20 @@ test.describe('Active View Persistence', () => {
   test.afterEach(async () => {
     // Reset stored active view to avoid bleeding between tests.
     const admin = createServiceRoleClient();
+    await admin.from('saved_views').delete().eq('agent_id', ACTIVE_VIEW_AGENT_ID).like('name', 'Persist %');
+    await admin.from('saved_views').delete().eq('agent_id', ACTIVE_VIEW_AGENT_ID).like('name', 'Delete Persist %');
+    await admin.from('saved_views').delete().eq('agent_id', ACTIVE_VIEW_AGENT_ID).like('name', 'Temp View %');
     await admin
       .from('profiles')
       .update({ active_view_id: null })
-      .eq('email', 'agent.smith@example.com');
+      .eq('id', ACTIVE_VIEW_AGENT_ID);
   });
 
   test('saved view is restored after navigating to a ticket and back', async ({ page }) => {
     const token = `persist-${Date.now()}`;
     const viewName = `Persist ${token}`;
 
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, ACTIVE_VIEW_EMAIL);
     // Start with a filter so the saved view holds something non-trivial.
     await page.goto(`/agent?status=closed&q=${encodeURIComponent(token)}`);
 
@@ -967,7 +978,7 @@ test.describe('Active View Persistence', () => {
     const { data: agent } = await admin
       .from('profiles')
       .select('id')
-      .eq('email', 'agent.smith@example.com')
+      .eq('email', ACTIVE_VIEW_EMAIL)
       .single();
 
     const { data: view } = await admin
@@ -986,7 +997,7 @@ test.describe('Active View Persistence', () => {
       .eq('id', agent!.id);
 
     try {
-      await loginAs(page, 'agent.smith@example.com');
+      await loginAs(page, ACTIVE_VIEW_EMAIL);
       await page.goto('/agent');
       await page.waitForLoadState('networkidle');
 
@@ -1011,7 +1022,7 @@ test.describe('Active View Persistence', () => {
     const token = `delete-persist-${Date.now()}`;
     const viewName = `Delete Persist ${token}`;
 
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, ACTIVE_VIEW_EMAIL);
     await page.goto(`/agent?status=open`);
     await page.getByText(/Views & Filters:/).click();
     await page.getByRole('button', { name: '+ Add new view' }).click();

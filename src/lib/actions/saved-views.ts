@@ -132,6 +132,19 @@ export async function deleteSavedView(formData: FormData): Promise<void> {
 }
 
 /**
+ * Persist the agent's currently active dashboard view so navigation away from
+ * /agent and back restores the same view instead of reverting to Default.
+ * Pass null to reset to the Default view.
+ */
+export async function setAgentActiveView(viewId: string | null): Promise<void> {
+  const { supabase, user } = await requireAgentRole();
+  await supabase
+    .from('profiles')
+    .update({ active_view_id: viewId })
+    .eq('id', user.id);
+}
+
+/**
  * Server action variant that creates a saved view and returns its id, used by
  * the inline "Add new view" client UI which then redirects to ?view=<id>.
  */

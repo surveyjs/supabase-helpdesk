@@ -721,6 +721,151 @@ test.describe('Consolidated Views & Filters Panel', () => {
   });
 });
 
+test.describe('Active View Persistence', () => {
+  test.describe.configure({ mode: 'serial' });
+
+  let ticketUrl: string;
+
+  test.beforeAll(async () => {
+    const admin = createServiceRoleClient();
+    const { data: ticket } = await admin
+      .from('tickets')
+      .select('id, slug')
+      .eq('title', 'Password reset not working')
+      .single();
+    ticketUrl = `/tickets/${ticket!.id}/${ticket!.slug}`;
+  });
+
+  test.afterEach(async () => {
+    // Reset stored active view to avoid bleeding between tests.
+    const admin = createServiceRoleClient();
+    await admin
+      .from('profiles')
+      .update({ active_view_id: null })
+      .eq('email', 'agent.smith@example.com');
+  });
+
+  test('saved view is restored after navigating to a ticket and back', async ({ page }) => {
+    const token = `persist-${Date.now()}`;
+    const viewName = `Persist ${token}`;
+
+    await loginAs(page, 'agent.smith@example.com');
+    // Start with a filter so the saved view holds something non-trivial.
+    await page.goto(`/agent?status=closed&q=${encodeURIComponent(token)}`);
+
+    // Expand panel and create a named view.
+    await page.getByText(/Views & Filters:/).click();
+    await page.getByRole('button', { name: '+ Add new view' }).click();
+    await page.getByLabel('New saved view name').fill(viewName);
+    await page.getByRole('button', { name: 'Confirm new view' }).click();
+    await page.waitForURL(/view=/, { timeout: 10000 });
+
+    // Verify the view is active.
+    await expect(page.getByText(`Views & Filters: ${viewName}`)).toBeVisible({ timeout: 10000 });
+
+    // Navigate to a ticket detail page (simulates opening a ticket from the list).
+    await page.goto(ticketUrl);
+    await page.waitForURL(/\/tickets\//, { timeout: 10000 });
+
+    // Navigate back to /agent with NO query params (simulates clicking nav link).
+    await page.goto('/agent');
+    await page.waitForLoadState('networkidle');
+
+    // The previously-selected view should be restored automatically.
+    await expect(
+      page.getByText(`Views & Filters: ${viewName}`),
+    ).toBeVisible({ timeout: 10000 });
+
+    // Clean up the test view.
+    const deleteBtn = page.getByLabel(`Delete saved view ${viewName}`);
+    if (!(await deleteBtn.isVisible())) {
+      await page.getByText(/Views & Filters:/).first().click();
+      await expect(deleteBtn).toBeVisible({ timeout: 5000 });
+    }
+    await deleteBtn.click();
+    await page.waitForTimeout(500);
+  });
+
+  test('selecting Default clears stored preference; navigating back shows Default', async ({ page }) => {
+    // Seed an active view directly in the DB.
+    const admin = createServiceRoleClient();
+    const { data: agent } = await admin
+      .from('profiles')
+      .select('id')
+      .eq('email', 'agent.smith@example.com')
+      .single();
+
+    const { data: view } = await admin
+      .from('saved_views')
+      .insert({
+        agent_id: agent!.id,
+        name: `Temp View ${Date.now()}`,
+        filters: { type: 'json', data: {}, sql: '' },
+      })
+      .select('id')
+      .single();
+
+    await admin
+      .from('profiles')
+      .update({ active_view_id: view!.id })
+      .eq('id', agent!.id);
+
+    try {
+      await loginAs(page, 'agent.smith@example.com');
+      await page.goto('/agent');
+      await page.waitForLoadState('networkidle');
+
+      // Expand panel and click Default.
+      await page.getByText(/Views & Filters:/).click();
+      await page.getByRole('button', { name: 'Default' }).click();
+      await page.waitForLoadState('networkidle');
+
+      // Navigate to a ticket and back.
+      await page.goto(ticketUrl);
+      await page.goto('/agent');
+      await page.waitForLoadState('networkidle');
+
+      // Default view should be shown, not the seeded saved view.
+      await expect(page.getByText('Views & Filters: Default')).toBeVisible({ timeout: 10000 });
+    } finally {
+      await admin.from('saved_views').delete().eq('id', view!.id);
+    }
+  });
+
+  test('deleting the stored active view falls back to Default', async ({ page }) => {
+    const token = `delete-persist-${Date.now()}`;
+    const viewName = `Delete Persist ${token}`;
+
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto(`/agent?status=open`);
+    await page.getByText(/Views & Filters:/).click();
+    await page.getByRole('button', { name: '+ Add new view' }).click();
+    await page.getByLabel('New saved view name').fill(viewName);
+    await page.getByRole('button', { name: 'Confirm new view' }).click();
+    await page.waitForURL(/view=/, { timeout: 10000 });
+
+    // View is now the active one (stored in DB).
+    await expect(page.getByText(`Views & Filters: ${viewName}`)).toBeVisible({ timeout: 10000 });
+
+    // Delete the view while it is the active one.
+    const deleteBtn = page.getByLabel(`Delete saved view ${viewName}`);
+    if (!(await deleteBtn.isVisible())) {
+      await page.getByText(/Views & Filters:/).first().click();
+      await expect(deleteBtn).toBeVisible({ timeout: 5000 });
+    }
+    await deleteBtn.click();
+    await page.waitForTimeout(500);
+
+    // Navigate away and back.
+    await page.goto(ticketUrl);
+    await page.goto('/agent');
+    await page.waitForLoadState('networkidle');
+
+    // Should fall back to Default (ON DELETE SET NULL cleared active_view_id).
+    await expect(page.getByText('Views & Filters: Default')).toBeVisible({ timeout: 10000 });
+  });
+});
+
 test.describe('Agent Stats Panel', () => {
   test('collapse/expand toggle works', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');

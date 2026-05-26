@@ -7,6 +7,7 @@ import { Model } from 'survey-core';
 import {
   createSavedViewReturnId,
   deleteSavedView,
+  setAgentActiveView,
   updateSavedViewDefinition,
 } from '@/lib/actions/saved-views';
 import { translateAiFilterPrompt } from '@/lib/actions/ai';
@@ -157,6 +158,7 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
   }
 
   function handleSelectView(viewId: string | null) {
+    void setAgentActiveView(viewId);
     if (viewId === null) {
       router.push('/agent');
     } else {
@@ -193,8 +195,12 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
         setIsAdding(false);
         setNewViewName('');
         setBusy(false);
-        if (id) router.push(`/agent?view=${id}`);
-        else router.refresh();
+        if (id) {
+          void setAgentActiveView(id);
+          router.push(`/agent?view=${id}`);
+        } else {
+          router.refresh();
+        }
       })
       .catch((err) => {
         console.error('createSavedViewReturnId failed', err);

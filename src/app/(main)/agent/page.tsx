@@ -37,10 +37,10 @@ export default async function AgentDashboardPage({
   const user = await requireAgent();
   const supabase = await createServerClient();
 
-  // Get current user profile
+  // Get current user profile (including stored active view preference)
   const { data: profile } = await supabase
     .from('profiles')
-    .select('id, role')
+    .select('id, role, active_view_id')
     .eq('id', user.id)
     .single();
 
@@ -61,37 +61,48 @@ export default async function AgentDashboardPage({
 
   const savedViews = await getSavedViews(user.id);
 
+  const defaultActiveView = {
+    id: null,
+    name: DEFAULT_VIEW_NAME,
+    definition: {
+      name: DEFAULT_VIEW_NAME,
+      type: 'json' as const,
+      data: EMPTY_FILTER_DATA,
+      sql: generateSqlFromJson(EMPTY_FILTER_DATA),
+    },
+  };
+
   // Resolve the active filter definition.
   let activeView: { id: string | null; name: string; definition: TicketFilterDefinition };
   if (requestedViewId) {
     const found = savedViews.find((v) => v.id === requestedViewId);
-    if (found) {
-      activeView = { id: found.id, name: found.name, definition: found.definition };
-    } else {
-      // Stale/unknown id — fall through to Default.
-      activeView = {
-        id: null,
-        name: DEFAULT_VIEW_NAME,
-        definition: {
-          name: DEFAULT_VIEW_NAME,
-          type: 'json',
-          data: EMPTY_FILTER_DATA,
-          sql: generateSqlFromJson(EMPTY_FILTER_DATA),
-        },
-      };
-    }
+    activeView = found
+      ? { id: found.id, name: found.name, definition: found.definition }
+      : defaultActiveView; // Stale/unknown id — fall through to Default.
   } else {
     const data: TicketFilterData = urlParamsToData(params);
-    activeView = {
-      id: null,
-      name: DEFAULT_VIEW_NAME,
-      definition: {
-        name: DEFAULT_VIEW_NAME,
-        type: 'json',
-        data,
-        sql: generateSqlFromJson(data),
-      },
-    };
+    const hasUrlFilters = Object.keys(data).length > 0;
+
+    if (!hasUrlFilters && profile.active_view_id) {
+      // No URL filter params — restore the last view the agent explicitly selected.
+      const stored = savedViews.find((v) => v.id === profile.active_view_id);
+      activeView = stored
+        ? { id: stored.id, name: stored.name, definition: stored.definition }
+        : defaultActiveView; // View was deleted — fall back to Default.
+    } else {
+      activeView = hasUrlFilters
+        ? {
+            id: null,
+            name: DEFAULT_VIEW_NAME,
+            definition: {
+              name: DEFAULT_VIEW_NAME,
+              type: 'json',
+              data,
+              sql: generateSqlFromJson(data),
+            },
+          }
+        : defaultActiveView;
+    }
   }
 
   const effectiveData: TicketFilterData = { ...activeView.definition.data };

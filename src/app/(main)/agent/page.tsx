@@ -18,6 +18,7 @@ import { BulkSelectProvider } from '@/components/features/bulk-actions/BulkSelec
 import { TicketCheckbox, SelectAllCheckbox } from '@/components/features/bulk-actions/TicketCheckbox';
 import { BulkActionToolbar } from '@/components/features/bulk-actions/BulkActionToolbar';
 import { ViewsAndFiltersPanel } from './ViewsAndFiltersPanel';
+import { ViewSwitcherDropdown } from './ViewSwitcherDropdown';
 import { parseAgentDashboardTemplate } from '@/lib/constants/survey-ui-config';
 import { getTemplateDefaultSort } from '@/lib/filters/ticket-filter-survey';
 import {
@@ -146,8 +147,6 @@ export default async function AgentDashboardPage({
     }
   }
 
-  const currentViewName = activeView.name;
-
   return (
     <div>
       <h1 className="sr-only">Agent Dashboard</h1>
@@ -191,7 +190,14 @@ export default async function AgentDashboardPage({
       {/* Consolidated Views & Filters Panel */}
       <details className="bg-white rounded-lg border border-gray-200 mb-4 group">
         <summary className="px-4 py-3 cursor-pointer text-sm font-medium text-gray-700 hover:text-gray-900 list-none flex items-center justify-between focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none rounded-lg">
-          <span>Views & Filters: {currentViewName}</span>
+          <span className="flex items-center gap-1.5">
+            <span>Views &amp; Filters:</span>
+            <ViewSwitcherDropdown
+              savedViews={savedViews.map((v) => ({ id: v.id, name: v.name }))}
+              activeViewId={activeView.id}
+              activeViewName={activeView.name}
+            />
+          </span>
           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
           </svg>

@@ -606,7 +606,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
     }
 
     // View should be gone
-    await expect(page.getByRole('button', { name: viewName, exact: true })).not.toBeVisible();
+    await expect(page.getByTestId('views-and-filters-panel').getByRole('button', { name: viewName, exact: true })).not.toBeVisible();
   });
 
   test('cannot delete Default view (no delete button for Default)', async ({ page }) => {
@@ -719,7 +719,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
     }
 
     // View should be gone
-    await expect(page.getByRole('button', { name: viewName, exact: true })).not.toBeVisible();
+    await expect(page.getByTestId('views-and-filters-panel').getByRole('button', { name: viewName, exact: true })).not.toBeVisible();
   });
 });
 

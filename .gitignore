@@ -50,3 +50,4 @@ playwright-results.json
 /migration/
 
 .claude/settings.json
+.claude/settings.json

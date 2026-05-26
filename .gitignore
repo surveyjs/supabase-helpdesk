@@ -49,5 +49,4 @@ playwright-results.json
 # migration
 /migration/
 
-.claude/settings.json
-.claude/settings.json
+.claude/

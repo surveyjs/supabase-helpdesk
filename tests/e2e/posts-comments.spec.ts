@@ -94,7 +94,12 @@ test.describe('Posts, Comments & Notes', () => {
 
     await page.getByLabel('Title').fill('E2E Posts Test Ticket');
     await typeSelect.selectOption({ label: 'Issue' });
-    await page.locator('[data-testid="markdown-editor"]').first().locator('textarea[name="textarea"]').fill('This is the original post body for E2E post tests.');
+    const editor = page.getByTestId('markdown-editor').first();
+    await editor.locator('textarea[name="textarea"]').fill('This is the original post body for E2E post tests.');
+    await expect(editor.locator('textarea[name="body"]')).toHaveValue(
+      'This is the original post body for E2E post tests.',
+      { timeout: 5000 },
+    );
     await page.getByRole('button', { name: 'Create Ticket' }).click();
 
     const createdUrlPattern = /\/tickets\/\d+\/e2e-posts-test-ticket/;

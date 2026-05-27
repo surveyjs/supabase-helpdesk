@@ -52,6 +52,19 @@ async function gotoAdmin(page: Page, path: string) {
   }
 }
 
+async function ensureExternalConfigVisible(page: Page) {
+  const svc = createServiceRoleClient();
+  for (let i = 0; i < 5; i++) {
+    if (await page.getByTestId('external-provider-config').isVisible().catch(() => false)) {
+      return;
+    }
+    await svc.from('app_settings').update({ value: 'external' }).eq('key', 'auth_mode');
+    await page.goto('/admin/auth').catch(() => {});
+    await page.waitForLoadState('domcontentloaded').catch(() => {});
+  }
+  await expect(page.getByTestId('external-provider-config')).toBeVisible({ timeout: 5000 });
+}
+
 async function resetAuthMode() {
   const svc = createServiceRoleClient();
   await svc.from('app_settings').update({ value: 'built-in' }).eq('key', 'auth_mode');
@@ -181,6 +194,8 @@ test.describe('Auth External', () => {
       await page.getByTestId('mode-external').click();
       await page.getByTestId('confirm-mode-switch').click();
     }
+
+    await ensureExternalConfigVisible(page);
 
     const redirectInput = page.getByTestId('redirect-uri');
     await expect(redirectInput).toBeVisible();

@@ -118,7 +118,9 @@ export async function loginViaForm(
     }
   }
 
-  await expect(page.locator('summary[aria-haspopup="true"]')).toBeVisible({ timeout: 15000 });
+  await expect(
+    page.locator('summary[aria-haspopup="true"]:visible, button[aria-controls="mobile-nav-menu"]:visible').first(),
+  ).toBeVisible({ timeout: 15000 });
 }
 
 /**

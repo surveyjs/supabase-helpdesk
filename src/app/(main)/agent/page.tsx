@@ -17,7 +17,7 @@ import { RealtimeDashboard } from '@/components/features/agent/RealtimeDashboard
 import { BulkSelectProvider } from '@/components/features/bulk-actions/BulkSelectProvider';
 import { TicketCheckbox, SelectAllCheckbox } from '@/components/features/bulk-actions/TicketCheckbox';
 import { BulkActionToolbar } from '@/components/features/bulk-actions/BulkActionToolbar';
-import { ViewsAndFiltersPanel } from './ViewsAndFiltersPanel';
+import { ViewsFiltersCollapsible } from './ViewsFiltersCollapsible';
 import { parseAgentDashboardTemplate } from '@/lib/constants/survey-ui-config';
 import { getTemplateDefaultSort } from '@/lib/filters/ticket-filter-survey';
 import {
@@ -37,10 +37,10 @@ export default async function AgentDashboardPage({
   const user = await requireAgent();
   const supabase = await createServerClient();
 
-  // Get current user profile
+  // Get current user profile (including stored active view preference)
   const { data: profile } = await supabase
     .from('profiles')
-    .select('id, role')
+    .select('id, role, active_view_id')
     .eq('id', user.id)
     .single();
 
@@ -58,40 +58,53 @@ export default async function AgentDashboardPage({
 
   const requestedViewId = typeof params.view === 'string' ? params.view : null;
   const pageParam = typeof params.page === 'string' ? params.page : '1';
+  const urlFilterData: TicketFilterData = urlParamsToData(params);
+  const hasUrlFilters = Object.keys(urlFilterData).length > 0;
 
   const savedViews = await getSavedViews(user.id);
+
+  const defaultActiveView = {
+    id: null,
+    name: DEFAULT_VIEW_NAME,
+    definition: {
+      name: DEFAULT_VIEW_NAME,
+      type: 'json' as const,
+      data: EMPTY_FILTER_DATA,
+      sql: generateSqlFromJson(EMPTY_FILTER_DATA),
+    },
+  };
 
   // Resolve the active filter definition.
   let activeView: { id: string | null; name: string; definition: TicketFilterDefinition };
   if (requestedViewId) {
     const found = savedViews.find((v) => v.id === requestedViewId);
-    if (found) {
-      activeView = { id: found.id, name: found.name, definition: found.definition };
-    } else {
-      // Stale/unknown id — fall through to Default.
-      activeView = {
-        id: null,
-        name: DEFAULT_VIEW_NAME,
-        definition: {
-          name: DEFAULT_VIEW_NAME,
-          type: 'json',
-          data: EMPTY_FILTER_DATA,
-          sql: generateSqlFromJson(EMPTY_FILTER_DATA),
-        },
-      };
-    }
+    activeView = found
+      ? { id: found.id, name: found.name, definition: found.definition }
+      : defaultActiveView; // Stale/unknown id — fall through to Default.
   } else {
-    const data: TicketFilterData = urlParamsToData(params);
-    activeView = {
-      id: null,
-      name: DEFAULT_VIEW_NAME,
-      definition: {
-        name: DEFAULT_VIEW_NAME,
-        type: 'json',
-        data,
-        sql: generateSqlFromJson(data),
-      },
-    };
+    if (!hasUrlFilters && profile.active_view_id) {
+      // No URL filter params — restore the last view the agent explicitly selected.
+      const stored = savedViews.find((v) => v.id === profile.active_view_id);
+      if (stored) {
+        activeView = { id: stored.id, name: stored.name, definition: stored.definition };
+      } else {
+        await supabase.from('profiles').update({ active_view_id: null }).eq('id', user.id);
+        activeView = defaultActiveView; // View was deleted — fall back to Default.
+      }
+    } else {
+      activeView = hasUrlFilters
+        ? {
+            id: null,
+            name: DEFAULT_VIEW_NAME,
+            definition: {
+              name: DEFAULT_VIEW_NAME,
+              type: 'json',
+              data: urlFilterData,
+              sql: generateSqlFromJson(urlFilterData),
+            },
+          }
+        : defaultActiveView;
+    }
   }
 
   const effectiveData: TicketFilterData = { ...activeView.definition.data };
@@ -135,8 +148,6 @@ export default async function AgentDashboardPage({
     }
   }
 
-  const currentViewName = activeView.name;
-
   return (
     <div>
       <h1 className="sr-only">Agent Dashboard</h1>
@@ -178,27 +189,16 @@ export default async function AgentDashboardPage({
       </details>
 
       {/* Consolidated Views & Filters Panel */}
-      <details className="bg-white rounded-lg border border-gray-200 mb-4 group">
-        <summary className="px-4 py-3 cursor-pointer text-sm font-medium text-gray-700 hover:text-gray-900 list-none flex items-center justify-between focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none rounded-lg">
-          <span>Views & Filters: {currentViewName}</span>
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </summary>
-
-        <div className="px-4 pt-4 pb-4 border-t border-gray-200">
-          <ViewsAndFiltersPanel
-            filterOptions={filterOptions}
-            template={surveyFilterTemplate}
-            savedViews={savedViews.map((v) => ({ id: v.id, name: v.name }))}
-            activeViewId={activeView.id}
-            activeViewName={activeView.name}
-            initialData={effectiveData}
-            activeDefinition={activeView.definition}
-            aiFilterEnabled={aiFilterEnabled}
-          />
-        </div>
-        </details>
+      <ViewsFiltersCollapsible
+        filterOptions={filterOptions}
+        template={surveyFilterTemplate}
+        savedViews={savedViews.map((v) => ({ id: v.id, name: v.name }))}
+        activeViewId={activeView.id}
+        activeViewName={activeView.name}
+        initialData={effectiveData}
+        activeDefinition={activeView.definition}
+        aiFilterEnabled={aiFilterEnabled}
+      />
 
       {/* Result count */}
       <p className="text-sm text-gray-600 mb-4" data-testid="result-count">

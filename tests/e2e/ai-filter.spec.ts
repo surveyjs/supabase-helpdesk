@@ -6,6 +6,8 @@ async function loginAsAgent(page: Page) {
   await loginViaForm(page, 'agent.smith@example.com');
 }
 
+test.describe.configure({ mode: 'serial' });
+
 // ─────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────
@@ -63,6 +65,14 @@ async function mockAiFilterAction(
   );
 }
 
+async function openViewsFiltersPanel(page: Page) {
+  const panel = page.getByTestId('views-and-filters-panel');
+  if (!(await panel.isVisible().catch(() => false))) {
+    await page.getByRole('button', { name: /Views & Filters:/ }).click();
+  }
+  await expect(panel).toBeVisible({ timeout: 10000 });
+}
+
 // ─────────────────────────────────────────────────────────────
 // Admin: feature toggle visibility
 // ─────────────────────────────────────────────────────────────
@@ -104,21 +114,14 @@ test.describe('AI Filter — enabled state', () => {
   test('AI pill appears in Views & Filters panel for agents', async ({ page }) => {
     await loginAsAgent(page);
     await page.goto('/agent');
-    // Open the details panel first
-    const summary = page.locator('details').filter({ hasText: 'Views & Filters' }).first();
-    if (await summary.getAttribute('open') === null) {
-      await summary.locator('summary').click();
-    }
+    await openViewsFiltersPanel(page);
     await expect(page.getByRole('button', { name: /✨\s*AI/i })).toBeVisible({ timeout: 10000 });
   });
 
   test('clicking AI pill hides SurveyJS form and shows textarea', async ({ page }) => {
     await loginAsAgent(page);
     await page.goto('/agent');
-    const summary = page.locator('details').filter({ hasText: 'Views & Filters' }).first();
-    if (await summary.getAttribute('open') === null) {
-      await summary.locator('summary').click();
-    }
+    await openViewsFiltersPanel(page);
     await page.getByRole('button', { name: /✨\s*AI/i }).click();
     await expect(
       page.getByPlaceholder("Describe what you're looking for…"),
@@ -129,10 +132,7 @@ test.describe('AI Filter — enabled state', () => {
   test('clicking Standard pill restores the SurveyJS form', async ({ page }) => {
     await loginAsAgent(page);
     await page.goto('/agent');
-    const summary = page.locator('details').filter({ hasText: 'Views & Filters' }).first();
-    if (await summary.getAttribute('open') === null) {
-      await summary.locator('summary').click();
-    }
+    await openViewsFiltersPanel(page);
     await page.getByRole('button', { name: /✨\s*AI/i }).click();
     await page.getByRole('button', { name: 'Standard' }).click();
     await expect(page.getByTestId('filter-survey')).toBeVisible({ timeout: 5000 });
@@ -141,10 +141,7 @@ test.describe('AI Filter — enabled state', () => {
   test('Ask AI button is disabled when textarea is empty', async ({ page }) => {
     await loginAsAgent(page);
     await page.goto('/agent');
-    const summary = page.locator('details').filter({ hasText: 'Views & Filters' }).first();
-    if (await summary.getAttribute('open') === null) {
-      await summary.locator('summary').click();
-    }
+    await openViewsFiltersPanel(page);
     await page.getByRole('button', { name: /✨\s*AI/i }).click();
     await expect(page.getByRole('button', { name: /Ask AI/i })).toBeDisabled();
   });
@@ -152,10 +149,7 @@ test.describe('AI Filter — enabled state', () => {
   test('Ask AI button is enabled once text is entered', async ({ page }) => {
     await loginAsAgent(page);
     await page.goto('/agent');
-    const summary = page.locator('details').filter({ hasText: 'Views & Filters' }).first();
-    if (await summary.getAttribute('open') === null) {
-      await summary.locator('summary').click();
-    }
+    await openViewsFiltersPanel(page);
     await page.getByRole('button', { name: /✨\s*AI/i }).click();
     await page.getByPlaceholder("Describe what you're looking for…").fill('urgent open tickets');
     await expect(page.getByRole('button', { name: /Ask AI/i })).toBeEnabled();
@@ -165,10 +159,7 @@ test.describe('AI Filter — enabled state', () => {
     await mockAiFilterAction(page, { data: { status: ['open'], urgency: 'high' } });
     await loginAsAgent(page);
     await page.goto('/agent');
-    const summary = page.locator('details').filter({ hasText: 'Views & Filters' }).first();
-    if (await summary.getAttribute('open') === null) {
-      await summary.locator('summary').click();
-    }
+    await openViewsFiltersPanel(page);
     await page.getByRole('button', { name: /✨\s*AI/i }).click();
     await page.getByPlaceholder("Describe what you're looking for…").fill('high urgency open');
     await page.getByRole('button', { name: /Ask AI/i }).click();
@@ -183,10 +174,7 @@ test.describe('AI Filter — enabled state', () => {
     await mockAiFilterAction(page, { data: { urgency: 'low' } });
     await loginAsAgent(page);
     await page.goto('/agent');
-    const summary = page.locator('details').filter({ hasText: 'Views & Filters' }).first();
-    if (await summary.getAttribute('open') === null) {
-      await summary.locator('summary').click();
-    }
+    await openViewsFiltersPanel(page);
     await page.getByRole('button', { name: /✨\s*AI/i }).click();
     await page.getByPlaceholder("Describe what you're looking for…").fill('low urgency');
     await page.getByRole('button', { name: /Ask AI/i }).click();
@@ -201,10 +189,7 @@ test.describe('AI Filter — enabled state', () => {
     });
     await loginAsAgent(page);
     await page.goto('/agent');
-    const summary = page.locator('details').filter({ hasText: 'Views & Filters' }).first();
-    if (await summary.getAttribute('open') === null) {
-      await summary.locator('summary').click();
-    }
+    await openViewsFiltersPanel(page);
     await page.getByRole('button', { name: /✨\s*AI/i }).click();
     await page.getByPlaceholder("Describe what you're looking for…").fill('???');
     await page.getByRole('button', { name: /Ask AI/i }).click();
@@ -222,10 +207,7 @@ test.describe('AI Filter — enabled state', () => {
     });
     await loginAsAgent(page);
     await page.goto('/agent');
-    const summary = page.locator('details').filter({ hasText: 'Views & Filters' }).first();
-    if (await summary.getAttribute('open') === null) {
-      await summary.locator('summary').click();
-    }
+    await openViewsFiltersPanel(page);
     await page.getByRole('button', { name: /✨\s*AI/i }).click();
     await page.getByPlaceholder("Describe what you're looking for…").fill('???');
     await page.getByRole('button', { name: /Ask AI/i }).click();
@@ -237,10 +219,7 @@ test.describe('AI Filter — enabled state', () => {
     await mockAiFilterAction(page, { data: { urgency: 'low' } });
     await loginAsAgent(page);
     await page.goto('/agent');
-    const summary = page.locator('details').filter({ hasText: 'Views & Filters' }).first();
-    if (await summary.getAttribute('open') === null) {
-      await summary.locator('summary').click();
-    }
+    await openViewsFiltersPanel(page);
     await page.getByRole('button', { name: /✨\s*AI/i }).click();
     await page.getByPlaceholder("Describe what you're looking for…").fill('low urgency');
     await page.getByRole('button', { name: /Ask AI/i }).click();
@@ -280,10 +259,7 @@ test.describe('AI Filter — enabled state', () => {
     try {
       await loginAsAgent(page);
       await page.goto(`/agent?view=${view!.id}`);
-      const summary = page.locator('details').filter({ hasText: 'Views & Filters' }).first();
-      if (await summary.getAttribute('open') === null) {
-        await summary.locator('summary').click();
-      }
+      await openViewsFiltersPanel(page);
 
       await expect(
         page.getByRole('button', { name: /✨\s*AI/i }),

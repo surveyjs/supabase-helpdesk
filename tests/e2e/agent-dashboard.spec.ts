@@ -459,6 +459,13 @@ test.describe('Agent Ticket Detail Controls', () => {
 test.describe('Consolidated Views & Filters Panel', () => {
   test.describe.configure({ mode: 'serial' });
 
+  test.beforeEach(async () => {
+    // Reset active_view_id before every test so parallel describe blocks
+    // (View Switcher Dropdown) cannot pollute this block's state.
+    const admin = createServiceRoleClient();
+    await admin.from('profiles').update({ active_view_id: null }).eq('email', 'agent.smith@example.com');
+  });
+
   test('panel is collapsed by default', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
@@ -476,9 +483,8 @@ test.describe('Consolidated Views & Filters Panel', () => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
 
-    // Summary should show "Default"
-    const summary = page.getByText('Views & Filters: Default');
-    await expect(summary).toBeVisible();
+    // Trigger should show "Default"
+    await expect(page.getByTestId('view-switcher-trigger')).toContainText('Default');
   });
 
   test('panel summary shows current view name when view is applied', async ({ page }) => {
@@ -497,9 +503,8 @@ test.describe('Consolidated Views & Filters Panel', () => {
     await page.getByRole('button', { name: 'Confirm new view' }).click();
     await page.waitForURL(/view=/, { timeout: 10000 });
 
-    // Panel should now show the view name in summary
-    const summary = page.getByText(`Views & Filters: ${viewName}`);
-    await expect(summary).toBeVisible({ timeout: 10000 });
+    // Trigger should now show the view name
+    await expect(page.getByTestId('view-switcher-trigger')).toContainText(viewName, { timeout: 10000 });
 
     // Cleanup: delete the view (need to expand first)
     const deleteBtn = page.getByLabel(`Delete saved view ${viewName}`);
@@ -537,8 +542,8 @@ test.describe('Consolidated Views & Filters Panel', () => {
     // Expand panel
     await page.getByText(/Views & Filters:/).click();
 
-    // Default should be visible and highlighted if current
-    await expect(page.getByRole('button', { name: 'Default' })).toBeVisible();
+    // Default should be visible and highlighted if current (scoped to panel to avoid matching the trigger)
+    await expect(page.getByTestId('views-and-filters-panel').getByRole('button', { name: 'Default' })).toBeVisible();
   });
 
   test('create and apply saved view', async ({ page }) => {
@@ -556,9 +561,8 @@ test.describe('Consolidated Views & Filters Panel', () => {
     await page.getByRole('button', { name: 'Confirm new view' }).click();
     await page.waitForURL(/view=/, { timeout: 10000 });
 
-    // Panel summary should reflect the newly-active view
-    const summary = page.getByText(`Views & Filters: ${viewName}`);
-    await expect(summary).toBeVisible({ timeout: 10000 });
+    // Trigger should reflect the newly-active view
+    await expect(page.getByTestId('view-switcher-trigger')).toContainText(viewName, { timeout: 10000 });
 
     // Cleanup
     {
@@ -588,7 +592,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
     await page.getByRole('button', { name: 'Confirm new view' }).click();
     await page.waitForURL(/view=/, { timeout: 10000 });
 
-    await expect(page.getByText(`Views & Filters: ${viewName}`)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('view-switcher-trigger')).toContainText(viewName, { timeout: 10000 });
 
     // Re-expand panel and delete
     {
@@ -602,7 +606,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
     }
 
     // View should be gone
-    await expect(page.getByRole('button', { name: viewName, exact: true })).not.toBeVisible();
+    await expect(page.getByTestId('views-and-filters-panel').getByRole('button', { name: viewName, exact: true })).not.toBeVisible();
   });
 
   test('cannot delete Default view (no delete button for Default)', async ({ page }) => {
@@ -612,7 +616,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
     // Expand panel
     await page.getByText(/Views & Filters:/).click();
 
-    await expect(page.getByRole('button', { name: 'Default' })).toBeVisible();
+    await expect(page.getByTestId('views-and-filters-panel').getByRole('button', { name: 'Default' })).toBeVisible();
 
     // There must be no delete button labelled for the Default view
     await expect(page.getByLabel('Delete saved view Default')).toHaveCount(0);
@@ -625,9 +629,8 @@ test.describe('Consolidated Views & Filters Panel', () => {
     // URL should have the filter
     await expect(page).toHaveURL(/status=closed/);
 
-    // Summary should still show Default (custom filters, not saved view)
-    const summary = page.getByText('Views & Filters: Default');
-    await expect(summary).toBeVisible();
+    // Trigger should still show Default (custom filters, not saved view)
+    await expect(page.getByTestId('view-switcher-trigger')).toContainText('Default');
   });
 
   test('clearing filters reverts to Default in collapsed summary', async ({ page }) => {
@@ -644,9 +647,8 @@ test.describe('Consolidated Views & Filters Panel', () => {
     await page.getByRole('button', { name: 'Apply Filters' }).click();
     await page.waitForLoadState('networkidle');
 
-    // Summary should show Default
-    const summary = page.getByText('Views & Filters: Default');
-    await expect(summary).toBeVisible();
+    // Trigger should show Default
+    await expect(page.getByTestId('view-switcher-trigger')).toContainText('Default');
 
     // URL should be clean
     await expect(page).toHaveURL('/agent');
@@ -702,8 +704,8 @@ test.describe('Consolidated Views & Filters Panel', () => {
     await page.getByRole('button', { name: 'Confirm new view' }).click();
     await page.waitForURL(/view=/, { timeout: 10000 });
 
-    // Panel summary should show the view name (newly active)
-    await expect(page.getByText(`Views & Filters: ${viewName}`)).toBeVisible({ timeout: 10000 });
+    // Trigger should show the view name (newly active)
+    await expect(page.getByTestId('view-switcher-trigger')).toContainText(viewName, { timeout: 10000 });
 
     // Delete the view (need to expand panel)
     {
@@ -717,7 +719,336 @@ test.describe('Consolidated Views & Filters Panel', () => {
     }
 
     // View should be gone
-    await expect(page.getByRole('button', { name: viewName, exact: true })).not.toBeVisible();
+    await expect(page.getByTestId('views-and-filters-panel').getByRole('button', { name: viewName, exact: true })).not.toBeVisible();
+  });
+});
+
+test.describe('View Switcher Dropdown', () => {
+  test.describe.configure({ mode: 'serial' });
+
+  // Use a dedicated agent to avoid sharing active_view_id with the Consolidated Views block.
+  const VSD_EMAIL = 'agent.jones@example.com';
+  const VSD_AGENT_ID = '00000000-0000-0000-0000-000000000013';
+  const VSD_FILTERS = { type: 'json', data: { status: 'closed' }, sql: "status = 'closed'" };
+
+  test.beforeAll(async () => {
+    // Clean up any stale state from previous runs for this block's dedicated agent.
+    const admin = createServiceRoleClient();
+    await admin.from('saved_views').delete().eq('agent_id', VSD_AGENT_ID).like('name', 'Switcher %');
+    await admin.from('profiles').update({ active_view_id: null }).eq('id', VSD_AGENT_ID);
+  });
+
+  test.afterAll(async () => {
+    const admin = createServiceRoleClient();
+    await admin.from('saved_views').delete().eq('agent_id', VSD_AGENT_ID).like('name', 'Switcher %');
+    await admin.from('profiles').update({ active_view_id: null }).eq('id', VSD_AGENT_ID);
+  });
+
+  test('trigger is visible in collapsed panel and opens dropdown on click', async ({ page }) => {
+    await loginAs(page, VSD_EMAIL);
+    await page.goto('/agent');
+
+    // Panel must be collapsed — the filter search label is not visible
+    await expect(page.getByLabel('Search', { exact: true })).not.toBeVisible();
+
+    // Trigger is visible inside the summary
+    const trigger = page.getByTestId('view-switcher-trigger');
+    await expect(trigger).toBeVisible();
+
+    // Click trigger — dropdown opens, panel does NOT expand
+    await trigger.click();
+    await expect(page.getByRole('listbox', { name: 'Switch view' })).toBeVisible();
+    await expect(page.getByLabel('Search', { exact: true })).not.toBeVisible();
+  });
+
+  test('dropdown lists Default and saved views', async ({ page }) => {
+    const viewName = `Switcher List ${Date.now()}`;
+    const admin = createServiceRoleClient();
+
+    // Seed view directly — avoids the flaky UI creation + server-action path.
+    const { data: view } = await admin.from('saved_views').insert({
+      agent_id: VSD_AGENT_ID,
+      name: viewName,
+      filters: VSD_FILTERS,
+    }).select('id').single();
+    if (!view) throw new Error('Failed to seed view');
+
+    await loginAs(page, VSD_EMAIL);
+    // Hard reload ensures the server renders fresh data that includes the seeded view.
+    await page.goto('/agent');
+    await page.reload();
+
+    // Open the view switcher dropdown
+    const trigger = page.getByTestId('view-switcher-trigger');
+    await trigger.click();
+    const dropdown = page.getByRole('listbox', { name: 'Switch view' });
+    await expect(dropdown).toBeVisible();
+
+    // Both Default and the seeded view should be listed
+    await expect(dropdown.getByText('Default')).toBeVisible();
+    await expect(dropdown.getByText(viewName)).toBeVisible();
+
+    // Cleanup
+    await admin.from('saved_views').delete().eq('id', view.id);
+  });
+
+  test('active view is highlighted in the dropdown', async ({ page }) => {
+    const viewName = `Switcher Highlight ${Date.now()}`;
+    const admin = createServiceRoleClient();
+
+    // Seed view. Navigate via ?view= URL param so the server treats it as the active view.
+    const { data: view } = await admin.from('saved_views').insert({
+      agent_id: VSD_AGENT_ID,
+      name: viewName,
+      filters: VSD_FILTERS,
+    }).select('id').single();
+    if (!view) throw new Error('Failed to seed view');
+
+    await loginAs(page, VSD_EMAIL);
+    await page.goto(`/agent?view=${view.id}`);
+
+    // Open the dropdown — the active view should be highlighted
+    await page.getByTestId('view-switcher-trigger').click();
+    const dropdown = page.getByRole('listbox', { name: 'Switch view' });
+    await expect(dropdown).toBeVisible();
+
+    const activeOption = dropdown.getByText(viewName);
+    await expect(activeOption).toBeVisible();
+    // The active option's button has aria-selected="true"
+    await expect(activeOption.locator('xpath=ancestor-or-self::button[@aria-selected]')).toHaveAttribute('aria-selected', 'true');
+
+    // Cleanup
+    await admin.from('saved_views').delete().eq('id', view.id);
+  });
+
+  test('selecting a view from dropdown switches view without opening the panel', async ({ page }) => {
+    const viewName = `Switcher Switch ${Date.now()}`;
+    const admin = createServiceRoleClient();
+
+    // Seed a view; active_view_id stays null so Default is the current active view.
+    const { data: view } = await admin.from('saved_views').insert({
+      agent_id: VSD_AGENT_ID,
+      name: viewName,
+      filters: VSD_FILTERS,
+    }).select('id').single();
+    if (!view) throw new Error('Failed to seed view');
+
+    await loginAs(page, VSD_EMAIL);
+    // Hard reload: panel resets to closed state, seeded view appears in dropdown.
+    await page.goto('/agent');
+    await page.reload();
+    await expect(page.getByLabel('Search', { exact: true })).not.toBeVisible();
+
+    // Open dropdown and select the seeded view — the key assertion is that the panel stays closed.
+    await page.getByTestId('view-switcher-trigger').click();
+    await page.getByRole('listbox', { name: 'Switch view' }).getByText(viewName).click();
+
+    // URL should update to include the view ID (via client-side router.push)
+    await page.waitForURL(/view=/, { timeout: 10000 });
+
+    // Panel must still be collapsed after the switch
+    await expect(page.getByLabel('Search', { exact: true })).not.toBeVisible();
+
+    // Trigger shows the view name
+    await expect(page.getByTestId('view-switcher-trigger')).toContainText(viewName);
+
+    // Cleanup
+    await admin.from('saved_views').delete().eq('id', view.id);
+  });
+
+  test('selecting Default from dropdown switches to Default view', async ({ page }) => {
+    const viewName = `Switcher Default ${Date.now()}`;
+    const admin = createServiceRoleClient();
+
+    // Seed a view and navigate to it via URL param so we start from a non-Default state.
+    const { data: view } = await admin.from('saved_views').insert({
+      agent_id: VSD_AGENT_ID,
+      name: viewName,
+      filters: VSD_FILTERS,
+    }).select('id').single();
+    if (!view) throw new Error('Failed to seed view');
+
+    await loginAs(page, VSD_EMAIL);
+    await page.goto(`/agent?view=${view.id}`);
+
+    await expect(page.getByTestId('view-switcher-trigger')).toContainText(viewName);
+
+    // Use dropdown to switch to Default
+    await page.getByTestId('view-switcher-trigger').click();
+    await page.getByRole('listbox', { name: 'Switch view' }).getByText('Default', { exact: true }).click();
+
+    // URL changes from ?view=<id> to /agent (no params)
+    await page.waitForURL('/agent', { timeout: 10000 });
+    await expect(page.getByTestId('view-switcher-trigger')).toContainText('Default');
+
+    // Cleanup
+    await admin.from('saved_views').delete().eq('id', view.id);
+  });
+
+  test('clicking outside the dropdown closes it', async ({ page }) => {
+    await loginAs(page, VSD_EMAIL);
+    await page.goto('/agent');
+
+    await page.getByTestId('view-switcher-trigger').click();
+    await expect(page.getByRole('listbox', { name: 'Switch view' })).toBeVisible();
+
+    // Click somewhere outside the dropdown (result-count is below the panel, outside the listbox)
+    await page.getByTestId('result-count').click();
+    await expect(page.getByRole('listbox', { name: 'Switch view' })).not.toBeVisible();
+  });
+});
+
+test.describe('Active View Persistence', () => {
+  test.describe.configure({ mode: 'serial' });
+
+  const ACTIVE_VIEW_EMAIL = 'admin@example.com';
+  const ACTIVE_VIEW_AGENT_ID = '00000000-0000-0000-0000-000000000011';
+
+  let ticketUrl: string;
+
+  test.beforeAll(async () => {
+    const admin = createServiceRoleClient();
+    await admin.from('saved_views').delete().eq('agent_id', ACTIVE_VIEW_AGENT_ID).like('name', 'Persist %');
+    await admin.from('saved_views').delete().eq('agent_id', ACTIVE_VIEW_AGENT_ID).like('name', 'Delete Persist %');
+    await admin.from('saved_views').delete().eq('agent_id', ACTIVE_VIEW_AGENT_ID).like('name', 'Temp View %');
+    await admin.from('profiles').update({ active_view_id: null }).eq('id', ACTIVE_VIEW_AGENT_ID);
+
+    const { data: ticket } = await admin
+      .from('tickets')
+      .select('id, slug')
+      .eq('title', 'Password reset not working')
+      .single();
+    ticketUrl = `/tickets/${ticket!.id}/${ticket!.slug}`;
+  });
+
+  test.afterEach(async () => {
+    // Reset stored active view to avoid bleeding between tests.
+    const admin = createServiceRoleClient();
+    await admin.from('saved_views').delete().eq('agent_id', ACTIVE_VIEW_AGENT_ID).like('name', 'Persist %');
+    await admin.from('saved_views').delete().eq('agent_id', ACTIVE_VIEW_AGENT_ID).like('name', 'Delete Persist %');
+    await admin.from('saved_views').delete().eq('agent_id', ACTIVE_VIEW_AGENT_ID).like('name', 'Temp View %');
+    await admin
+      .from('profiles')
+      .update({ active_view_id: null })
+      .eq('id', ACTIVE_VIEW_AGENT_ID);
+  });
+
+  test('saved view is restored after navigating to a ticket and back', async ({ page }) => {
+    const token = `persist-${Date.now()}`;
+    const viewName = `Persist ${token}`;
+
+    await loginAs(page, ACTIVE_VIEW_EMAIL);
+    // Start with a filter so the saved view holds something non-trivial.
+    await page.goto(`/agent?status=closed&q=${encodeURIComponent(token)}`);
+
+    // Expand panel and create a named view.
+    await page.getByText(/Views & Filters:/).click();
+    await page.getByRole('button', { name: '+ Add new view' }).click();
+    await page.getByLabel('New saved view name').fill(viewName);
+    await page.getByRole('button', { name: 'Confirm new view' }).click();
+    await page.waitForURL(/view=/, { timeout: 10000 });
+
+    // Verify the view is active.
+    await expect(page.getByTestId('view-switcher-trigger')).toContainText(viewName, { timeout: 10000 });
+
+    // Navigate to a ticket detail page (simulates opening a ticket from the list).
+    await page.goto(ticketUrl);
+    await page.waitForURL(/\/tickets\//, { timeout: 10000 });
+
+    // Navigate back to /agent with NO query params (simulates clicking nav link).
+    await page.goto('/agent');
+    await page.waitForLoadState('networkidle');
+
+    // The previously-selected view should be restored automatically.
+    await expect(page.getByTestId('view-switcher-trigger')).toContainText(viewName, { timeout: 10000 });
+
+    // Clean up the test view.
+    const deleteBtn = page.getByLabel(`Delete saved view ${viewName}`);
+    if (!(await deleteBtn.isVisible())) {
+      await page.getByText(/Views & Filters:/).first().click();
+      await expect(deleteBtn).toBeVisible({ timeout: 5000 });
+    }
+    await deleteBtn.click();
+    await page.waitForTimeout(500);
+  });
+
+  test('selecting Default clears stored preference; navigating back shows Default', async ({ page }) => {
+    // Seed an active view directly in the DB.
+    const admin = createServiceRoleClient();
+    const { data: agent } = await admin
+      .from('profiles')
+      .select('id')
+      .eq('email', ACTIVE_VIEW_EMAIL)
+      .single();
+
+    const { data: view } = await admin
+      .from('saved_views')
+      .insert({
+        agent_id: agent!.id,
+        name: `Temp View ${Date.now()}`,
+        filters: { type: 'json', data: {}, sql: '' },
+      })
+      .select('id')
+      .single();
+
+    await admin
+      .from('profiles')
+      .update({ active_view_id: view!.id })
+      .eq('id', agent!.id);
+
+    try {
+      await loginAs(page, ACTIVE_VIEW_EMAIL);
+      await page.goto('/agent');
+      await page.waitForLoadState('networkidle');
+
+      // Expand panel and click Default.
+      await page.getByText(/Views & Filters:/).click();
+      await page.getByTestId('views-and-filters-panel').getByRole('button', { name: 'Default' }).click();
+      await page.waitForLoadState('networkidle');
+
+      // Navigate to a ticket and back.
+      await page.goto(ticketUrl);
+      await page.goto('/agent');
+      await page.waitForLoadState('networkidle');
+
+      // Default view should be shown, not the seeded saved view.
+      await expect(page.getByTestId('view-switcher-trigger')).toContainText('Default', { timeout: 10000 });
+    } finally {
+      await admin.from('saved_views').delete().eq('id', view!.id);
+    }
+  });
+
+  test('deleting the stored active view falls back to Default', async ({ page }) => {
+    const token = `delete-persist-${Date.now()}`;
+    const viewName = `Delete Persist ${token}`;
+
+    await loginAs(page, ACTIVE_VIEW_EMAIL);
+    await page.goto(`/agent?status=open`);
+    await page.getByText(/Views & Filters:/).click();
+    await page.getByRole('button', { name: '+ Add new view' }).click();
+    await page.getByLabel('New saved view name').fill(viewName);
+    await page.getByRole('button', { name: 'Confirm new view' }).click();
+    await page.waitForURL(/view=/, { timeout: 10000 });
+
+    // View is now the active one (stored in DB).
+    await expect(page.getByTestId('view-switcher-trigger')).toContainText(viewName, { timeout: 10000 });
+
+    // Delete the view while it is the active one.
+    const deleteBtn = page.getByLabel(`Delete saved view ${viewName}`);
+    if (!(await deleteBtn.isVisible())) {
+      await page.getByText(/Views & Filters:/).first().click();
+      await expect(deleteBtn).toBeVisible({ timeout: 5000 });
+    }
+    await deleteBtn.click();
+    await page.waitForTimeout(500);
+
+    // Navigate away and back.
+    await page.goto(ticketUrl);
+    await page.goto('/agent');
+    await page.waitForLoadState('networkidle');
+
+    // Should fall back to Default (ON DELETE SET NULL cleared active_view_id).
+    await expect(page.getByTestId('view-switcher-trigger')).toContainText('Default', { timeout: 10000 });
   });
 });
 

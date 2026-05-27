@@ -8,6 +8,47 @@ const SEED_PASSWORD = 'Password123';
 const TEST_USER_ID = '00000000-0000-0000-0000-000000000911';
 const TEST_EMAIL = 'editor-heights-e2e@test.local';
 
+async function ensureTestUser(): Promise<void> {
+  const svc = createServiceRoleClient();
+  const { data: users } = await svc.auth.admin.listUsers({ page: 1, perPage: 500 });
+  const existing = (users?.users ?? []).find((user) => user.id === TEST_USER_ID || user.email === TEST_EMAIL);
+
+  if (existing && existing.id !== TEST_USER_ID) {
+    await svc.from('profiles').delete().eq('id', existing.id).then(() => undefined, () => undefined);
+    await svc.auth.admin.deleteUser(existing.id).catch(() => undefined);
+  }
+
+  if (existing?.id === TEST_USER_ID) {
+    await svc.auth.admin.updateUserById(TEST_USER_ID, {
+      email: TEST_EMAIL,
+      password: SEED_PASSWORD,
+      email_confirm: true,
+      user_metadata: { display_name: 'Editor Heights E2E' },
+    });
+  } else {
+    const { error } = await svc.auth.admin.createUser({
+      id: TEST_USER_ID,
+      email: TEST_EMAIL,
+      password: SEED_PASSWORD,
+      email_confirm: true,
+      user_metadata: { display_name: 'Editor Heights E2E' },
+    });
+    if (error) {
+      throw new Error(`createUser(${TEST_EMAIL}): ${error.message}`);
+    }
+  }
+
+  await svc.from('profiles').upsert({
+    id: TEST_USER_ID,
+    email: TEST_EMAIL,
+    display_name: 'Editor Heights E2E',
+    role: 'user',
+    editor_view_mode: 'both',
+    editor_min_height_px: 300,
+    editor_max_height_px: 540,
+  });
+}
+
 async function resetHeights(): Promise<void> {
   const svc = createServiceRoleClient();
   await svc
@@ -21,6 +62,7 @@ async function resetHeights(): Promise<void> {
 }
 
 async function loginAs(page: Page): Promise<void> {
+  await ensureTestUser();
   await resetHeights();
   await loginViaForm(page, TEST_EMAIL, SEED_PASSWORD);
 }
@@ -32,16 +74,7 @@ test.beforeAll(async () => {
   // drop the profile row first to avoid a 500 from auth.admin.deleteUser.
   await svc.from('profiles').delete().eq('id', TEST_USER_ID).then(() => undefined, () => undefined);
   await svc.auth.admin.deleteUser(TEST_USER_ID).catch(() => undefined);
-  const { error } = await svc.auth.admin.createUser({
-    id: TEST_USER_ID,
-    email: TEST_EMAIL,
-    password: SEED_PASSWORD,
-    email_confirm: true,
-    user_metadata: { display_name: 'Editor Heights E2E' },
-  });
-  if (error) {
-    throw new Error(`createUser(${TEST_EMAIL}): ${error.message}`);
-  }
+  await ensureTestUser();
   await resetHeights();
 });
 

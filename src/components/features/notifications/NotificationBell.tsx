@@ -2,7 +2,10 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { createBrowserClient } from '@/lib/supabase/client';
+import { notifyPopupOpened, subscribeToOtherPopups } from '@/lib/utils/popup-coordinator';
 import { NotificationDropdown, type Notification } from './NotificationDropdown';
+
+const POPUP_ID = 'notifications';
 
 interface NotificationBellProps {
   initialUnreadCount: number;
@@ -26,6 +29,7 @@ export function NotificationBell({ initialUnreadCount, userId }: NotificationBel
         .order('created_at', { ascending: false })
         .limit(10);
       setDropdownNotifications(data ?? []);
+      notifyPopupOpened(POPUP_ID);
     }
     setIsOpen((prev) => !prev);
   }
@@ -79,6 +83,11 @@ export function NotificationBell({ initialUnreadCount, userId }: NotificationBel
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Close when another popup opens
+  useEffect(() => {
+    return subscribeToOtherPopups(POPUP_ID, () => setIsOpen(false));
   }, []);
 
   return (

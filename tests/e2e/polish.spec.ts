@@ -1,6 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
-
-const SEED_PASSWORD = 'Password123';
+import { loginViaForm } from '../helpers/auth';
 
 async function loginAs(page: Page, email: string) {
   const { createServiceRoleClient } = await import('../helpers/supabase');
@@ -30,30 +29,7 @@ async function loginAs(page: Page, email: string) {
     }
   }
 
-  await svc.from('app_settings').update({ value: 'built-in' }).eq('key', 'auth_mode');
-  await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
-
-  await page.goto('/login');
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(SEED_PASSWORD);
-  await page.getByRole('button', { name: 'Log in' }).click();
-
-  try {
-    await expect(page).toHaveURL('/', { timeout: 10000 });
-  } catch {
-    if (page.url().includes('/login')) {
-      await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
-      await page.goto('/login');
-      await page.getByLabel('Email').fill(email);
-      await page.getByLabel('Password').fill(SEED_PASSWORD);
-      await page.getByRole('button', { name: 'Log in' }).click();
-      await expect(page).toHaveURL('/', { timeout: 15000 });
-    }
-  }
-  // On mobile the user dropdown is hidden; check for either it or the hamburger
-  await expect(
-    page.locator('summary[aria-haspopup="true"]:visible, button[aria-controls="mobile-nav-menu"]:visible').first()
-  ).toBeVisible({ timeout: 15000 });
+  await loginViaForm(page, email);
 }
 
 test.describe('Polish', () => {

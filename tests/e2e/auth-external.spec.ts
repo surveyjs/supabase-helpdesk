@@ -212,24 +212,12 @@ test.describe('Auth External', () => {
       await page.getByTestId('confirm-mode-switch').click();
     }
 
-    // SurveyJS renders the boolean question with the label "Auto-redirect to external provider".
-    // A parallel worker's loginViaForm() can reset auth_mode back to 'built-in'
-    // between the click above and the page re-render. Self-heal by re-setting
-    // 'external' via service role and re-navigating until the toggle appears.
-    const svc = createServiceRoleClient();
-    let visible = false;
-    for (let i = 0; i < 5; i++) {
-      visible = await page
-        .getByText('Auto-redirect to external provider')
-        .isVisible()
-        .catch(() => false);
-      if (visible) break;
-      await svc.from('app_settings').update({ value: 'external' }).eq('key', 'auth_mode');
-      await page.goto('/admin/auth').catch(() => {});
-      await page.waitForLoadState('domcontentloaded').catch(() => {});
-    }
+    await ensureExternalConfigVisible(page);
+
+    // SurveyJS renders the boolean question with this label after the external
+    // config server component has loaded.
     await expect(
-      page.getByText('Auto-redirect to external provider'),
+      page.getByTestId('external-provider-survey').getByText('Auto-redirect to external provider'),
     ).toBeVisible({ timeout: 10000 });
   });
 

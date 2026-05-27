@@ -357,7 +357,7 @@ describe('Advanced Tickets — Merge', () => {
     await svc.from('posts').insert({
       ticket_id: ticketC,
       author_id: AGENT_ID,
-      body: `This ticket has been merged into [#${ticketD}](/tickets/${ticketD}).`,
+      body: `This ticket has been merged into [#${ticketD}](/tickets/${ticketD}/redirect).`,
       post_type: 'post',
     });
 

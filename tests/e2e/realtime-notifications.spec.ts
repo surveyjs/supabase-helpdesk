@@ -92,6 +92,41 @@ test.describe('Realtime Notifications', () => {
     await admin.from('notifications').delete().eq('recipient_id', aliceId).eq('message', 'Ticket #42 status changed to resolved');
   });
 
+  test('clicking notification with ticket_id navigates to ticket detail (not 404)', async ({ page }) => {
+    // Regression: notification links used to point to /tickets/<id> (no slug),
+    // which 404s because the route is /tickets/[id]/[slug]. They now point to
+    // /tickets/<id>/redirect so the slug page redirects to the canonical URL.
+    await loginAs(page, 'alice@example.com');
+    const aliceId = '00000000-0000-0000-0000-000000000014';
+    const admin = svc();
+
+    const { data: ticket } = await admin
+      .from('tickets')
+      .select('id, slug')
+      .eq('creator_id', aliceId)
+      .limit(1)
+      .single();
+    expect(ticket).toBeTruthy();
+
+    const message = `Click-through dropdown test ${ticket!.id}`;
+    await admin.from('notifications').delete().eq('recipient_id', aliceId).eq('message', message);
+    await admin.from('notifications').insert({
+      recipient_id: aliceId,
+      event_type: 'new_post',
+      ticket_id: ticket!.id,
+      message,
+    });
+
+    await page.reload();
+    await page.getByLabel('Notifications').click();
+    await page.getByText(message).click();
+
+    await page.waitForURL(new RegExp(`/tickets/${ticket!.id}/${ticket!.slug}(\\?|$)`), { timeout: 10000 });
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10000 });
+
+    await admin.from('notifications').delete().eq('recipient_id', aliceId).eq('message', message);
+  });
+
   test('mark all as read clears badge', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
     const aliceId = '00000000-0000-0000-0000-000000000014';
@@ -156,6 +191,37 @@ test.describe('Notifications Page', () => {
 
     // Clean up
     await admin.from('notifications').delete().eq('recipient_id', aliceId).in('message', ['Page test notification 1', 'Page test notification 2']);
+  });
+
+  test('clicking notification on full page navigates to ticket detail (not 404)', async ({ page }) => {
+    const aliceId = '00000000-0000-0000-0000-000000000014';
+    const admin = svc();
+
+    const { data: ticket } = await admin
+      .from('tickets')
+      .select('id, slug')
+      .eq('creator_id', aliceId)
+      .limit(1)
+      .single();
+    expect(ticket).toBeTruthy();
+
+    const message = `Click-through page test ${ticket!.id}`;
+    await admin.from('notifications').delete().eq('recipient_id', aliceId).eq('message', message);
+    await admin.from('notifications').insert({
+      recipient_id: aliceId,
+      event_type: 'new_post',
+      ticket_id: ticket!.id,
+      message,
+    });
+
+    await loginAs(page, 'alice@example.com');
+    await page.goto(`/notifications?t=${Date.now()}`);
+    await page.getByText(message).click();
+
+    await page.waitForURL(new RegExp(`/tickets/${ticket!.id}/${ticket!.slug}(\\?|$)`), { timeout: 10000 });
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10000 });
+
+    await admin.from('notifications').delete().eq('recipient_id', aliceId).eq('message', message);
   });
 
   test('notifications page has mark all as read', async ({ page }) => {

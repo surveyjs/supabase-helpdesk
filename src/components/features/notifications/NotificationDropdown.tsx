@@ -148,7 +148,7 @@ export function NotificationDropdown({ initialNotifications, onClose, onMarkAllR
             return notif.ticket_id ? (
               <Link
                 key={notif.id}
-                href={`/tickets/${notif.ticket_id}`}
+                href={`/tickets/${notif.ticket_id}/redirect`}
                 onClick={() => handleClickNotification(notif)}
                 className={className}
               >

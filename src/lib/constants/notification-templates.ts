@@ -29,15 +29,15 @@ export const DEFAULT_TEMPLATES: Record<string, { subject: string; body: string }
   },
   duplicate_post: {
     subject: 'Ticket marked as duplicate',
-    body: 'This ticket has been closed as a duplicate of [#{{ticketId}}](/tickets/{{ticketId}}).',
+    body: 'This ticket has been closed as a duplicate of [#{{ticketId}}](/tickets/{{ticketId}}/redirect).',
   },
   merge_post: {
     subject: 'Ticket merged',
-    body: 'This ticket has been merged into [#{{ticketId}}](/tickets/{{ticketId}}).',
+    body: 'This ticket has been merged into [#{{ticketId}}](/tickets/{{ticketId}}/redirect).',
   },
   merge_banner: {
     subject: 'Merge stub banner',
-    body: 'This ticket has been merged into [#{{ticketId}}](/tickets/{{ticketId}}). All posts have been moved.',
+    body: 'This ticket has been merged into [#{{ticketId}}](/tickets/{{ticketId}}/redirect). All posts have been moved.',
   },
   urgency_changed: {
     subject: 'Ticket urgency updated',

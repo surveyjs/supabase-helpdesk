@@ -137,7 +137,7 @@ export async function POST(request: Request) {
         const placeholders = {
           ticketTitle: firstPlaceholders.ticketTitle ?? '',
           ticketId: firstPlaceholders.ticketId ?? String(entry.ticket_id),
-          ticketUrl: firstPlaceholders.ticketUrl ?? `/tickets/${entry.ticket_id}`,
+          ticketUrl: firstPlaceholders.ticketUrl ?? `/tickets/${entry.ticket_id}/redirect`,
           changeList,
           agentName: firstPlaceholders.agentName ?? 'Agent',
           ownerName: firstPlaceholders.ownerName ?? '',

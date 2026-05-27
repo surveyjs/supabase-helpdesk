@@ -135,7 +135,7 @@ export default async function NotificationsPage({
             return notif.ticket_id ? (
               <Link
                 key={notif.id}
-                href={`/tickets/${notif.ticket_id}`}
+                href={`/tickets/${notif.ticket_id}/redirect`}
                 className={className}
               >
                 {content}

@@ -70,7 +70,7 @@ export async function markAsDuplicate(formData: FormData): Promise<void> {
     .eq('event_type', 'duplicate_post')
     .single();
 
-  const templateBody = tpl?.body ?? `This ticket has been closed as a duplicate of [#${originalTicketId}](/tickets/${originalTicketId}).`;
+  const templateBody = tpl?.body ?? `This ticket has been closed as a duplicate of [#${originalTicketId}](/tickets/${originalTicketId}/redirect).`;
   const renderedBody = templateBody.replace(/\{\{ticketId\}\}/g, String(originalTicketId));
 
   // Insert system post on the source ticket

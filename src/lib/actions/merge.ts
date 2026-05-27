@@ -186,7 +186,7 @@ export async function mergeTickets(formData: FormData): Promise<void> {
     .eq('event_type', 'merge_post')
     .single();
 
-  const templateBody = tpl?.body ?? `This ticket has been merged into [#${targetTicketId}](/tickets/${targetTicketId}).`;
+  const templateBody = tpl?.body ?? `This ticket has been merged into [#${targetTicketId}](/tickets/${targetTicketId}/redirect).`;
   const renderedBody = templateBody.replace(/\{\{ticketId\}\}/g, String(targetTicketId));
 
   await svc.from('posts').insert({

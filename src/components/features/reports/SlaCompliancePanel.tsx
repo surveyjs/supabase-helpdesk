@@ -81,7 +81,7 @@ export function SlaCompliancePanel({ data }: Props) {
                 {data.breachedTickets.map((b) => (
                   <tr key={`${b.ticketId}-${b.slaType}`} className="border-b border-gray-100">
                     <td className="py-2">
-                      <Link href={`/tickets/${b.ticketId}`} className="text-blue-600 hover:text-blue-800">
+                      <Link href={`/tickets/${b.ticketId}/redirect`} className="text-blue-600 hover:text-blue-800">
                         #{b.ticketId} {b.title}
                       </Link>
                     </td>

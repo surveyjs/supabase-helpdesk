@@ -63,7 +63,7 @@ export function ArticleEditorForm({
           {article.source_ticket_id && (
             <p>
               Generated from ticket{' '}
-              <a href={`/tickets/${article.source_ticket_id}`} className="text-blue-600 hover:text-blue-800">
+              <a href={`/tickets/${article.source_ticket_id}/redirect`} className="text-blue-600 hover:text-blue-800">
                 #{article.source_ticket_id}
               </a>
             </p>

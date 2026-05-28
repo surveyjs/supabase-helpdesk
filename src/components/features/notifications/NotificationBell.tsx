@@ -2,7 +2,10 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { createBrowserClient } from '@/lib/supabase/client';
+import { notifyPopupOpened, subscribeToOtherPopups } from '@/lib/utils/popup-coordinator';
 import { NotificationDropdown, type Notification } from './NotificationDropdown';
+
+const POPUP_ID = 'notifications';
 
 interface NotificationBellProps {
   initialUnreadCount: number;
@@ -14,10 +17,20 @@ export function NotificationBell({ initialUnreadCount, userId }: NotificationBel
   const [isOpen, setIsOpen] = useState(false);
   const [dropdownNotifications, setDropdownNotifications] = useState<Notification[] | null>(null);
   const bellRef = useRef<HTMLDivElement>(null);
+  // Guards against rapid double-clicks starting concurrent fetches while
+  // `isOpen` hasn't flipped yet.
+  const fetchingRef = useRef(false);
 
   async function handleToggle() {
-    if (!isOpen) {
-      // Fetch notifications before opening
+    if (isOpen) {
+      setIsOpen(false);
+      return;
+    }
+    if (fetchingRef.current) return;
+    fetchingRef.current = true;
+    // Notify other popups immediately so they close without waiting for the fetch.
+    notifyPopupOpened(POPUP_ID);
+    try {
       const supabase = createBrowserClient();
       const { data } = await supabase
         .from('notifications')
@@ -26,8 +39,10 @@ export function NotificationBell({ initialUnreadCount, userId }: NotificationBel
         .order('created_at', { ascending: false })
         .limit(10);
       setDropdownNotifications(data ?? []);
+      setIsOpen(true);
+    } finally {
+      fetchingRef.current = false;
     }
-    setIsOpen((prev) => !prev);
   }
 
   // Subscribe to realtime notification changes
@@ -79,6 +94,11 @@ export function NotificationBell({ initialUnreadCount, userId }: NotificationBel
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Close when another popup opens
+  useEffect(() => {
+    return subscribeToOtherPopups(POPUP_ID, () => setIsOpen(false));
   }, []);
 
   return (

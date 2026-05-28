@@ -103,7 +103,10 @@ export function NotificationDropdown({ initialNotifications, onClose, onMarkAllR
   }
 
   return (
-    <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg border border-gray-200 shadow-lg z-50">
+    <div
+      data-testid="notification-dropdown"
+      className="absolute right-0 mt-2 w-80 bg-white rounded-lg border border-gray-200 shadow-lg z-50"
+    >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
         <h3 className="text-sm font-semibold text-gray-900">Notifications</h3>

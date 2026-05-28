@@ -4,6 +4,9 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { isActivePath } from './nav-utils';
+import { notifyPopupOpened, subscribeToOtherPopups } from '@/lib/utils/popup-coordinator';
+
+const POPUP_ID = 'mobile-menu';
 
 interface MobileMenuProps {
   links: { href: string; label: string }[];
@@ -36,11 +39,23 @@ export function MobileMenu({ links }: MobileMenuProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [open]);
 
+  useEffect(() => {
+    return subscribeToOtherPopups(POPUP_ID, () => setOpen(false));
+  }, []);
+
+  function handleToggle() {
+    setOpen((prev) => {
+      const next = !prev;
+      if (next) notifyPopupOpened(POPUP_ID);
+      return next;
+    });
+  }
+
   return (
     <div ref={menuRef} className="md:hidden">
       <button
         type="button"
-        onClick={() => setOpen((prev) => !prev)}
+        onClick={handleToggle}
         className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded text-gray-600 hover:text-gray-900 hover:bg-gray-100 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
         aria-label={open ? 'Close navigation menu' : 'Open navigation menu'}
         aria-expanded={open}

@@ -3,6 +3,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { setAgentActiveView } from '@/lib/actions/saved-views';
+import { notifyPopupOpened, subscribeToOtherPopups } from '@/lib/utils/popup-coordinator';
+
+const POPUP_ID = 'view-switcher';
 
 type Props = {
   savedViews: Array<{ id: string; name: string }>;
@@ -26,6 +29,10 @@ export function ViewSwitcherDropdown({ savedViews, activeViewId, activeViewName 
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, [open]);
 
+  useEffect(() => {
+    return subscribeToOtherPopups(POPUP_ID, () => setOpen(false));
+  }, []);
+
   function handleSelect(viewId: string | null) {
     setOpen(false);
     void setAgentActiveView(viewId)
@@ -40,7 +47,14 @@ export function ViewSwitcherDropdown({ savedViews, activeViewId, activeViewName 
       <button
         type="button"
         data-testid="view-switcher-trigger"
-        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((o) => {
+            const next = !o;
+            if (next) notifyPopupOpened(POPUP_ID);
+            return next;
+          });
+        }}
         className="inline-flex items-center gap-1 text-sm font-medium text-gray-700 hover:text-blue-600 px-1 py-0.5 rounded hover:bg-blue-50 transition-colors"
         aria-haspopup="listbox"
         aria-expanded={open}

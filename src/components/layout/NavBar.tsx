@@ -1,29 +1,11 @@
 import Link from 'next/link';
 import { getUser, getProfile } from '@/lib/supabase/auth';
-import { signOut } from '@/lib/actions/auth';
 import { getUnreadCount } from '@/lib/actions/notifications';
 import { NotificationBell } from '@/components/features/notifications/NotificationBell';
 import { createServerClient } from '@/lib/supabase/server';
 import { MobileMenu } from './MobileMenu';
 import { TopNavLinks } from './TopNavLinks';
-
-function RoleBadge({ role }: { role: string }) {
-  if (role === 'admin') {
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
-        Admin
-      </span>
-    );
-  }
-  if (role === 'agent') {
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-        Agent
-      </span>
-    );
-  }
-  return null;
-}
+import { UserMenu } from './UserMenu';
 
 export default async function NavBar() {
   const user = await getUser();
@@ -94,31 +76,11 @@ export default async function NavBar() {
 
               {/* User info with dropdown */}
               <div className="hidden sm:flex items-center gap-2">
-                <details className="relative">
-                  <summary className="flex items-center gap-2 cursor-pointer list-none text-sm text-gray-700 hover:text-gray-900 min-h-[44px] px-2 rounded focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none" aria-label={`User menu for ${displayName}`} aria-haspopup="true">
-                    <span>{displayName}</span>
-                    {profile && <RoleBadge role={profile.role} />}
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </summary>
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded border border-gray-200 shadow-lg py-1 z-50" role="menu">
-                    {userMenuLinks.map((link) => (
-                      <a key={link.href} href={link.href} className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 min-h-[44px] flex items-center focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 focus-visible:outline-none" role="menuitem">
-                        {link.label}
-                      </a>
-                    ))}
-                    <form action={signOut}>
-                      <button
-                        type="submit"
-                        className="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 min-h-[44px] flex items-center focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 focus-visible:outline-none"
-                        role="menuitem"
-                      >
-                        Sign out
-                      </button>
-                    </form>
-                  </div>
-                </details>
+                <UserMenu
+                  displayName={displayName}
+                  role={profile?.role ?? null}
+                  links={userMenuLinks}
+                />
               </div>
             </>
           ) : (

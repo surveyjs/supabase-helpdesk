@@ -17,10 +17,20 @@ export function NotificationBell({ initialUnreadCount, userId }: NotificationBel
   const [isOpen, setIsOpen] = useState(false);
   const [dropdownNotifications, setDropdownNotifications] = useState<Notification[] | null>(null);
   const bellRef = useRef<HTMLDivElement>(null);
+  // Guards against rapid double-clicks starting concurrent fetches while
+  // `isOpen` hasn't flipped yet.
+  const fetchingRef = useRef(false);
 
   async function handleToggle() {
-    if (!isOpen) {
-      // Fetch notifications before opening
+    if (isOpen) {
+      setIsOpen(false);
+      return;
+    }
+    if (fetchingRef.current) return;
+    fetchingRef.current = true;
+    // Notify other popups immediately so they close without waiting for the fetch.
+    notifyPopupOpened(POPUP_ID);
+    try {
       const supabase = createBrowserClient();
       const { data } = await supabase
         .from('notifications')
@@ -29,9 +39,10 @@ export function NotificationBell({ initialUnreadCount, userId }: NotificationBel
         .order('created_at', { ascending: false })
         .limit(10);
       setDropdownNotifications(data ?? []);
-      notifyPopupOpened(POPUP_ID);
+      setIsOpen(true);
+    } finally {
+      fetchingRef.current = false;
     }
-    setIsOpen((prev) => !prev);
   }
 
   // Subscribe to realtime notification changes

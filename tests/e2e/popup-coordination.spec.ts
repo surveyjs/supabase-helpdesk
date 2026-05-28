@@ -13,9 +13,10 @@ const userMenuDetails = (page: Page) =>
 
 const notificationBell = (page: Page) => page.getByLabel(/^Notifications/);
 
-// "Mark all as read" / "View all" are unique to the open notification dropdown.
+// Scoped to the bell-dropdown container so it can't accidentally match
+// the same text on the /notifications page.
 const notificationDropdownMarker = (page: Page) =>
-  page.getByText('Mark all as read');
+  page.getByTestId('notification-dropdown');
 
 async function openUserMenu(page: Page) {
   const summary = userMenuSummary(page);

@@ -90,6 +90,27 @@ test.describe('CSAT Rating Page', () => {
     await expect(page.getByTestId('csat-form')).toBeVisible();
   });
 
+  test('close (X) button dismisses the rating page', async ({ page }) => {
+    const svc = createServiceRoleClient();
+
+    // Use a dedicated, unused token so this test is independent of the submit tests.
+    const closeToken = crypto.randomBytes(32).toString('hex');
+    await svc.from('csat_ratings').insert({
+      ticket_id: ticketId,
+      token: closeToken,
+      token_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      is_used: false,
+    });
+
+    await page.goto(`/csat/${closeToken}`);
+    await expect(page.getByTestId('csat-form')).toBeVisible({ timeout: 10000 });
+
+    // The close button navigates home; an unauthenticated visitor is redirected to login.
+    await page.getByTestId('csat-close').click();
+    await expect(page).toHaveURL(/\/login/, { timeout: 10000 });
+    await expect(page.getByTestId('csat-form')).toHaveCount(0);
+  });
+
   test('invalid token shows error page', async ({ page }) => {
     await page.goto('/csat/invalidtoken123');
     await expect(page.getByText('Invalid or Expired Link')).toBeVisible({ timeout: 10000 });

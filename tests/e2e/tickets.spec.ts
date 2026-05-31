@@ -370,6 +370,29 @@ test.describe('Tickets', () => {
     await expect(page.getByText('Normal text')).toBeVisible();
   });
 
+  test('Cancel button on new ticket form returns to tickets list without creating', async ({ page }) => {
+    await loginAs(page, 'alice@example.com');
+    await page.goto('/tickets/new');
+
+    // Fill in some fields to ensure no ticket is created on cancel
+    await page.getByLabel('Title').fill('Should Not Be Created');
+
+    const cancelLink = page.getByRole('link', { name: 'Cancel' });
+    await expect(cancelLink).toBeVisible();
+    await cancelLink.click();
+
+    // Should navigate back to the tickets list
+    await expect(page).toHaveURL(/\/tickets$/, { timeout: 10000 });
+
+    // No ticket with that title should have been created
+    const svc = createServiceRoleClient();
+    const { data: leaked } = await svc
+      .from('tickets')
+      .select('id')
+      .eq('title', 'Should Not Be Created');
+    expect(leaked ?? []).toHaveLength(0);
+  });
+
   test('creating tickets beyond the rate limit shows an error', async ({ page }) => {
     // This test requires setting a low rate limit
     // We can't easily change app_settings via the browser, so we'd need a special setup

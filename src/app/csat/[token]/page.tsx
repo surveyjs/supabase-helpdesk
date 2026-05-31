@@ -45,7 +45,15 @@ export default async function CsatPage({
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm max-w-lg w-full p-8">
+      <div className="relative bg-white rounded-lg border border-gray-200 shadow-sm max-w-lg w-full p-8">
+        <Link
+          href="/"
+          className="absolute top-3 right-3 text-2xl leading-none text-gray-400 hover:text-gray-600 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none rounded"
+          aria-label="Close"
+          data-testid="csat-close"
+        >
+          ×
+        </Link>
         <h1 className="text-xl font-semibold text-gray-900 mb-1 text-center">
           Rate Your Experience
         </h1>

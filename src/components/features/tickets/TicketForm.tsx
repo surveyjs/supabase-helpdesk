@@ -485,13 +485,21 @@ export function TicketForm({
         </div>
       )}
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="w-full bg-blue-600 text-white rounded py-2 px-4 text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
-      >
-        {pending ? 'Creating…' : 'Create Ticket'}
-      </button>
+      <div className="flex gap-3">
+        <Link
+          href="/tickets"
+          className="flex-1 text-center bg-white text-gray-700 border border-gray-300 rounded py-2 px-4 text-sm font-medium hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
+        >
+          Cancel
+        </Link>
+        <button
+          type="submit"
+          disabled={pending}
+          className="flex-1 bg-blue-600 text-white rounded py-2 px-4 text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
+        >
+          {pending ? 'Creating…' : 'Create Ticket'}
+        </button>
+      </div>
     </form>
   );
 }

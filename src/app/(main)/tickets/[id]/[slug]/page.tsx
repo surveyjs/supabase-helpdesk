@@ -31,6 +31,8 @@ import { MarkAsDuplicateForm } from './MarkAsDuplicateForm';
 import { MergeTicketForm } from './MergeTicketForm';
 import { TicketSidebarSurvey } from './TicketSidebarSurvey';
 import { TicketTagChips } from './TicketTagChips';
+import { ActivityLogItem } from './ActivityLogItem';
+import { buildActivityDescriptor } from '@/lib/tickets/activity-log';
 import {
   parseTicketDetailAgentTemplate,
   parseTicketDetailUserTemplate,
@@ -344,61 +346,13 @@ export default async function TicketDetailPage({
     return `${d.toLocaleDateString()} ${d.toLocaleTimeString()} (${formatRelativeTime(dateStr)})`;
   }
 
-  function formatActivityMessage(entry: NonNullable<typeof activityLog>[number]) {
-    const actor = Array.isArray(entry.actor) ? entry.actor[0] : entry.actor;
-    const actorName = actor?.display_name ?? 'Unknown';
-    const d = entry.details as Record<string, unknown> | null;
-
-    switch (entry.action) {
-      case 'status_changed':
-        return `${actorName} changed status from ${d?.from ?? '?'} to ${d?.to ?? '?'}`;
-      case 'agent_assigned':
-        return `${actorName} assigned an agent`;
-      case 'agent_reassigned':
-        return `${actorName} reassigned agent${d?.reason ? ` (${d.reason})` : ''}`;
-      case 'agent_unassigned':
-        return `${actorName} unassigned agent`;
-      case 'urgency_changed':
-        return `${actorName} changed urgency from ${d?.from ?? '?'} to ${d?.to ?? '?'}`;
-      case 'severity_changed':
-        return `${actorName} changed severity from ${d?.from ?? '?'} to ${d?.to ?? '?'}`;
-      case 'type_changed':
-        return `${actorName} changed type`;
-      case 'category_changed':
-        return `${actorName} changed category`;
-      case 'title_changed':
-        return `${actorName} changed title from "${d?.from ?? '?'}" to "${d?.to ?? '?'}"`;
-      case 'tag_added':
-        return `${actorName} added tag "${d?.tag_name ?? ''}"`;
-      case 'tag_removed':
-        return `${actorName} removed tag "${d?.tag_name ?? ''}"`;
-      case 'ticket_privacy_changed':
-      case 'privacy_changed':
-        return `${actorName} changed ticket privacy from ${d?.from ? 'private' : 'public'} to ${d?.to ? 'private' : 'public'}`;
-      case 'post_privacy_changed':
-        return `${actorName} changed post privacy to ${d?.is_private ? 'private' : 'public'}`;
-      case 'draft_published':
-        return `${actorName} published a draft`;
-      case 'marked_duplicate':
-        return d?.original_ticket_id != null
-          ? `${actorName} marked as duplicate of #${d.original_ticket_id}`
-          : `${actorName} marked as duplicate`;
-      case 'duplicate_removed':
-        return `${actorName} removed duplicate link (was #${d?.previous_original_id ?? '?'})`;
-      case 'merged_from':
-        return `${actorName} merged ticket #${d?.source_ticket_id ?? '?'} into this ticket`;
-      case 'merged_into':
-        return `${actorName} merged this ticket into #${d?.target_ticket_id ?? '?'}`;
-      case 'merged':
-        return `${actorName} merged ticket`;
-      case 'file_uploaded':
-        return `${actorName} uploaded file "${d?.filename ?? ''}"`;
-      case 'file_deleted':
-        return `${actorName} deleted file "${d?.filename ?? ''}"`;
-      default:
-        return `${actorName} performed ${entry.action}`;
-    }
-  }
+  // Label lookups for resolving FK ids in activity-log payloads (issue #74).
+  const activityLabelLookups = {
+    typeName: (id: string) => typeNameById.get(id),
+    categoryName: (id: string) => categoryNameById.get(id),
+    agentName: (id: string) => agentNameById.get(id),
+    tagName: (id: string) => tagNameById.get(id),
+  };
 
   function renderPostCard(
     post: (typeof renderedPosts)[number],
@@ -604,11 +558,25 @@ export default async function TicketDetailPage({
   }
 
   function renderActivityEntry(entry: NonNullable<typeof activityLog>[number]) {
+    const actor = Array.isArray(entry.actor) ? entry.actor[0] : entry.actor;
+    const desc = buildActivityDescriptor(
+      entry.action,
+      entry.details as Record<string, unknown> | null,
+      actor?.display_name ?? 'Unknown',
+      activityLabelLookups,
+    );
     return (
-      <div key={entry.id} className="py-1 px-4 text-xs text-gray-500" data-testid={`activity-${entry.id}`}>
-        <span>{formatActivityMessage(entry)}</span>
-        <span className="ml-2 text-gray-500">{formatTime(entry.created_at)}</span>
-      </div>
+      <ActivityLogItem
+        key={entry.id}
+        id={entry.id}
+        actorName={desc.actorName}
+        createdAt={entry.created_at}
+        field={desc.field}
+        oldValue={desc.oldValue}
+        newValue={desc.newValue}
+        message={desc.message}
+        note={desc.note}
+      />
     );
   }
 
@@ -637,6 +605,16 @@ export default async function TicketDetailPage({
     allAgents = agentsRes.data ?? [];
     allTags = tagsRes.data ?? [];
   }
+
+  // Resolve FK ids in activity-log payloads to human-readable labels for the
+  // Logs tab old->new comparison (issue #74). These maps are only populated for
+  // agents / tier users; other viewers fall back to prose rendering.
+  const typeNameById = new Map(allTypes.map((t) => [t.id, t.name] as const));
+  const categoryNameById = new Map(allCategories.map((c) => [c.id, c.name] as const));
+  const agentNameById = new Map(
+    allAgents.map((a) => [a.id, a.display_name ?? a.email] as const),
+  );
+  const tagNameById = new Map(allTags.map((t) => [t.id, t.name] as const));
 
   // Fetch ticket tags
   const { data: ticketTagRows } = await supabase

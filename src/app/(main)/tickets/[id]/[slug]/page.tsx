@@ -294,6 +294,13 @@ export default async function TicketDetailPage({
   // Separate activity log entries visible to this viewer
   const visibleActivityEntries = (activityLog ?? []).filter((a) => {
     if (!isAgent && (a.action === 'draft_published' || a.action === 'post_privacy_changed')) return false;
+    // Post edit/delete entries expose body snippets: hide those for internal
+    // notes and private posts (and any legacy row missing the flags) from
+    // non-agents.
+    if (!isAgent && (a.action === 'post_edited' || a.action === 'post_deleted')) {
+      const d = a.details as Record<string, unknown> | null;
+      if (d?.post_type === 'note' || d?.is_private === true) return false;
+    }
     return true;
   });
 
@@ -576,6 +583,9 @@ export default async function TicketDetailPage({
         newValue={desc.newValue}
         message={desc.message}
         note={desc.note}
+        oldCopyText={desc.oldCopyText}
+        newCopyText={desc.newCopyText}
+        messageCopyText={desc.messageCopyText}
       />
     );
   }

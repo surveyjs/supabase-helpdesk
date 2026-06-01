@@ -1,4 +1,5 @@
 import { formatRelativeTime } from '@/lib/utils/time';
+import { CopyButton } from './CopyButton';
 
 /**
  * One entry in the ticket **Logs** (history) tab.
@@ -9,6 +10,9 @@ import { formatRelativeTime } from '@/lib/utils/time';
  *    and the new value emphasized (issue #74).
  *  - Prose: when only `message` is provided (events without a before/after,
  *    e.g. merges, file uploads), renders "{actor} {message}".
+ *
+ * When a displayed value is a truncated snippet of a longer body, the matching
+ * `*CopyText` prop carries the full text and a copy button is shown beside it.
  */
 export type ActivityLogItemProps = {
   id: string;
@@ -24,15 +28,34 @@ export type ActivityLogItemProps = {
   message?: string;
   /** Optional trailing note, e.g. a reassignment reason. */
   note?: string | null;
+  /** Full text behind `oldValue` when it was truncated; enables a copy button. */
+  oldCopyText?: string;
+  /** Full text behind `newValue` when it was truncated; enables a copy button. */
+  newCopyText?: string;
+  /** Full text behind a snippet embedded in `message`; enables a copy button. */
+  messageCopyText?: string;
 };
 
-function ValueChip({ value, variant }: { value?: string | null; variant: 'old' | 'new' }) {
+function ValueChip({
+  value,
+  variant,
+  copyText,
+}: {
+  value?: string | null;
+  variant: 'old' | 'new';
+  copyText?: string;
+}) {
   const text = value == null || value === '' ? '—' : value;
   const className =
     variant === 'old'
       ? 'rounded bg-gray-100 px-1.5 py-0.5 text-gray-500 line-through'
       : 'rounded bg-gray-100 px-1.5 py-0.5 font-medium text-gray-800';
-  return <span className={className}>{text}</span>;
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className={className}>{text}</span>
+      {copyText ? <CopyButton value={copyText} label="Copy full text" /> : null}
+    </span>
+  );
 }
 
 export function ActivityLogItem({
@@ -44,6 +67,9 @@ export function ActivityLogItem({
   newValue,
   message,
   note,
+  oldCopyText,
+  newCopyText,
+  messageCopyText,
 }: ActivityLogItemProps) {
   const exactTime = new Date(createdAt).toLocaleString();
   const isComparison = field !== undefined;
@@ -60,15 +86,18 @@ export function ActivityLogItem({
           <span>changed</span>
           <span className="text-gray-500">{field}</span>
           <span className="inline-flex items-center gap-1.5">
-            <ValueChip value={oldValue} variant="old" />
+            <ValueChip value={oldValue} variant="old" copyText={oldCopyText} />
             <span aria-hidden="true" className="text-gray-400">
               →
             </span>
-            <ValueChip value={newValue} variant="new" />
+            <ValueChip value={newValue} variant="new" copyText={newCopyText} />
           </span>
         </>
       ) : (
-        <span>{message}</span>
+        <span className="inline-flex items-center gap-1">
+          <span>{message}</span>
+          {messageCopyText ? <CopyButton value={messageCopyText} label="Copy full text" /> : null}
+        </span>
       )}
 
       {note ? <span className="italic text-gray-500">({note})</span> : null}

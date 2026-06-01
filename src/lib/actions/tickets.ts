@@ -583,7 +583,7 @@ export async function editPost(
 
   const { data: post } = await supabase
     .from('posts')
-    .select('id, author_id, is_original, post_type, ticket_id')
+    .select('id, author_id, is_original, post_type, ticket_id, body, is_private')
     .eq('id', postId)
     .single();
 
@@ -597,6 +597,8 @@ export async function editPost(
     if (post.post_type === 'note') return { error: 'You can only edit your own notes.' };
   }
 
+  const previousBody = post.body ?? '';
+
   const { error: updateError } = await supabase
     .from('posts')
     .update({ body, edited_at: new Date().toISOString() })
@@ -605,6 +607,23 @@ export async function editPost(
   if (updateError) return { error: 'Failed to edit post. Please try again.' };
 
   await claimInlineAttachments(postId, body);
+
+  // Record the edit in the ticket history with a before/after of the body.
+  // Skip no-op saves where the body is unchanged.
+  if (body !== previousBody) {
+    await supabase.from('activity_log').insert({
+      ticket_id: post.ticket_id,
+      actor_id: user.id,
+      action: 'post_edited',
+      details: {
+        post_id: post.id,
+        post_type: post.post_type,
+        is_private: post.is_private,
+        from: previousBody,
+        to: body,
+      },
+    });
+  }
 
   const { data: ticket } = await supabase
     .from('tickets')
@@ -698,7 +717,7 @@ export async function deletePost(formData: FormData): Promise<void> {
 
   const { data: post } = await supabase
     .from('posts')
-    .select('id, author_id, is_original, post_type, ticket_id')
+    .select('id, author_id, is_original, post_type, ticket_id, body, is_private')
     .eq('id', postId)
     .single();
 
@@ -721,7 +740,23 @@ export async function deletePost(formData: FormData): Promise<void> {
     .eq('id', post.ticket_id)
     .single();
 
-  await supabase.from('posts').delete().eq('id', postId);
+  const { error: deleteError } = await supabase.from('posts').delete().eq('id', postId);
+
+  // Record the deletion in the ticket history, retaining the removed body so it
+  // is not lost (the post row itself is hard-deleted).
+  if (!deleteError) {
+    await supabase.from('activity_log').insert({
+      ticket_id: post.ticket_id,
+      actor_id: user.id,
+      action: 'post_deleted',
+      details: {
+        post_id: post.id,
+        post_type: post.post_type,
+        is_private: post.is_private,
+        body: post.body ?? '',
+      },
+    });
+  }
 
   if (ticket) revalidatePath(`/tickets/${ticket.id}/${ticket.slug}`);
 }

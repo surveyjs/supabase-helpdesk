@@ -24,6 +24,15 @@ export type ActivityDescriptor = {
   /** Predicate-only prose (no leading actor name) for events without before/after. */
   message?: string;
   note?: string | null;
+  /**
+   * Full (untruncated) text behind a truncated display value, for a copy
+   * button. `oldCopyText` pairs with `oldValue`, `newCopyText` with `newValue`,
+   * and `messageCopyText` with a snippet embedded in `message`. Only set when
+   * the displayed value was actually truncated/derived from a longer body.
+   */
+  oldCopyText?: string;
+  newCopyText?: string;
+  messageCopyText?: string;
 };
 
 /** Title-cases an enum-ish token, e.g. "in_progress" -> "In progress". */
@@ -32,6 +41,27 @@ export function titleCaseValue(value: unknown): string {
     .replace(/_/g, ' ')
     .trim();
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : '—';
+}
+
+/**
+ * Formats a free-form custom-field value (text/number/checkbox/dropdown) for
+ * display. Unlike `titleCaseValue`, it preserves the raw text and only maps
+ * booleans and empty values.
+ */
+export function formatPlainValue(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '—';
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  return String(value);
+}
+
+/**
+ * Collapses whitespace and truncates a (possibly long, multi-line) body to a
+ * single-line snippet for the inline old->new comparison. Empty -> em dash.
+ */
+export function snippet(value: unknown, max = 80): string {
+  const s = String(value ?? '').replace(/\s+/g, ' ').trim();
+  if (!s) return '—';
+  return s.length > max ? `${s.slice(0, max).trimEnd()}…` : s;
 }
 
 /**
@@ -68,6 +98,17 @@ export function buildActivityDescriptor(
       return { actorName, field: 'type', oldValue: typeLabel(d.from), newValue: typeLabel(d.to) };
     case 'category_changed':
       return { actorName, field: 'category', oldValue: categoryLabel(d.from), newValue: categoryLabel(d.to) };
+    case 'custom_field_changed': {
+      // Older rows only carried `value` (the new value); newer rows add `from`/`to`.
+      const fieldName = typeof d.field === 'string' && d.field ? d.field : 'custom field';
+      const hasComparison = 'from' in d || 'to' in d;
+      return {
+        actorName,
+        field: fieldName,
+        oldValue: hasComparison ? formatPlainValue(d.from) : null,
+        newValue: formatPlainValue(hasComparison ? d.to : d.value),
+      };
+    }
     case 'title_changed':
       return {
         actorName,
@@ -75,6 +116,31 @@ export function buildActivityDescriptor(
         oldValue: d.from != null ? `"${d.from}"` : '—',
         newValue: d.to != null ? `"${d.to}"` : '—',
       };
+    case 'post_edited': {
+      const kind =
+        d.post_type === 'note' ? 'note' : d.post_type === 'comment' ? 'comment' : 'reply';
+      const fromText = String(d.from ?? '');
+      const toText = String(d.to ?? '');
+      return {
+        actorName,
+        field: kind,
+        oldValue: snippet(d.from),
+        newValue: snippet(d.to),
+        oldCopyText: fromText || undefined,
+        newCopyText: toText || undefined,
+      };
+    }
+    case 'post_deleted': {
+      const kind =
+        d.post_type === 'note' ? 'note' : d.post_type === 'comment' ? 'comment' : 'reply';
+      const bodyText = String(d.body ?? '');
+      const body = snippet(d.body);
+      return {
+        actorName,
+        message: body === '—' ? `deleted a ${kind}` : `deleted a ${kind}: "${body}"`,
+        messageCopyText: bodyText || undefined,
+      };
+    }
     case 'ticket_privacy_changed':
     case 'privacy_changed':
       return {

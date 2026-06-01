@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   buildActivityDescriptor,
   titleCaseValue,
+  snippet,
   type ActivityLabelLookups,
 } from '../activity-log';
 
@@ -103,6 +104,87 @@ describe('buildActivityDescriptor — comparison entries', () => {
       newValue: '"New"',
     });
   });
+
+  it('custom-field change uses the field name and shows old -> new', () => {
+    expect(
+      build('custom_field_changed', { field: 'Region', from: 'EU', to: 'US', value: 'US' }),
+    ).toEqual({
+      actorName: 'Carol',
+      field: 'Region',
+      oldValue: 'EU',
+      newValue: 'US',
+    });
+  });
+
+  it('custom-field checkbox values map to Yes/No', () => {
+    expect(
+      build('custom_field_changed', { field: 'VIP', from: false, to: true, value: true }),
+    ).toMatchObject({ field: 'VIP', oldValue: 'No', newValue: 'Yes' });
+  });
+
+  it('legacy custom-field rows (value only, no from/to) show just the new value', () => {
+    expect(build('custom_field_changed', { field: 'Region', value: 'US' })).toEqual({
+      actorName: 'Carol',
+      field: 'Region',
+      oldValue: null,
+      newValue: 'US',
+    });
+  });
+
+  it('post edit shows a before/after snippet labelled by post kind', () => {
+    expect(
+      build('post_edited', { post_type: 'post', from: 'old body', to: 'new body' }),
+    ).toMatchObject({ actorName: 'Carol', field: 'reply', oldValue: 'old body', newValue: 'new body' });
+    expect(build('post_edited', { post_type: 'comment', from: 'a', to: 'b' })).toMatchObject({
+      field: 'comment',
+    });
+    expect(build('post_edited', { post_type: 'note', from: 'a', to: 'b' })).toMatchObject({
+      field: 'note',
+    });
+  });
+
+  it('post edit collapses whitespace and truncates long bodies', () => {
+    const long = 'word '.repeat(40); // 200 chars
+    const res = build('post_edited', { post_type: 'post', from: '', to: long });
+    expect(res.oldValue).toBe('—');
+    expect(res.newValue?.endsWith('…')).toBe(true);
+    expect((res.newValue ?? '').length).toBeLessThanOrEqual(81);
+  });
+
+  it('post edit carries full untruncated copy text for both sides', () => {
+    const long = 'word '.repeat(40).trim();
+    const res = build('post_edited', { post_type: 'post', from: 'short before', to: long });
+    expect(res.oldCopyText).toBe('short before');
+    expect(res.newCopyText).toBe(long);
+  });
+
+  it('post edit omits copy text for an empty side', () => {
+    const res = build('post_edited', { post_type: 'post', from: '', to: 'hi' });
+    expect(res.oldCopyText).toBeUndefined();
+    expect(res.newCopyText).toBe('hi');
+  });
+
+  it('post deletion carries full body as message copy text', () => {
+    const res = build('post_deleted', { post_type: 'comment', body: 'the whole deleted body' });
+    expect(res.messageCopyText).toBe('the whole deleted body');
+  });
+
+  it('post deletion with empty body has no copy text', () => {
+    expect(build('post_deleted', { post_type: 'post', body: '' }).messageCopyText).toBeUndefined();
+  });
+});
+
+describe('snippet', () => {
+  it('collapses whitespace/newlines and trims', () => {
+    expect(snippet('  a\n\n b\t c  ')).toBe('a b c');
+  });
+  it('returns the em dash for empty input', () => {
+    expect(snippet('')).toBe('—');
+    expect(snippet(null)).toBe('—');
+  });
+  it('truncates with an ellipsis past the max', () => {
+    expect(snippet('abcdef', 3)).toBe('abc…');
+  });
 });
 
 describe('buildActivityDescriptor — prose entries', () => {
@@ -119,6 +201,26 @@ describe('buildActivityDescriptor — prose entries', () => {
   it('prefers an explicit tag_name when present', () => {
     expect(build('tag_added', { tag_name: 'legacy' })).toMatchObject({
       message: 'added tag "legacy"',
+    });
+  });
+
+  it('post deletion retains the removed body as a snippet, labelled by kind', () => {
+    expect(build('post_deleted', { post_type: 'post', body: 'spam content' })).toMatchObject({
+      actorName: 'Carol',
+      message: 'deleted a reply: "spam content"',
+    });
+    expect(build('post_deleted', { post_type: 'comment', body: 'oops' })).toMatchObject({
+      message: 'deleted a comment: "oops"',
+    });
+    expect(build('post_deleted', { post_type: 'note', body: 'internal' })).toMatchObject({
+      message: 'deleted a note: "internal"',
+    });
+  });
+
+  it('post deletion with an empty body omits the quote', () => {
+    expect(build('post_deleted', { post_type: 'post', body: '' })).toEqual({
+      actorName: 'Carol',
+      message: 'deleted a reply',
     });
   });
 

@@ -507,6 +507,107 @@ test.describe('Posts, Comments & Notes', () => {
     const count = await activityEntries.count();
     expect(count).toBeGreaterThanOrEqual(1);
   });
+
+  test('Logs tab: copy button copies the full body of an edited post', async ({ page }) => {
+    // Clipboard read requires an explicit permission grant (Chromium).
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+
+    await loginAs(page, 'alice@example.com');
+    await page.goto(ticketUrl || await resolveTicketUrl());
+
+    // Add a fresh reply, then edit it to a long body so the Logs snippet
+    // truncates and exposes a copy button for the full (new) value.
+    const longBody =
+      'COPYEDIT marker followed by a deliberately long body that exceeds the eighty character snippet limit so it truncates.';
+    await page.getByTestId('main-reply-btn').click();
+    const replyPanel = page.getByTestId('main-reply-panel');
+    await expect(replyPanel).toBeVisible({ timeout: 10000 });
+    await replyPanel.locator('[data-testid="markdown-editor"]').locator('textarea[name="textarea"]')
+      .fill('COPYEDIT original short reply.');
+    await replyPanel.getByRole('button', { name: 'Add a reply' }).click();
+
+    const replyCardByText = page
+      .locator('[data-testid^="post-"]')
+      .filter({ hasText: 'COPYEDIT original short reply.' })
+      .first();
+    await expect(replyCardByText).toBeVisible({ timeout: 10000 });
+    const replyTestId = await replyCardByText.getAttribute('data-testid');
+    const replyCard = page.locator(`[data-testid="${replyTestId}"]`);
+
+    await replyCard.locator('[data-testid="edit-post-btn"]').first().click();
+    const editEditor = replyCard.locator('[data-testid="markdown-editor"]').first();
+    await editEditor.locator('textarea[name="textarea"]').clear();
+    await editEditor.locator('textarea[name="textarea"]').fill(longBody);
+    await replyCard.getByRole('button', { name: 'Save' }).first().click();
+    await expect(
+      page.locator('[data-testid^="post-"]').filter({ hasText: '(edited)' }).filter({ hasText: 'COPYEDIT marker' }).first(),
+    ).toBeVisible({ timeout: 10000 });
+
+    // Open the Logs tab and locate the post_edited entry for this change.
+    await page.getByTestId('logs-tab').click();
+    const editRow = page
+      .locator('[data-testid^="activity-"]')
+      .filter({ hasText: 'COPYEDIT marker' })
+      .first();
+    await expect(editRow).toBeVisible({ timeout: 10000 });
+
+    // The displayed value is truncated with an ellipsis...
+    await expect(editRow).toContainText('…');
+
+    // ...but the copy button puts the FULL body on the clipboard.
+    const copyBtn = editRow.getByTestId('activity-copy-btn').last();
+    await expect(copyBtn).toBeVisible();
+    await copyBtn.click();
+    await expect(copyBtn).toHaveAttribute('title', 'Copied', { timeout: 5000 });
+
+    const clip = await page.evaluate(() => navigator.clipboard.readText());
+    expect(clip).toBe(longBody);
+  });
+
+  test('Logs tab: copy button copies the full body of a deleted post', async ({ page }) => {
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+
+    await loginAs(page, 'agent.smith@example.com');
+    const url = ticketUrl || await resolveTicketUrl();
+    await gotoAuthed(page, url, () => loginAs(page, 'agent.smith@example.com'));
+
+    const longBody =
+      'COPYDEL marker plus a long body that goes well past the eighty character snippet boundary so the Logs entry must truncate it.';
+    await page.getByTestId('main-reply-btn').click();
+    const replyPanel = page.getByTestId('main-reply-panel');
+    await expect(replyPanel).toBeVisible({ timeout: 10000 });
+    await replyPanel.locator('[data-testid="markdown-editor"]').locator('textarea[name="textarea"]').fill(longBody);
+    await replyPanel.getByRole('button', { name: 'Add a reply' }).click();
+
+    const tempCard = page
+      .locator('[data-testid^="post-"]')
+      .filter({ hasText: 'COPYDEL marker' })
+      .first();
+    await expect(tempCard).toBeVisible({ timeout: 10000 });
+    await tempCard.locator('[data-testid="delete-post-btn"]').click();
+    await expect(
+      page.locator('[data-testid^="post-"]').filter({ hasText: 'COPYDEL marker' }),
+    ).toHaveCount(0, { timeout: 20000 });
+
+    // The deleted body survives only in the Logs tab; its copy button must
+    // yield the full text even though the row shows a truncated snippet.
+    await page.getByTestId('logs-tab').click();
+    const delRow = page
+      .locator('[data-testid^="activity-"]')
+      .filter({ hasText: 'deleted a reply' })
+      .filter({ hasText: 'COPYDEL marker' })
+      .first();
+    await expect(delRow).toBeVisible({ timeout: 10000 });
+    await expect(delRow).toContainText('…');
+
+    const copyBtn = delRow.getByTestId('activity-copy-btn').first();
+    await expect(copyBtn).toBeVisible();
+    await copyBtn.click();
+    await expect(copyBtn).toHaveAttribute('title', 'Copied', { timeout: 5000 });
+
+    const clip = await page.evaluate(() => navigator.clipboard.readText());
+    expect(clip).toBe(longBody);
+  });
 });
 
 test.describe('Collapsible Timeline', () => {

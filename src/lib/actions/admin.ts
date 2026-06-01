@@ -1120,6 +1120,7 @@ export async function updateCustomFieldValue(formData: FormData): Promise<void> 
   }
 
   const cf = (ticket.custom_fields ?? {}) as Record<string, unknown>;
+  const previousValue = cf[fieldName] ?? null;
   cf[fieldName] = parsedValue;
 
   const serviceClient = createServiceRoleClient();
@@ -1128,12 +1129,13 @@ export async function updateCustomFieldValue(formData: FormData): Promise<void> 
     .update({ custom_fields: cf })
     .eq('id', ticketId);
 
-  // Log activity
+  // Log activity. `from`/`to` drive the Logs-tab old->new comparison (issue #74);
+  // `value` is kept for backward compatibility with older log rows/readers.
   await supabase.from('activity_log').insert({
     ticket_id: parseInt(ticketId, 10),
     actor_id: user.id,
     action: 'custom_field_changed',
-    details: { field: fieldName, value: parsedValue },
+    details: { field: fieldName, value: parsedValue, from: previousValue, to: parsedValue },
   });
 
   // Canonical ticket route is `/tickets/{id}/{slug}` — revalidate that.

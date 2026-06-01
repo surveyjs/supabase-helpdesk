@@ -61,9 +61,9 @@ export function TicketForm({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestQueryRef = useRef<string>('');
 
-  // Track whether the user has entered data that would be lost on an
-  // accidental reload / tab close. Cleared while a create is in flight so the
-  // post-submit redirect doesn't prompt; re-armed if the submit fails.
+  // Tracks whether the user has entered data that would be lost on an accidental
+  // reload / tab close. While a create is in flight `submittingRef` suppresses the
+  // prompt so the post-submit redirect is silent; it is re-armed if the submit fails.
   const dirtyRef = useRef(false);
   const submittingRef = useRef(false);
 

@@ -401,16 +401,17 @@ test.describe('Tickets', () => {
     // Enter data that would be lost on an accidental reload.
     await page.getByLabel('Title').fill('Draft that should be protected');
 
-    // The browser surfaces a native beforeunload confirmation on reload.
-    // Accept it so the reload proceeds and the test does not hang.
-    let beforeUnloadShown = false;
-    page.on('dialog', async (dialog) => {
-      if (dialog.type() === 'beforeunload') beforeUnloadShown = true;
+    // The browser surfaces a native beforeunload confirmation on reload. Handle
+    // exactly that one dialog (accept so the reload proceeds and the test does
+    // not hang); a lingering listener could mask other, unexpected dialogs.
+    let beforeUnloadType: string | undefined;
+    page.once('dialog', async (dialog) => {
+      beforeUnloadType = dialog.type();
       await dialog.accept();
     });
     await page.reload();
 
-    expect(beforeUnloadShown).toBe(true);
+    expect(beforeUnloadType).toBe('beforeunload');
   });
 
   test('creating tickets beyond the rate limit shows an error', async ({ page }) => {

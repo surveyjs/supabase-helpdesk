@@ -61,6 +61,12 @@ export function TicketForm({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestQueryRef = useRef<string>('');
 
+  // Track whether the user has entered data that would be lost on an
+  // accidental reload / tab close. Cleared while a create is in flight so the
+  // post-submit redirect doesn't prompt; re-armed if the submit fails.
+  const dirtyRef = useRef(false);
+  const submittingRef = useRef(false);
+
   // AI auto-categorization state
   const [aiSuggestions, setAiSuggestions] = useState<AutoCategorizeResult>({});
   const [aiCategorizePending, setAiCategorizePending] = useState(false);
@@ -124,6 +130,7 @@ export function TicketForm({
   const bodyCategDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function handleBodyChange(text: string) {
+    dirtyRef.current = true;
     bodyRef.current = text;
     // Debounce auto-categorization (triggers ~1s after last edit, like blur used to)
     if (!aiAutoCategEnabled || aiCategorized) return;
@@ -204,8 +211,40 @@ export function TicketForm({
     };
   }, []);
 
+  // Warn before an accidental reload / tab close discards unsaved input. Only
+  // native unloads (reload, close, external navigation) trigger this; the
+  // in-app Cancel link and the Create submit are client-side navigations and
+  // are intentionally left unguarded.
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!dirtyRef.current || submittingRef.current) return;
+      e.preventDefault();
+      // Legacy browsers require returnValue to be set to show the prompt.
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
+
+  // Re-arm the guard if a submit attempt finished with errors: the user's input
+  // is still on screen and would be lost on reload.
+  useEffect(() => {
+    if (!pending && (state.error || state.fieldErrors)) {
+      submittingRef.current = false;
+    }
+  }, [pending, state]);
+
   return (
-    <form action={formAction} className="space-y-6">
+    <form
+      action={formAction}
+      onSubmit={() => {
+        submittingRef.current = true;
+      }}
+      onChange={() => {
+        dirtyRef.current = true;
+      }}
+      className="space-y-6"
+    >
       {sourceArticleId && (
         <input type="hidden" name="source_article_id" value={sourceArticleId} />
       )}

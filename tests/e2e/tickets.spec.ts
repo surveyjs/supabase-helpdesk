@@ -393,6 +393,26 @@ test.describe('Tickets', () => {
     expect(leaked ?? []).toHaveLength(0);
   });
 
+  test('reloading the new ticket form with unsaved input prompts before discarding', async ({ page }) => {
+    await loginAs(page, 'alice@example.com');
+    await page.goto('/tickets/new');
+
+    // No prompt should be armed until the user has actually entered something.
+    // Enter data that would be lost on an accidental reload.
+    await page.getByLabel('Title').fill('Draft that should be protected');
+
+    // The browser surfaces a native beforeunload confirmation on reload.
+    // Accept it so the reload proceeds and the test does not hang.
+    let beforeUnloadShown = false;
+    page.on('dialog', async (dialog) => {
+      if (dialog.type() === 'beforeunload') beforeUnloadShown = true;
+      await dialog.accept();
+    });
+    await page.reload();
+
+    expect(beforeUnloadShown).toBe(true);
+  });
+
   test('creating tickets beyond the rate limit shows an error', async ({ page }) => {
     // This test requires setting a low rate limit
     // We can't easily change app_settings via the browser, so we'd need a special setup

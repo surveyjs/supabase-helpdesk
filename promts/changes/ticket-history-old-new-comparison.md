@@ -35,13 +35,20 @@ This is an enhancement of the existing `activity_log` infrastructure — not a n
 - `src/lib/tickets/__tests__/activity-log.test.ts` — 15 unit tests (green). Typecheck + lint clean; full
   unit suite unaffected.
 
+Follow-up work landed after the initial render-time pass:
+- Custom-field changes now render as comparisons. `updateCustomFieldValue()` already logged
+  `custom_field_changed`; this work captures the previous value (`from`/`to`) and adds a descriptor case.
+- Post edits are now logged (`post_edited`, with old/new body) and post/comment deletions
+  (`post_deleted`, retaining the deleted body). Both expose body snippets, so note/private entries are
+  hidden from non-agents (fail-closed allowlist in `visibleActivityEntries`).
+- Copy buttons in the Logs tab copy the full untruncated body behind a snippet (unit + e2e covered).
+
 **Deferred** (optional hardening, not required for the visible feature):
 - Write-time label persistence in `details` (immutable history; needed for non-agent viewers who don't
   load the lookup maps). The render-time fallback covers the agent Logs tab today.
 - Logging a `created` event at ticket-creation time (the descriptor already renders it if present).
-- Logging custom-field changes (the sidebar custom-field path does not currently write `activity_log`).
-- Extra e2e assertion for the old→new rendering. The existing `data-testid="activity-${id}"` contract is
-  unchanged, so current e2e remains valid.
+- Logging *creation* of posts/comments (they are already visible in the Thread tab; only edits and
+  deletions are logged).
 
 ---
 

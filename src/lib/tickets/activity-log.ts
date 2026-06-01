@@ -25,15 +25,41 @@ export type ActivityDescriptor = {
   message?: string;
   note?: string | null;
   /**
-   * Full (untruncated) text behind a truncated display value, for a copy
-   * button. `oldCopyText` pairs with `oldValue`, `newCopyText` with `newValue`,
-   * and `messageCopyText` with a snippet embedded in `message`. Only set when
-   * the displayed value was actually truncated/derived from a longer body.
+   * Full (untruncated) text behind a displayed value, for a copy button.
+   * `oldCopyText` pairs with `oldValue`, `newCopyText` with `newValue`, and
+   * `messageCopyText` with a snippet embedded in `message`. Set whenever the
+   * source body is non-empty (the display value may be a truncated snippet of
+   * it, or — for short bodies — identical to it).
    */
   oldCopyText?: string;
   newCopyText?: string;
   messageCopyText?: string;
 };
+
+/**
+ * Decides whether a non-agent viewer may see an activity entry. Most entries
+ * are visible, but a few expose information that must stay agent-only:
+ *  - `draft_published` / `post_privacy_changed`: agent-only workflow events.
+ *  - `post_edited` / `post_deleted`: carry body snippets, so they are shown only
+ *    when the payload *proves* the post is a public, non-private reply/comment.
+ *    This fails closed — legacy/malformed rows missing the flags are hidden so
+ *    internal-note or private-post content can never leak.
+ *
+ * Agents bypass this entirely (callers should only apply it when `!isAgent`).
+ */
+export function isActivityVisibleToNonAgent(
+  action: string,
+  details: Record<string, unknown> | null | undefined,
+): boolean {
+  if (action === 'draft_published' || action === 'post_privacy_changed') return false;
+  if (action === 'post_edited' || action === 'post_deleted') {
+    const d = details ?? {};
+    const isPublicPostOrComment =
+      (d.post_type === 'post' || d.post_type === 'comment') && d.is_private === false;
+    return isPublicPostOrComment;
+  }
+  return true;
+}
 
 /** Title-cases an enum-ish token, e.g. "in_progress" -> "In progress". */
 export function titleCaseValue(value: unknown): string {

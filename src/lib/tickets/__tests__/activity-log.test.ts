@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildActivityDescriptor,
+  isActivityVisibleToNonAgent,
   titleCaseValue,
   snippet,
   type ActivityLabelLookups,
@@ -171,6 +172,35 @@ describe('buildActivityDescriptor — comparison entries', () => {
 
   it('post deletion with empty body has no copy text', () => {
     expect(build('post_deleted', { post_type: 'post', body: '' }).messageCopyText).toBeUndefined();
+  });
+});
+
+describe('isActivityVisibleToNonAgent', () => {
+  it('shows ordinary change entries to non-agents', () => {
+    expect(isActivityVisibleToNonAgent('status_changed', { from: 'open', to: 'closed' })).toBe(true);
+    expect(isActivityVisibleToNonAgent('tag_added', { tag_id: 'g1' })).toBe(true);
+  });
+
+  it('hides agent-only workflow events', () => {
+    expect(isActivityVisibleToNonAgent('draft_published', {})).toBe(false);
+    expect(isActivityVisibleToNonAgent('post_privacy_changed', {})).toBe(false);
+  });
+
+  it('shows post edits/deletions only for public, non-private posts/comments', () => {
+    expect(isActivityVisibleToNonAgent('post_edited', { post_type: 'post', is_private: false })).toBe(true);
+    expect(isActivityVisibleToNonAgent('post_deleted', { post_type: 'comment', is_private: false })).toBe(true);
+  });
+
+  it('hides body-snippet entries for notes and private posts', () => {
+    expect(isActivityVisibleToNonAgent('post_edited', { post_type: 'note', is_private: false })).toBe(false);
+    expect(isActivityVisibleToNonAgent('post_deleted', { post_type: 'post', is_private: true })).toBe(false);
+  });
+
+  it('fails closed for legacy/malformed rows missing the flags', () => {
+    expect(isActivityVisibleToNonAgent('post_edited', {})).toBe(false);
+    expect(isActivityVisibleToNonAgent('post_edited', null)).toBe(false);
+    expect(isActivityVisibleToNonAgent('post_deleted', { post_type: 'post' })).toBe(false); // no is_private
+    expect(isActivityVisibleToNonAgent('post_deleted', { is_private: false })).toBe(false); // no post_type
   });
 });
 

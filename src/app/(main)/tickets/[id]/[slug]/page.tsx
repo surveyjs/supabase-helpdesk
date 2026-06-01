@@ -32,7 +32,7 @@ import { MergeTicketForm } from './MergeTicketForm';
 import { TicketSidebarSurvey } from './TicketSidebarSurvey';
 import { TicketTagChips } from './TicketTagChips';
 import { ActivityLogItem } from './ActivityLogItem';
-import { buildActivityDescriptor } from '@/lib/tickets/activity-log';
+import { buildActivityDescriptor, isActivityVisibleToNonAgent } from '@/lib/tickets/activity-log';
 import {
   parseTicketDetailAgentTemplate,
   parseTicketDetailUserTemplate,
@@ -291,18 +291,12 @@ export default async function TicketDetailPage({
     commentsByParentPost.set(k, arr);
   }
 
-  // Separate activity log entries visible to this viewer
-  const visibleActivityEntries = (activityLog ?? []).filter((a) => {
-    if (!isAgent && (a.action === 'draft_published' || a.action === 'post_privacy_changed')) return false;
-    // Post edit/delete entries expose body snippets: hide those for internal
-    // notes and private posts (and any legacy row missing the flags) from
-    // non-agents.
-    if (!isAgent && (a.action === 'post_edited' || a.action === 'post_deleted')) {
-      const d = a.details as Record<string, unknown> | null;
-      if (d?.post_type === 'note' || d?.is_private === true) return false;
-    }
-    return true;
-  });
+  // Separate activity log entries visible to this viewer. Agents see all;
+  // non-agents are filtered by isActivityVisibleToNonAgent (fails closed for
+  // body-snippet entries — see its docstring).
+  const visibleActivityEntries = (activityLog ?? []).filter(
+    (a) => isAgent || isActivityVisibleToNonAgent(a.action, a.details as Record<string, unknown> | null),
+  );
 
   // Thread items: original post (if any) first, then root reply posts sorted by date.
   type ThreadItem = { kind: 'post'; data: (typeof renderedPosts)[number] };

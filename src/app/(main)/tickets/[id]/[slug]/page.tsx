@@ -607,14 +607,31 @@ export default async function TicketDetailPage({
   }
 
   // Resolve FK ids in activity-log payloads to human-readable labels for the
-  // Logs tab old->new comparison (issue #74). These maps are only populated for
-  // agents / tier users; other viewers fall back to prose rendering.
-  const typeNameById = new Map(allTypes.map((t) => [t.id, t.name] as const));
-  const categoryNameById = new Map(allCategories.map((c) => [c.id, c.name] as const));
-  const agentNameById = new Map(
-    allAgents.map((a) => [a.id, a.display_name ?? a.email] as const),
-  );
-  const tagNameById = new Map(allTags.map((t) => [t.id, t.name] as const));
+  // Logs tab old->new comparison (issue #74). Agents/tier users already loaded
+  // the full reference lists above; other viewers (e.g. the ticket creator)
+  // would otherwise see "Unknown" placeholders, so fetch name-only lookups for
+  // them too. All four reference tables are world-readable to authenticated
+  // users (RLS: ticket_types/categories/tags/profiles SELECT USING (true)).
+  let labelTypes = allTypes.map((t) => ({ id: t.id, name: t.name }));
+  let labelCategories = allCategories.map((c) => ({ id: c.id, name: c.name }));
+  let labelAgents = allAgents.map((a) => ({ id: a.id, name: a.display_name ?? a.email }));
+  let labelTags = allTags.map((t) => ({ id: t.id, name: t.name }));
+  if (!isAgent && !hasAnyTierCap) {
+    const [typesRes, catsRes, agentsRes, tagsRes] = await Promise.all([
+      supabase.from('ticket_types').select('id, name'),
+      supabase.from('categories').select('id, name'),
+      supabase.from('profiles').select('id, display_name, email').in('role', ['agent', 'admin']),
+      supabase.from('tags').select('id, name'),
+    ]);
+    labelTypes = typesRes.data ?? [];
+    labelCategories = catsRes.data ?? [];
+    labelAgents = (agentsRes.data ?? []).map((a) => ({ id: a.id, name: a.display_name ?? a.email }));
+    labelTags = tagsRes.data ?? [];
+  }
+  const typeNameById = new Map(labelTypes.map((t) => [t.id, t.name] as const));
+  const categoryNameById = new Map(labelCategories.map((c) => [c.id, c.name] as const));
+  const agentNameById = new Map(labelAgents.map((a) => [a.id, a.name] as const));
+  const tagNameById = new Map(labelTags.map((t) => [t.id, t.name] as const));
 
   // Fetch ticket tags
   const { data: ticketTagRows } = await supabase

@@ -12,7 +12,8 @@ of plain prose with a relative timestamp. This change turns it into an auditable
 1. Renders an **old → new comparison** (previous value struck through / muted, arrow, new value emphasized).
 2. Shows **human-readable values** for fields that currently store only UUIDs (type, category, assignee, tags).
 3. Shows the **exact timestamp** alongside the relative time.
-4. Records the ticket **creation** event so the history has a beginning.
+4. Renders a ticket **creation** entry when one exists in the log. (Writing the `created`
+   entry at ticket-creation time is deferred — see "Implementation status".)
 
 This is an enhancement of the existing `activity_log` infrastructure — not a new subsystem.
 

@@ -1,25 +1,27 @@
 import { createServerClient } from '@/lib/supabase/server';
 import { requireAuth } from '@/lib/supabase/auth';
 import { TicketForm } from '@/components/features/tickets/TicketForm';
+import { resolveCloneSource } from '@/lib/actions/clone';
 
 export default async function NewTicketPage({
   searchParams,
 }: {
-  searchParams: Promise<{ from_article?: string }>;
+  searchParams: Promise<{ from_article?: string; clone_from?: string; clone_post?: string }>;
 }) {
   const user = await requireAuth();
-  const { from_article } = await searchParams;
+  const { from_article, clone_from, clone_post } = await searchParams;
   const supabase = await createServerClient();
 
   const { data: profileWithHeights, error: profileError } = await supabase
     .from('profiles')
-    .select('editor_view_mode, editor_min_height_px, editor_max_height_px')
+    .select('role, editor_view_mode, editor_min_height_px, editor_max_height_px')
     .eq('id', user.id)
     .single();
 
   // Older local DBs without migration 027 don't have the height columns;
   // fall back to selecting just editor_view_mode so the page still renders.
   let profile: {
+    role?: string | null;
     editor_view_mode?: string | null;
     editor_min_height_px?: number | null;
     editor_max_height_px?: number | null;
@@ -27,13 +29,22 @@ export default async function NewTicketPage({
   if (profileError?.code === '42703') {
     const { data: legacyProfile } = await supabase
       .from('profiles')
-      .select('editor_view_mode')
+      .select('role, editor_view_mode')
       .eq('id', user.id)
       .single();
     profile = legacyProfile
       ? { ...legacyProfile, editor_min_height_px: null, editor_max_height_px: null }
       : null;
   }
+
+  // Clone prefill (agent-only). When the page is opened from a "Clone" link, the
+  // form is prefilled from the source; submitting it creates the clone, and
+  // Cancel returns to the source ticket without writing anything.
+  const isAgent = profile?.role === 'agent' || profile?.role === 'admin';
+  const clone =
+    isAgent && (clone_from || clone_post)
+      ? await resolveCloneSource(clone_from ?? null, clone_post ?? null)
+      : null;
 
   // Fetch ticket types
   const { data: ticketTypes } = await supabase
@@ -97,7 +108,9 @@ export default async function NewTicketPage({
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold text-gray-900 mb-6">Create Ticket</h1>
+      <h1 className="text-2xl font-semibold text-gray-900 mb-6">
+        {clone ? 'Clone Ticket' : 'Create Ticket'}
+      </h1>
       <div className="bg-white rounded-lg border border-gray-200 p-6">
         <TicketForm
           ticketTypes={ticketTypes ?? []}
@@ -116,7 +129,16 @@ export default async function NewTicketPage({
               ? (profile as { editor_max_height_px: number }).editor_max_height_px
               : undefined
           }
-          initialTitle={fromArticleTitle}
+          initialTitle={clone ? clone.prefill.title : fromArticleTitle}
+          initialBody={clone?.prefill.body}
+          initialType={clone?.prefill.typeId ?? undefined}
+          initialCategory={clone?.prefill.categoryId ?? undefined}
+          initialUrgency={clone?.prefill.urgency ?? undefined}
+          initialPrivate={clone?.prefill.isPrivate}
+          initialCustomFields={clone?.prefill.customFields}
+          cloneFromId={clone ? clone.sourceTicketId : undefined}
+          cloneFromPostId={clone?.sourcePostId ?? undefined}
+          cancelHref={clone ? `/tickets/${clone.sourceTicketId}/${clone.sourceSlug}` : undefined}
           sourceArticleId={fromArticleId}
           aiAutoCategEnabled={aiAutoCategEnabled}
           aiDuplicateEnabled={aiDuplicateEnabled}

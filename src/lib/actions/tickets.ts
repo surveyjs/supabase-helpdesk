@@ -2,13 +2,14 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { createServerClient } from '@/lib/supabase/server';
+import { createServerClient, createServiceRoleClient } from '@/lib/supabase/server';
 import { generateSlug } from '@/lib/utils/slug';
 import { validateTitle, validateBody } from '@/lib/utils/validation';
 import { notifyTicketRecipients, notifyAgent } from '@/lib/email/notify';
 import { cancelCsatSurvey } from '@/lib/actions/csat';
 import { claimInlineAttachments } from '@/lib/actions/attachments';
 import { initializeSlaTimer, stopFirstResponseTimer, resumeSlaTimer } from '@/lib/utils/sla';
+import { resolveCloneSource, finalizeClone } from '@/lib/actions/clone';
 
 export type TicketActionState = {
   error?: string;
@@ -184,8 +185,23 @@ export async function createTicket(
 
   if (Object.keys(fieldErrors).length > 0) return { fieldErrors };
 
+  // Clone context (agent-only). When the form carries `clone_from`/`clone_post`,
+  // the new ticket is a clone owned by the ORIGINAL author, not the acting agent.
+  // We re-resolve the source server-side (never trusting the form for ownership)
+  // and insert with the service role, because RLS insert policies require
+  // creator_id = auth.uid() and the owner here is someone else.
+  const cloneFromRaw = formData.get('clone_from') as string | null;
+  const clonePostRaw = formData.get('clone_post') as string | null;
+  const clone =
+    isAgent && (cloneFromRaw || clonePostRaw)
+      ? await resolveCloneSource(cloneFromRaw, clonePostRaw)
+      : null;
+
+  const db = clone ? createServiceRoleClient() : supabase;
+  const ownerId = clone ? clone.ownerId : user.id;
+
   // Insert ticket
-  const { data: ticket, error: ticketError } = await supabase
+  const { data: ticket, error: ticketError } = await db
     .from('tickets')
     .insert({
       title,
@@ -193,10 +209,17 @@ export async function createTicket(
       urgency,
       type_id: typeId,
       category_id: categoryId,
-      creator_id: user.id,
+      creator_id: ownerId,
       is_private: isPrivate,
       custom_fields: Object.keys(customFieldValues).length > 0 ? customFieldValues : {},
       source_article_id: sourceArticleId && !isNaN(sourceArticleId) ? sourceArticleId : null,
+      ...(clone
+        ? {
+            severity: clone.severity,
+            cloned_from_id: clone.sourceTicketId,
+            cloned_from_post_id: clone.sourcePostId,
+          }
+        : {}),
     })
     .select('id, slug')
     .single();
@@ -209,11 +232,11 @@ export async function createTicket(
   }
 
   // Insert original post
-  const { data: originalPost, error: postError } = await supabase
+  const { data: originalPost, error: postError } = await db
     .from('posts')
     .insert({
       ticket_id: ticket.id,
-      author_id: user.id,
+      author_id: ownerId,
       body,
       is_original: true,
       post_type: 'post',
@@ -223,19 +246,34 @@ export async function createTicket(
 
   if (postError || !originalPost) {
     // Cleanup: delete the ticket if post creation fails
-    await supabase.from('tickets').delete().eq('id', ticket.id);
+    await db.from('tickets').delete().eq('id', ticket.id);
     return { error: 'Failed to create ticket. Please try again.' };
   }
 
-  await claimInlineAttachments(originalPost.id, body);
+  // For clones, the copied body keeps referencing the source's inline
+  // attachments (claiming would re-point them to the new post). See clone spec.
+  if (!clone) {
+    await claimInlineAttachments(originalPost.id, body);
+  }
 
-  // Auto-follow: insert ticket_followers row for creator
-  await supabase
+  // Auto-follow: insert ticket_followers row for the owner
+  await db
     .from('ticket_followers')
-    .insert({ ticket_id: ticket.id, user_id: user.id });
+    .insert({ ticket_id: ticket.id, user_id: ownerId });
 
-  // Initialize SLA timer (defaults to medium severity)
-  initializeSlaTimer(ticket.id, 'medium').catch((err) => console.error('[sla]', err));
+  // Initialize SLA timer (clones inherit the source severity; otherwise medium)
+  initializeSlaTimer(ticket.id, clone?.severity ?? 'medium').catch((err) => console.error('[sla]', err));
+
+  // Clone side effects: copy tags, record lineage, replace the source comment.
+  if (clone) {
+    await finalizeClone(db, {
+      source: clone,
+      agentId: user.id,
+      newTicketId: ticket.id,
+      newTitle: title,
+    });
+    revalidatePath(`/tickets/${clone.sourceTicketId}/${clone.sourceSlug}`);
+  }
 
   redirect(`/tickets/${ticket.id}/${ticket.slug}`);
 }

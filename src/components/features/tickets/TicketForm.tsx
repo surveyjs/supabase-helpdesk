@@ -39,6 +39,15 @@ export function TicketForm({
   editorMinHeightPx,
   editorMaxHeightPx,
   initialTitle,
+  initialBody,
+  initialType,
+  initialCategory,
+  initialUrgency,
+  initialPrivate,
+  initialCustomFields,
+  cloneFromId,
+  cloneFromPostId,
+  cancelHref,
   sourceArticleId,
   aiAutoCategEnabled,
   aiDuplicateEnabled,
@@ -52,6 +61,18 @@ export function TicketForm({
   editorMinHeightPx?: number;
   editorMaxHeightPx?: number;
   initialTitle?: string | null;
+  initialBody?: string | null;
+  initialType?: string;
+  initialCategory?: string;
+  initialUrgency?: string;
+  initialPrivate?: boolean;
+  initialCustomFields?: Record<string, unknown>;
+  /** When set, the form submits as a clone of this source ticket. */
+  cloneFromId?: number;
+  /** When set, the form submits as a clone of this source comment. */
+  cloneFromPostId?: string;
+  /** Where Cancel navigates (defaults to the ticket list). */
+  cancelHref?: string;
   sourceArticleId?: number | null;
   aiAutoCategEnabled?: boolean;
   aiDuplicateEnabled?: boolean;
@@ -78,7 +99,14 @@ export function TicketForm({
   const dupDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestDupQueryRef = useRef<string>('');
 
-  const defaultType = ticketTypes.find((t) => t.is_default)?.id ?? ticketTypes[0]?.id;
+  const defaultType = initialType ?? ticketTypes.find((t) => t.is_default)?.id ?? ticketTypes[0]?.id;
+
+  // Prefilled value for a custom field (clone), falling back to its configured default.
+  function customFieldDefault(field: CustomField): string {
+    const cloned = initialCustomFields?.[field.name];
+    if (cloned != null) return String(cloned);
+    return field.default_value ?? '';
+  }
 
   function handleTitleChange(value: string) {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -248,6 +276,12 @@ export function TicketForm({
       {sourceArticleId && (
         <input type="hidden" name="source_article_id" value={sourceArticleId} />
       )}
+      {cloneFromId != null && (
+        <input type="hidden" name="clone_from" value={cloneFromId} />
+      )}
+      {cloneFromPostId && (
+        <input type="hidden" name="clone_post" value={cloneFromPostId} />
+      )}
 
       {state.error && (
         <div
@@ -358,7 +392,7 @@ export function TicketForm({
           <select
             id="urgency"
             name="urgency"
-            defaultValue="medium"
+            defaultValue={initialUrgency ?? 'medium'}
             onChange={() => markFieldModified('urgency')}
             className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
           >
@@ -384,7 +418,7 @@ export function TicketForm({
           <select
             id="category_id"
             name="category_id"
-            defaultValue=""
+            defaultValue={initialCategory ?? ''}
             onChange={() => markFieldModified('category_id')}
             className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
           >
@@ -407,6 +441,7 @@ export function TicketForm({
           name="body"
           required
           maxLength={50000}
+          defaultValue={initialBody ?? undefined}
           placeholder="Describe your issue in detail (Markdown supported)"
           onValueChange={handleBodyChange}
           viewMode={editorViewMode}
@@ -452,7 +487,7 @@ export function TicketForm({
                   id={`cf-${field.name}`}
                   type="text"
                   name={`cf_${field.name}`}
-                  defaultValue={field.default_value ?? ''}
+                  defaultValue={customFieldDefault(field)}
                   maxLength={1000}
                   required={field.is_required}
                   className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
@@ -463,7 +498,7 @@ export function TicketForm({
                   id={`cf-${field.name}`}
                   type="number"
                   name={`cf_${field.name}`}
-                  defaultValue={field.default_value ?? ''}
+                  defaultValue={customFieldDefault(field)}
                   required={field.is_required}
                   className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
                 />
@@ -472,7 +507,7 @@ export function TicketForm({
                 <select
                   id={`cf-${field.name}`}
                   name={`cf_${field.name}`}
-                  defaultValue={field.default_value ?? ''}
+                  defaultValue={customFieldDefault(field)}
                   required={field.is_required}
                   className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
                 >
@@ -487,7 +522,11 @@ export function TicketForm({
                   id={`cf-${field.name}`}
                   type="checkbox"
                   name={`cf_${field.name}`}
-                  defaultChecked={field.default_value === 'true'}
+                  defaultChecked={
+                    initialCustomFields?.[field.name] != null
+                      ? initialCustomFields[field.name] === true
+                      : field.default_value === 'true'
+                  }
                   className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
               )}
@@ -496,7 +535,7 @@ export function TicketForm({
                   id={`cf-${field.name}`}
                   type="date"
                   name={`cf_${field.name}`}
-                  defaultValue={field.default_value ?? ''}
+                  defaultValue={customFieldDefault(field)}
                   required={field.is_required}
                   className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
                 />
@@ -515,7 +554,7 @@ export function TicketForm({
             id="is_private"
             name="is_private"
             type="checkbox"
-            defaultChecked={defaultPrivate}
+            defaultChecked={initialPrivate ?? defaultPrivate}
             className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
           />
           <label htmlFor="is_private" className="text-sm text-gray-700">
@@ -526,7 +565,8 @@ export function TicketForm({
 
       <div className="flex gap-3">
         <Link
-          href="/tickets"
+          href={cancelHref ?? '/tickets'}
+          data-testid="cancel-ticket-btn"
           className="flex-1 text-center bg-white text-gray-700 border border-gray-300 rounded py-2 px-4 text-sm font-medium hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
         >
           Cancel
@@ -534,6 +574,7 @@ export function TicketForm({
         <button
           type="submit"
           disabled={pending}
+          data-testid="create-ticket-btn"
           className="flex-1 bg-blue-600 text-white rounded py-2 px-4 text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
         >
           {pending ? 'Creating…' : 'Create Ticket'}

@@ -2,6 +2,7 @@ import { test, expect, Page } from '@playwright/test';
 import { createServiceRoleClient } from '../helpers/supabase';
 
 const ALICE_ID = '00000000-0000-0000-0000-000000000014';
+const COMMENT_BODY = 'This is a separate problem that deserves its own ticket.';
 
 async function loginAs(page: Page, email: string, password = 'Password123') {
   const svc = createServiceRoleClient();
@@ -70,7 +71,7 @@ test.describe('Clone ticket / comment (issue #49)', () => {
       .insert({
         ticket_id: commentCloneSourceId,
         author_id: ALICE_ID,
-        body: 'This is a separate problem that deserves its own ticket.',
+        body: COMMENT_BODY,
         post_type: 'post',
         is_original: false,
       })
@@ -102,37 +103,66 @@ test.describe('Clone ticket / comment (issue #49)', () => {
     if (tagId) await svc.from('tags').delete().eq('id', tagId);
   });
 
-  test('agent clones a ticket → new ticket owned by creator with origin note and tags', async ({ page }) => {
+  test('clone ticket → Cancel returns to the source and creates nothing', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(`/tickets/${ticketCloneSourceId}/e2e-clone-source`);
 
+    // The Clone control is a link to the prefilled create page (no write yet).
     await expect(page.getByTestId('clone-ticket-btn')).toBeVisible({ timeout: 10000 });
     await page.getByTestId('clone-ticket-btn').click();
-    await expect(page.getByTestId('clone-ticket-confirm')).toBeVisible();
-    await page.getByTestId('clone-ticket-confirm-btn').click();
 
-    // Redirected to the new ticket (different id than the source).
+    await page.waitForURL(/\/tickets\/new/, { timeout: 10000 });
+    await expect(page.locator('#title')).toHaveValue(/^Copy of /);
+
+    await page.getByTestId('cancel-ticket-btn').click();
+    await expect(page).toHaveURL(new RegExp(`/tickets/${ticketCloneSourceId}/`), { timeout: 10000 });
+
+    // Nothing was created.
+    const svc = createServiceRoleClient();
+    const { data: clones } = await svc.from('tickets').select('id').eq('cloned_from_id', ticketCloneSourceId);
+    expect(clones?.length ?? 0).toBe(0);
+  });
+
+  test('clone ticket → Create makes a new ticket owned by the creator with origin note and tags', async ({ page }) => {
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto(`/tickets/${ticketCloneSourceId}/e2e-clone-source`);
+
+    await page.getByTestId('clone-ticket-btn').click();
+    await page.waitForURL(/\/tickets\/new/, { timeout: 10000 });
+    await expect(page.locator('#title')).toHaveValue(/^Copy of /);
+
+    await page.getByTestId('create-ticket-btn').click();
+
+    // Redirected to the newly created ticket (away from /tickets/new).
     await page.waitForURL(/\/tickets\/\d+\//, { timeout: 20000 });
-    await expect(page).not.toHaveURL(new RegExp(`/tickets/${ticketCloneSourceId}/`));
+    await expect(page).not.toHaveURL(/\/tickets\/new/);
 
-    // Origin note links back to the source ticket.
-    await expect(page.getByText(`#${ticketCloneSourceId}`, { exact: true }).first()).toBeVisible({ timeout: 10000 });
-
-    // Verify server state: new ticket owned by alice, tags copied.
+    // Verify server state: clone owned by alice, tags + origin note copied.
     const svc = createServiceRoleClient();
     const { data: clone } = await svc
       .from('tickets')
       .select('id, creator_id, title')
       .eq('cloned_from_id', ticketCloneSourceId)
-      .single();
+      .order('id', { ascending: false })
+      .limit(1)
+      .maybeSingle();
     expect(clone?.creator_id).toBe(ALICE_ID);
     expect(clone?.title).toContain('Copy of');
 
     const { data: cloneTags } = await svc.from('ticket_tags').select('tag_id').eq('ticket_id', clone!.id);
     expect(cloneTags?.map((t) => t.tag_id)).toContain(tagId);
+
+    const { data: post } = await svc
+      .from('posts')
+      .select('body')
+      .eq('ticket_id', clone!.id)
+      .eq('is_original', true)
+      .single();
+    expect(post?.body).toContain(`#${ticketCloneSourceId}`);
+    expect(post?.body).toContain('Original description for the clone source ticket.');
   });
 
-  test('agent clones a comment → new ticket created, source comment replaced with link', async ({ page }) => {
+  test('clone comment → Cancel leaves the source comment untouched', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(`/tickets/${commentCloneSourceId}/e2e-comment-clone-source`);
 
@@ -140,20 +170,38 @@ test.describe('Clone ticket / comment (issue #49)', () => {
     await expect(postCard.getByTestId('clone-comment-btn')).toBeVisible({ timeout: 10000 });
     await postCard.getByTestId('clone-comment-btn').click();
 
-    await expect(page.getByTestId('clone-comment-form')).toBeVisible();
-    await page.getByTestId('clone-comment-title-input').fill('Spun-off issue from comment');
-    await page.getByTestId('clone-comment-confirm-btn').click();
+    await page.waitForURL(/\/tickets\/new/, { timeout: 10000 });
+    await page.getByTestId('cancel-ticket-btn').click();
+    await expect(page).toHaveURL(new RegExp(`/tickets/${commentCloneSourceId}/`), { timeout: 10000 });
 
-    // Redirected to the new ticket (navigates away from the source ticket).
-    await expect(page).not.toHaveURL(new RegExp(`/tickets/${commentCloneSourceId}/`), { timeout: 20000 });
-    await expect(page).toHaveURL(/\/tickets\/\d+\//);
+    // The source comment body is unchanged (replacement only happens on Create).
+    const svc = createServiceRoleClient();
+    const { data: reply } = await svc.from('posts').select('body').eq('id', commentPostId).single();
+    expect(reply?.body).toBe(COMMENT_BODY);
+  });
+
+  test('clone comment → Create makes a new ticket and replaces the source comment with a link', async ({ page }) => {
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto(`/tickets/${commentCloneSourceId}/e2e-comment-clone-source`);
+
+    const postCard = page.getByTestId(`post-${commentPostId}`);
+    await postCard.getByTestId('clone-comment-btn').click();
+
+    await page.waitForURL(/\/tickets\/new/, { timeout: 10000 });
+    await page.locator('#title').fill('Spun-off issue from comment');
+    await page.getByTestId('create-ticket-btn').click();
+
+    await page.waitForURL(/\/tickets\/\d+\//, { timeout: 20000 });
+    await expect(page).not.toHaveURL(/\/tickets\/new/);
 
     const svc = createServiceRoleClient();
     const { data: clone } = await svc
       .from('tickets')
       .select('id, creator_id, title')
       .eq('cloned_from_post_id', commentPostId)
-      .single();
+      .order('id', { ascending: false })
+      .limit(1)
+      .maybeSingle();
     expect(clone?.creator_id).toBe(ALICE_ID);
     expect(clone?.title).toBe('Spun-off issue from comment');
 

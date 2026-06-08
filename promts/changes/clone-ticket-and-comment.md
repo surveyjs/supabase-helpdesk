@@ -15,6 +15,17 @@ Add two agent-only operations to the ticket detail page:
 Both operations are admin-template-driven (see *Templates* below) and produce a new
 ticket **owned by the original user** (not the agent who performed the action).
 
+> **Flow (revised):** Clone is a two-step, review-before-create flow. The Clone
+> controls are **links** to the standard create-ticket page (`/tickets/new`) with a
+> `clone_from=<ticketId>` or `clone_post=<postId>` query param. That page prefills
+> the create form from the source (title, body with origin note, type, category,
+> urgency, privacy, custom fields) and points **Cancel** back at the source ticket.
+> **Nothing is written until the agent submits the form.** On submit, `createTicket`
+> re-resolves the source server-side, inserts the new ticket owned by the original
+> author via the service role, copies tags, records lineage, and — for a comment
+> clone — replaces the source comment. If the agent cancels, no ticket is created and
+> the source comment is left untouched.
+
 ## Design decisions (confirmed with product)
 
 | Decision | Choice |
@@ -24,6 +35,8 @@ ticket **owned by the original user** (not the agent who performed the action).
 | What does a cloned ticket copy? | Subject (newly generated), type, category, urgency, severity, custom fields, privacy, and **tags**. The thread (replies, comments, notes) is **not** copied. |
 | New ticket's original post | The source's original post body (ticket clone) or the comment body (comment clone), **prefixed** with an admin-defined templated note linking back to the source ticket. |
 | Where do the links resolve? | Use the canonical-redirect form `/tickets/{{ticketId}}/redirect` (the `[id]/[slug]` page redirects a non-matching slug to the canonical URL — same convention as the duplicate/merge templates, see `032_fix_template_ticket_urls.sql`). |
+| When is the clone created? | **On the agent's explicit submit** of the prefilled create form, not on the Clone click. Cancel returns to the source ticket and writes nothing (the comment clone's source-comment replacement also happens only on submit). |
+| Who creates it / via which action? | The existing `createTicket` action, made clone-aware. It owns the clone to the original author (service role) and runs the clone side effects. There is **no** dedicated `cloneTicket`/`cloneCommentToTicket` form action. |
 
 ## Prerequisites (already in place)
 
@@ -105,92 +118,84 @@ In `src/app/(main)/admin/templates/page.tsx`, add both event types to the
 `'Auto-Replies & System'` category array (alongside `duplicate_post`, `merge_post`)
 so they appear in the admin editor with placeholder hints and a reset button.
 
-### 3. New server actions — `src/lib/actions/clone.ts`
+### 3. Clone helpers — `src/lib/actions/clone.ts`
 
-Follow the structure of `duplicate.ts`/`merge.ts`:
-- Reuse the local `requireAgentRole()` helper (server client + role check).
-- Use `createServiceRoleClient()` for the cross-user inserts/updates, because the
-  new ticket's `creator_id` is **not** the acting agent and RLS insert policies
-  require `creator_id = auth.uid()` (same reason `merge.ts` uses the service role).
-- A shared helper renders a template body and substitutes placeholders
-  (`replace(/\{\{key\}\}/g, value)`), falling back to the `DEFAULT_TEMPLATES` body
-  when the row is missing.
+A server-only helper module (no `'use server'` — nothing here is a form action):
 
-#### `cloneTicket(formData: FormData): Promise<void>`
+- `renderTemplate(svc, eventType, values)` — render a template body, falling back to
+  `DEFAULT_TEMPLATES` when the row is missing.
+- `resolveCloneSource(cloneFromRaw, clonePostRaw): Promise<CloneSource | null>` —
+  resolve a source from `clone_from` (ticket id) or `clone_post` (post uuid) and
+  return everything both the prefill page and the create action need:
+  `{ kind, sourceTicketId, sourceSlug, ownerId, severity, sourcePostId, authorName,
+  prefill: { title, body, typeId, categoryId, urgency, isPrivate, customFields } }`.
+  Applies the guards: a **merged stub** is not clonable; for a comment clone the post
+  must exist and **must not be the original post or a private note**. The `prefill.body`
+  is the source body (original post or comment) with the rendered `clone_origin_note`
+  prepended. The caller does the agent-role check.
+- `finalizeClone(svc, { source, agentId, newTicketId, newTitle })` — side effects run
+  **after** the clone ticket + original post are created: copy the source's tags,
+  record lineage in the activity log (`cloned_to`+`cloned_from` for a ticket clone;
+  `cloned_from` + a source-side `comment_cloned` for a comment clone), and for a comment
+  clone render `clone_comment_reply` and replace the source post body (preserving the
+  previous body in the `comment_cloned` log entry).
 
-1. `requireAgentRole()`; `ticketId = Number(formData.get('ticket_id'))`; bail if falsy.
-2. Fetch source: `id, title, slug, type_id, category_id, urgency, severity, is_private, custom_fields, creator_id, merged_into_id`.
-3. Guard: source must exist; **skip if `merged_into_id`** (a stub has no usable content).
-4. Fetch the source original post body (`is_original = true`).
-5. New title: `Copy of ${source.title}` (truncate to the 300-char column limit); `slug = generateSlug(newTitle)`.
-6. Render `clone_origin_note` with `{{ticketId}} = source.id`; new original body =
-   `${renderedNote}\n\n${sourceOriginalBody}`.
-7. Insert the new ticket (service role): copy `type_id, category_id, urgency, severity, is_private, custom_fields`; set `creator_id = source.creator_id`, `cloned_from_id = source.id`, `title`, `slug`. Select `id, slug`.
-8. Insert the new original post (`author_id = source.creator_id, is_original = true, post_type = 'post', body = combined`).
-9. Copy tags: read `ticket_tags` for the source, insert the same `tag_id`s for the new ticket.
-10. Auto-follow: insert `ticket_followers { new ticket, source.creator_id }`.
-11. `initializeSlaTimer(newId, source.severity).catch(...)`.
-12. Activity log: on source `action: 'cloned_to' { new_ticket_id }`; on new ticket `action: 'cloned_from' { source_ticket_id: source.id }`.
-13. `revalidatePath('/agent')`, `revalidatePath('/tickets/${source.id}/${source.slug}')`, then `redirect('/tickets/${newId}/${newSlug}')`.
+There is **no** `cloneTicket`/`cloneCommentToTicket` form action; creation goes through
+`createTicket`.
 
-#### `cloneCommentToTicket(formData: FormData): Promise<void>`
+### 3a. `createTicket` integration — `src/lib/actions/tickets.ts`
 
-1. `requireAgentRole()`; `postId = formData.get('post_id')` (UUID); optional `title = formData.get('title')`.
-2. Fetch the post: `id, body, author_id, ticket_id, post_type, is_original`.
-   - Guard: must exist; **reject `is_original`** (use Clone Ticket for that) and `post_type === 'note'` (private agent content).
-3. Fetch the author profile (`display_name`) for `{{userName}}` and the source ticket
-   (`id, title, slug, type_id, category_id, urgency, severity, is_private, merged_into_id`). Skip if the source is a merged stub.
-4. New title: trimmed `title` from the form if provided, else `Copy of ${source.title}`; `slug = generateSlug(newTitle)`.
-5. Render `clone_origin_note` with `{{ticketId}} = source.id`; new original body =
-   `${renderedNote}\n\n${post.body}`.
-6. Insert the new ticket (service role): copy `type_id, category_id, urgency, severity, is_private`; set
-   `creator_id = post.author_id`, `cloned_from_id = source.id`, `cloned_from_post_id = post.id`, `title`, `slug`.
-7. Insert the new original post (`author_id = post.author_id, is_original = true, post_type = 'post'`).
-8. Auto-follow the author; `initializeSlaTimer(newId, source.severity)`.
-9. **Replace the source comment**: render `clone_comment_reply` with
-   `{{userName}} = author display_name (fallback to a generic label)`, `{{ticketTitle}} = newTitle`, `{{ticketId}} = newId`;
-   `update posts set body = rendered, edited_at = now() where id = postId`.
-10. Activity log on the source ticket: `action: 'comment_cloned' { post_id, new_ticket_id: newId, previous_body: post.body }`
-    (mirrors how `deletePost`/`editPost` retain the prior body for audit).
-11. `revalidatePath('/tickets/${source.id}/${source.slug}')`, `revalidatePath('/agent')`, then `redirect('/tickets/${newId}/${newSlug}')`.
+After validation, before the insert, read `clone_from`/`clone_post` from the form. When
+present **and** the actor is an agent, call `resolveCloneSource` and:
+- pick the DB client: `createServiceRoleClient()` for a clone (owner ≠ acting agent, so
+  RLS would block the insert), otherwise the normal RLS client;
+- set `creator_id`/`author_id` to `clone.ownerId` (else `user.id`);
+- on the ticket insert add `severity: clone.severity`, `cloned_from_id`,
+  `cloned_from_post_id`;
+- **skip `claimInlineAttachments`** for clones (claiming would re-point the source's
+  attachments — copied bodies keep referencing the source's attachment URLs; known
+  limitation);
+- start the SLA timer with `clone.severity ?? 'medium'`;
+- after insert, call `finalizeClone(...)` and `revalidatePath` the source ticket, then
+  redirect to the new ticket as usual.
 
-> **Inline attachments:** do **not** call `claimInlineAttachments` on cloned bodies —
-> claiming would re-point the source post's attachments to the new post. Copied
-> bodies keep referencing the source's attachment URLs (acceptable for v1; note it
-> in the spec as a known limitation).
+The submitted (possibly edited) title/body/type/urgency/category/privacy/custom-fields are
+used as-is — the origin note is already part of the prefilled body, so it is **not**
+re-added on submit.
 
-### 4. UI — Clone a ticket button
+### 4. UI — Clone a ticket link
 
-New client component `src/app/(main)/tickets/[id]/[slug]/CloneTicketButton.tsx`,
-modeled on `DeleteTicketButton`/`MarkAsDuplicateForm`:
-
-- Renders a **Clone** button, `data-testid="clone-ticket-btn"`.
-- On click, a `window.confirm("Create a copy of this ticket?")` then a form
-  `action={cloneTicket}` with `<input type="hidden" name="ticket_id" value={ticketId} />`.
-
-Wire it into `page.tsx` inside the existing **Advanced** `<dd>` block (next to
-`MarkAsDuplicateForm`/`MergeTicketForm`, ~line 966), under the same
+`src/app/(main)/tickets/[id]/[slug]/CloneTicketButton.tsx` is a server component that
+renders a **Clone** `next/link` (`data-testid="clone-ticket-btn"`) to
+`/tickets/new?clone_from=${ticketId}`. Wired into the **Advanced** `<dd>` block in
+`page.tsx` (next to `MarkAsDuplicateForm`/`MergeTicketForm`) under the same
 `isAgent && !ticket.merged_into_id && !ticket.duplicate_of_id` guard.
 
-### 5. UI — Clone a comment button
+### 5. UI — Clone a comment link
 
-New client component `src/app/(main)/tickets/[id]/[slug]/CloneCommentButton.tsx`:
-
-- Renders a **Clone to new ticket** button, `data-testid="clone-comment-btn"`.
-- On click, expands an inline form (`data-testid="clone-comment-form"`) with:
-  - a title `<input name="title" data-testid="clone-comment-title-input" />` prefilled with `defaultTitle`,
-  - a Confirm submit + Cancel,
-  - `action={cloneCommentToTicket}` with `<input type="hidden" name="post_id" value={postId} />`.
-- Props: `{ postId: string; defaultTitle: string }`.
-
-Wire it into the post **action buttons** row in `page.tsx` (~line 454, next to the
-Delete button), gated to agents on real user content:
+`src/app/(main)/tickets/[id]/[slug]/CloneCommentButton.tsx` is a server component that
+renders a **Clone to new ticket** `next/link` (`data-testid="clone-comment-btn"`) to
+`/tickets/new?clone_post=${postId}`. Props: `{ postId: string }` (no inline title form —
+the title is edited on the prefilled create page). Wired into the post action row in
+`page.tsx` (next to Delete), gated to agents on real user content:
 
 ```tsx
-{isAgent && !isDraft && !post.is_original && post.post_type !== 'note' && !ticket.merged_into_id && (
-  <CloneCommentButton postId={post.id} defaultTitle={ticket.title} />
+{isAgent && !isOriginal && !isNote && !isDraft && !ticket!.merged_into_id && (
+  <CloneCommentButton postId={post.id} />
 )}
 ```
+
+### 6. Create-ticket page + form prefill
+
+`src/app/(main)/tickets/new/page.tsx` reads `clone_from`/`clone_post`; for an agent it
+calls `resolveCloneSource` and passes the prefill into `TicketForm` (`initialTitle`,
+`initialBody`, `initialType`, `initialCategory`, `initialUrgency`, `initialPrivate`,
+`initialCustomFields`), plus `cloneFromId`/`cloneFromPostId` (rendered as hidden
+`clone_from`/`clone_post` inputs) and `cancelHref` pointing at the source ticket. The
+heading switches to **Clone Ticket**. `TicketForm` applies these as the field defaults,
+prefills the Markdown editor via its `defaultValue`, and points the **Cancel** link at
+`cancelHref` (defaulting to `/tickets`). Stable test ids: `create-ticket-btn`,
+`cancel-ticket-btn`.
 
 ---
 
@@ -266,15 +271,20 @@ Delete button), gated to agents on real user content:
 Set up source tickets via the service client (as `advanced-tickets.spec.ts` does).
 
 - **Agent clones a ticket:** log in as an agent, open a source ticket, click
-  `clone-ticket-btn`, confirm. Assert redirect to a new ticket whose title is
-  `Copy of …`, whose original post contains the origin-note link to the source, and
-  whose tags match the source. Assert the new ticket's `creator_id` is the source
-  creator (via service client).
+  `clone-ticket-btn`. Assert it lands on `/tickets/new` with the title prefilled to
+  `Copy of …` and the description containing the origin-note link to the source. Click
+  `create-ticket-btn`; assert redirect to a new ticket. Via the service client, assert
+  the new ticket's `creator_id` is the source creator and its tags match the source.
+- **Cancel creates nothing:** click `clone-ticket-btn`, then `cancel-ticket-btn` on the
+  create page; assert the browser returns to the source ticket and (service client) no
+  new `cloned_from_id` row was created.
 - **Agent clones a comment:** open a ticket with a user comment, click
-  `clone-comment-btn`, set a title, confirm. Assert redirect to a new ticket owned by
-  the comment author whose original post contains the comment body + origin note.
-  Return to the source ticket and assert the original comment now shows the
-  `clone_comment_reply` text linking to the new ticket.
+  `clone-comment-btn`. On the prefilled create page edit the title and click
+  `create-ticket-btn`. Assert redirect to a new ticket owned by the comment author whose
+  original post contains the comment body + origin note, and that the source comment was
+  replaced with the `clone_comment_reply` text linking to the new ticket.
+- **Comment cancel leaves the comment untouched:** click `clone-comment-btn`, then
+  `cancel-ticket-btn`; assert (service client) the source comment body is unchanged.
 - **Permissions:** a regular (non-agent) user does **not** see `clone-ticket-btn` or
   `clone-comment-btn`.
 

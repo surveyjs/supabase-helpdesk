@@ -470,7 +470,7 @@ export default async function TicketDetailPage({
             <PrivacyCheckbox postId={post.id} isPrivate={post.is_private} />
           )}
           {isAgent && !isOriginal && !isNote && !isDraft && !ticket!.merged_into_id && (
-            <CloneCommentButton postId={post.id} defaultTitle={ticket!.title} />
+            <CloneCommentButton postId={post.id} />
           )}
           {isDraft && isCurrentUser && (
             <form action={publishDraft} className="inline">

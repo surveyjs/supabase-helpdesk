@@ -1,26 +1,8 @@
-'use server';
-
-import { revalidatePath } from 'next/cache';
-import { redirect } from 'next/navigation';
+// Server-only clone helpers (no 'use server': these are plain functions called
+// from the create-ticket page and the createTicket action, not form actions).
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { createServerClient, createServiceRoleClient } from '@/lib/supabase/server';
-import { generateSlug } from '@/lib/utils/slug';
-import { initializeSlaTimer } from '@/lib/utils/sla';
 import { DEFAULT_TEMPLATES } from '@/lib/constants/notification-templates';
-
-async function requireAgentRole() {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('id, role')
-    .eq('id', user.id)
-    .single();
-  if (!profile || !['agent', 'admin'].includes(profile.role)) {
-    throw new Error('Forbidden');
-  }
-  return { supabase, user, profile };
-}
 
 /**
  * Render a notification template body for the given event type, substituting
@@ -28,7 +10,7 @@ async function requireAgentRole() {
  * missing or empty.
  */
 async function renderTemplate(
-  svc: ReturnType<typeof createServiceRoleClient>,
+  svc: SupabaseClient,
   eventType: string,
   values: Record<string, string | number>,
 ): Promise<string> {
@@ -53,7 +35,7 @@ function clampTitle(title: string): string {
 }
 
 async function copyTags(
-  svc: ReturnType<typeof createServiceRoleClient>,
+  svc: SupabaseClient,
   sourceTicketId: number,
   newTicketId: number,
 ): Promise<void> {
@@ -70,231 +52,214 @@ async function copyTags(
 }
 
 // ---------------------------------------------------------------------------
-// cloneTicket — create a copy of an existing ticket, owned by its creator.
+// Clone is a two-step flow:
+//   1. The agent clicks "Clone" on a ticket/comment, which navigates to the
+//      create-ticket page with `?clone_from=` / `?clone_post=`. The page calls
+//      `resolveCloneSource` to PREFILL the form (title, body w/ origin note,
+//      type, category, urgency, privacy, custom fields). Nothing is written yet.
+//   2. The agent reviews/edits and submits. `createTicket` re-resolves the source
+//      (never trusting the form for ownership), inserts the new ticket owned by
+//      the ORIGINAL author via the service role, then calls `finalizeClone` to
+//      copy tags, record lineage in the activity log, and — for a comment clone —
+//      replace the source comment with the configured reply. If the agent
+//      cancels, the create page never submits and nothing changes.
 // ---------------------------------------------------------------------------
-export async function cloneTicket(formData: FormData): Promise<void> {
-  const { user } = await requireAgentRole();
 
-  const ticketId = Number(formData.get('ticket_id'));
-  if (!ticketId) return;
+export type CloneSource = {
+  kind: 'ticket' | 'comment';
+  sourceTicketId: number;
+  sourceSlug: string;
+  /** The created clone is owned by this user (source creator / comment author). */
+  ownerId: string;
+  severity: string | null;
+  /** Set only for a comment clone — the post that gets replaced on create. */
+  sourcePostId: string | null;
+  /** Comment author display name, for the `clone_comment_reply` template. */
+  authorName: string;
+  /** Values used to prefill the create-ticket form. */
+  prefill: {
+    title: string;
+    body: string;
+    typeId: string | null;
+    categoryId: string | null;
+    urgency: string | null;
+    isPrivate: boolean;
+    customFields: Record<string, unknown>;
+  };
+};
 
+/**
+ * Resolve a clone source from `clone_from` (ticket id) or `clone_post` (post
+ * uuid), applying the same guards as before: a merged stub cannot be cloned, and
+ * the original post / private notes cannot be comment-cloned. Returns `null`
+ * when the source is missing or not clonable. The caller is responsible for the
+ * agent-role check.
+ */
+export async function resolveCloneSource(
+  cloneFromRaw: string | null,
+  clonePostRaw: string | null,
+): Promise<CloneSource | null> {
   const supabase = await createServerClient();
+  const svc = createServiceRoleClient();
+
+  // ----- Comment clone -----------------------------------------------------
+  if (clonePostRaw) {
+    const { data: post } = await supabase
+      .from('posts')
+      .select('id, body, author_id, ticket_id, post_type, is_original')
+      .eq('id', clonePostRaw)
+      .single();
+
+    if (!post) return null;
+    // Only real user content: not the original post (use Clone Ticket) and not
+    // private agent notes.
+    if (post.is_original || post.post_type === 'note') return null;
+
+    const [{ data: author }, { data: source }] = await Promise.all([
+      supabase.from('profiles').select('display_name').eq('id', post.author_id).single(),
+      supabase
+        .from('tickets')
+        .select('id, title, slug, type_id, category_id, urgency, severity, is_private, merged_into_id')
+        .eq('id', post.ticket_id)
+        .single(),
+    ]);
+
+    if (!source || source.merged_into_id) return null;
+
+    const originNote = await renderTemplate(svc, 'clone_origin_note', { ticketId: source.id });
+
+    return {
+      kind: 'comment',
+      sourceTicketId: source.id,
+      sourceSlug: source.slug,
+      ownerId: post.author_id,
+      severity: source.severity,
+      sourcePostId: post.id,
+      authorName: author?.display_name ?? 'there',
+      prefill: {
+        title: clampTitle(`Copy of ${source.title}`),
+        body: `${originNote}\n\n${post.body}`,
+        typeId: source.type_id,
+        categoryId: source.category_id,
+        urgency: source.urgency,
+        isPrivate: source.is_private,
+        customFields: {},
+      },
+    };
+  }
+
+  // ----- Ticket clone ------------------------------------------------------
+  const cloneFromId = Number(cloneFromRaw);
+  if (!cloneFromId) return null;
 
   const { data: source } = await supabase
     .from('tickets')
     .select('id, title, slug, type_id, category_id, urgency, severity, is_private, custom_fields, creator_id, merged_into_id')
-    .eq('id', ticketId)
+    .eq('id', cloneFromId)
     .single();
 
-  if (!source) return;
-  // Cannot clone a merged stub — it has no usable content.
-  if (source.merged_into_id) return;
+  if (!source || source.merged_into_id) return null;
 
-  // Fetch the source's original post body.
-  const { data: originalPost } = await supabase
-    .from('posts')
-    .select('body')
-    .eq('ticket_id', ticketId)
-    .eq('is_original', true)
-    .single();
-
-  // Use the service role for cross-user inserts (the clone is owned by the
-  // source creator, not the acting agent — RLS insert policies require
-  // creator_id = auth.uid()).
-  const svc = createServiceRoleClient();
-
-  const newTitle = clampTitle(`Copy of ${source.title}`);
-  const newSlug = generateSlug(newTitle);
-
-  const originNote = await renderTemplate(svc, 'clone_origin_note', {
-    ticketId: source.id,
-  });
-  const newBody = `${originNote}\n\n${originalPost?.body ?? ''}`;
-
-  // Insert the new ticket.
-  const { data: newTicket, error: ticketError } = await svc
-    .from('tickets')
-    .insert({
-      title: newTitle,
-      slug: newSlug,
-      type_id: source.type_id,
-      category_id: source.category_id,
-      urgency: source.urgency,
-      severity: source.severity,
-      is_private: source.is_private,
-      custom_fields: source.custom_fields ?? {},
-      creator_id: source.creator_id,
-      cloned_from_id: source.id,
-    })
-    .select('id, slug')
-    .single();
-
-  if (ticketError || !newTicket) {
-    throw new Error(`Clone failed (create ticket): ${ticketError?.message ?? 'unknown'}`);
-  }
-
-  // Insert the original post.
-  const { error: postError } = await svc.from('posts').insert({
-    ticket_id: newTicket.id,
-    author_id: source.creator_id,
-    body: newBody,
-    is_original: true,
-    post_type: 'post',
-  });
-
-  if (postError) {
-    // Roll back the orphaned ticket.
-    await svc.from('tickets').delete().eq('id', newTicket.id);
-    throw new Error(`Clone failed (create post): ${postError.message}`);
-  }
-
-  await copyTags(svc, source.id, newTicket.id);
-
-  // Owner auto-follows.
-  await svc
-    .from('ticket_followers')
-    .insert({ ticket_id: newTicket.id, user_id: source.creator_id });
-
-  initializeSlaTimer(newTicket.id, source.severity).catch((err) => console.error('[sla]', err));
-
-  // Activity log on both tickets.
-  await svc.from('activity_log').insert([
-    {
-      ticket_id: source.id,
-      actor_id: user.id,
-      action: 'cloned_to',
-      details: { new_ticket_id: newTicket.id },
-    },
-    {
-      ticket_id: newTicket.id,
-      actor_id: user.id,
-      action: 'cloned_from',
-      details: { source_ticket_id: source.id },
-    },
+  const [{ data: originalPost }, { data: author }] = await Promise.all([
+    supabase
+      .from('posts')
+      .select('body')
+      .eq('ticket_id', source.id)
+      .eq('is_original', true)
+      .single(),
+    supabase.from('profiles').select('display_name').eq('id', source.creator_id).single(),
   ]);
 
-  revalidatePath(`/tickets/${source.id}/${source.slug}`);
-  revalidatePath('/agent');
-  redirect(`/tickets/${newTicket.id}/${newTicket.slug}`);
+  const originNote = await renderTemplate(svc, 'clone_origin_note', { ticketId: source.id });
+
+  return {
+    kind: 'ticket',
+    sourceTicketId: source.id,
+    sourceSlug: source.slug,
+    ownerId: source.creator_id,
+    severity: source.severity,
+    sourcePostId: null,
+    authorName: author?.display_name ?? 'there',
+    prefill: {
+      title: clampTitle(`Copy of ${source.title}`),
+      body: `${originNote}\n\n${originalPost?.body ?? ''}`,
+      typeId: source.type_id,
+      categoryId: source.category_id,
+      urgency: source.urgency,
+      isPrivate: source.is_private,
+      customFields: (source.custom_fields as Record<string, unknown>) ?? {},
+    },
+  };
 }
 
-// ---------------------------------------------------------------------------
-// cloneCommentToTicket — spin a user post/comment off into a new ticket and
-// replace the original comment in the source thread with a link to the clone.
-// ---------------------------------------------------------------------------
-export async function cloneCommentToTicket(formData: FormData): Promise<void> {
-  const { user } = await requireAgentRole();
+/**
+ * Side effects performed after the cloned ticket + its original post have been
+ * created: copy the source's tags, record lineage in the activity log, and —
+ * for a comment clone — replace the source comment with the configured reply
+ * (preserving the previous body for audit). Uses the service role because it
+ * writes across the source and new tickets on behalf of the original users.
+ */
+export async function finalizeClone(
+  svc: SupabaseClient,
+  opts: {
+    source: CloneSource;
+    agentId: string;
+    newTicketId: number;
+    newTitle: string;
+  },
+): Promise<void> {
+  const { source, agentId, newTicketId, newTitle } = opts;
 
-  const postId = formData.get('post_id') as string;
-  if (!postId) return;
-  const titleInput = (formData.get('title') as string)?.trim() ?? '';
+  await copyTags(svc, source.sourceTicketId, newTicketId);
 
-  const supabase = await createServerClient();
+  if (source.kind === 'comment' && source.sourcePostId) {
+    const replyText = await renderTemplate(svc, 'clone_comment_reply', {
+      userName: source.authorName,
+      ticketTitle: newTitle,
+      ticketId: newTicketId,
+    });
 
-  const { data: post } = await supabase
-    .from('posts')
-    .select('id, body, author_id, ticket_id, post_type, is_original')
-    .eq('id', postId)
-    .single();
+    // Preserve the previous body for audit before replacing it.
+    const { data: prev } = await svc
+      .from('posts')
+      .select('body')
+      .eq('id', source.sourcePostId)
+      .single();
 
-  if (!post) return;
-  // Only real user content can be cloned: not the original post (use Clone
-  // Ticket for that) and not private agent notes.
-  if (post.is_original || post.post_type === 'note') return;
+    await svc
+      .from('posts')
+      .update({ body: replyText, edited_at: new Date().toISOString() })
+      .eq('id', source.sourcePostId);
 
-  const [{ data: author }, { data: source }] = await Promise.all([
-    supabase.from('profiles').select('display_name').eq('id', post.author_id).single(),
-    supabase
-      .from('tickets')
-      .select('id, title, slug, type_id, category_id, urgency, severity, is_private, merged_into_id')
-      .eq('id', post.ticket_id)
-      .single(),
-  ]);
-
-  if (!source) return;
-  if (source.merged_into_id) return;
-
-  const svc = createServiceRoleClient();
-
-  const newTitle = clampTitle(titleInput || `Copy of ${source.title}`);
-  const newSlug = generateSlug(newTitle);
-
-  const originNote = await renderTemplate(svc, 'clone_origin_note', {
-    ticketId: source.id,
-  });
-  const newBody = `${originNote}\n\n${post.body}`;
-
-  // Insert the new ticket, owned by the comment's author.
-  const { data: newTicket, error: ticketError } = await svc
-    .from('tickets')
-    .insert({
-      title: newTitle,
-      slug: newSlug,
-      type_id: source.type_id,
-      category_id: source.category_id,
-      urgency: source.urgency,
-      severity: source.severity,
-      is_private: source.is_private,
-      creator_id: post.author_id,
-      cloned_from_id: source.id,
-      cloned_from_post_id: post.id,
-    })
-    .select('id, slug')
-    .single();
-
-  if (ticketError || !newTicket) {
-    throw new Error(`Clone failed (create ticket): ${ticketError?.message ?? 'unknown'}`);
+    await svc.from('activity_log').insert([
+      {
+        ticket_id: source.sourceTicketId,
+        actor_id: agentId,
+        action: 'comment_cloned',
+        details: { post_id: source.sourcePostId, new_ticket_id: newTicketId, previous_body: prev?.body ?? null },
+      },
+      {
+        ticket_id: newTicketId,
+        actor_id: agentId,
+        action: 'cloned_from',
+        details: { source_ticket_id: source.sourceTicketId, source_post_id: source.sourcePostId },
+      },
+    ]);
+    return;
   }
 
-  const { error: postError } = await svc.from('posts').insert({
-    ticket_id: newTicket.id,
-    author_id: post.author_id,
-    body: newBody,
-    is_original: true,
-    post_type: 'post',
-  });
-
-  if (postError) {
-    await svc.from('tickets').delete().eq('id', newTicket.id);
-    throw new Error(`Clone failed (create post): ${postError.message}`);
-  }
-
-  await svc
-    .from('ticket_followers')
-    .insert({ ticket_id: newTicket.id, user_id: post.author_id });
-
-  initializeSlaTimer(newTicket.id, source.severity).catch((err) => console.error('[sla]', err));
-
-  // Replace the source comment body with the configurable reply text.
-  const replyText = await renderTemplate(svc, 'clone_comment_reply', {
-    userName: author?.display_name ?? 'there',
-    ticketTitle: newTitle,
-    ticketId: newTicket.id,
-  });
-
-  const previousBody = post.body;
-  await svc
-    .from('posts')
-    .update({ body: replyText, edited_at: new Date().toISOString() })
-    .eq('id', post.id);
-
-  // Activity log: record the clone and retain the replaced body for audit.
   await svc.from('activity_log').insert([
     {
-      ticket_id: source.id,
-      actor_id: user.id,
-      action: 'comment_cloned',
-      details: { post_id: post.id, new_ticket_id: newTicket.id, previous_body: previousBody },
+      ticket_id: source.sourceTicketId,
+      actor_id: agentId,
+      action: 'cloned_to',
+      details: { new_ticket_id: newTicketId },
     },
     {
-      ticket_id: newTicket.id,
-      actor_id: user.id,
+      ticket_id: newTicketId,
+      actor_id: agentId,
       action: 'cloned_from',
-      details: { source_ticket_id: source.id, source_post_id: post.id },
+      details: { source_ticket_id: source.sourceTicketId },
     },
   ]);
-
-  revalidatePath(`/tickets/${source.id}/${source.slug}`);
-  revalidatePath('/agent');
-  redirect(`/tickets/${newTicket.id}/${newTicket.slug}`);
 }

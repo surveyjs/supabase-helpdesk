@@ -116,7 +116,7 @@ test.describe('Clone ticket / comment (issue #49)', () => {
     await expect(page).not.toHaveURL(new RegExp(`/tickets/${ticketCloneSourceId}/`));
 
     // Origin note links back to the source ticket.
-    await expect(page.getByText(`#${ticketCloneSourceId}`).first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(`#${ticketCloneSourceId}`, { exact: true }).first()).toBeVisible({ timeout: 10000 });
 
     // Verify server state: new ticket owned by alice, tags copied.
     const svc = createServiceRoleClient();
@@ -165,9 +165,14 @@ test.describe('Clone ticket / comment (issue #49)', () => {
 
   test('regular user does not see clone controls', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
-    await page.goto(`/tickets/${ticketCloneSourceId}/e2e-clone-source`);
 
+    // Clone Ticket lives on a ticket whose only post is the original.
+    await page.goto(`/tickets/${ticketCloneSourceId}/e2e-clone-source`);
     await expect(page.getByTestId('clone-ticket-btn')).not.toBeVisible({ timeout: 5000 });
+
+    // Clone Comment only renders on non-original posts — check the ticket that
+    // actually has a clonable reply, otherwise the assertion is vacuous.
+    await page.goto(`/tickets/${commentCloneSourceId}/e2e-comment-clone-source`);
     await expect(page.getByTestId('clone-comment-btn')).not.toBeVisible({ timeout: 5000 });
   });
 });

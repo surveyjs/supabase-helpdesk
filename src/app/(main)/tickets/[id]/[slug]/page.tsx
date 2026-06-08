@@ -29,6 +29,8 @@ import { GenerateKbArticleButton } from './GenerateKbArticleButton';
 import { TicketTabs } from './TicketTabs';
 import { MarkAsDuplicateForm } from './MarkAsDuplicateForm';
 import { MergeTicketForm } from './MergeTicketForm';
+import { CloneTicketButton } from './CloneTicketButton';
+import { CloneCommentButton } from './CloneCommentButton';
 import { TicketSidebarSurvey } from './TicketSidebarSurvey';
 import { TicketSaveStatus } from './TicketSaveStatus';
 import { TicketTagChips } from './TicketTagChips';
@@ -466,6 +468,9 @@ export default async function TicketDetailPage({
           )}
           {canTogglePrivacy && (
             <PrivacyCheckbox postId={post.id} isPrivate={post.is_private} />
+          )}
+          {isAgent && !isOriginal && !isNote && !isDraft && !ticket!.merged_into_id && (
+            <CloneCommentButton postId={post.id} defaultTitle={ticket!.title} />
           )}
           {isDraft && isCurrentUser && (
             <form action={publishDraft} className="inline">
@@ -965,6 +970,7 @@ export default async function TicketDetailPage({
                     <div className="flex flex-wrap gap-2">
                       <MarkAsDuplicateForm ticketId={ticket.id} />
                       <MergeTicketForm ticketId={ticket.id} />
+                      <CloneTicketButton ticketId={ticket.id} />
                     </div>
                   </dd>
                 </>

@@ -205,6 +205,12 @@ export function buildActivityDescriptor(
       return { actorName, message: `merged this ticket into #${d.target_ticket_id ?? '?'}` };
     case 'merged':
       return { actorName, message: 'merged ticket' };
+    case 'cloned_to':
+      return { actorName, message: `cloned this ticket to #${d.new_ticket_id ?? '?'}` };
+    case 'cloned_from':
+      return { actorName, message: `cloned this ticket from #${d.source_ticket_id ?? '?'}` };
+    case 'comment_cloned':
+      return { actorName, message: `cloned a comment to a new ticket #${d.new_ticket_id ?? '?'}` };
     case 'file_uploaded':
       return { actorName, message: `uploaded file "${d.filename ?? ''}"` };
     case 'file_deleted':

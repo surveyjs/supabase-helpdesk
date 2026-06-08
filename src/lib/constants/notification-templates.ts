@@ -59,6 +59,14 @@ export const DEFAULT_TEMPLATES: Record<string, { subject: string; body: string }
     subject: '{{actionType}} applied to {{ticketCount}} tickets',
     body: 'Agent {{actorName}} performed a bulk action: {{actionType}} on {{ticketCount}} ticket(s).\n\nAffected tickets:\n{{ticketList}}',
   },
+  clone_origin_note: {
+    subject: 'Cloned ticket origin note',
+    body: 'This ticket is a copy of a post from [#{{ticketId}}](/tickets/{{ticketId}}/redirect).',
+  },
+  clone_comment_reply: {
+    subject: 'Comment cloned to a new ticket',
+    body: 'Hello {{userName}}, I created a separate ticket on your behalf: [{{ticketTitle}}](/tickets/{{ticketId}}/redirect).',
+  },
 };
 
 /** Available placeholders per event type */
@@ -77,6 +85,8 @@ export const TEMPLATE_PLACEHOLDERS: Record<string, string[]> = {
   privacy_changed: ['ticketTitle', 'ticketId'],
   consolidated_update: ['ticketTitle', 'ticketId', 'ticketUrl', 'changeList', 'agentName', 'ownerName'],
   bulk_action_summary: ['actionType', 'ticketCount', 'actorName', 'ticketList'],
+  clone_origin_note: ['ticketId'],
+  clone_comment_reply: ['userName', 'ticketTitle', 'ticketId'],
 };
 
 /** Human-readable label for event types */
@@ -95,4 +105,6 @@ export const TEMPLATE_LABELS: Record<string, string> = {
   privacy_changed: 'Privacy Changed',
   consolidated_update: 'Consolidated Update',
   bulk_action_summary: 'Bulk Action Summary',
+  clone_origin_note: 'Clone Origin Note',
+  clone_comment_reply: 'Clone Comment Reply',
 };

@@ -1,20 +1,9 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { createServiceRoleClient } from '../helpers/supabase';
+import { loginViaForm } from '../helpers/auth';
 
 const ALICE_ID = '00000000-0000-0000-0000-000000000014';
 const COMMENT_BODY = 'This is a separate problem that deserves its own ticket.';
-
-async function loginAs(page: Page, email: string, password = 'Password123') {
-  const svc = createServiceRoleClient();
-  await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
-
-  await page.goto('/login');
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Log in' }).click();
-  await expect(page).toHaveURL('/', { timeout: 10000 });
-  await expect(page.locator('summary[aria-haspopup="true"]')).toBeVisible({ timeout: 10000 });
-}
 
 test.describe('Clone ticket / comment (issue #49)', () => {
   test.describe.configure({ mode: 'serial' });
@@ -104,7 +93,7 @@ test.describe('Clone ticket / comment (issue #49)', () => {
   });
 
   test('clone ticket → Cancel returns to the source and creates nothing', async ({ page }) => {
-    await loginAs(page, 'agent.smith@example.com');
+    await loginViaForm(page, 'agent.smith@example.com');
     await page.goto(`/tickets/${ticketCloneSourceId}/e2e-clone-source`);
 
     // The Clone control is a link to the prefilled create page (no write yet).
@@ -124,7 +113,7 @@ test.describe('Clone ticket / comment (issue #49)', () => {
   });
 
   test('clone ticket → Create makes a new ticket owned by the creator with origin note and tags', async ({ page }) => {
-    await loginAs(page, 'agent.smith@example.com');
+    await loginViaForm(page, 'agent.smith@example.com');
     await page.goto(`/tickets/${ticketCloneSourceId}/e2e-clone-source`);
 
     await page.getByTestId('clone-ticket-btn').click();
@@ -163,7 +152,7 @@ test.describe('Clone ticket / comment (issue #49)', () => {
   });
 
   test('clone comment → Cancel leaves the source comment untouched', async ({ page }) => {
-    await loginAs(page, 'agent.smith@example.com');
+    await loginViaForm(page, 'agent.smith@example.com');
     await page.goto(`/tickets/${commentCloneSourceId}/e2e-comment-clone-source`);
 
     const postCard = page.getByTestId(`post-${commentPostId}`);
@@ -181,7 +170,7 @@ test.describe('Clone ticket / comment (issue #49)', () => {
   });
 
   test('clone comment → Create makes a new ticket and replaces the source comment with a link', async ({ page }) => {
-    await loginAs(page, 'agent.smith@example.com');
+    await loginViaForm(page, 'agent.smith@example.com');
     await page.goto(`/tickets/${commentCloneSourceId}/e2e-comment-clone-source`);
 
     const postCard = page.getByTestId(`post-${commentPostId}`);
@@ -212,7 +201,7 @@ test.describe('Clone ticket / comment (issue #49)', () => {
   });
 
   test('regular user does not see clone controls', async ({ page }) => {
-    await loginAs(page, 'alice@example.com');
+    await loginViaForm(page, 'alice@example.com');
 
     // Clone Ticket lives on a ticket whose only post is the original.
     await page.goto(`/tickets/${ticketCloneSourceId}/e2e-clone-source`);

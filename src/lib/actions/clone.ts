@@ -23,8 +23,11 @@ async function renderTemplate(
   const body = tpl?.body ?? DEFAULT_TEMPLATES[eventType]?.body ?? '';
 
   return Object.entries(values).reduce(
+    // Function-form replacement so values are always literal — a `$` in a
+    // ticket title / user name (e.g. "Price is $5", "$&") must not be treated
+    // as a `String.prototype.replace` substitution pattern.
     (acc, [key, value]) =>
-      acc.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), String(value)),
+      acc.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), () => String(value)),
     body,
   );
 }
@@ -119,12 +122,15 @@ export async function resolveCloneSource(
       supabase.from('profiles').select('display_name').eq('id', post.author_id).single(),
       supabase
         .from('tickets')
-        .select('id, title, slug, type_id, category_id, urgency, severity, is_private, merged_into_id')
+        .select('id, title, slug, type_id, category_id, urgency, severity, is_private, merged_into_id, duplicate_of_id')
         .eq('id', post.ticket_id)
         .single(),
     ]);
 
-    if (!source || source.merged_into_id) return null;
+    // A merged stub or a ticket marked as duplicate cannot be cloned. The UI
+    // already hides Clone in these states; guard here too so a hand-crafted
+    // `/tickets/new?clone_post=…` URL can't bypass it.
+    if (!source || source.merged_into_id || source.duplicate_of_id) return null;
 
     const originNote = await renderTemplate(svc, 'clone_origin_note', { ticketId: source.id });
 
@@ -154,11 +160,13 @@ export async function resolveCloneSource(
 
   const { data: source } = await supabase
     .from('tickets')
-    .select('id, title, slug, type_id, category_id, urgency, severity, is_private, custom_fields, creator_id, merged_into_id')
+    .select('id, title, slug, type_id, category_id, urgency, severity, is_private, custom_fields, creator_id, merged_into_id, duplicate_of_id')
     .eq('id', cloneFromId)
     .single();
 
-  if (!source || source.merged_into_id) return null;
+  // See the comment-clone branch above: merged stubs and duplicate tickets are
+  // not clonable, guarded here so a direct URL can't bypass the hidden UI.
+  if (!source || source.merged_into_id || source.duplicate_of_id) return null;
 
   const [{ data: originalPost }, { data: author }] = await Promise.all([
     supabase

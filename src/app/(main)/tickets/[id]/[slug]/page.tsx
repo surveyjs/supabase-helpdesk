@@ -30,6 +30,7 @@ import { TicketTabs } from './TicketTabs';
 import { MarkAsDuplicateForm } from './MarkAsDuplicateForm';
 import { MergeTicketForm } from './MergeTicketForm';
 import { TicketSidebarSurvey } from './TicketSidebarSurvey';
+import { TicketSaveStatus } from './TicketSaveStatus';
 import { TicketTagChips } from './TicketTagChips';
 import { ActivityLogItem } from './ActivityLogItem';
 import { buildActivityDescriptor, isActivityVisibleToNonAgent } from '@/lib/tickets/activity-log';
@@ -918,9 +919,10 @@ export default async function TicketDetailPage({
         {/* RIGHT: Sidebar */}
         <aside className="w-full lg:w-[400px] lg:min-w-[400px] lg:max-w-[400px] flex-shrink-0 lg:sticky lg:top-4 lg:self-start" data-testid="ticket-sidebar">
           <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
-            {/* Ticket # */}
-            <div className="mb-3">
+            {/* Ticket # + autosave status (issue #77) */}
+            <div className="mb-3 flex items-center justify-between gap-2">
               <span className="text-xs text-gray-500 font-mono">#{ticket.id}</span>
+              {hasAnySidebarSurveyField && <TicketSaveStatus ticketId={ticket.id} />}
             </div>
 
             {ticket.merged_into_id && (

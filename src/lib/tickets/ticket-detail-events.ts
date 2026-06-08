@@ -33,3 +33,36 @@ export function subscribeTicketDetailFieldChange(
   window.addEventListener(EVENT_NAME, handler);
   return () => window.removeEventListener(EVENT_NAME, handler);
 }
+
+const SAVE_STATUS_EVENT = 'ticket-detail-save-status';
+
+export type TicketDetailSaveStatusTone = 'idle' | 'saving' | 'saved' | 'error';
+
+export type TicketDetailSaveStatusDetail = {
+  ticketId: string;
+  tone: TicketDetailSaveStatusTone;
+  /** Human-readable label to display (empty string when idle). */
+  message: string;
+};
+
+/**
+ * Broadcast the sidebar autosave status so it can be rendered away from the
+ * survey itself (e.g. on the ticket-number header line at the top of the
+ * sidebar).
+ */
+export function dispatchTicketDetailSaveStatus(detail: TicketDetailSaveStatusDetail): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent<TicketDetailSaveStatusDetail>(SAVE_STATUS_EVENT, { detail }));
+}
+
+export function subscribeTicketDetailSaveStatus(
+  listener: (detail: TicketDetailSaveStatusDetail) => void,
+): () => void {
+  if (typeof window === 'undefined') return () => {};
+  const handler = (e: Event) => {
+    const ce = e as CustomEvent<TicketDetailSaveStatusDetail>;
+    listener(ce.detail);
+  };
+  window.addEventListener(SAVE_STATUS_EVENT, handler);
+  return () => window.removeEventListener(SAVE_STATUS_EVENT, handler);
+}

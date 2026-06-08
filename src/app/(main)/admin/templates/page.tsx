@@ -6,7 +6,7 @@ import { TemplatesSurveyForm } from './TemplatesSurveyForm';
 const TEMPLATE_CATEGORIES: Record<string, string[]> = {
   'User Notifications': ['new_post', 'status_changed', 'agent_assigned', 'auto_reopen', 'urgency_changed', 'severity_changed', 'privacy_changed'],
   'Agent Notifications': ['agent_assigned_to_agent', 'user_reply_to_agent'],
-  'Auto-Replies & System': ['duplicate_post', 'merge_post', 'merge_banner', 'bulk_action_summary', 'consolidated_update'],
+  'Auto-Replies & System': ['duplicate_post', 'merge_post', 'merge_banner', 'bulk_action_summary', 'consolidated_update', 'clone_origin_note', 'clone_comment_reply'],
 };
 
 const CATEGORY_ORDER = Object.keys(TEMPLATE_CATEGORIES);

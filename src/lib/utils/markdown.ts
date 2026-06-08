@@ -1,6 +1,7 @@
 import { unified } from 'unified';
 import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
 import remarkRehype from 'remark-rehype';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import rehypeStringify from 'rehype-stringify';
@@ -39,6 +40,9 @@ const sanitizeSchema = {
 const processor = unified()
   .use(remarkParse)
   .use(remarkGfm)
+  // Render a single newline as a hard line break (<br>) so pressing Enter once
+  // in the editor produces a visible line break, matching user expectation.
+  .use(remarkBreaks)
   .use(remarkRehype)
   .use(rehypeSanitize, sanitizeSchema)
   .use(rehypeStringify);

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
 
 export function MarkdownPreview({
   name,
@@ -67,7 +68,7 @@ export function MarkdownPreview({
       ) : (
         <div className="min-h-[150px] rounded border border-gray-300 px-3 py-2 prose prose-sm max-w-none">
           {text ? (
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{text}</ReactMarkdown>
           ) : (
             <p className="text-gray-500 italic">Nothing to preview</p>
           )}

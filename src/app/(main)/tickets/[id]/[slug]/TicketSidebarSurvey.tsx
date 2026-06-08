@@ -4,7 +4,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { Model } from 'survey-core';
 import { getDispatcher } from '@/lib/tickets/ticket-detail-dispatch';
-import { dispatchTicketDetailFieldChange } from '@/lib/tickets/ticket-detail-events';
+import {
+  dispatchTicketDetailFieldChange,
+  dispatchTicketDetailSaveStatus,
+  type TicketDetailSaveStatusTone,
+} from '@/lib/tickets/ticket-detail-events';
 import type { SurveyJsonDefinition } from '@/lib/constants/survey-ui-config';
 
 const Survey = dynamic(() => import('survey-react-ui').then((m) => m.Survey), { ssr: false });
@@ -87,24 +91,29 @@ export function TicketSidebarSurvey({ ticketId, templateJson, initial }: TicketS
     };
   }, [model, ticketId]);
 
-  const summary = generalError
-    ? generalError
-    : Object.values(fieldStatus).some((v) => v === 'saving')
-      ? 'Saving…'
-      : Object.values(fieldStatus).some((v) => v === 'saved')
-        ? 'Saved'
-        : '';
+  const { tone, message } = useMemo<{
+    tone: TicketDetailSaveStatusTone;
+    message: string;
+  }>(() => {
+    if (generalError) return { tone: 'error', message: generalError };
+    if (Object.values(fieldStatus).some((v) => v === 'saving')) {
+      return { tone: 'saving', message: 'Saving…' };
+    }
+    if (Object.values(fieldStatus).some((v) => v === 'saved')) {
+      return { tone: 'saved', message: 'Saved' };
+    }
+    return { tone: 'idle', message: '' };
+  }, [fieldStatus, generalError]);
+
+  // Publish the autosave status so the header indicator (rendered on the
+  // ticket-number line) can display it away from the survey itself.
+  useEffect(() => {
+    dispatchTicketDetailSaveStatus({ ticketId, tone, message });
+  }, [ticketId, tone, message]);
 
   return (
     <div data-testid="ticket-sidebar-survey">
       <Survey model={model} />
-      <p
-        aria-live="polite"
-        className="mt-2 min-h-[1rem] text-xs text-gray-500"
-        data-testid="ticket-sidebar-survey-status"
-      >
-        {summary}
-      </p>
     </div>
   );
 }

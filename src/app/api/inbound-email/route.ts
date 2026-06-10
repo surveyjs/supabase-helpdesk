@@ -18,7 +18,17 @@ export async function POST(request: Request) {
     const authHeader = request.headers.get('Authorization');
     const webhookSecret = process.env.INBOUND_EMAIL_WEBHOOK_SECRET ?? process.env.CRON_SECRET;
 
-    if (webhookSecret && authHeader !== `Bearer ${webhookSecret}`) {
+    // Fail closed: if no secret is configured the endpoint would otherwise
+    // accept unauthenticated, forgeable inbound mail (spoofed senders creating
+    // tickets/posts as arbitrary users). Require a secret to be set.
+    if (!webhookSecret) {
+      console.error(
+        '[inbound-email-webhook] Rejected: no INBOUND_EMAIL_WEBHOOK_SECRET or CRON_SECRET configured.',
+      );
+      return NextResponse.json({ error: 'Webhook not configured' }, { status: 503 });
+    }
+
+    if (authHeader !== `Bearer ${webhookSecret}`) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

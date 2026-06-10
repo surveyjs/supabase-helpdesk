@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createServerClient, createServiceRoleClient } from '@/lib/supabase/server';
-import { cancelCsatSurvey } from '@/lib/actions/csat';
+import { cancelCsatSurvey } from '@/lib/utils/csat';
 import { stopResolutionTimer, recalculateSlaTargets } from '@/lib/utils/sla';
 
 const SEVERITY_ORDER: Record<string, number> = {

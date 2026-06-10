@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createServerClient } from '@/lib/supabase/server';
 import { notifyTicketRecipients, notifyAgent } from '@/lib/email/notify';
-import { scheduleCsatSurvey, cancelCsatSurvey } from '@/lib/actions/csat';
+import { scheduleCsatSurvey, cancelCsatSurvey } from '@/lib/utils/csat';
 import { pauseSlaTimer, resumeSlaTimer, stopResolutionTimer, recalculateSlaTargets } from '@/lib/utils/sla';
 
 const VALID_PRIORITIES = ['low', 'medium', 'high', 'critical'];

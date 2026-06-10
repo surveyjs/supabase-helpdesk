@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createServerClient, createServiceRoleClient } from '@/lib/supabase/server';
-import { scheduleCsatSurvey, cancelCsatSurvey } from '@/lib/actions/csat';
+import { scheduleCsatSurvey, cancelCsatSurvey } from '@/lib/utils/csat';
 import { pauseSlaTimer, resumeSlaTimer, stopResolutionTimer, recalculateSlaTargets } from '@/lib/utils/sla';
 
 async function requireAgentRole() {

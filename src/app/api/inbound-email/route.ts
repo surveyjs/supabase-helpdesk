@@ -8,7 +8,11 @@ import type { InboundEmailPayload } from '@/lib/actions/inbound-email';
  * Supports a generic payload format. Provider-specific adapters can be added
  * by extending the parsePayload function.
  *
- * Always returns 200 OK to prevent email provider retries on expected rejections.
+ * Authentication failures are surfaced to the caller: 401 when the bearer token
+ * is missing/invalid, and 503 when no webhook secret is configured at all (so a
+ * misconfiguration is noticed rather than silently accepting forged mail). Once
+ * authenticated, the handler returns 200 OK even for expected payload-level
+ * rejections (e.g. missing sender) to prevent the email provider from retrying.
  */
 export async function POST(request: Request) {
   try {
@@ -18,7 +22,17 @@ export async function POST(request: Request) {
     const authHeader = request.headers.get('Authorization');
     const webhookSecret = process.env.INBOUND_EMAIL_WEBHOOK_SECRET ?? process.env.CRON_SECRET;
 
-    if (webhookSecret && authHeader !== `Bearer ${webhookSecret}`) {
+    // Fail closed: if no secret is configured the endpoint would otherwise
+    // accept unauthenticated, forgeable inbound mail (spoofed senders creating
+    // tickets/posts as arbitrary users). Require a secret to be set.
+    if (!webhookSecret) {
+      console.error(
+        '[inbound-email-webhook] Rejected: no INBOUND_EMAIL_WEBHOOK_SECRET or CRON_SECRET configured.',
+      );
+      return NextResponse.json({ error: 'Webhook not configured' }, { status: 503 });
+    }
+
+    if (authHeader !== `Bearer ${webhookSecret}`) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

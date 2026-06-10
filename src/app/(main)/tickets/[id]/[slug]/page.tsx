@@ -20,7 +20,8 @@ import {
   publishDraft,
   getFollowers,
 } from '@/lib/actions/tickets';
-import { getCsatRating, requestCsatToken } from '@/lib/actions/csat';
+import { requestCsatToken } from '@/lib/actions/csat';
+import { getCsatRating } from '@/lib/utils/csat';
 import { getSlaStatus, type SlaTimer, type SlaIndicatorStatus } from '@/lib/utils/sla';
 import { removeDuplicateLink } from '@/lib/actions/duplicate';
 import { DeleteTicketButton } from './DeleteTicketButton';

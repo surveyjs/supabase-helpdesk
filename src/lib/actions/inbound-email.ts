@@ -7,7 +7,7 @@ import { notifyTicketRecipients, notifyAgent } from '@/lib/email/notify';
 import { generateSlug } from '@/lib/utils/slug';
 import { sanitizeSvg } from '@/lib/utils/svg-sanitize';
 import { initializeSlaTimer, stopFirstResponseTimer, resumeSlaTimer } from '@/lib/utils/sla';
-import { cancelCsatSurvey } from '@/lib/actions/csat';
+import { cancelCsatSurvey } from '@/lib/utils/csat';
 import { stripEmailSignature, extractTicketIdFromSubject } from '@/lib/utils/email-parser';
 
 // ============================================================

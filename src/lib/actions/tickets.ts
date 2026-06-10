@@ -6,7 +6,7 @@ import { createServerClient, createServiceRoleClient } from '@/lib/supabase/serv
 import { generateSlug } from '@/lib/utils/slug';
 import { validateTitle, validateBody } from '@/lib/utils/validation';
 import { notifyTicketRecipients, notifyAgent } from '@/lib/email/notify';
-import { cancelCsatSurvey } from '@/lib/actions/csat';
+import { cancelCsatSurvey } from '@/lib/utils/csat';
 import { claimInlineAttachments } from '@/lib/actions/attachments';
 import { initializeSlaTimer, stopFirstResponseTimer, resumeSlaTimer } from '@/lib/utils/sla';
 import { resolveCloneSource, finalizeClone } from '@/lib/actions/clone';

@@ -8,7 +8,11 @@ import type { InboundEmailPayload } from '@/lib/actions/inbound-email';
  * Supports a generic payload format. Provider-specific adapters can be added
  * by extending the parsePayload function.
  *
- * Always returns 200 OK to prevent email provider retries on expected rejections.
+ * Authentication failures are surfaced to the caller: 401 when the bearer token
+ * is missing/invalid, and 503 when no webhook secret is configured at all (so a
+ * misconfiguration is noticed rather than silently accepting forged mail). Once
+ * authenticated, the handler returns 200 OK even for expected payload-level
+ * rejections (e.g. missing sender) to prevent the email provider from retrying.
  */
 export async function POST(request: Request) {
   try {

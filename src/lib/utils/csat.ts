@@ -131,7 +131,7 @@ export async function scheduleCsatSurvey(ticketId: number): Promise<void> {
     .eq('ticket_id', ticketId)
     .not('rating', 'is', null)
     .limit(1)
-    .single();
+    .maybeSingle();
 
   if (existingRating) return; // Already rated, don't schedule
 
@@ -151,7 +151,7 @@ export async function scheduleCsatSurvey(ticketId: number): Promise<void> {
     .from('csat_survey_schedule')
     .select('id, is_cancelled')
     .eq('ticket_id', ticketId)
-    .single();
+    .maybeSingle();
 
   if (existing) {
     await supabase
@@ -201,7 +201,7 @@ export async function getCsatRating(
     .not('rating', 'is', null)
     .order('submitted_at', { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
 
   if (!data || data.rating === null) return null;
 

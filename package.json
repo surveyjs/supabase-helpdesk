@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "next dev -p 3001",
     "dev:local": "dotenv -e .env.test -- next dev -p 3001",
+    "dev:demo": "dotenv -e .env.demo.local -- next dev -p 3002",
+    "dev:internal": "dotenv -e .env.internal.local -- next dev -p 3001",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",

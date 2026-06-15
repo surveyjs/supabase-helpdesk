@@ -1,0 +1,32 @@
+# Keep the build context small and free of secrets / large fixtures.
+node_modules
+.next
+.git
+.github
+npm-debug.log*
+
+# Local env / secrets — runtime env is injected by docker compose instead.
+.env
+.env.local
+.env.test
+.env*.local
+
+# Tests & tooling not needed in the runtime image
+tests
+playwright-report
+test-results
+coverage
+e2e
+
+# Large migration fixtures (CSV dumps + attachment blobs) — never ship these
+migration/source-data
+
+# Editor / OS cruft
+.vscode
+.idea
+.DS_Store
+
+# Deploy + docs (built/managed on the server, not inside the image)
+deploy
+docs
+*.md

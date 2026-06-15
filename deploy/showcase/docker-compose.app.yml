@@ -1,0 +1,88 @@
+# App overlay for the SHOWCASE instance — the public demo at
+# helpdesk.demos.surveyjs.io.
+#
+# This runs on the shared DEMOS machine, alongside other surveyjs examples
+# (each its own docker stack) behind a shared **Traefik** proxy. This overlay
+# therefore ships no proxy of its own: it joins Traefik's network and exposes
+# two routers via labels —
+#     ${APP_PUBLIC_HOST}       -> this app (port 3001)
+#     ${SUPABASE_PUBLIC_HOST}  -> kong (port 8000)
+#
+# Set these in .env (or the deploy/webhook environment) to match this machine
+# and the demos host's Traefik install:
+#     APP_PUBLIC_HOST      (e.g. helpdesk.demos.surveyjs.io)
+#     SUPABASE_PUBLIC_HOST (e.g. supabase.helpdesk.demos.surveyjs.io)
+#     TRAEFIK_NETWORK     (external docker network Traefik watches; default `traefik`)
+#     TRAEFIK_ENTRYPOINT  (TLS entrypoint name; default `websecure`)
+#     TRAEFIK_CERTRESOLVER (ACME certresolver name; default `le`)
+#
+#   cd /opt/demos/helpdesk
+#   docker compose -p helpdesk-showcase \
+#     -f docker-compose.yml -f docker-compose.app.yml up -d
+#
+# A nightly cron (deploy/showcase/reset-demo.sh) wipes this DB back to seed.
+
+services:
+  app:
+    build:
+      # Docker build context = the repo ROOT (where the Dockerfile lives).
+      # Default works when running from the repo (deploy/showcase -> ../../).
+      # On the demos machine set APP_BUILD_CONTEXT in .env to the absolute
+      # checkout root (e.g. /opt/demos/helpdesk/src).
+      context: ${APP_BUILD_CONTEXT:-../../}
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${ANON_KEY}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+    image: helpdesk-showcase-app:latest
+    container_name: helpdesk-showcase-app
+    restart: unless-stopped
+    depends_on:
+      - kong
+    environment:
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${ANON_KEY}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+      CRON_SECRET: ${CRON_SECRET}
+      INBOUND_EMAIL_WEBHOOK_SECRET: ${INBOUND_EMAIL_WEBHOOK_SECRET:-}
+      AI_PROVIDER: ${AI_PROVIDER:-}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-}
+      AI_CUSTOM_ENDPOINT_URL: ${AI_CUSTOM_ENDPOINT_URL:-}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK:-traefik}"
+      - "traefik.http.routers.helpdesk-demo-app.rule=Host(`${APP_PUBLIC_HOST}`)"
+      - "traefik.http.routers.helpdesk-demo-app.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}"
+      - "traefik.http.routers.helpdesk-demo-app.tls.certresolver=${TRAEFIK_CERTRESOLVER:-le}"
+      - "traefik.http.services.helpdesk-demo-app.loadbalancer.server.port=3001"
+    networks:
+      - default     # supabase project network
+      - traefik     # shared Traefik network on the demos host
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3001/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # Expose the Supabase API gateway through Traefik on its own subdomain.
+  kong:
+    networks:
+      default: {}
+      traefik: {}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK:-traefik}"
+      - "traefik.http.routers.helpdesk-demo-supabase.rule=Host(`${SUPABASE_PUBLIC_HOST}`)"
+      - "traefik.http.routers.helpdesk-demo-supabase.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}"
+      - "traefik.http.routers.helpdesk-demo-supabase.tls.certresolver=${TRAEFIK_CERTRESOLVER:-le}"
+      - "traefik.http.services.helpdesk-demo-supabase.loadbalancer.server.port=8000"
+
+networks:
+  traefik:
+    external: true
+    name: ${TRAEFIK_NETWORK:-traefik}

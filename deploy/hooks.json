@@ -1,0 +1,30 @@
+[
+  {
+    "id": "redeploy",
+    "execute-command": "/opt/helpdesk/redeploy.sh",
+    "command-working-directory": "/opt/helpdesk",
+    "pass-arguments-to-command": [
+      { "source": "payload", "name": "ref" },
+      { "source": "payload", "name": "after" }
+    ],
+    "include-command-output-in-response": false,
+    "trigger-rule": {
+      "and": [
+        {
+          "match": {
+            "type": "payload-hmac-sha256",
+            "secret": "{{ getenv \"GITHUB_WEBHOOK_SECRET\" }}",
+            "parameter": { "source": "header", "name": "X-Hub-Signature-256" }
+          }
+        },
+        {
+          "match": {
+            "type": "value",
+            "value": "refs/heads/main",
+            "parameter": { "source": "payload", "name": "ref" }
+          }
+        }
+      ]
+    }
+  }
+]

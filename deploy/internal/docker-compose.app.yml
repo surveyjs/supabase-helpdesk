@@ -1,0 +1,70 @@
+# App overlay for the INTERNAL instance (Answer Desk replacement, real data).
+#
+# This file is merged on top of the official Supabase self-host compose:
+#
+#   cd /opt/helpdesk/internal
+#   docker compose -p helpdesk-internal \
+#     -f docker-compose.yml          \   # official supabase/docker compose (vendored, pinned)
+#     -f docker-compose.app.yml      \   # this file
+#     up -d
+#
+# The app talks to Supabase over the PUBLIC url (NEXT_PUBLIC_SUPABASE_URL),
+# which Caddy terminates. Caddy reaches this container over the shared external
+# `edge` network via the alias `internal-app`.
+
+services:
+  app:
+    build:
+      # Docker build context = the repo ROOT (where the Dockerfile lives).
+      # Default works when running from the repo (deploy/internal -> ../../).
+      # On the server set APP_BUILD_CONTEXT in .env to the absolute checkout path
+      # (the clone root, e.g. /opt/helpdesk/src).
+      context: ${APP_BUILD_CONTEXT:-../../}
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${ANON_KEY}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+    image: helpdesk-internal-app:latest
+    container_name: helpdesk-internal-app
+    restart: unless-stopped
+    depends_on:
+      - kong
+    environment:
+      # Public (also read server-side at runtime)
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${ANON_KEY}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-}
+      # Runtime-only secrets (never baked into the image)
+      SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+      CRON_SECRET: ${CRON_SECRET}
+      INBOUND_EMAIL_WEBHOOK_SECRET: ${INBOUND_EMAIL_WEBHOOK_SECRET:-}
+      # Optional env-level AI fallback (admin UI / Vault takes precedence)
+      AI_PROVIDER: ${AI_PROVIDER:-}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-}
+      AI_CUSTOM_ENDPOINT_URL: ${AI_CUSTOM_ENDPOINT_URL:-}
+    networks:
+      - default     # supabase project network (reach kong:8000 if needed)
+      - edge        # shared with Caddy reverse proxy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3001/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # Expose the Supabase API gateway to Caddy over the shared edge network so the
+  # public Supabase domain can be proxied without publishing host ports.
+  kong:
+    networks:
+      default: {}
+      edge:
+        aliases:
+          - internal-kong
+
+networks:
+  edge:
+    external: true
+    name: edge

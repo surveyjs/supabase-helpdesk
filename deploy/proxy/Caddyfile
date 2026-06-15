@@ -1,0 +1,47 @@
+# Caddy reverse proxy for the DEDICATED HELPDESK MACHINE (helpdesk.surveyjs.io).
+# This machine runs only the internal helpdesk; the public demo lives on a
+# separate (shared) machine behind its own proxy, so there are no demo routes
+# here.
+#
+# Caddy runs in its own compose project and joins the shared external `edge`
+# network so it can reach the app + Supabase gateway by container alias.
+#
+# Run:
+#   docker network create edge   # once
+#   cd /opt/helpdesk/proxy
+#   docker compose up -d
+#
+# Caddy obtains Let's Encrypt certs automatically once DNS A/AAAA records point
+# at this machine. Domains + email are env-driven (Caddy {$VAR} substitution);
+# set them in deploy/proxy/.env (see .env.example) — same Caddyfile everywhere.
+
+{
+	# Let's Encrypt registration/expiry notices.
+	email {$ACME_EMAIL}
+}
+
+# ---------------------------------------------------------------------------
+# INTERNAL instance — the helpdesk itself (Answer Desk replacement, real data)
+# ---------------------------------------------------------------------------
+
+{$APP_PUBLIC_HOST} {
+	# OPTIONAL: lock the internal app down to office/VPN ranges. Remove if you
+	# gate access via SSO/auth instead.
+	# @blocked not remote_ip 203.0.113.0/24 198.51.100.0/24
+	# respond @blocked "Forbidden" 403
+	reverse_proxy helpdesk-internal-app:3001
+}
+
+{$SUPABASE_PUBLIC_HOST} {
+	reverse_proxy internal-kong:8000
+}
+
+# ---------------------------------------------------------------------------
+# Auto-deploy webhook receiver (adnanh/webhook) — see deploy/hooks.json
+# ---------------------------------------------------------------------------
+
+{$DEPLOY_PUBLIC_HOST} {
+	# Host-based receiver (deploy/webhook.service). host.docker.internal is
+	# wired to the host gateway in the proxy compose.
+	reverse_proxy host.docker.internal:9000
+}

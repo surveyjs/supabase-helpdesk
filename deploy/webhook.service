@@ -1,0 +1,39 @@
+# systemd unit for the GitHub auto-deploy webhook receiver (adnanh/webhook),
+# run on the HOST so it has docker, git, and the Supabase CLI on PATH.
+#
+# Install:
+#   sudo apt-get install -y webhook        # or download the adnanh/webhook binary
+#   sudo cp deploy/hooks.json   /opt/helpdesk/hooks.json
+#   sudo cp deploy/redeploy.sh  /opt/helpdesk/redeploy.sh && sudo chmod +x /opt/helpdesk/redeploy.sh
+#   sudo cp deploy/webhook.service /etc/systemd/system/helpdesk-webhook.service
+#   sudo systemctl daemon-reload && sudo systemctl enable --now helpdesk-webhook
+#
+# Set the secret AND which instance this machine hosts in
+# /etc/helpdesk-webhook.env:
+#   GITHUB_WEBHOOK_SECRET=<same secret configured in the GitHub repo webhook>
+#   INSTANCE=internal      # on the helpdesk machine; use `showcase` on the demos machine
+#
+# Each machine runs its own webhook + redeploy.sh and deploys only its own
+# instance. Point that machine's GitHub repo webhook at its deploy URL
+# (helpdesk machine: https://deploy.helpdesk.surveyjs.io/hooks/redeploy),
+# content type application/json, secret = GITHUB_WEBHOOK_SECRET, "push" event.
+
+[Unit]
+Description=HelpDesk GitHub auto-deploy webhook receiver
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=/etc/helpdesk-webhook.env
+ExecStart=/usr/bin/webhook -verbose -template \
+  -hooks /opt/helpdesk/hooks.json \
+  -ip 127.0.0.1 -port 9000 -urlprefix hooks -hotreload
+Restart=on-failure
+RestartSec=5
+# Needs docker group membership to talk to the daemon.
+User=deploy
+Group=docker
+WorkingDirectory=/opt/helpdesk
+
+[Install]
+WantedBy=multi-user.target

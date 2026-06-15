@@ -31,7 +31,18 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files
+# Real, secret env files are gitignored; `.env.test` (deterministic local
+# Supabase keys) and the `*.example` templates stay committed.
 .env.local
+.env*.local
+
+# Local self-hosted instances (vendored official supabase compose + .env +
+# data volumes). Machine-local only — never commit.
+/deploy/local/
+
+# Per-instance deploy secrets (real .env alongside the committed *.example
+# templates). Hold POSTGRES_PASSWORD / SERVICE_ROLE_KEY / SMTP_PASS — never commit.
+/deploy/**/.env
 
 # testing
 playwright-report/

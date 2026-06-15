@@ -15,7 +15,7 @@
 #
 # Each machine runs its own webhook + redeploy.sh and deploys only its own
 # instance. Point that machine's GitHub repo webhook at its deploy URL
-# (helpdesk machine: https://deploy.helpdesk.surveyjs.io/hooks/redeploy),
+# (helpdesk machine: https://deploy.helpdesk.example.com/hooks/redeploy),
 # content type application/json, secret = GITHUB_WEBHOOK_SECRET, "push" event.
 
 [Unit]

@@ -1,5 +1,5 @@
 # App overlay for the SHOWCASE instance — the public demo at
-# helpdesk.demos.surveyjs.io.
+# helpdesk.demos.example.com.
 #
 # This runs on the shared DEMOS machine, alongside other surveyjs examples
 # (each its own docker stack) behind a shared **Traefik** proxy. This overlay
@@ -10,8 +10,8 @@
 #
 # Set these in .env (or the deploy/webhook environment) to match this machine
 # and the demos host's Traefik install:
-#     APP_PUBLIC_HOST      (e.g. helpdesk.demos.surveyjs.io)
-#     SUPABASE_PUBLIC_HOST (e.g. supabase.helpdesk.demos.surveyjs.io)
+#     APP_PUBLIC_HOST      (e.g. helpdesk.demos.example.com)
+#     SUPABASE_PUBLIC_HOST (e.g. supabase.helpdesk.demos.example.com)
 #     TRAEFIK_NETWORK     (external docker network Traefik watches; default `traefik`)
 #     TRAEFIK_ENTRYPOINT  (TLS entrypoint name; default `websecure`)
 #     TRAEFIK_CERTRESOLVER (ACME certresolver name; default `le`)

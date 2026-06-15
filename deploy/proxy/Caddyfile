@@ -1,4 +1,4 @@
-# Caddy reverse proxy for the DEDICATED HELPDESK MACHINE (helpdesk.surveyjs.io).
+# Caddy reverse proxy for the DEDICATED HELPDESK MACHINE (helpdesk.example.com).
 # This machine runs only the internal helpdesk; the public demo lives on a
 # separate (shared) machine behind its own proxy, so there are no demo routes
 # here.

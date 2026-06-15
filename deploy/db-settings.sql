@@ -2,13 +2,13 @@
 --
 -- The pg_cron jobs (see supabase/migrations/011_sla.sql) call the app over HTTP
 -- with pg_net, reading these settings:
---   current_setting('app.settings.base_url')   -> e.g. https://helpdesk.surveyjs.io
+--   current_setting('app.settings.base_url')   -> e.g. https://helpdesk.example.com
 --   current_setting('app.settings.cron_secret') -> must equal the app's CRON_SECRET
 --
 -- Run once per instance against its postgres DB, substituting the real values:
 --
 --   docker compose -p helpdesk-internal exec -T db \
---     psql -U postgres -d postgres -v base_url='https://helpdesk.surveyjs.io' \
+--     psql -U postgres -d postgres -v base_url='https://helpdesk.example.com' \
 --                                  -v cron_secret='<CRON_SECRET>' \
 --          -f - < deploy/db-settings.sql
 --

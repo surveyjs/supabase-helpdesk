@@ -13,9 +13,9 @@ Domains:
 
 | Role | Internal (helpdesk machine) | Showcase (demos machine) |
 |---|---|---|
-| App | `helpdesk.surveyjs.io` | `helpdesk.demos.surveyjs.io` |
-| Supabase API | `supabase.helpdesk.surveyjs.io` | `supabase.helpdesk.demos.surveyjs.io` |
-| Webhook | `deploy.helpdesk.surveyjs.io` | (demos machine's own deploy hook) |
+| App | `helpdesk.example.com` | `helpdesk.demos.example.com` |
+| Supabase API | `supabase.helpdesk.example.com` | `supabase.helpdesk.demos.example.com` |
+| Webhook | `deploy.helpdesk.example.com` | (demos machine's own deploy hook) |
 
 All deployment artifacts live in [`deploy/`](../deploy/). Both instances use the
 same overlay shape (`deploy/<instance>/docker-compose.app.yml` merged onto the
@@ -36,7 +36,7 @@ GH│ webhook(INSTANCE=internal) ─▶ redeploy.sh         │ GH│ webhook(IN
   │  │ Caddy(TLS) ─┬─▶ helpdesk-internal-app        │ │   │        │                    │            │
   │  │             └─▶ internal-kong ─┐ internal     │ │   │        ▼ (traefik network)  ▼            │
   │  └────────────────────────────────┘ supabase    │ │   │  helpdesk-showcase-app    showcase kong  │
-  │       helpdesk.surveyjs.io / supabase.helpdesk…  │ │   │  …other example dockers alongside…       │
+  │       helpdesk.example.com / supabase.helpdesk…  │ │   │  …other example dockers alongside…       │
   └───────────────────────────────────────────────────┘   └──────────────────────────────────────────┘
 ```
 
@@ -48,8 +48,8 @@ GH│ webhook(INSTANCE=internal) ─▶ redeploy.sh         │ GH│ webhook(IN
 - **Edge — helpdesk machine:** our Caddy (`deploy/proxy/`) terminates TLS and
   routes the two helpdesk domains over a shared external `edge` network.
 - **Edge — demos machine:** the showcase joins the shared **Traefik** network
-  and declares two routers via labels (app → `helpdesk.demos.surveyjs.io`,
-  kong → `supabase.helpdesk.demos.surveyjs.io`); Traefik handles TLS. No host
+  and declares two routers via labels (app → `helpdesk.demos.example.com`,
+  kong → `supabase.helpdesk.demos.example.com`); Traefik handles TLS. No host
   ports are published for routing.
 - **Auto-deploy:** each machine runs its own `adnanh/webhook` + `redeploy.sh`
   with `INSTANCE` set, deploying only that machine's instance.
@@ -72,9 +72,9 @@ DNS A/AAAA records:
 
 ```
 # -> dedicated helpdesk machine:
-helpdesk.surveyjs.io   supabase.helpdesk.surveyjs.io   deploy.helpdesk.surveyjs.io
+helpdesk.example.com   supabase.helpdesk.example.com   deploy.helpdesk.example.com
 # -> shared demos machine (the demos front proxy serves these):
-helpdesk.demos.surveyjs.io   supabase.helpdesk.demos.surveyjs.io
+helpdesk.demos.example.com   supabase.helpdesk.demos.example.com
 ```
 
 ### 1a. Dedicated helpdesk machine layout
@@ -197,7 +197,7 @@ cp /opt/helpdesk/src/deploy/proxy/.env.example .env
 docker compose up -d
 ```
 
-Caddy auto-issues TLS certs once DNS resolves. Browse to `https://helpdesk.surveyjs.io`.
+Caddy auto-issues TLS certs once DNS resolves. Browse to `https://helpdesk.example.com`.
 
 > This app holds customer data — gate it (uncomment the IP allow-list block in
 > the Caddyfile, or front it with SSO).
@@ -210,15 +210,15 @@ ships no proxy; it joins Traefik's network and declares two routers via labels
 
 | Router | Host rule | → service:port |
 |---|---|---|
-| `helpdesk-demo-app` | `helpdesk.demos.surveyjs.io` | app : 3001 |
-| `helpdesk-demo-supabase` | `supabase.helpdesk.demos.surveyjs.io` | kong : 8000 |
+| `helpdesk-demo-app` | `helpdesk.demos.example.com` | app : 3001 |
+| `helpdesk-demo-supabase` | `supabase.helpdesk.demos.example.com` | kong : 8000 |
 
 Set these in the showcase `.env` (the `Host()` rules and Traefik settings are
 all env-driven, so the compose file is the same on every machine):
 
 ```
-APP_PUBLIC_HOST=helpdesk.demos.surveyjs.io            # app router host
-SUPABASE_PUBLIC_HOST=supabase.helpdesk.demos.surveyjs.io  # supabase router host
+APP_PUBLIC_HOST=helpdesk.demos.example.com            # app router host
+SUPABASE_PUBLIC_HOST=supabase.helpdesk.demos.example.com  # supabase router host
 TRAEFIK_NETWORK=traefik        # the external network Traefik watches (must exist)
 TRAEFIK_ENTRYPOINT=websecure   # your TLS entrypoint name
 TRAEFIK_CERTRESOLVER=le        # your ACME certresolver name
@@ -258,7 +258,7 @@ On the **demos machine** the steps are identical except: paths point at
 plus `ROOT=/opt/demos/helpdesk` (so `redeploy.sh` finds the checkout + stack).
 
 In each repo webhook (GitHub → **Settings → Webhooks**):
-- Payload URL: that machine's hook, e.g. `https://deploy.helpdesk.surveyjs.io/hooks/redeploy`
+- Payload URL: that machine's hook, e.g. `https://deploy.helpdesk.example.com/hooks/redeploy`
 - Content type: `application/json`; Secret: the machine's `GITHUB_WEBHOOK_SECRET`; Events: **push only**
 
 On each push to `main`, `redeploy.sh` syncs the checkout, applies new migrations,
@@ -341,7 +341,7 @@ every attachment file.
    - custom fields `LicenseStatus` / `Is License Owner` present;
    - an attachment downloads.
 3. When validated, run the **same loader once** against the internal production
-   instance (`SUPABASE_URL=https://supabase.helpdesk.surveyjs.io`,
+   instance (`SUPABASE_URL=https://supabase.helpdesk.example.com`,
    `SERVICE_ROLE_KEY=<internal SERVICE_ROLE_KEY>`) — while it is still private.
 4. Keep the Supabase **Cloud** project read-only as reference until the internal
    instance is verified, then decommission it.
@@ -482,7 +482,7 @@ npm run dev:demo        # example-data app on http://127.0.0.1:3002
 - The two stacks are independent of the `supabase start` test stack — if you hit
   port limits or RAM pressure, stop `supabase start` while running them.
 - To point an env file at the **remote** servers instead of local, swap the URL
-  + keys (⚠ `helpdesk.surveyjs.io` is live production data).
+  + keys (⚠ `helpdesk.example.com` is live production data).
 
 ---
 
@@ -491,7 +491,7 @@ npm run dev:demo        # example-data app on http://127.0.0.1:3002
 Vercel + Supabase Cloud was only ever the **dev/demo backend** for this app —
 not the source of the Answer Desk migration (that's the local CSVs in
 `migration/`) and not the live internal helptracker. Once the self-hosted demo
-is up (it is — `helpdesk.demos.surveyjs.io`), it's redundant. Before tearing it
+is up (it is — `helpdesk.demos.example.com`), it's redundant. Before tearing it
 down, confirm two things:
 
 1. Nobody is actively using the old Vercel URL as a working instance (point them
@@ -515,7 +515,7 @@ supabase unlink
 Repo-side cleanup is already done: there was no Vercel/Cloud binding in code
 (the leftover `public/vercel.svg` has been removed). After decommissioning,
 scrub the stale Cloud credentials from your `.env.local` (the
-`csyflfpzgzmcrizwegfy.supabase.co` URL, anon/service keys, and
+`<your-cloud-project-ref>.supabase.co` URL, anon/service keys, and
 `SUPABASE_ACCESS_TOKEN`) and repoint it at the local container.
 
 ---

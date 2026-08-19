@@ -35,8 +35,8 @@
     "remark-gfm": "^4.0.1",
     "remark-parse": "^11.0.0",
     "remark-rehype": "^11.1.2",
-    "survey-core": "3.0.0-beta.4",
-    "survey-react-ui": "3.0.0-beta.4",
+    "survey-core": "^3.0.0",
+    "survey-react-ui": "^3.0.0",
     "unified": "^11.0.5"
   },
   "devDependencies": {

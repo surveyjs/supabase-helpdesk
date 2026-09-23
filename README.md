@@ -194,7 +194,7 @@ src/
 │   ├── supabase/           # Supabase client helpers
 │   └── utils/              # Shared utilities
 supabase/
-├── migrations/             # 20 SQL migrations
+├── migrations/             # Initial database schema (001_initial_schema.sql)
 ├── seed.sql                # Development seed data
 └── config.toml             # Supabase local config
 tests/

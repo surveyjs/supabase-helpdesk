@@ -61,3 +61,4 @@ playwright-results.json
 /migration/
 
 .claude/
+package-lock.json

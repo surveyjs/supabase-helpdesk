@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer';
+import nodemailer, { type SendMailOptions } from 'nodemailer';
 import { createServiceRoleClient } from '@/lib/supabase/server';
 
 /**
@@ -79,7 +79,7 @@ export async function sendEmail(
     const safeSubject = subject.replace(/[\r\n]/g, ' ');
 
     // Build mail options
-    const mailOptions: nodemailer.SendMailOptions = {
+    const mailOptions: SendMailOptions = {
       from: `"${config.sender_name}" <${config.sender_email}>`,
       to,
       subject: safeSubject,

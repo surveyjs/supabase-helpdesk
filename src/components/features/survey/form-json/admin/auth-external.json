@@ -1,5 +1,6 @@
 {
   "showQuestionNumbers": "off",
+  "completeText": "Save",
   "pages": [
     {
       "elements": [
@@ -8,10 +9,62 @@
           "name": "external_provider_panel",
           "elements": [
             {
+              "type": "dropdown",
+              "name": "preset",
+              "title": "Provider",
+              "defaultValue": "surveyjs",
+              "allowClear": false,
+              "choices": [
+                { "value": "surveyjs", "text": "SurveyJS (auth.surveyjs.io)" },
+                { "value": "oidc", "text": "Generic OpenID Connect" },
+                { "value": "oauth2", "text": "Generic OAuth 2.0" }
+              ]
+            },
+            {
+              "type": "html",
+              "name": "surveyjs_preset_info",
+              "visibleIf": "{preset} = 'surveyjs'",
+              "html": "<div class=\"text-sm text-gray-600\" data-testid=\"surveyjs-preset-info\"><ul class=\"list-disc pl-5\"><li>Authorization: <code>https://auth.surveyjs.io/OAuth/Authorize</code></li><li>Token: <code>https://auth.surveyjs.io/OAuth/Token</code></li><li>UserInfo: <code>https://auth.surveyjs.io/OAuth/UserInfo</code></li></ul><p class=\"mt-2\">ID tokens from auth.surveyjs.io are HS256-signed, so this provider is registered as OAuth 2.0 and the user is read from the UserInfo endpoint.</p></div>"
+            },
+            {
               "type": "text",
               "name": "provider_name",
               "title": "Provider Name",
-              "description": "Display name shown on the login button."
+              "description": "Display name shown on the login button.",
+              "defaultValueExpression": "iif({preset} = 'surveyjs', 'SurveyJS', '')"
+            },
+            {
+              "type": "text",
+              "name": "issuer_url",
+              "title": "Issuer URL",
+              "inputType": "url",
+              "visibleIf": "{preset} = 'oidc'",
+              "requiredIf": "{preset} = 'oidc'",
+              "description": "OIDC issuer. Must serve /.well-known/openid-configuration."
+            },
+            {
+              "type": "text",
+              "name": "authorization_url",
+              "title": "Authorization URL",
+              "inputType": "url",
+              "visibleIf": "{preset} = 'oauth2'",
+              "requiredIf": "{preset} = 'oauth2'"
+            },
+            {
+              "type": "text",
+              "name": "token_url",
+              "title": "Token URL",
+              "inputType": "url",
+              "visibleIf": "{preset} = 'oauth2'",
+              "requiredIf": "{preset} = 'oauth2'"
+            },
+            {
+              "type": "text",
+              "name": "userinfo_url",
+              "title": "UserInfo URL",
+              "inputType": "url",
+              "visibleIf": "{preset} = 'oauth2'",
+              "requiredIf": "{preset} = 'oauth2'"
             },
             {
               "type": "text",
@@ -23,13 +76,6 @@
               "name": "client_secret",
               "title": "Client Secret",
               "inputType": "password"
-            },
-            {
-              "type": "text",
-              "name": "issuer_url",
-              "title": "Issuer URL",
-              "inputType": "url",
-              "description": "OIDC discovery URL. Must support /.well-known/openid-configuration."
             },
             {
               "type": "text",

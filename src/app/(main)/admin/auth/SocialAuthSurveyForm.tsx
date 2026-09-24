@@ -31,11 +31,7 @@ export function SocialAuthSurveyForm({ config }: { config: SocialProviderConfig 
         schema={authSocialSchema as Record<string, unknown>}
         data={initial}
         mode="autosave"
-        saveAction={async (fd) => {
-          const r = await updateSocialProvider(fd);
-          if (r?.error) return { message: `Error: ${r.error}` };
-          return undefined;
-        }}
+        saveAction={updateSocialProvider}
         successMessage="Saved."
       />
     </div>

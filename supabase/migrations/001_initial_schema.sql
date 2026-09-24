@@ -2062,10 +2062,18 @@ INSERT INTO app_settings (key, value) VALUES
   ('auth_gitlab_enabled', 'false'),
   ('auth_gitlab_instance_url', ''),            -- optional self-hosted URL
   -- External OAuth/OIDC provider
+  -- Registered with Supabase Auth as the custom provider `custom:external`;
+  -- the Supabase provider type is derived from the preset (surveyjs → oauth2).
+  ('auth_external_preset', 'surveyjs'),        -- 'surveyjs' | 'oidc' | 'oauth2'
   ('auth_external_provider_name', ''),         -- display name for login button
-  ('auth_external_issuer_url', ''),            -- OIDC discovery URL
+  ('auth_external_issuer_url', ''),            -- oidc preset only
+  ('auth_external_authorization_url', ''),     -- oauth2 preset only
+  ('auth_external_token_url', ''),             -- oauth2 preset only
+  ('auth_external_userinfo_url', ''),          -- oauth2 preset only
   ('auth_external_scopes', 'openid email profile'),
   ('auth_external_auto_redirect', 'false'),    -- auto-redirect to external provider
+  ('auth_external_registered', 'false'),       -- 'true' while an enabled custom provider exists in Supabase Auth
+  ('auth_external_last_error', ''),            -- last registration error, '' when the last attempt succeeded
 
   -- Error page templates
   ('error_template_404', '# {{statusCode}} — Page Not Found

@@ -258,7 +258,7 @@ All changes recorded in admin audit log.
 
 - **Supabase Auth provider configuration**: Supabase supports configuring OAuth providers via the dashboard or the Management API. For a self-hosted setup, provider credentials are configured in `supabase/config.toml` or via environment variables. The admin setting Server Actions should update the Supabase Auth configuration programmatically. If the Management API is not available (local dev), store the configuration in `app_settings` and apply it at runtime.
 - **OAuth callback**: Supabase Auth handles the OAuth flow. The app only needs to handle the callback (`/auth/callback`) where it exchanges the code for a session.
-- **External OIDC**: Supabase Auth supports generic OIDC providers. Configure it via the Auth settings with the issuer URL, client ID, and secret. Supabase auto-discovers endpoints from `/.well-known/openid-configuration`.
+- **External provider**: superseded — the external mode is registered with Supabase Auth as the custom provider `custom:external` (SurveyJS / generic OIDC / generic OAuth 2.0 presets). See [changes/auth-external-custom-provider.md](changes/auth-external-custom-provider.md).
 - **Auto-redirect**: Implemented at the login page level (client-side redirect on mount) rather than in middleware, to keep the middleware simple. The middleware ensures session refresh only.
 - **Social provider buttons**: Use the provider's official brand colors and icons. Button order: Google, GitHub, Microsoft, GitLab (but only show enabled ones).
 - **First-time OAuth users**: The existing profile creation trigger (from Phase 2) fires on `auth.users` INSERT. For OAuth users, the trigger should extract `raw_user_meta_data.full_name` or `raw_user_meta_data.name` and set it as `display_name`.

@@ -9,6 +9,8 @@ type AdminSurveyFormProps = {
   schema: Record<string, unknown>;
   data: Record<string, unknown>;
   mode?: 'complete' | 'autosave';
+  /** Complete mode only: keep the form visible after submit (see SurveyJsonForm). */
+  keepOpen?: boolean;
   debounceMs?: number;
   saveAction: (formData: FormData) => Promise<SaveResponse>;
   toFormData?: (data: Record<string, unknown>) => FormData;
@@ -45,6 +47,7 @@ export function AdminSurveyForm({
   schema,
   data,
   mode = 'complete',
+  keepOpen = false,
   debounceMs = 600,
   saveAction,
   toFormData,
@@ -74,6 +77,11 @@ export function AdminSurveyForm({
   const saveNow = useCallback((nextData: Record<string, unknown>) => {
     const snapshot = JSON.stringify(nextData ?? {});
     if (snapshot === lastSavedSnapshotRef.current) {
+      // An explicit Save with nothing changed should not look like a dead button.
+      if (mode === 'complete') {
+        setIsError(false);
+        setMessage('No changes to save.');
+      }
       return;
     }
 
@@ -92,7 +100,7 @@ export function AdminSurveyForm({
       setIsError(false);
       setMessage(result?.message ?? successMessage);
     });
-  }, [saveAction, successMessage, toFormData]);
+  }, [mode, saveAction, successMessage, toFormData]);
 
   const queueSave = useCallback((nextData: Record<string, unknown>) => {
     pendingDataRef.current = nextData;
@@ -126,11 +134,12 @@ export function AdminSurveyForm({
         schema={schema}
         data={data}
         mode="complete"
+        keepOpen={keepOpen}
         onComplete={saveNow}
         className={className}
       />
     );
-  }, [className, data, mode, queueSave, saveNow, schema]);
+  }, [className, data, keepOpen, mode, queueSave, saveNow, schema]);
 
   return (
     <>

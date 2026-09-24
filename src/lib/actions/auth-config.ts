@@ -3,6 +3,24 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createServerClient, createServiceRoleClient } from '@/lib/supabase/server';
+import {
+  EXTERNAL_PROVIDER_ID,
+  buildCustomProviderParams,
+  resolveExternalProvider,
+  validateExternalProvider,
+  type ExternalProviderSettings,
+  type ResolvedExternalProvider,
+} from '@/lib/auth/external-provider';
+import {
+  EXTERNAL_CLIENT_ID,
+  EXTERNAL_CLIENT_ID_PREV,
+  EXTERNAL_CLIENT_SECRET,
+  EXTERNAL_CLIENT_SECRET_PREV,
+  snapshotPreviousCredentials,
+  syncExternalProvider,
+  type CredentialVault,
+  type Credentials,
+} from '@/lib/auth/external-provider-sync';
 
 // ============================================================
 // Helpers
@@ -47,10 +65,16 @@ export type AuthConfigSettings = {
   auth_microsoft_client_id_present: boolean;
   auth_gitlab_client_id_present: boolean;
   // External provider
+  auth_external_preset: string;
   auth_external_provider_name: string;
   auth_external_issuer_url: string;
+  auth_external_authorization_url: string;
+  auth_external_token_url: string;
+  auth_external_userinfo_url: string;
   auth_external_scopes: string;
   auth_external_auto_redirect: string;
+  auth_external_registered: string;
+  auth_external_last_error: string;
   auth_external_client_id_present: boolean;
 };
 
@@ -87,10 +111,16 @@ export async function getAuthConfigSettings(): Promise<AuthConfigSettings> {
     auth_github_client_id_present: secretFlags.github,
     auth_microsoft_client_id_present: secretFlags.microsoft,
     auth_gitlab_client_id_present: secretFlags.gitlab,
+    auth_external_preset: map.auth_external_preset || 'surveyjs',
     auth_external_provider_name: map.auth_external_provider_name || '',
     auth_external_issuer_url: map.auth_external_issuer_url || '',
+    auth_external_authorization_url: map.auth_external_authorization_url || '',
+    auth_external_token_url: map.auth_external_token_url || '',
+    auth_external_userinfo_url: map.auth_external_userinfo_url || '',
     auth_external_scopes: map.auth_external_scopes || 'openid email profile',
     auth_external_auto_redirect: map.auth_external_auto_redirect || 'false',
+    auth_external_registered: map.auth_external_registered || 'false',
+    auth_external_last_error: map.auth_external_last_error || '',
     auth_external_client_id_present: secretFlags.external,
   };
 }
@@ -104,6 +134,8 @@ export type PublicAuthConfig = {
   enabledSocialProviders: SocialProvider[];
   externalProviderName: string;
   autoRedirect: boolean;
+  /** True while an enabled `custom:external` provider exists in Supabase Auth. */
+  externalRegistered: boolean;
 };
 
 export async function getPublicAuthConfig(): Promise<PublicAuthConfig> {
@@ -115,6 +147,7 @@ export async function getPublicAuthConfig(): Promise<PublicAuthConfig> {
     'auth_google_enabled', 'auth_github_enabled',
     'auth_microsoft_enabled', 'auth_gitlab_enabled',
     'auth_external_provider_name', 'auth_external_auto_redirect',
+    'auth_external_registered',
   ];
   const { data } = await svc
     .from('app_settings')
@@ -140,6 +173,7 @@ export async function getPublicAuthConfig(): Promise<PublicAuthConfig> {
     enabledSocialProviders,
     externalProviderName: map.auth_external_provider_name || '',
     autoRedirect: map.auth_external_auto_redirect === 'true',
+    externalRegistered: map.auth_external_registered === 'true',
   };
 }
 
@@ -164,6 +198,18 @@ export async function updateAuthMode(formData: FormData): Promise<{ error?: stri
 
   const from = current?.value || 'built-in';
   if (from === mode) return {}; // No change
+
+  // An unregistered provider would lock every user out of the login page.
+  if (mode === 'external') {
+    const { data: registered } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'auth_external_registered')
+      .single();
+    if (registered?.value !== 'true') {
+      return { error: 'Configure and register the external provider before switching to External mode.' };
+    }
+  }
 
   await supabase.from('app_settings').update({ value: mode }).eq('key', 'auth_mode');
 
@@ -258,71 +304,243 @@ export async function updateSocialProvider(formData: FormData): Promise<{ error?
 }
 
 // ============================================================
-// 5. Update External Provider
+// 5. External Provider (Supabase Auth custom provider)
 // ============================================================
+
+const EXTERNAL_SETTING_KEYS = [
+  'auth_external_preset',
+  'auth_external_provider_name',
+  'auth_external_issuer_url',
+  'auth_external_authorization_url',
+  'auth_external_token_url',
+  'auth_external_userinfo_url',
+  'auth_external_scopes',
+] as const;
+
+type ServiceRoleClient = ReturnType<typeof createServiceRoleClient>;
+
+async function readExternalSettings(svc: ServiceRoleClient): Promise<ExternalProviderSettings> {
+  const { data } = await svc
+    .from('app_settings')
+    .select('key, value')
+    .in('key', EXTERNAL_SETTING_KEYS as unknown as string[]);
+  const map: Record<string, string> = {};
+  for (const row of data ?? []) map[row.key] = row.value ?? '';
+  return {
+    preset: map.auth_external_preset || 'surveyjs',
+    provider_name: map.auth_external_provider_name ?? '',
+    issuer_url: map.auth_external_issuer_url ?? '',
+    authorization_url: map.auth_external_authorization_url ?? '',
+    token_url: map.auth_external_token_url ?? '',
+    userinfo_url: map.auth_external_userinfo_url ?? '',
+    scopes: map.auth_external_scopes ?? '',
+  };
+}
+
+/** Vault access that throws on RPC errors, so a failed read is never mistaken for "absent". */
+function credentialVault(svc: ServiceRoleClient): CredentialVault {
+  return {
+    read: async (name) => {
+      const { data, error } = await svc.rpc('get_oauth_secret', { secret_name: name });
+      if (error) throw new Error(`Vault read of ${name} failed: ${error.message}`);
+      return typeof data === 'string' ? data : '';
+    },
+    write: async (name, value, description) => {
+      const { error } = await svc.rpc('store_oauth_secret', {
+        secret_name: name,
+        secret_value: value,
+        secret_description: description,
+      });
+      if (error) throw new Error(`Vault write of ${name} failed: ${error.message}`);
+    },
+    remove: async (name) => {
+      const { error } = await svc.rpc('delete_oauth_secret', { secret_name: name });
+      if (error) throw new Error(`Vault delete of ${name} failed: ${error.message}`);
+    },
+  };
+}
+
+async function readCredentials(vault: CredentialVault, idName: string, secretName: string): Promise<Credentials | null> {
+  const clientId = await vault.read(idName);
+  const clientSecret = await vault.read(secretName);
+  return clientId && clientSecret ? { clientId, clientSecret } : null;
+}
+
+async function setSetting(svc: ServiceRoleClient, key: string, value: string) {
+  await svc.from('app_settings').update({ value }).eq('key', key);
+}
+
+/**
+ * Syncs the saved settings + Vault credentials to Supabase Auth.
+ * Shared by `updateExternalProvider` and the explicit `registerExternalProvider` action.
+ */
+async function syncSavedExternalProvider(): Promise<{ error?: string; resolved: ResolvedExternalProvider }> {
+  const svc = createServiceRoleClient();
+  const vault = credentialVault(svc);
+  const resolved = resolveExternalProvider(await readExternalSettings(svc));
+
+  let creds: Credentials | null;
+  let previousCreds: Credentials | null;
+  try {
+    creds = await readCredentials(vault, EXTERNAL_CLIENT_ID, EXTERNAL_CLIENT_SECRET);
+    // Credentials the registered provider was created with, for the restore path.
+    // Without a backup, the current credentials have not changed since the last
+    // successful registration (every overwrite is preceded by a verified backup).
+    previousCreds = (await readCredentials(vault, EXTERNAL_CLIENT_ID_PREV, EXTERNAL_CLIENT_SECRET_PREV)) ?? creds;
+  } catch (err) {
+    // Touching Supabase Auth without a trustworthy restore point could break a working provider.
+    const message = err instanceof Error ? err.message : String(err);
+    await setSetting(svc, 'auth_external_last_error', message);
+    return { error: message, resolved };
+  }
+
+  const validationError = validateExternalProvider(resolved, !!creds);
+  if (validationError || !creds) {
+    const message = validationError ?? 'Client ID and Client Secret are required to register the provider.';
+    await setSetting(svc, 'auth_external_last_error', message);
+    return { error: message, resolved };
+  }
+
+  const result = await syncExternalProvider(
+    {
+      api: svc.auth.admin.customProviders,
+      saveStatus: async ({ registered, lastError }) => {
+        if (registered !== null) {
+          await setSetting(svc, 'auth_external_registered', registered ? 'true' : 'false');
+        }
+        await setSetting(svc, 'auth_external_last_error', lastError);
+      },
+      clearPreviousCredentials: async () => {
+        await vault.remove(EXTERNAL_CLIENT_ID_PREV);
+        await vault.remove(EXTERNAL_CLIENT_SECRET_PREV);
+      },
+    },
+    buildCustomProviderParams(resolved, creds),
+    previousCreds,
+  );
+  return { ...result, resolved };
+}
+
+function revalidateAuthPages() {
+  revalidatePath('/admin/auth');
+  revalidatePath('/login');
+  revalidatePath('/signup');
+}
 
 export async function updateExternalProvider(formData: FormData): Promise<{ error?: string }> {
   const { supabase, profile } = await requireAdminProfile();
 
-  const providerName = (formData.get('provider_name') as string ?? '').trim();
-  const clientId = (formData.get('client_id') as string ?? '').trim();
-  const clientSecret = (formData.get('client_secret') as string ?? '').trim();
-  const issuerUrl = (formData.get('issuer_url') as string ?? '').trim();
-  const scopes = (formData.get('scopes') as string ?? '').trim() || 'openid email profile';
+  const field = (name: string) => ((formData.get(name) as string | null) ?? '').trim();
+  const clientId = field('client_id');
+  const clientSecret = field('client_secret');
   const autoRedirect = formData.get('auto_redirect') === 'on';
 
-  // Validate issuer URL if provided
-  if (issuerUrl) {
-    try {
-      new URL(issuerUrl);
-    } catch {
-      return { error: 'Issuer URL is not a valid URL.' };
-    }
+  // For the SurveyJS preset the submitted endpoint fields are ignored.
+  const resolved = resolveExternalProvider({
+    preset: field('preset'),
+    provider_name: field('provider_name'),
+    issuer_url: field('issuer_url'),
+    authorization_url: field('authorization_url'),
+    token_url: field('token_url'),
+    userinfo_url: field('userinfo_url'),
+    scopes: field('scopes'),
+  });
+
+  const svc = createServiceRoleClient();
+
+  const hasStored = async (name: string) =>
+    !!(await svc.rpc('has_oauth_secret', { secret_name: name })).data;
+  const hasCreds =
+    (!!clientId || (await hasStored(EXTERNAL_CLIENT_ID))) &&
+    (!!clientSecret || (await hasStored(EXTERNAL_CLIENT_SECRET)));
+
+  const validationError = validateExternalProvider(
+    { ...resolved, preset: field('preset') || 'surveyjs' },
+    hasCreds,
+  );
+  if (validationError) return { error: validationError };
+
+  // Back up the registered provider's credentials before overwriting them, so
+  // a failed registration can restore it. Nothing is changed if that fails.
+  if (clientId || clientSecret) {
+    const { error: backupError } = await snapshotPreviousCredentials(credentialVault(svc));
+    if (backupError) return { error: backupError };
   }
 
-  // Store credentials in Vault if provided
-  const svc = createServiceRoleClient();
   if (clientId) {
     const { error: idErr } = await svc.rpc('store_oauth_secret', {
-      secret_name: 'auth_external_client_id',
+      secret_name: EXTERNAL_CLIENT_ID,
       secret_value: clientId,
-      secret_description: 'External OIDC client ID',
+      secret_description: 'External provider client ID',
     });
     if (idErr) return { error: `Failed to store Client ID: ${idErr.message}` };
   }
   if (clientSecret) {
     const { error: secretErr } = await svc.rpc('store_oauth_secret', {
-      secret_name: 'auth_external_client_secret',
+      secret_name: EXTERNAL_CLIENT_SECRET,
       secret_value: clientSecret,
-      secret_description: 'External OIDC client secret',
+      secret_description: 'External provider client secret',
     });
     if (secretErr) return { error: `Failed to store Client Secret: ${secretErr.message}` };
   }
 
-  // Update settings
   const settingsToUpdate: Record<string, string> = {
-    auth_external_provider_name: providerName,
-    auth_external_issuer_url: issuerUrl,
-    auth_external_scopes: scopes,
+    auth_external_preset: resolved.preset,
+    auth_external_provider_name: resolved.provider_name,
+    auth_external_issuer_url: resolved.issuer_url,
+    auth_external_authorization_url: resolved.authorization_url,
+    auth_external_token_url: resolved.token_url,
+    auth_external_userinfo_url: resolved.userinfo_url,
+    auth_external_scopes: resolved.scopes,
     auth_external_auto_redirect: autoRedirect ? 'true' : 'false',
   };
-
   for (const [key, value] of Object.entries(settingsToUpdate)) {
     await supabase.from('app_settings').update({ value }).eq('key', key);
   }
 
-  // Audit log
+  const result = await syncSavedExternalProvider();
+
   await supabase.from('admin_audit_log').insert({
     admin_id: profile.id,
     action: 'external_provider_updated',
     target_type: 'app_settings',
-    details: { provider_name: providerName, issuer_url: issuerUrl },
+    target_id: EXTERNAL_PROVIDER_ID,
+    details: {
+      preset: resolved.preset,
+      provider_type: resolved.provider_type,
+      provider_name: resolved.provider_name,
+      registered: !result.error,
+    },
   });
 
-  revalidatePath('/admin/auth');
-  revalidatePath('/login');
-  revalidatePath('/signup');
-  return {};
+  revalidateAuthPages();
+  return result.error ? { error: result.error } : {};
+}
+
+/**
+ * Re-registers the saved external provider with Supabase Auth without changing
+ * any setting — the retry path after a transient failure.
+ */
+export async function registerExternalProvider(): Promise<{ error?: string }> {
+  const { supabase, profile } = await requireAdminProfile();
+
+  const result = await syncSavedExternalProvider();
+
+  await supabase.from('admin_audit_log').insert({
+    admin_id: profile.id,
+    action: 'external_provider_registered',
+    target_type: 'app_settings',
+    target_id: EXTERNAL_PROVIDER_ID,
+    details: {
+      preset: result.resolved.preset,
+      provider_type: result.resolved.provider_type,
+      registered: !result.error,
+      ...(result.error ? { error: result.error } : {}),
+    },
+  });
+
+  revalidateAuthPages();
+  return result.error ? { error: result.error } : {};
 }
 
 // ============================================================
@@ -336,32 +554,63 @@ export async function testAuthConnection(formData: FormData): Promise<{ success:
     const provider = formData.get('provider') as string;
 
     if (provider === 'external') {
-      // For external OIDC: fetch the well-known configuration
-      const supabase = await createServerClient();
-      const { data: issuerSetting } = await supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'auth_external_issuer_url')
-        .single();
+      const svc = createServiceRoleClient();
+      const resolved = resolveExternalProvider(await readExternalSettings(svc));
+      const details: string[] = [];
 
-      const issuerUrl = issuerSetting?.value;
-      if (!issuerUrl) {
-        return { success: false, error: 'Issuer URL is not configured.' };
+      if (resolved.provider_type === 'oauth2') {
+        if (!resolved.authorization_url || !resolved.userinfo_url) {
+          return { success: false, error: 'OAuth 2.0 endpoints are not configured.' };
+        }
+        // Any HTTP response means reachable — the endpoint needs params, so 4xx is expected.
+        try {
+          await fetch(resolved.authorization_url, { signal: AbortSignal.timeout(10000), redirect: 'manual' });
+        } catch (err) {
+          return { success: false, error: `Authorization endpoint unreachable: ${err instanceof Error ? err.message : String(err)}` };
+        }
+        let userinfoStatus: number;
+        try {
+          const res = await fetch(resolved.userinfo_url, { signal: AbortSignal.timeout(10000), redirect: 'manual' });
+          userinfoStatus = res.status;
+        } catch (err) {
+          return { success: false, error: `UserInfo endpoint unreachable: ${err instanceof Error ? err.message : String(err)}` };
+        }
+        if (userinfoStatus !== 401 && userinfoStatus !== 403) {
+          return {
+            success: false,
+            error: `UserInfo endpoint should reject anonymous requests (401/403) but returned HTTP ${userinfoStatus}.`,
+          };
+        }
+        details.push(`Endpoints reachable (${new URL(resolved.authorization_url).host})`);
+      } else {
+        if (!resolved.issuer_url) {
+          return { success: false, error: 'Issuer URL is not configured.' };
+        }
+        const wellKnownUrl = resolved.issuer_url.replace(/\/+$/, '') + '/.well-known/openid-configuration';
+        const response = await fetch(wellKnownUrl, { signal: AbortSignal.timeout(10000) });
+        if (!response.ok) {
+          return { success: false, error: `OIDC discovery failed: HTTP ${response.status}` };
+        }
+        const config = await response.json();
+        if (!config.authorization_endpoint || !config.token_endpoint) {
+          return { success: false, error: 'Invalid OIDC configuration: missing required endpoints.' };
+        }
+        details.push(`Issuer: ${config.issuer ?? resolved.issuer_url}`);
       }
 
-      const wellKnownUrl = issuerUrl.replace(/\/$/, '') + '/.well-known/openid-configuration';
-      const response = await fetch(wellKnownUrl, { signal: AbortSignal.timeout(10000) });
-
-      if (!response.ok) {
-        return { success: false, error: `OIDC discovery failed: HTTP ${response.status}` };
+      const { data: registered, error: regError } = await svc.auth.admin.customProviders.getProvider(EXTERNAL_PROVIDER_ID);
+      if (regError || !registered) {
+        return {
+          success: false,
+          error: `Provider is not registered with Supabase Auth${regError ? `: ${regError.message}` : '.'}`,
+        };
       }
-
-      const config = await response.json();
-      if (!config.authorization_endpoint || !config.token_endpoint) {
-        return { success: false, error: 'Invalid OIDC configuration: missing required endpoints.' };
+      if (!registered.enabled) {
+        return { success: false, error: `Provider ${registered.identifier} is registered but disabled in Supabase Auth.` };
       }
+      details.push(`Supabase Auth: ${registered.identifier} (${registered.provider_type}, enabled)`);
 
-      return { success: true, details: `Issuer: ${config.issuer ?? issuerUrl}` };
+      return { success: true, details: details.join(' · ') };
     }
 
     // For social providers: check that credentials exist
@@ -387,7 +636,11 @@ export async function testAuthConnection(formData: FormData): Promise<{ success:
 // 7. Get Redirect URI
 // ============================================================
 
+/**
+ * The URI to register at the identity provider. Supabase Auth receives the
+ * provider's redirect there and then forwards to the app's `/auth/callback`.
+ */
 export async function getRedirectUri(): Promise<string> {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://127.0.0.1:3000';
-  return `${appUrl}/auth/callback`;
+  const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'http://127.0.0.1:54321').replace(/\/+$/, '');
+  return `${supabaseUrl}/auth/v1/callback`;
 }

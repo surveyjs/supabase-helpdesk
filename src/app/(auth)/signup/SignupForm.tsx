@@ -1,8 +1,9 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 import { signup, type AuthState } from '@/lib/actions/auth';
 import { createBrowserClient } from '@/lib/supabase/client';
+import { signInWithExternalProvider } from '@/lib/supabase/external-sign-in';
 import type { PublicAuthConfig } from '@/lib/actions/auth-config';
 
 const initialState: AuthState = {};
@@ -44,25 +45,33 @@ function SocialButton({ provider, label }: { provider: string; label: string }) 
 }
 
 function ExternalButton({ providerName }: { providerName: string }) {
+  const [error, setError] = useState('');
+
   async function handleClick() {
-    const supabase = createBrowserClient();
-    const redirectTo = `${window.location.origin}/auth/callback`;
-    await supabase.auth.signInWithOAuth({
-      // @ts-expect-error - OIDC provider type not in Supabase types
-      provider: 'oidc',
-      options: { redirectTo },
-    });
+    const result = await signInWithExternalProvider(createBrowserClient());
+    setError(result.error ?? '');
   }
 
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      className="w-full bg-blue-600 text-white rounded py-2 px-4 text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-      data-testid="external-signup-btn"
-    >
-      Sign in with {providerName || 'External Provider'}
-    </button>
+    <>
+      {error && (
+        <div
+          role="alert"
+          className="mb-4 p-3 rounded bg-red-50 border border-red-200 text-red-700 text-sm"
+          data-testid="external-login-error"
+        >
+          {error}
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={handleClick}
+        className="w-full bg-blue-600 text-white rounded py-2 px-4 text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+        data-testid="external-signup-btn"
+      >
+        Sign in with {providerName || 'External Provider'}
+      </button>
+    </>
   );
 }
 
@@ -77,7 +86,13 @@ export function SignupForm({ config }: { config: PublicAuthConfig }) {
         <p className="text-sm text-gray-600 mb-6">
           Account creation is managed by your organization&apos;s identity provider.
         </p>
-        <ExternalButton providerName={config.externalProviderName} />
+        {config.externalRegistered ? (
+          <ExternalButton providerName={config.externalProviderName} />
+        ) : (
+          <p className="text-sm text-gray-600" data-testid="external-not-configured">
+            External sign-in is not configured. Contact your administrator.
+          </p>
+        )}
         <p className="mt-4 text-sm text-center text-gray-600">
           Already have an account?{' '}
           <a href="/login" className="text-blue-600 hover:text-blue-800 underline">Log in</a>

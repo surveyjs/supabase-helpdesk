@@ -12,6 +12,12 @@ type SurveyJsonFormProps = {
   onComplete?: (data: Record<string, unknown>) => void;
   onValueChanged?: (data: Record<string, unknown>) => void;
   mode?: 'complete' | 'autosave';
+  /**
+   * Complete mode only: keep the form on screen after the Complete button is
+   * pressed (the survey never enters the completed state), so the same data
+   * can be submitted again — e.g. after a server-side error.
+   */
+  keepOpen?: boolean;
   className?: string;
 };
 
@@ -21,6 +27,7 @@ export function SurveyJsonForm({
   onComplete,
   onValueChanged,
   mode = 'complete',
+  keepOpen = false,
   className,
 }: SurveyJsonFormProps) {
   const model = useMemo(() => {
@@ -59,6 +66,18 @@ export function SurveyJsonForm({
   useEffect(() => {
     if (!onComplete) return;
 
+    if (keepOpen) {
+      // onCompleting fires after page validation; cancelling it keeps the form open.
+      const completingHandler = (_: unknown, options: { allow: boolean }) => {
+        options.allow = false;
+        onComplete((model.data ?? {}) as Record<string, unknown>);
+      };
+      model.onCompleting.add(completingHandler);
+      return () => {
+        model.onCompleting.remove(completingHandler);
+      };
+    }
+
     const handler = () => {
       onComplete((model.data ?? {}) as Record<string, unknown>);
     };
@@ -67,7 +86,7 @@ export function SurveyJsonForm({
     return () => {
       model.onComplete.remove(handler);
     };
-  }, [model, onComplete]);
+  }, [model, onComplete, keepOpen]);
 
   useEffect(() => {
     if (!onValueChanged) return;

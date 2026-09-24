@@ -1,8 +1,9 @@
 'use client';
 
-import { useActionState, useEffect } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { login, type AuthState } from '@/lib/actions/auth';
 import { createBrowserClient } from '@/lib/supabase/client';
+import { signInWithExternalProvider } from '@/lib/supabase/external-sign-in';
 import type { PublicAuthConfig } from '@/lib/actions/auth-config';
 
 const initialState: AuthState = {};
@@ -44,15 +45,16 @@ function SocialButton({ provider, label }: { provider: string; label: string }) 
   );
 }
 
-function ExternalButton({ providerName }: { providerName: string }) {
+function ExternalButton({
+  providerName,
+  onError,
+}: {
+  providerName: string;
+  onError: (message: string) => void;
+}) {
   async function handleClick() {
-    const supabase = createBrowserClient();
-    const redirectTo = `${window.location.origin}/auth/callback`;
-    await supabase.auth.signInWithOAuth({
-      // @ts-expect-error - OIDC provider type not in Supabase types
-      provider: 'oidc',
-      options: { redirectTo },
-    });
+    const { error } = await signInWithExternalProvider(createBrowserClient());
+    if (error) onError(error);
   }
 
   return (
@@ -67,38 +69,81 @@ function ExternalButton({ providerName }: { providerName: string }) {
   );
 }
 
-export function LoginForm({ config }: { config: PublicAuthConfig }) {
-  const [state, formAction, pending] = useActionState(login, initialState);
+function CallbackError({ providerName, detail }: { providerName: string; detail: string }) {
+  return (
+    <div
+      role="alert"
+      className="mb-4 p-3 rounded bg-red-50 border border-red-200 text-red-700 text-sm"
+      data-testid="auth-callback-error"
+    >
+      Sign-in with {providerName} failed.{detail ? ` ${detail}` : ''}
+    </div>
+  );
+}
 
-  // Auto-redirect for external mode
+export function LoginForm({
+  config,
+  callbackError,
+}: {
+  config: PublicAuthConfig;
+  /** Set when `/auth/callback` redirected here after a failed sign-in. */
+  callbackError: { detail: string } | null;
+}) {
+  const [state, formAction, pending] = useActionState(login, initialState);
+  const [externalError, setExternalError] = useState('');
+
+  const externalActive = config.authMode === 'external' && config.externalRegistered;
+  const externalLabel = config.externalProviderName || 'External Provider';
+
+  // Auto-redirect for external mode. Never from a page that is showing an
+  // error — a failed callback would otherwise restart the flow in a loop.
   useEffect(() => {
-    if (
-      config.authMode === 'external' &&
-      config.autoRedirect &&
-      typeof window !== 'undefined'
-    ) {
-      const params = new URLSearchParams(window.location.search);
-      if (!params.has('no_redirect')) {
-        const supabase = createBrowserClient();
-        const redirectTo = `${window.location.origin}/auth/callback`;
-        supabase.auth.signInWithOAuth({
-          // @ts-expect-error - OIDC provider type not in Supabase types
-          provider: 'oidc',
-          options: { redirectTo },
-        });
-      }
-    }
-  }, [config]);
+    if (!externalActive || !config.autoRedirect) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('no_redirect') || params.has('error')) return;
+    signInWithExternalProvider(createBrowserClient()).then(({ error }) => {
+      if (error) setExternalError(error);
+    });
+  }, [externalActive, config.autoRedirect]);
+
+  const callbackErrorBanner = callbackError && (
+    <CallbackError
+      providerName={config.authMode === 'external' ? externalLabel : 'the external provider'}
+      detail={callbackError.detail}
+    />
+  );
 
   // External mode: show only the external provider button
   if (config.authMode === 'external') {
+    if (!config.externalRegistered) {
+      return (
+        <>
+          <h1 className="text-2xl font-semibold text-gray-900 mb-6">Log in</h1>
+          {callbackErrorBanner}
+          <p className="text-sm text-gray-600" data-testid="external-not-configured">
+            External sign-in is not configured. Contact your administrator.
+          </p>
+        </>
+      );
+    }
+
     return (
       <>
         <h1 className="text-2xl font-semibold text-gray-900 mb-6">Log in</h1>
+        {callbackErrorBanner}
         <p className="text-sm text-gray-600 mb-4">
           Sign in using your organization&apos;s identity provider.
         </p>
-        <ExternalButton providerName={config.externalProviderName} />
+        {externalError && (
+          <div
+            role="alert"
+            className="mb-4 p-3 rounded bg-red-50 border border-red-200 text-red-700 text-sm"
+            data-testid="external-login-error"
+          >
+            {externalError}
+          </div>
+        )}
+        <ExternalButton providerName={config.externalProviderName} onError={setExternalError} />
       </>
     );
   }
@@ -107,6 +152,7 @@ export function LoginForm({ config }: { config: PublicAuthConfig }) {
   return (
     <>
       <h1 className="text-2xl font-semibold text-gray-900 mb-6">Log in</h1>
+      {callbackErrorBanner}
       {state.error && (
         <div role="alert" className="mb-4 p-3 rounded bg-red-50 border border-red-200 text-red-700 text-sm">
           {state.error}

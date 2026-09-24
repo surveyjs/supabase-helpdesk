@@ -151,6 +151,26 @@ SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>
 
 The anon key and service role key are printed by `supabase start`.
 
+### Authentication
+
+Admins choose the authentication mode at `/admin/auth`: **Built-in** (email/password plus optional
+social providers) or **External**, where every user signs in through one external identity provider.
+The external provider is registered with Supabase Auth as the custom provider `custom:external`
+(Supabase Auth v2.188+, via the admin API — so `SUPABASE_SERVICE_ROLE_KEY` is required). Presets:
+**SurveyJS**, **Generic OpenID Connect**, and **Generic OAuth 2.0**.
+
+#### SurveyJS SSO preset
+
+1. At [auth.surveyjs.io](https://auth.surveyjs.io), create an OAuth client with the redirect URI
+   `${NEXT_PUBLIC_SUPABASE_URL}/auth/v1/callback` (shown, with a Copy button, on `/admin/auth`).
+2. On `/admin/auth` (still in Built-in mode), keep the **SurveyJS** preset, paste the client ID and
+   secret, and click **Save**. The status line changes to "Registered with Supabase Auth ✓".
+3. Switch the authentication mode to **External**. The login page now shows "Sign in with SurveyJS".
+
+Switching to External is refused until the provider is registered, and a failed re-registration
+never replaces a working provider. If sign-in fails, `/login` shows the error and does not
+auto-redirect; `/login?no_redirect=true` also suppresses the auto-redirect.
+
 ## Scripts
 
 | Command | Description |

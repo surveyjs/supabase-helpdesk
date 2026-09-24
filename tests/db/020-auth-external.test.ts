@@ -1,5 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { createServiceRoleClient } from '../helpers/supabase';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'http://127.0.0.1:54321';
@@ -10,6 +10,20 @@ const USER_ID = '00000000-0000-0000-0000-000000001002';
 
 let svc: SupabaseClient;
 const clients: Record<string, SupabaseClient> = {};
+
+// Defaults seeded by 001_initial_schema.sql for the external-provider keys.
+const EXTERNAL_DEFAULTS: Record<string, string> = {
+  auth_external_preset: 'surveyjs',
+  auth_external_provider_name: '',
+  auth_external_issuer_url: '',
+  auth_external_authorization_url: '',
+  auth_external_token_url: '',
+  auth_external_userinfo_url: '',
+  auth_external_scopes: 'openid email profile',
+  auth_external_auto_redirect: 'false',
+  auth_external_registered: 'false',
+  auth_external_last_error: '',
+};
 
 async function ensureAuthUser(
   admin: SupabaseClient,
@@ -196,6 +210,64 @@ describe('Phase 21: Auth External — Settings', () => {
       const defaultVal = key === 'auth_external_scopes' ? 'openid email profile' : key === 'auth_external_auto_redirect' ? 'false' : '';
       await admin.from('app_settings').update({ value: defaultVal }).eq('key', key);
     }
+  });
+});
+
+describe('Auth External — custom provider settings', () => {
+  afterEach(async () => {
+    for (const [key, value] of Object.entries(EXTERNAL_DEFAULTS)) {
+      await svc.from('app_settings').update({ value }).eq('key', key);
+    }
+  });
+
+  it('preset, OAuth2 endpoint and registration keys exist with defaults', async () => {
+    const admin = await clientForUser('authext-admin@test.local');
+    const keys = [
+      'auth_external_preset',
+      'auth_external_authorization_url',
+      'auth_external_token_url',
+      'auth_external_userinfo_url',
+      'auth_external_registered',
+      'auth_external_last_error',
+    ];
+    const { data, error } = await admin.from('app_settings').select('key, value').in('key', keys);
+    expect(error).toBeNull();
+
+    const map = new Map(data!.map((row) => [row.key, row.value]));
+    expect(map.size).toBe(keys.length);
+    for (const key of keys) {
+      expect(map.get(key)).toBe(EXTERNAL_DEFAULTS[key]);
+    }
+  });
+
+  it('admin can round-trip the new keys', async () => {
+    const admin = await clientForUser('authext-admin@test.local');
+    const updates: Record<string, string> = {
+      auth_external_preset: 'oauth2',
+      auth_external_authorization_url: 'https://idp.example.com/authorize',
+      auth_external_token_url: 'https://idp.example.com/token',
+      auth_external_userinfo_url: 'https://idp.example.com/userinfo',
+      auth_external_registered: 'true',
+      auth_external_last_error: 'Supabase Auth rejected the provider',
+    };
+    for (const [key, value] of Object.entries(updates)) {
+      const { error } = await admin.from('app_settings').update({ value }).eq('key', key);
+      expect(error).toBeNull();
+    }
+
+    const { data } = await admin.from('app_settings').select('key, value').in('key', Object.keys(updates));
+    const map = new Map(data!.map((row) => [row.key, row.value]));
+    for (const [key, value] of Object.entries(updates)) {
+      expect(map.get(key)).toBe(value);
+    }
+  });
+
+  it('non-admin cannot change the registration flag', async () => {
+    const user = await clientForUser('authext-user@test.local');
+    await user.from('app_settings').update({ value: 'true' }).eq('key', 'auth_external_registered');
+
+    const { data } = await svc.from('app_settings').select('value').eq('key', 'auth_external_registered').single();
+    expect(data?.value).toBe('false');
   });
 });
 

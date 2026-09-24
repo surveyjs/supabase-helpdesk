@@ -5,9 +5,21 @@ import { createServiceRoleClient } from '@/lib/supabase/server';
 // Allowlist of valid internal redirect paths for the auth callback
 const ALLOWED_NEXT_PATHS = ['/', '/reset-password', '/tickets'];
 
+/** Plain-text, single-line, max 200 chars — the value is shown on the login page. */
+function sanitizeErrorDetail(value: string | null | undefined): string {
+  return (value ?? '')
+    .replace(/<[^>]*>/g, '')
+    .replace(/[\u0000-\u001f\u007f<>]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 200);
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const code = searchParams.get('code');
+  // Supabase Auth forwards provider/token-exchange failures as query params.
+  let errorDetail = sanitizeErrorDetail(searchParams.get('error_description') ?? searchParams.get('error'));
   const rawNext = searchParams.get('next') ?? '/';
 
   // Validate the `next` parameter to prevent open redirects:
@@ -22,6 +34,7 @@ export async function GET(request: NextRequest) {
   if (code) {
     const supabase = await createServerClient();
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error && !errorDetail) errorDetail = sanitizeErrorDetail(error.message);
 
     if (!error && data.user) {
       // For OAuth users signing in for the first time: update display name from token claims
@@ -62,9 +75,14 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // On error or missing code, redirect to login with error
+  // On error or missing code, redirect to login with error. `no_redirect`
+  // stops the login page from auto-redirecting straight back into the
+  // failing OAuth flow.
   const loginUrl = request.nextUrl.clone();
   loginUrl.pathname = '/login';
+  loginUrl.search = '';
   loginUrl.searchParams.set('error', 'auth_callback_error');
+  loginUrl.searchParams.set('no_redirect', 'true');
+  if (errorDetail) loginUrl.searchParams.set('error_detail', errorDetail);
   return NextResponse.redirect(loginUrl);
 }

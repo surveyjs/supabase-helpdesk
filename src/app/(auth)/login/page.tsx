@@ -3,8 +3,22 @@ import { LoginForm } from './LoginForm';
 
 export const dynamic = 'force-dynamic';
 
-export default async function LoginPage() {
-  const config = await getPublicAuthConfig();
+function first(value: string | string[] | undefined): string {
+  return (Array.isArray(value) ? value[0] : value) ?? '';
+}
 
-  return <LoginForm config={config} />;
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const config = await getPublicAuthConfig();
+  const params = await searchParams;
+
+  return (
+    <LoginForm
+      config={config}
+      callbackError={first(params.error) ? { detail: first(params.error_detail).slice(0, 200) } : null}
+    />
+  );
 }

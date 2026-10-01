@@ -24,7 +24,7 @@
               "type": "html",
               "name": "surveyjs_preset_info",
               "visibleIf": "{preset} = 'surveyjs'",
-              "html": "<div class=\"text-sm text-gray-600\" data-testid=\"surveyjs-preset-info\"><ul class=\"list-disc pl-5\"><li>Authorization: <code>https://auth.surveyjs.io/OAuth/Authorize</code></li><li>Token: <code>https://auth.surveyjs.io/OAuth/Token</code></li><li>UserInfo: <code>https://auth.surveyjs.io/OAuth/UserInfo</code></li></ul><p class=\"mt-2\">ID tokens from auth.surveyjs.io are HS256-signed, so this provider is registered as OAuth 2.0 and the user is read from the UserInfo endpoint.</p></div>"
+              "html": "<div class=\"text-sm text-gray-600\" data-testid=\"surveyjs-preset-info\"><ul class=\"list-disc pl-5\"><li>Authorization: <code>https://auth.surveyjs.io/OAuth/Authorize</code></li><li>Token: <code>https://auth.surveyjs.io/OAuth/Token</code></li><li>UserInfo: <code>https://auth.surveyjs.io/OAuth/UserInfo</code></li><li>Scopes: <code>email profile</code></li></ul><p class=\"mt-2\">auth.surveyjs.io is an OAuth 2.0 server (no OpenID Connect), so this provider is registered as OAuth 2.0 and the user is read from the UserInfo endpoint.</p></div>"
             },
             {
               "type": "text",
@@ -81,7 +81,8 @@
               "type": "text",
               "name": "scopes",
               "title": "Scopes",
-              "description": "Space-separated list of OAuth scopes."
+              "description": "Space-separated list of OAuth scopes.",
+              "visibleIf": "{preset} <> 'surveyjs'"
             },
             {
               "type": "boolean",

@@ -26,7 +26,10 @@ with no other input. Generic OIDC / OAuth2 providers remain supported as a secon
 
 ## What `https://auth.surveyjs.io` actually is
 
-Verified from `https://auth.surveyjs.io/.well-known/openid-configuration` (do not re-derive):
+auth.surveyjs.io is now a **plain OAuth 2.0 authorization server, not an OpenID Connect
+provider** (it changed after this spec was first written; see **Update 2026-10-01** at the end
+of this file). Verified on 2026-10-01 from
+`https://auth.surveyjs.io/.well-known/oauth-authorization-server` (RFC 8414 metadata):
 
 | Field | Value |
 |---|---|
@@ -34,26 +37,36 @@ Verified from `https://auth.surveyjs.io/.well-known/openid-configuration` (do no
 | `authorization_endpoint` | `https://auth.surveyjs.io/OAuth/Authorize` |
 | `token_endpoint` | `https://auth.surveyjs.io/OAuth/Token` |
 | `userinfo_endpoint` | `https://auth.surveyjs.io/OAuth/UserInfo` |
+| `revocation_endpoint` | `https://auth.surveyjs.io/OAuth/Revoke` (new) |
 | `end_session_endpoint` | `https://auth.surveyjs.io/OAuth/Logout` |
-| `jwks_uri` | `https://auth.surveyjs.io/.well-known/jwks` → returns `{"keys":[]}` |
 | `response_types_supported` | `["code"]` |
-| `id_token_signing_alg_values_supported` | `["HS256"]` |
-| `token_endpoint_auth_methods_supported` | `["client_secret_post"]` |
+| `grant_types_supported` | `["authorization_code"]` |
+| `token_endpoint_auth_methods_supported` | `["client_secret_post", "client_secret_basic"]` |
 | `code_challenge_methods_supported` | `["S256"]` |
-| `scopes_supported` | `openid profile email` |
-| `claims_supported` | `sub email name` |
+| `scopes_supported` | `["profile", "email"]` (no `openid`) |
+
+Gone compared with the earlier snapshot: `/.well-known/openid-configuration`, `jwks_uri`,
+`id_token_signing_alg_values_supported` (HS256 ID tokens) and `claims_supported`. The server
+issues no ID tokens at all.
+
+Observed behaviour (probed with a dummy client):
+- `GET /OAuth/Authorize` without params → `400 client_id is required.`; without `state` →
+  `400 state is required for CSRF protection.`; unknown client → `400 Unknown client_id.`
+- `GET /OAuth/UserInfo` anonymously → `401`.
+- `POST /OAuth/Token` with bad credentials, sent either in the body or as HTTP Basic →
+  `401 {"error":"invalid_client"}`.
 
 Consequences that drive the design:
 
-- **It must be registered as `provider_type: 'oauth2'`, not `'oidc'`.** ID tokens are HS256
-  (signed with the client secret) and the JWKS is empty, so Supabase's OIDC mode — which
-  verifies the ID token against `jwks_uri` — rejects every login. In OAuth2 mode Supabase
-  ignores the ID token and reads the user from `userinfo_url`.
-- PKCE S256 is supported → `pkce_enabled: true`.
-- The token endpoint accepts the client secret **only in the POST body**
-  (`client_secret_post`). Confirm during the manual test (see **Verification**) that the
-  Supabase token exchange succeeds; if it fails with `invalid_client`, look for a client-auth
-  style option on the custom-provider API and set it, and record the outcome in this file.
+- **It must be registered as `provider_type: 'oauth2'`.** There is no discovery document and
+  no ID token, so Supabase's OIDC mode cannot be used at all. In OAuth2 mode Supabase reads
+  the user from `userinfo_url`, which is the only identity source auth.surveyjs.io offers.
+- **Request scopes `email profile`, not `openid email profile`.** `openid` is no longer in
+  `scopes_supported`. Whether the server rejects it with `invalid_scope` or ignores it can only
+  be checked with a real client, so do not send it.
+- PKCE S256 is supported → `pkce_enabled: true`. `state` is mandatory; GoTrue always sends it.
+- The token endpoint accepts both `client_secret_post` and `client_secret_basic`, so the
+  client-authentication style used by GoTrue's token exchange no longer matters.
 
 ## Prerequisites (already in place)
 
@@ -111,7 +124,7 @@ export const SURVEYJS_PRESET = {
   token_url: 'https://auth.surveyjs.io/OAuth/Token',
   userinfo_url: 'https://auth.surveyjs.io/OAuth/UserInfo',
   issuer_url: 'https://auth.surveyjs.io',
-  scopes: 'openid email profile',
+  scopes: 'email profile',   // fixed by the preset; auth.surveyjs.io does not list `openid`
 } as const;
 
 export type ExternalProviderSettings = { /* the auth_external_* keys as strings */ };
@@ -258,8 +271,8 @@ External." Only the *login/signup behaviour* depends on `auth_mode`; configurati
 - `authorization_url`, `token_url`, `userinfo_url` — `inputType: url`,
   `visibleIf: {preset} = 'oauth2'`, `isRequired: true` when visible.
 - For `surveyjs` show a read-only `html` block listing the preset endpoints and a note:
-  "ID tokens from auth.surveyjs.io are HS256-signed, so this provider is registered as
-  OAuth 2.0 and the user is read from the UserInfo endpoint."
+  "auth.surveyjs.io is an OAuth 2.0 server (no OpenID Connect), so this provider is
+  registered as OAuth 2.0 and the user is read from the UserInfo endpoint."
 - `client_id`, `client_secret` — unchanged; placeholder "•••••• (saved)" when
   `auth_external_client_id_present`.
 - `scopes`, `auto_redirect` — unchanged.
@@ -311,7 +324,7 @@ chain cannot cover it).
 **Unit** — `src/lib/auth/__tests__/external-provider.test.ts` (Vitest, same layout as
 `src/lib/tickets/__tests__/`):
 - `resolveExternalProvider` with `preset: 'surveyjs'` yields the exact SurveyJS endpoints,
-  `provider_type: 'oauth2'`, scopes `openid email profile`, regardless of submitted URL fields;
+  `provider_type: 'oauth2'`, scopes `email profile`, regardless of submitted URL or scope fields;
   `preset: 'oidc'` → `provider_type: 'oidc'`; `preset: 'oauth2'` → `'oauth2'`.
 - `buildCustomProviderParams` for `surveyjs` → `identifier: 'custom:external'`,
   `provider_type: 'oauth2'`, `pkce_enabled: true`, `authorization_url/token_url/userinfo_url`
@@ -413,9 +426,9 @@ Existing e2e tests that assert the old `/auth/callback` redirect URI text must b
   - A missing provider returns 404 `custom_provider_not_found`, which is treated as "no
     previous provider".
   - `provider_type` / `identifier` are immutable, so they are stripped from `updateProvider`.
-- **`client_secret_post`:** *not yet verified.* The custom-provider API has no client-auth-style
-  option (see `CreateCustomProviderParams` in auth-js 2.103). If the manual test fails with
-  `invalid_client`, it needs a GoTrue-side change.
+- **`client_secret_post`:** no longer a risk. auth.surveyjs.io now accepts both
+  `client_secret_post` and `client_secret_basic` (as of 2026-10-01), so the custom-provider
+  API's missing client-auth-style option does not matter.
 - **`attribute_mapping`:** none is sent. Whether `name` / `email` land in `user_metadata` is
   still to be confirmed in the manual test; `/auth/callback` already falls back through
   `full_name → name → preferred_username → user_name`.
@@ -455,3 +468,62 @@ Existing e2e tests that assert the old `/auth/callback` redirect URI text must b
     hand-built `/auth/v1/authorize?provider=custom:external` URL. This matches how
     `enabled: true` is specified; it becomes relevant only if Built-in deployments must block
     external sign-ups.
+
+## Update 2026-10-01: auth.surveyjs.io switched to plain OAuth 2.0
+
+auth.surveyjs.io dropped OpenID Connect. `/.well-known/openid-configuration` and the JWKS
+endpoint now return 404. The server publishes RFC 8414 metadata at
+`/.well-known/oauth-authorization-server` instead; see the table at the top of this file. The
+endpoint URLs did not change.
+
+### Decision: keep commit e8a1d74, do not revert it
+
+The IdP change does not make this work obsolete. It confirms the main design choice.
+
+- **The custom provider is still the only way to sign in.** Supabase Auth has no built-in
+  provider for an arbitrary OAuth 2.0 / OIDC server. Before e8a1d74 the login page called
+  `signInWithOAuth({ provider: 'oidc' })`, which GoTrue rejects whatever the IdP supports, and
+  nothing registered a provider with GoTrue. Reverting would leave External mode broken again.
+- **The SurveyJS preset was already registered as `oauth2`** and reads the user from
+  UserInfo. That is exactly what a plain OAuth 2.0 server needs. Only the reason has changed:
+  before, OIDC was unusable because of HS256 ID tokens and an empty JWKS; now it does not
+  exist at all.
+- **One earlier risk is gone.** The token endpoint now also accepts `client_secret_basic`.
+- **The commit also fixes bugs unrelated to the IdP:** the redirect loop after a callback
+  error (`no_redirect`), the `{ error }` → `{ message }` bug in `SocialAuthSurveyForm`, the
+  guard that blocks switching to External mode while unregistered, the wrong Redirect URI and
+  `keepOpen` for complete-mode forms. A revert would bring these back.
+- **The generic `oidc` preset stays for now, although nothing needs it soon.** Removing it
+  would be a real simplification, not a trivial one. `oidc` is the only preset with a
+  different provider type, and the type cannot change in place. Without it every save is a
+  plain `updateProvider`, so the delete → create → restore path in `external-provider-sync.ts`,
+  the `_prev` Vault snapshots and about half of `register-external-provider.test.ts` would go
+  too (roughly 400–500 lines including tests). It is not done now, because that code works, is
+  fully tested, and would have to be rebuilt when OIDC is needed. Revisit when this area next
+  needs real changes. If simplifying then, remove `oidc`, not the generic `oauth2` preset.
+
+### Follow-up (implemented 2026-10-01)
+
+1. **SurveyJS preset scopes → `email profile`.** `SURVEYJS_PRESET.scopes` is
+   `'email profile'`, and `resolveExternalProvider` uses it for the `surveyjs` preset
+   regardless of the submitted or stored value, like the endpoint URLs.
+   `updateExternalProvider` does not write `auth_external_scopes` for the `surveyjs` preset.
+   That way, a later switch to a generic preset still finds its own scopes
+   (`openid email profile` by default). The `scopes` question in `auth-external.json` is
+   hidden for `surveyjs`, and the preset info block lists the scopes. Generic presets keep
+   `openid email profile` as their default (`DEFAULT_EXTERNAL_SCOPES`, DB seed,
+   `getAuthConfigSettings` fallback).
+2. **Stale wording.** The HS256 explanation in the `SURVEYJS_PRESET` doc comment and in the
+   `surveyjs_preset_info` HTML is replaced with the §5 text.
+3. **Tests.** The unit tests expect `email profile` for the SurveyJS preset, and a new case
+   checks that submitted `openid` scopes are ignored. The e2e fixture
+   `registerProviderDirectly` registers `['email', 'profile']`. The preset e2e test checks
+   that `scopes` is hidden for SurveyJS and visible for Generic OAuth 2.0. Typecheck, lint and
+   the unit tests pass. The DB and e2e suites were not run, because Docker / the local
+   Supabase stack was down.
+4. **Test Connection** needs no change. `GET /OAuth/Authorize` → 400 (reachable),
+   `GET /OAuth/UserInfo` → 401, which matches the current check.
+5. **Still open: the manual end-to-end test (Verification step 2).** Also confirm that
+   `/OAuth/UserInfo` still returns `sub`, `email` and `name` now that `claims_supported` is no
+   longer published. If the keys differ, extend the fallback chain in `/auth/callback` (§6) or
+   add an `attribute_mapping`.

@@ -111,7 +111,7 @@ async function registerProviderDirectly(providerName = 'SurveyJS') {
     name: providerName,
     client_id: 'e2e-client-id',
     client_secret: 'e2e-client-secret',
-    scopes: ['openid', 'email', 'profile'],
+    scopes: ['email', 'profile'],
     pkce_enabled: true,
     enabled: true,
     authorization_url: SURVEYJS_AUTHORIZE_URL,
@@ -313,7 +313,7 @@ test.describe('Auth External', () => {
     await expect(question(page, 'preset')).toContainText('SurveyJS (auth.surveyjs.io)', { timeout: 10000 });
     await expect(externalSurvey(page).getByTestId('surveyjs-preset-info')).toBeVisible();
     await expect(question(page, 'provider_name').locator('input')).toHaveValue('SurveyJS');
-    for (const name of ['issuer_url', 'authorization_url', 'token_url', 'userinfo_url']) {
+    for (const name of ['issuer_url', 'authorization_url', 'token_url', 'userinfo_url', 'scopes']) {
       await expect(question(page, name)).toHaveCount(0);
     }
 
@@ -321,6 +321,7 @@ test.describe('Auth External', () => {
     for (const name of ['authorization_url', 'token_url', 'userinfo_url']) {
       await expect(question(page, name)).toBeVisible();
     }
+    await expect(question(page, 'scopes')).toBeVisible();
     await expect(question(page, 'issuer_url')).toHaveCount(0);
     await expect(externalSurvey(page).getByTestId('surveyjs-preset-info')).toHaveCount(0);
 

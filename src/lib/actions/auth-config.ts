@@ -491,9 +491,12 @@ export async function updateExternalProvider(formData: FormData): Promise<{ erro
     auth_external_authorization_url: resolved.authorization_url,
     auth_external_token_url: resolved.token_url,
     auth_external_userinfo_url: resolved.userinfo_url,
-    auth_external_scopes: resolved.scopes,
     auth_external_auto_redirect: autoRedirect ? 'true' : 'false',
   };
+  // The SurveyJS preset has fixed scopes; keep the stored ones for the generic presets.
+  if (resolved.preset !== 'surveyjs') {
+    settingsToUpdate.auth_external_scopes = resolved.scopes;
+  }
   for (const [key, value] of Object.entries(settingsToUpdate)) {
     await supabase.from('app_settings').update({ value }).eq('key', key);
   }

@@ -41,8 +41,13 @@ describe('resolveExternalProvider', () => {
       authorization_url: 'https://auth.surveyjs.io/OAuth/Authorize',
       token_url: 'https://auth.surveyjs.io/OAuth/Token',
       userinfo_url: 'https://auth.surveyjs.io/OAuth/UserInfo',
-      scopes: 'openid email profile',
+      scopes: 'email profile',
     });
+  });
+
+  it('surveyjs preset uses its fixed scopes, ignoring submitted ones — openid is not supported', () => {
+    expect(resolveExternalProvider(settings({ scopes: 'openid email profile' })).scopes)
+      .toBe('email profile');
   });
 
   it('keeps an admin-edited provider name for the surveyjs preset', () => {
@@ -86,7 +91,7 @@ describe('buildCustomProviderParams', () => {
     expect(params.email_optional).toBe(false);
     expect(params.client_id).toBe('client-1');
     expect(params.client_secret).toBe('secret-1');
-    expect(params.scopes).toEqual(['openid', 'email', 'profile']);
+    expect(params.scopes).toEqual(['email', 'profile']);
     expect(params.authorization_url).toBe(SURVEYJS_PRESET.authorization_url);
     expect(params.token_url).toBe(SURVEYJS_PRESET.token_url);
     expect(params.userinfo_url).toBe(SURVEYJS_PRESET.userinfo_url);

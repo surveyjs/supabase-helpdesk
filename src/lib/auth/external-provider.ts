@@ -19,9 +19,9 @@ export type ExternalPreset = typeof EXTERNAL_PRESETS[number];
 export const DEFAULT_EXTERNAL_SCOPES = 'openid email profile';
 
 /**
- * auth.surveyjs.io issues HS256 ID tokens (signed with the client secret) and
- * publishes an empty JWKS, so Supabase's OIDC mode cannot verify them. It is
- * registered as plain OAuth 2.0 and the user is read from the UserInfo endpoint.
+ * auth.surveyjs.io is a plain OAuth 2.0 server (no OpenID Connect: no discovery
+ * document, no ID tokens), so it is registered as OAuth 2.0 and the user is read
+ * from the UserInfo endpoint. Its scopes are fixed: `openid` is not supported.
  */
 export const SURVEYJS_PRESET = {
   provider_name: 'SurveyJS',
@@ -30,7 +30,7 @@ export const SURVEYJS_PRESET = {
   token_url: 'https://auth.surveyjs.io/OAuth/Token',
   userinfo_url: 'https://auth.surveyjs.io/OAuth/UserInfo',
   issuer_url: 'https://auth.surveyjs.io',
-  scopes: DEFAULT_EXTERNAL_SCOPES,
+  scopes: 'email profile',
 } as const;
 
 /** The `auth_external_*` settings (without the prefix), as stored strings. */
@@ -61,7 +61,7 @@ export function isExternalPreset(value: string): value is ExternalPreset {
 
 /**
  * Resolves preset → concrete settings, including `provider_type`
- * (surveyjs fills every endpoint and is always oauth2; oidc/oauth2 use admin input).
+ * (surveyjs fills every endpoint and the scopes and is always oauth2; oidc/oauth2 use admin input).
  * This is the only place the provider type is decided.
  */
 export function resolveExternalProvider(s: ExternalProviderSettings): ResolvedExternalProvider {
@@ -78,7 +78,7 @@ export function resolveExternalProvider(s: ExternalProviderSettings): ResolvedEx
       authorization_url: SURVEYJS_PRESET.authorization_url,
       token_url: SURVEYJS_PRESET.token_url,
       userinfo_url: SURVEYJS_PRESET.userinfo_url,
-      scopes,
+      scopes: SURVEYJS_PRESET.scopes,
     };
   }
 

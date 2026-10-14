@@ -181,7 +181,7 @@ No `survey-creator-core`. No visual form builder.**
             title: 'SurveyJS template JSON',
             rows: 24,
             isRequired: true,
-            // monospace styling via survey-overrides.css
+            // monospace styling via src/styles/surveyjs-bridge.css
             cssClasses: { content: 'survey-template-json-editor' },
           },
         ],
@@ -365,7 +365,7 @@ collapses into the survey's `tagbox` rendered as `readOnly`.
 
 Verify the resulting page still shows e.g. urgency as a non-interactive
 chip/label for users when they cannot change it. If the SurveyJS
-`readOnly` rendering is too form-like, add a `survey-overrides.css`
+`readOnly` rendering is too form-like, add a `src/styles/surveyjs-bridge.css`
 rule that styles `.sd-question--readonly` in the sidebar to look like
 the existing static chips (still a CSS-only change — no per-field
 fallback markup).

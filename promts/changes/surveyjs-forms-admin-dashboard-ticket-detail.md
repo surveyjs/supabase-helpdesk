@@ -13,6 +13,17 @@
 > Custom fields on the ticket detail page are now SurveyJS questions in
 > the sidebar template (named `custom_fields.<name>`), optionally
 > auto-generated via the `autoGenerateCustomFields` wrapper flag.
+>
+> **Update — superseded for SurveyJS styling by
+> [`surveyjs-tailwind-adapter.md`](./surveyjs-tailwind-adapter.md).**
+> `theme.json`, `model.applyTheme(...)` and `survey-overrides.css` described
+> below were removed in the SurveyJS V3 migration. Surveys are now styled by
+> the SurveyJS Tailwind adapter (`src/styles/surveyjs-tailwind-adapter.css`,
+> with the fixes in
+> [`surveyjs-tailwind-adapter-fixes.md`](./surveyjs-tailwind-adapter-fixes.md))
+> plus a thin app layer
+> (`src/styles/surveyjs-bridge.css`), imported in `src/app/layout.tsx` after
+> `survey-core/survey-core.css`. Surveys must not call `applyTheme`.
 
 ## Summary
 

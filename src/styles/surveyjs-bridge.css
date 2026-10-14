@@ -1,218 +1,38 @@
-/* SurveyJS V3 ↔ Tailwind v4 bridge.
+/* SurveyJS app layer, on top of the SurveyJS Tailwind adapter.
  *
- * Maps the app's design tokens onto the SurveyJS V3 `--sjs2-*` token layers.
- * This file covers the Survey Library only (no Survey Creator).
- * Import order: after tailwindcss and after survey-core.css.
+ * Import order (src/app/layout.tsx): survey-core.css → surveyjs-tailwind-adapter.css
+ * → this file. The adapter maps the Tailwind theme (`--color-*` in globals.css)
+ * onto the `--sjs2-*` tokens; this file holds only what is specific to this app.
+ * Generic Tailwind fixes belong in the adapter, documented in
+ * promts/changes/surveyjs-tailwind-adapter-fixes.md.
  *
- * ── How V3 tokens cascade (why the selectors look the way they do) ─────
- * survey-core.css declares the whole `--sjs2-*` system on `.sd-theme-root`,
- * a class the survey model puts on the SAME element as `.sd-root-modern`.
- * A custom property declared on an element always beats one inherited from
- * an ancestor, so overriding from `:root` alone is silently ignored by the
- * survey. The compound `.sd-root-modern.sd-theme-root` (specificity 0,2,0)
- * outranks `.sd-theme-root` (0,1,0) and wins regardless of import order —
- * there is no `!important` anywhere in this file.
+ * ── How the tokens cascade ────────────────────────────────────────────
+ * survey-core.css declares its base `--sjs2-*` tokens under
+ * `:where(.sd-theme-root)`, which has zero specificity, so any class selector
+ * on the survey root wins in any import order. The root carries
+ * `sd-root-modern sd-theme-root sjs-theme-overrides`; token rules here use
+ * `.sjs-theme-overrides`, which ties with the adapter and wins by import order.
+ * They may read the adapter's `--sjstw-*` variables, declared on the same element.
  *
- * `:root` is still needed as the second selector: dropdown/tagbox popups
- * are portaled to <body>, outside `.sd-theme-root`, where survey-core.css
- * declares no tokens at all.
- *
- * ── Which layer to override ───────────────────────────────────────────
- * Layer 0 palette → Layer 1 base units → Layer 2 scales → Layer 3 semantic
- * → Layer 4 per-component/per-state. Each layer derives from the one above,
- * so we override as high as possible: Layer 0 + Layer 3 do almost all the
- * work here. Layer 4 appears only where this app's design intent genuinely
- * diverges from the V3 derivation (see SECTION E).
+ * Dropdown and tagbox popups render inside the survey root, so they inherit
+ * these tokens. Do not call `model.applyTheme(...)`: it writes theme variables
+ * as inline styles, which override both the adapter and this file.
  */
 
-/* =====================================================================
- * Design system tokens — consumed only by this bridge file.
- * Defined here rather than globals.css to keep co-located with their
- * sole consumer and avoid polluting the global stylesheet.
- * ===================================================================== */
-:root {
-  --background: #ffffff;
-  --foreground: #111827;
-  --card: #ffffff;
-  --card-foreground: #111827;
-  --muted: #f3f4f6;
-  --muted-foreground: #6b7280;
-  --accent: #f3f4f6;
-  --accent-foreground: #374151;
-  --primary: #2563eb;
-  --primary-foreground: #ffffff;
-  --secondary: #f3f4f6;
-  --secondary-foreground: #374151;
-  --destructive: #dc2626;
-  --border: #e5e7eb;
-  --popover: #ffffff;
-  --popover-foreground: #111827;
-  --radius: 6px;
-  --font-sans: var(--font-geist-sans), Arial, Helvetica, sans-serif;
-}
+.sjs-theme-overrides {
+  /* Every survey here sits inside a padded Tailwind card, so the survey adds
+   * no side padding of its own: fields and the Complete button line up with
+   * the card's other content. Set on the layout tokens, so it holds at every
+   * width (the adapter's default is 16px). */
+  --sjs2-layout-component-page-content-area-padding-horizontal: 0px;
+  --sjs2-layout-component-survey-footer-padding-horizontal: 0px;
 
-/* =====================================================================
- * SECTION A — Layer 0: palette primitives
- * Everything else in the V3 token system derives from these, so mapping
- * the palette alone already recolours most of the survey.
- * ===================================================================== */
-
-:root,
-.sd-root-modern.sd-theme-root {
-  /* Gray ramp: 000 = lightest (surface) → 999 = darkest (text). */
-  --sjs2-palette-gray-000: var(--background);
-  --sjs2-palette-gray-100: var(--muted);
-  --sjs2-palette-gray-150: color-mix(in oklch, var(--muted) 70%, var(--background));
-  --sjs2-palette-gray-200: var(--accent);
-  --sjs2-palette-gray-250: var(--border);
-  --sjs2-palette-gray-300: var(--border);
-  --sjs2-palette-gray-400: color-mix(in oklch, var(--muted-foreground) 35%, var(--background));
-  --sjs2-palette-gray-500: var(--muted-foreground);
-  --sjs2-palette-gray-600: color-mix(in oklch, var(--foreground) 70%, var(--background));
-  --sjs2-palette-gray-650: color-mix(in oklch, var(--foreground) 80%, var(--background));
-  --sjs2-palette-gray-700: color-mix(in oklch, var(--foreground) 85%, var(--background));
-  --sjs2-palette-gray-750: color-mix(in oklch, var(--foreground) 90%, var(--background));
-  --sjs2-palette-gray-800: color-mix(in oklch, var(--foreground) 95%, var(--background));
-  --sjs2-palette-gray-850: var(--foreground);
-  --sjs2-palette-gray-900: var(--foreground);
-  --sjs2-palette-gray-950: var(--foreground);
-  --sjs2-palette-gray-999: var(--foreground);
-
-  /* Brand. The 400/700/800 shades are derived, not hand-picked — see below. */
-  --sjs2-color-project-brand-600: var(--primary);
-
-  /* Red drives every alert/error surface via `--sjs2-color-*-alert-*`. */
-  --sjs2-palette-red-400: color-mix(in oklch, var(--destructive) 70%, var(--background));
-  --sjs2-palette-red-600: var(--destructive);
-  --sjs2-palette-red-700: color-mix(in oklch, var(--destructive) 90%, black);
-}
-
-/* Derived brand shades.
- * `Model` applies `DefaultTheme` on construction, which writes exactly these
- * three relative-colour formulas as inline styles on the survey root. Because
- * they resolve against `--sjs2-color-project-brand-600` — set to `--primary`
- * above — the runtime already produces the correct hover/pressed shades for
- * the survey itself, and hand-overriding them would only fight an inline
- * style. Popups portaled to <body> get no inline style, so mirror the same
- * formulas at `:root` to keep the two in sync. */
-:root {
-  --sjs2-color-project-brand-400: hsl(from var(--sjs2-color-project-brand-600) h s calc(l * 1.2));
-  --sjs2-color-project-brand-700: hsl(from var(--sjs2-color-project-brand-600) h s calc(l * 0.85));
-  --sjs2-color-project-brand-800: hsl(from var(--sjs2-color-project-brand-600) h s calc(l * 0.75));
-}
-
-/* =====================================================================
- * SECTION B — Layer 1: base units
- * Every Layer-2 scale (`--sjs2-spacing-x200`, `--sjs2-radius-x150`, …) is
- * `calc(base-unit * n)`, so changing a base unit rescales the whole family.
- * ===================================================================== */
-
-:root,
-.sd-root-modern.sd-theme-root {
-  --sjs2-base-unit-radius: var(--radius);
-  --sjs2-typography-font-family-text: var(--font-sans);
-}
-
-/* Density. Applied to the survey only — popups keep the stock 8px base so
- * their list rows stay comfortably clickable.
- *
- *  - spacing 8px → 3px shrinks every gap, including the inter-row
- *    `--sjs2-spacing-x200`, proportionally.
- *  - font-size 8px → 7px puts body text at `--sjs2-font-size-x200` = 14px and
- *    titles at x250 = 17.5px, matching the surrounding Tailwind `text-sm` UI. */
-.sd-root-modern.sd-theme-root {
-  --sjs2-base-unit-spacing: 3px;
-  --sjs2-base-unit-font-size: 7px;
-  --sjs2-base-unit-line-height: 9px;
-}
-
-/* =====================================================================
- * SECTION C — Layer 3: semantic tokens
- * Intent-based names that the Layer-4 per-component tokens all derive from.
- * Setting these is what lets SECTION E stay as short as it is.
- * ===================================================================== */
-
-:root,
-.sd-root-modern.sd-theme-root {
-  /* Utility surfaces. `sheet` backs every popup and floating panel.
-   * The two `surface-survey` tokens are the only thing painting the survey
-   * root's background; making them transparent lets the surrounding Tailwind
-   * panel show through without an element-level `background` override. */
-  --sjs2-color-utility-body: var(--background);
-  --sjs2-color-utility-surface-survey: transparent;
-  --sjs2-color-utility-surface-survey-panelless: transparent;
-  --sjs2-color-utility-sheet: var(--popover);
-  --sjs2-color-utility-overlay: color-mix(in oklch, var(--foreground) 50%, transparent);
-  --sjs2-color-utility-scrollbar: var(--border);
-
-  /* Focus / press rings. Softer than the stock solid-brand ring. */
-  --sjs2-color-utility-shadow-surface-focused: color-mix(in oklch, var(--primary) 50%, transparent);
-  --sjs2-color-utility-shadow-surface-hovered: color-mix(in oklch, var(--primary) 40%, transparent);
-  --sjs2-color-utility-shadow-surface-pressed: var(--primary);
-
-  /* Brand intent. `-dim` is the hover/active shade and derives from
-   * brand-700, so it is deliberately left to derive. */
-  --sjs2-color-fg-brand-on-primary: var(--primary-foreground);
-  --sjs2-color-fg-brand-primary: var(--primary);
-  --sjs2-color-border-brand-primary: var(--primary);
-
-  /* Basic foreground. `-tertiary` covers icons and quaternary action glyphs;
-   * pinning it to --muted-foreground keeps them legible without a per-icon
-   * Layer-4 override. The `-disabled` variants derive from these. */
-  --sjs2-color-fg-basic-primary: var(--foreground);
-  --sjs2-color-fg-basic-primary-muted: var(--secondary-foreground);
-  --sjs2-color-fg-basic-secondary: var(--muted-foreground);
-  --sjs2-color-fg-basic-tertiary: var(--muted-foreground);
-
-  /* Basic background / border. */
-  --sjs2-color-bg-basic-primary: var(--card);
-  --sjs2-color-bg-basic-primary-dim: var(--accent);
-  --sjs2-color-bg-basic-secondary: var(--background);
-  --sjs2-color-bg-basic-secondary-dim: var(--muted);
-  --sjs2-color-border-basic-primary: var(--border);
-  --sjs2-color-border-basic-secondary: var(--border);
-
-  /* Neutral actions. Stock V3 renders a neutral primary button as near-black
-   * (gray-900); this app wants it to read as the brand action instead. */
-  --sjs2-color-bg-neutral-primary: var(--primary);
-  --sjs2-color-bg-neutral-primary-dim: color-mix(in oklch, var(--primary) 88%, black);
-  --sjs2-color-fg-neutral-on-primary: var(--primary-foreground);
-  --sjs2-color-bg-neutral-secondary-dim: var(--accent);
-  --sjs2-color-bg-neutral-tertiary-dim: var(--accent);
-}
-
-/* =====================================================================
- * SECTION D — Frameless questions
- * Stock V3 wraps every question in a card (opaque panel background + a 1px
- * ring drawn as a box-shadow). The surveys here are embedded inside
- * Tailwind panels that already provide that chrome, so the frame is
- * neutralised through the two tokens the frame is built from rather than by
- * overriding `background` / `box-shadow` on the class itself. Declaring them
- * on the framed element keeps the effect scoped: other surfaces that read
- * `--sjs2-border-effect-surface-default` are unaffected.
- * ===================================================================== */
-
-.sd-root-modern .sd-element--with-frame {
-  --sjs2-color-component-panel-default-bg: transparent;
-  --sjs2-border-effect-surface-default: none;
-}
-
-/* =====================================================================
- * SECTION E — Layer 4: per-component overrides
- * Only where the design intent genuinely diverges from what Layer 3 derives.
- * ===================================================================== */
-
-:root,
-.sd-root-modern.sd-theme-root {
-  /* Input boxes read as filled (`--muted`) rather than inheriting the page
-   * background, in every state. This is the one place where the app's inputs
-   * disagree with the V3 `bg-basic-secondary` derivation. */
-  --sjs2-color-component-formbox-default-bg: var(--muted);
-  --sjs2-color-component-formbox-focused-bg: var(--muted);
-  --sjs2-color-component-formbox-invalid-bg: var(--muted);
-  --sjs2-color-component-formbox-readonly-bg: var(--muted);
-  --sjs2-color-component-formbox-disabled-bg: var(--muted);
-  --sjs2-color-component-formbox-hovered-bg: var(--accent);
+  /* Stock V3 draws a neutral primary button near-black; this app uses brand. */
+  --sjs2-color-bg-neutral-primary: var(--sjstw-primary);
+  --sjs2-color-bg-neutral-primary-dim: var(--sjs2-color-project-brand-700);
+  --sjs2-color-fg-neutral-on-primary: var(--sjstw-primary-foreground);
+  --sjs2-color-bg-neutral-secondary-dim: var(--color-muted);
+  --sjs2-color-bg-neutral-tertiary-dim: var(--color-muted);
 }
 
 /* Navigation bar (Prev / Next / Complete).
@@ -220,10 +40,10 @@
  * labels every button in the brand colour. Mute the secondary ones so only
  * the forward action carries brand emphasis. */
 .sd-root-modern .sd-body__navigation {
-  --sjs2-color-component-action-brand-tertiary-surface-default-label: var(--foreground);
-  --sjs2-color-component-action-brand-tertiary-surface-hovered-label: var(--foreground);
-  --sjs2-color-component-action-brand-tertiary-surface-default-icon: var(--muted-foreground);
-  --sjs2-color-component-action-brand-tertiary-surface-hovered-icon: var(--foreground);
+  --sjs2-color-component-action-brand-tertiary-surface-default-label: var(--sjstw-foreground);
+  --sjs2-color-component-action-brand-tertiary-surface-hovered-label: var(--sjstw-foreground);
+  --sjs2-color-component-action-brand-tertiary-surface-default-icon: var(--sjstw-muted-foreground);
+  --sjs2-color-component-action-brand-tertiary-surface-hovered-icon: var(--sjstw-foreground);
 }
 
 /* Promote Next / Complete to a filled brand button by re-pointing the
@@ -242,18 +62,11 @@
   --sd-action-disabled-icon-color: var(--sjs2-color-component-action-brand-primary-disabled-icon);
 }
 
-/* =====================================================================
- * SECTION F — Padding
- * `--sd-base-padding` and friends are survey-core internals (not design
- * tokens) and are declared on BOTH `.sd-root-modern` and its
- * `.sd-container-modern` child. A custom property only inherits into a child
- * that does not declare it itself, so the selector here has to mirror the
- * one in survey-core.css or the container keeps the stock value.
- *
- * These are deliberate absolute values, not scale multiples: the surveys sit
- * flush inside Tailwind panels that already own the outer padding.
- * ===================================================================== */
-
+/* Legacy padding variables. `--sd-base-padding` and friends are survey-core
+ * internals, still read in 3.2.1 by nested multi-column rows
+ * (`.sd-row--multiple`), dynamic panels and the survey title. They are
+ * declared on both `.sd-root-modern` and its `.sd-container-modern` child, so
+ * the selector mirrors survey-core.css; the doubled classes outrank it. */
 .sd-root-modern.sd-root-modern,
 .sd-container-modern.sd-container-modern {
   --sd-base-padding: 8px;
@@ -261,78 +74,14 @@
   --sd-page-vertical-padding: 0px;
 }
 
-/* The inter-row gap comes from the spacing scale (`--sjs2-spacing-x200`),
- * not from `--sd-base-vertical-padding`. Collapse it a step further so
- * stacked dropdowns sit close together.
- *
- * survey-core.css sets this gap from four separate selectors — a base rule
- * plus three that reach higher specificity through sibling combinators — so
- * each one is mirrored here with a leading `.sd-root-modern` to outrank it.
- * Overriding only the base rule leaves every row after the first untouched. */
-.sd-root-modern .sd-row.sd-page__row,
-.sd-root-modern .sd-page__title ~ .sd-row.sd-page__row:not(.sd-row--compact),
-.sd-root-modern .sd-page__description ~ .sd-row.sd-page__row:not(.sd-row--compact),
-.sd-root-modern
-  .sd-row.sd-page__row:not(.sd-row--compact)
-  ~ .sd-row.sd-page__row:not(.sd-row--compact) {
-  margin-top: var(--sjs2-spacing-x100);
-}
-
-.sd-root-modern .sd-question__header--location-top {
-  padding-bottom: calc(0.25 * var(--sd-base-vertical-padding));
-}
-
-/* =====================================================================
- * SECTION G — Tailwind preflight repairs
- * Not theming: preflight strips the intrinsic width/height off <svg>, so
- * SurveyJS icons expand to fill their flex container. Restore a fixed box.
- * ===================================================================== */
-
-.sd-dropdown_chevron-button,
-.sd-editor-chevron-button,
-.sd-editor-clean-button,
-.sd-action__icon,
-.sv-list__item .sv-svg-icon,
-.sv-popup__container .sv-svg-icon {
-  flex-shrink: 0;
-}
-
-.sd-dropdown_chevron-button,
-.sd-editor-chevron-button,
-.sd-editor-clean-button {
-  width: 20px;
-  height: 20px;
-  min-width: 20px;
-  min-height: 20px;
-}
-
-.sv-svg-icon,
-.sd-action__icon,
-.sv-list__item svg {
-  width: 16px;
-  height: 16px;
-}
-
-/* Control height. The V3 scale would size these off the reduced base units
- * in SECTION B; pin them instead to the 36px used by the surrounding
- * Tailwind form controls so a survey dropdown lines up with a plain one. */
-.sd-root-modern .sd-dropdown,
-.sd-root-modern .sd-tagbox {
-  min-height: 36px;
-}
-
-/* =====================================================================
- * SECTION H — Disable the SurveyJS internal scroll wrapper
+/* Disable the SurveyJS internal scroll wrapper.
  * V3 wraps the survey root in `.sv-scroll__wrapper` (`height: 100%`) around
  * an `overflow-y: auto` `.sv-scroll__scroller`. Embedded in a Tailwind
  * container with no explicit height the wrapper collapses and clips content
  * (e.g. a matrixdynamic "Add" button hidden below the fold). Let the survey
  * grow to its natural height and let the page scroll instead.
- * ===================================================================== */
-
-/* The doubled class raises specificity to (0,2,0) so these win over
- * survey-core.css regardless of stylesheet order — the same guarantee the
- * token blocks above get from `.sd-root-modern.sd-theme-root`. */
+ * The doubled classes raise specificity to (0,2,0) so these beat the
+ * single-class rules in survey-core.css. */
 .sv-scroll__wrapper.sv-scroll__wrapper {
   height: auto;
 }

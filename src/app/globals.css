@@ -6,6 +6,23 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* Semantic colours. Consumed by the SurveyJS Tailwind adapter
+ * (src/styles/surveyjs-tailwind-adapter.css). `static` makes Tailwind always
+ * emit these variables; plain `@theme` drops the ones no utility uses, and the
+ * survey would then fall back to SurveyJS teal. */
+@theme static {
+  --color-primary: #2563eb;            /* blue-600 */
+  --color-primary-foreground: #ffffff;
+  --color-foreground: #111827;         /* gray-900 */
+  --color-muted: #f3f4f6;              /* gray-100: hover fills in the app layer */
+  --color-muted-foreground: #6b7280;   /* gray-500 */
+  --color-card: #ffffff;
+  --color-input: #d1d5db;              /* gray-300: same as the app's native <select> borders */
+  --color-border: #e5e7eb;             /* gray-200 */
+  --color-ring: #2563eb;
+  --color-destructive: #dc2626;        /* red-600 */
+}
+
 body {
   font-family: Arial, Helvetica, sans-serif;
   /*

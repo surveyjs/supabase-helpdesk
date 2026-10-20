@@ -1806,10 +1806,13 @@ CREATE POLICY ticket_summaries_select ON ticket_summaries
 -- 18. Vault RPC Functions
 -- ============================================================
 -- All Vault helpers are SECURITY DEFINER and only ever called
--- server-side via the service-role client. PUBLIC (which in Supabase
--- includes `anon` and `authenticated`) must not be able to execute
--- them, otherwise any holder of the anon key could read secrets via
--- PostgREST RPC.
+-- server-side via the service-role client. anon and authenticated must
+-- not be able to execute them, otherwise any holder of the anon key
+-- could read secrets via PostgREST RPC.
+-- NOTE: revoking from PUBLIC below is NOT enough on databases created
+-- under Supabase's old default privileges, which also granted EXECUTE
+-- to anon/authenticated explicitly. 002_explicit_grants.sql revokes
+-- those grants as well.
 
 -- ---------- AI provider API key ----------
 

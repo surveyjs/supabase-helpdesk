@@ -127,7 +127,7 @@ SELECT 900000 + n,
          WHEN 5 THEN '<script>alert(' || n || ')</script> in title'
          WHEN 6 THEN '**Markdown** _title_ `code` ' || n
          WHEN 7 THEN 'Ticket ' || n
-         WHEN 8 THEN 'Tab	and spaces   ' || n
+         WHEN 8 THEN '  Leading/trailing spaces, inner	tab ' || n || '   '
          ELSE 'Same title for many tickets'          -- duplicate titles and slugs
        END,
        CASE WHEN n % 10 = 9 THEN 'same-title-for-many-tickets' ELSE 'fixture-ticket-' || n END,

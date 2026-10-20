@@ -15,7 +15,8 @@
 #               and drops `auto_expose_new_tables` from its config.toml so the
 #               stack starts with the OLD defaults (like production).
 #   (the caller starts that project: `supabase start --workdir <project>`)
-#   3. verify   guard (old defaults really active) -> schema + data fingerprint
+#   3. verify   guard (old defaults really active) -> supabase/upgrade-fixtures.sql
+#               (production-like volume + edge cases) -> schema + data fingerprint
 #               -> `supabase migration up --include-all` with the new files ->
 #               data / privileges / idempotency checks -> `npm run test:db`.
 #
@@ -52,7 +53,7 @@ PROJ="$WORK/project"
 OUT="$WORK/out"
 SUMMARY="${GITHUB_STEP_SUMMARY:-$OUT/summary.md}"
 GH_OUTPUT="${GITHUB_OUTPUT:-/dev/null}"
-KEY_TABLES=(profiles tickets posts teams attachments app_settings)
+KEY_TABLES=(profiles teams categories tags tickets posts ticket_tags ticket_followers attachments app_settings)
 VAULT_FN_RE='^(store|get|delete|has)_.*(secret|api_key)$'
 VAULT_FN_MIN=10
 EXCLUDE='studio,postgres-meta,imgproxy,edge-runtime,logflare,vector,supavisor'
@@ -240,6 +241,26 @@ cmd_verify() {
     return 1
   fi
   note "✅ Guard: base database runs with the old default privileges (like production)."
+
+  # --- production-like data on top of seed.sql --------------------------------
+  # The fixtures target the base schema, so the base revision's copy is used;
+  # HEAD's copy only when the base predates the file.
+  local fixtures="$PROJ/supabase/upgrade-fixtures.sql" fixtures_from="base revision"
+  if [[ ! -f "$fixtures" && -f "$ROOT/supabase/upgrade-fixtures.sql" ]]; then
+    fixtures="$ROOT/supabase/upgrade-fixtures.sql"; fixtures_from="HEAD (not on the base revision yet)"
+  fi
+  if [[ -f "$fixtures" ]]; then
+    SECONDS=0
+    if ! psql_db < "$fixtures" > "$OUT/fixtures.log" 2>&1; then
+      cat "$OUT/fixtures.log"
+      error "Loading supabase/upgrade-fixtures.sql into the base database failed: $(grep -m1 ERROR "$OUT/fixtures.log")"
+      note "❌ Loading \`supabase/upgrade-fixtures.sql\` ($fixtures_from) failed."
+      return 1
+    fi
+    note "✅ Loaded \`supabase/upgrade-fixtures.sql\` from the $fixtures_from in ${SECONDS}s."
+  else
+    note "⚠️ No \`supabase/upgrade-fixtures.sql\`: the upgrade runs on seed data only."
+  fi
 
   # --- snapshot before -------------------------------------------------------
   load_expectations

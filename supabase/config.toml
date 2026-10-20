@@ -19,9 +19,11 @@ max_rows = 1000
 # Do not auto-grant new `public` tables/sequences/functions to anon,
 # authenticated and service_role — Supabase's behaviour for all projects from
 # 2026-10-30 (https://github.com/orgs/supabase/discussions/45329). Pinning it
-# here makes local stacks and CI behave like that today, so a migration that
-# forgets its GRANTs fails tests instead of production. Grants live in
-# migrations/002_explicit_grants.sql. Remove this key once the pinned CLI
+# here makes local stacks and CI start from those defaults today, so tests
+# exercise the schema's own grants (migrations/002_explicit_grants.sql) rather
+# than whatever the CLI version happens to grant. The upgrade path from the
+# old defaults is covered by the CI `migration-upgrade` job, which removes
+# this key to emulate production. Remove this key once the pinned CLI
 # (package.json "supabase" script) defaults to it and drops the setting.
 auto_expose_new_tables = false
 

@@ -23,13 +23,13 @@ Docker (node:24-alpine), Supabase CLI 2.121.0, PostgreSQL 17 client, GitHub Acti
 ## Global Constraints
 - Node 24 (`.nvmrc` = `24`), базовый образ `node:24-alpine`.
 - Supabase CLI в образе = версии в `package.json` → `"supabase": "npx -y supabase@2.121.0"` (2.121.0).
-- `postgresql17-client` (pg_dump, psql, pg_restore).
+- `postgresql17-client` (psql — держит блокировку миграции).
 - Переменные: `APP_URL`, `SUPABASE_URL`, `SUPABASE_INTERNAL_URL`, `SUPABASE_ANON_KEY`,
-  `SUPABASE_SERVICE_ROLE_KEY`, `MIGRATION_DB_URL`, `BACKUP_DIR` (по умолчанию `/backups`), `KEEP_BACKUPS` (5),
+  `SUPABASE_SERVICE_ROLE_KEY`, `MIGRATION_DB_URL`,
   `HELPDESK_VERSION` (build-arg, по умолчанию `dev`), `SCHEMA_CHECK_WAIT_SECONDS` (60).
 - Exit codes:
   - `serve`/`status`: 78 — схема не совпадает, 1 — ошибка конфигурации или Supabase недоступен;
-  - `migrate`: 0 — ок или нечего делать, 1 — ошибка, 2 — бэкап не удался (ничего не применено),
+  - `migrate`: 0 — ок или нечего делать, 1 — ошибка, 2 — бэкап не подтверждён (нет `--backup-confirmed`, ничего не применено),
     3 — история разошлась, 4 — БД новее образа;
   - entrypoint: 64 — неизвестная команда.
 - Пути в образе: `/app/supabase/migrations`, `/app/docker`, `/app/docker/lib` (копия `src/lib/deploy`).
@@ -48,8 +48,9 @@ Docker (node:24-alpine), Supabase CLI 2.121.0, PostgreSQL 17 client, GitHub Acti
    Smoke-сценарий в Task 7.
 3. **Неверный service-role ключ.** Ожидаемо: немедленная понятная ошибка (HTTP 401), без минутного
    ожидания. Smoke-сценарий в Task 7.
-4. **`BACKUP_DIR` недоступен на запись** (каталог хоста принадлежит root). Ожидаемо: exit 2 до
-   применения чего-либо. Smoke-сценарий в Task 6.
+4. **`migrate` без `--backup-confirmed` при наличии pending-миграций.** Ожидаемо: exit 2, ничего не
+   применено, сообщение говорит, как сделать бэкап. Без pending-миграций флаг не нужен (exit 0).
+   Smoke-сценарии в Task 6.
 5. **Посторонние файлы или дубли версий в `supabase/migrations`.** Ожидаемо: посторонние файлы
    игнорируются, дубль — жёсткая ошибка, из БД принимаются только цифровые версии (защита `eval`
    в `migrate.sh`). Unit-тесты в Task 5, проверка `versions-cli` в Task 6.
@@ -66,7 +67,7 @@ Docker (node:24-alpine), Supabase CLI 2.121.0, PostgreSQL 17 client, GitHub Acti
 | `src/app/layout.tsx`, `src/proxy.ts` | Подключение `/runtime-config.js`, исключение его из proxy |
 | `src/app/api/health/route.ts` | Отдаёт `version` |
 | `supabase/migrations/003_schema_version_rpc.sql` (new) | RPC `schema_migration_versions()` |
-| `docker/entrypoint.sh`, `docker/check-schema.mjs`, `docker/migrate.sh`, `docker/restore.sh`, `docker/versions-cli.mjs` (new) | Команды образа |
+| `docker/entrypoint.sh`, `docker/check-schema.mjs`, `docker/migrate.sh`, `docker/versions-cli.mjs` (new) | Команды образа |
 | `Dockerfile`, `.dockerignore` | Образ на одну версию |
 | `.github/scripts/image-smoke.sh` (new) | Сценарии образа против живого Supabase-стека |
 | `.github/workflows/ci.yml`, `.github/scripts/migration-upgrade.sh` | Job'ы `image` и `image-smoke`, `migration-upgrade` через образ |
@@ -765,40 +766,33 @@ export function explain(result) {
 
 ---
 
-### Task 6: Образ и команда `migrate` / `restore`
+### Task 6: Образ и команда `migrate`
+
+> **Пересмотрено 2026-10-22 по результату проверки (gate).** `pg_restore --clean` ролью `postgres`
+> на Supabase-БД падает: `must be owner of event trigger pgrst_drop_watch`, 875 ошибок прав, все в
+> схемах `supabase_admin`. Документация Supabase отката «на месте» не предлагает: откат —
+> восстановление всей БД (Cloud — PITR или ежедневный бэкап; self-hosted — своими средствами).
+> Решение пользователя: в полном стеке `upgrade.sh` (план B) делает снимок каталога данных Postgres,
+> во внешнем режиме используется PITR провайдера. В образе остаётся только `migrate`: он ничего не
+> применяет без явного `--backup-confirmed` и печатает UTC-время как точку восстановления для PITR.
+> Команды `restore` и `pg_dump` в образе нет.
 
 **Files:**
-- Create: `docker/entrypoint.sh`, `docker/migrate.sh`, `docker/restore.sh`, `docker/versions-cli.mjs`,
+- Create: `docker/entrypoint.sh`, `docker/migrate.sh`, `docker/versions-cli.mjs`,
   `.github/scripts/image-smoke.sh`, `tests/unit/deploy-pins.test.ts`
 - Modify: `Dockerfile` (переписать), `.dockerignore`
 
 **Interfaces:**
 - Consumes: `migrationVersions`, `compareVersions` (Task 5).
 - Produces:
-  - образ с `ENTRYPOINT sh /app/docker/entrypoint.sh` и командами `serve | status | migrate | restore`
-    (`serve` пока без проверки, её добавляет Task 7);
+  - образ с `ENTRYPOINT sh /app/docker/entrypoint.sh` и командами `serve | migrate`
+    (`serve` пока без проверки; проверку и `status` добавляет Task 7);
+  - `migrate [--dry-run] [--backup-confirmed]`: exit 0, 1, 2 (бэкап не подтверждён, ничего не
+    применено), 3, 4;
   - `image-smoke.sh` с хелперами `run <name> [docker opts] -- <args>` (результат в `$rc` и
-    `$OUT/<name>.log`), `expect_run`, `expect_eq`, `applied`, `dumps`, `variant`.
+    `$OUT/<name>.log`), `expect_run`, `expect_eq`, `applied`, `psql_val`, `variant`.
 
-- [ ] **Step 1: Spike — бэкап и восстановление Supabase-БД ролью `postgres`** (обязательный gate).
-  Это единственное, что эксперимент не проверил. Шаги на локальном стеке
-  (`npm run supabase -- start`, данные из seed):
-  1. `docker run --rm --network supabase_network_helpdesk postgres:17-alpine pg_dump "postgresql://postgres:postgres@supabase_db_helpdesk:5432/postgres?sslmode=disable" -Fc -f /tmp/a.dump`
-     → записать ошибки и предупреждения;
-  2. применить тестовую миграцию (новая таблица и строка в `profiles`);
-  3. `pg_restore --dbname=… --clean --if-exists --single-transaction --no-owner --exit-on-error /tmp/a.dump`;
-  4. сравнить с шагом 1: версии в `supabase_migrations.schema_migrations`, число строк в `profiles`,
-     `auth.users`, `storage.objects`.
-
-  **Gate.** Шаги 1 и 3 должны завершиться с exit 0, история и данные — вернуться. Таблица,
-  созданная после дампа, может остаться: `--clean` удаляет только объекты из архива, а повторное
-  применение миграции безопасно благодаря обязательной идемпотентности. Это нужно описать в шапке
-  `restore.sh`. **Если gate не пройден** (например, нет прав на объекты `supabase_admin`) —
-  остановиться и вернуться к спецификации: альтернатива — путь из документации Supabase
-  (`supabase db dump --db-url` схема плюс `--data-only`, восстановление через psql с
-  `session_replication_role = replica`). Её нужно согласовать до реализации.
-
-- [ ] **Step 2: Тест закреплённых версий** `tests/unit/deploy-pins.test.ts`
+- [ ] **Step 1: Тест закреплённых версий** `tests/unit/deploy-pins.test.ts`
 
 ```ts
 import { readFileSync } from 'node:fs';
@@ -821,15 +815,14 @@ describe('Dockerfile pins', () => {
 
 Run: `npx vitest run --config vitest.config.ts tests/unit/deploy-pins.test.ts` → FAIL (ARG нет)
 
-- [ ] **Step 3: `Dockerfile`** (полная замена)
+- [ ] **Step 2: `Dockerfile`** (полная замена)
 
 ```dockerfile
 # syntax=docker/dockerfile:1
 
 # One image per release, shared by every instance and both Supabase modes:
 # nothing instance-specific is baked in (src/lib/deploy/env.mjs reads it at
-# runtime). Commands (docker/entrypoint.sh): serve (default) | status |
-# migrate [--dry-run] [--no-backup] | restore <dump>.
+# runtime). Commands (docker/entrypoint.sh): serve (default) | migrate.
 ARG NODE_VERSION=24
 
 # ---- deps ---------------------------------------------------------------------
@@ -852,8 +845,8 @@ RUN npm run build
 FROM node:${NODE_VERSION}-alpine AS runner
 ARG SUPABASE_CLI_VERSION=2.121.0
 ARG HELPDESK_VERSION=dev
-# psql/pg_dump/pg_restore for `migrate` and `restore`; the CLI's npm package
-# brings a musl binary (@supabase/cli-linux-x64-musl) — no Docker needed.
+# psql holds the migration lock for `migrate`; the CLI's npm package brings a
+# musl binary (@supabase/cli-linux-x64-musl) — no Docker needed.
 RUN apk add --no-cache postgresql17-client \
  && npm install -g --no-audit --no-fund supabase@${SUPABASE_CLI_VERSION} \
  && npm cache clean --force
@@ -862,11 +855,9 @@ ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3001 \
     HOSTNAME=0.0.0.0 \
-    HELPDESK_VERSION=${HELPDESK_VERSION} \
-    BACKUP_DIR=/backups
+    HELPDESK_VERSION=${HELPDESK_VERSION}
 RUN addgroup --system --gid 1001 nodejs \
- && adduser --system --uid 1001 -G nodejs nextjs \
- && mkdir /backups && chown nextjs:nodejs /backups
+ && adduser --system --uid 1001 -G nodejs nextjs
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
@@ -888,7 +879,7 @@ CMD ["serve"]
 
 Run: `npx vitest run --config vitest.config.ts tests/unit/deploy-pins.test.ts` → PASS
 
-- [ ] **Step 4: `docker/versions-cli.mjs`**
+- [ ] **Step 3: `docker/versions-cli.mjs`**
 
 ```js
 // Glue for docker/migrate.sh: reads the database's applied versions (one per
@@ -909,16 +900,20 @@ const vars = { status, image: image.join(' '), db: db.join(' '), pending: pendin
 for (const [key, value] of Object.entries(vars)) console.log(`${key}='${value}'`);
 ```
 
-- [ ] **Step 5: `docker/migrate.sh`**
+- [ ] **Step 4: `docker/migrate.sh`**
 
 ```sh
 #!/bin/sh
 # Explicit database migration — the only place the schema is changed:
-#   migrate [--dry-run] [--no-backup]
-# Holds a session advisory lock (the Supabase CLI has none), refuses a database
-# that is newer than this image or has diverged (the CLI would fail with
-# DbPushMissingLocalError), backs up before applying, then runs `supabase db push`.
-# Exit: 0 ok/nothing to do, 1 error, 2 backup failed (nothing applied),
+#   migrate [--dry-run] [--backup-confirmed]
+# Holds a session advisory lock (the Supabase CLI has none) and refuses a
+# database that is newer than this image or has diverged (the CLI would fail
+# with DbPushMissingLocalError). It applies nothing until the operator confirms
+# a backup exists: Supabase offers no in-place logical restore, so a rollback is
+# a whole-database restore — the Postgres data-directory snapshot taken by
+# deploy/upgrade.sh (bundled stack) or the provider's PITR/daily backup
+# (external Supabase). The UTC time printed before applying is the PITR point.
+# Exit: 0 ok/nothing to do, 1 error, 2 backup not confirmed (nothing applied),
 #       3 history diverged, 4 database newer than this image.
 # MIGRATION_DB_URL: direct or session-pooler connection (the lock needs a
 # session); bundled stack: ...?sslmode=disable (its Postgres has ssl=off).
@@ -926,14 +921,13 @@ set -eu
 DB="${MIGRATION_DB_URL:?MIGRATION_DB_URL is required}"
 MIG=/app/supabase/migrations
 LOCK_KEY=7270011
-KEEP_BACKUPS="${KEEP_BACKUPS:-5}"
 log() { echo "[migrate] $*" >&2; }
 
-dry_run=0; backup=1
+dry_run=0; confirmed=0
 for arg in "$@"; do
   case "$arg" in
     --dry-run) dry_run=1 ;;
-    --no-backup) backup=0 ;;
+    --backup-confirmed) confirmed=1 ;;
     *) log "unknown option: $arg"; exit 1 ;;
   esac
 done
@@ -961,17 +955,14 @@ case "$status" in
 esac
 if [ "$dry_run" = 1 ]; then log "dry run: would apply $pending"; exit 0; fi
 
-if [ "$backup" = 1 ]; then
-  file="$BACKUP_DIR/pre-$(echo "$pending" | tr ' ' '-')-$(date -u +%Y%m%dT%H%M%SZ).dump"
-  log "backup -> $file"
-  if ! pg_dump "$DB" -Fc -f "$file"; then
-    rm -f "$file"; log "backup failed; nothing was applied"; exit 2
-  fi
-  ls -1t "$BACKUP_DIR"/pre-*.dump | tail -n "+$((KEEP_BACKUPS + 1))" | xargs -r rm -f
-else
-  log "backup skipped (--no-backup)"
+if [ "$confirmed" != 1 ]; then
+  log "refusing to apply $pending without a confirmed backup; nothing was applied."
+  log "Bundled stack: run ./upgrade.sh — it snapshots the database before migrating."
+  log "External Supabase: make sure PITR or a recent backup exists, then re-run with --backup-confirmed."
+  exit 2
 fi
 
+log "restore point (UTC, for PITR): $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 if ! supabase db push --db-url "$DB" --include-all --skip-vault --workdir /app --yes </dev/null 1>&2; then
   log "migration failed (see above); migrations applied before the failing one stay applied"
   exit 1
@@ -979,27 +970,7 @@ fi
 log "applied: $pending"
 ```
 
-- [ ] **Step 6: `docker/restore.sh`** (флаги — по итогам Step 1)
-
-```sh
-#!/bin/sh
-# Explicit database rollback: restore <dump>   (a file name in BACKUP_DIR or a path)
-# Restores the pre-upgrade backup written by `migrate`. Everything written after
-# that backup is lost. Objects created after it (e.g. by a half-applied
-# upgrade) are not dropped — pg_restore --clean only drops what the archive
-# contains — which is harmless: migrations are required to be re-runnable.
-# Run it with the app stopped (deploy/upgrade.sh --rollback does).
-set -eu
-DB="${MIGRATION_DB_URL:?MIGRATION_DB_URL is required}"
-file="${1:?usage: restore <dump>}"
-case "$file" in /*) ;; *) file="$BACKUP_DIR/$file" ;; esac
-[ -f "$file" ] || { echo "[restore] no such dump: $file" >&2; exit 1; }
-echo "[restore] restoring $file — changes made after it are lost" >&2
-pg_restore --dbname="$DB" --clean --if-exists --single-transaction --no-owner --exit-on-error "$file"
-echo "[restore] done" >&2
-```
-
-- [ ] **Step 7: `docker/entrypoint.sh`**
+- [ ] **Step 5: `docker/entrypoint.sh`**
 
 ```sh
 #!/bin/sh
@@ -1010,18 +981,17 @@ cmd="${1:-serve}"
 case "$cmd" in
   serve)   exec node /app/server.js ;;
   migrate) exec sh /app/docker/migrate.sh "$@" ;;
-  restore) exec sh /app/docker/restore.sh "$@" ;;
-  *) echo "usage: serve | migrate [--dry-run] [--no-backup] | restore <dump>" >&2; exit 64 ;;
+  *) echo "usage: serve | migrate [--dry-run] [--backup-confirmed]" >&2; exit 64 ;;
 esac
 ```
 
-- [ ] **Step 8: `.github/scripts/image-smoke.sh`** (часть для `migrate`/`restore`)
+- [ ] **Step 6: `.github/scripts/image-smoke.sh`** (часть для `migrate`)
 
 ```bash
 #!/usr/bin/env bash
 # Smoke test of the release image against a real local Supabase stack that
-# starts with NO schema: the explicit `migrate` command (dry run, backup,
-# lock, refusals, restore) and the app's startup schema check. CI: job
+# starts with NO schema: the explicit `migrate` command (dry run, backup
+# confirmation, lock, refusals) and the app's startup schema check. CI: job
 # image-smoke. Locally (Git Bash + Docker), stops this project's local stack:
 #   docker build -t supabase-helpdesk:ci --build-arg HELPDESK_VERSION=local .
 #   IMAGE=supabase-helpdesk:ci EXPECTED_VERSION=local bash .github/scripts/image-smoke.sh
@@ -1032,14 +1002,13 @@ ROOT="$(git rev-parse --show-toplevel)"
 IMAGE="${IMAGE:-supabase-helpdesk:ci}"
 EXPECTED_VERSION="${EXPECTED_VERSION:-local}"
 WORK="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/image-smoke"
-PROJ="$WORK/project" BACKUPS="$WORK/backups" OUT="$WORK/out"
+PROJ="$WORK/project" OUT="$WORK/out"
 SUMMARY="${GITHUB_STEP_SUMMARY:-$OUT/summary.md}"
 EXCLUDE='studio,postgres-meta,imgproxy,edge-runtime,logflare,vector,supavisor'
 native_path() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else echo "$1"; fi; }
 supabase() { (cd "$ROOT" && npm run --silent supabase -- "$@"); }
 
-rm -rf "$WORK"; mkdir -p "$PROJ/supabase/migrations" "$BACKUPS" "$OUT"
-chmod 777 "$BACKUPS"                       # the image runs as uid 1001
+rm -rf "$WORK"; mkdir -p "$PROJ/supabase/migrations" "$OUT"
 # The repo's stack config with no migrations and no seed.
 awk '/^\[/{s=$0} { if (s=="[db.seed]" && $1=="enabled") print "enabled = false"; else print }' \
   "$ROOT/supabase/config.toml" > "$PROJ/supabase/config.toml"
@@ -1060,8 +1029,7 @@ run() {
   docker run --rm --network "$NET" \
     -e SUPABASE_URL="http://supabase_kong_$PID:8000" -e APP_URL=http://localhost:3001 \
     -e SUPABASE_ANON_KEY -e SUPABASE_SERVICE_ROLE_KEY -e MIGRATION_DB_URL="$DB_URL" \
-    -e SCHEMA_CHECK_WAIT_SECONDS=15 -v "$(native_path "$BACKUPS"):/backups" \
-    "${opts[@]}" "$IMAGE" "$@" > "$OUT/$name.log" 2>&1
+    -e SCHEMA_CHECK_WAIT_SECONDS=15 "${opts[@]}" "$IMAGE" "$@" > "$OUT/$name.log" 2>&1
   rc=$?
   set -e
 }
@@ -1075,7 +1043,6 @@ expect_run() { # <log> <exit> <text> <description>
 expect_eq() { if [[ "$1" == "$2" ]]; then pass "$3"; else fail "$3 (got '$1', want '$2')"; fi; }
 psql_val() { docker exec -i "$DBC" psql -U postgres -X -qtA -c "$1" 2>/dev/null || true; }
 applied() { psql_val "select string_agg(version, ' ' order by version) from supabase_migrations.schema_migrations"; }
-dumps() { find "$BACKUPS" -name '*.dump' | wc -l | tr -d ' '; }
 # variant <name> <drop-last 0|1> [<file> <sql>]: a migrations dir to mount over the image's
 variant() {
   local d="$WORK/variants/$1"; mkdir -p "$d"; cp "$ROOT/supabase/migrations/"*.sql "$d/"
@@ -1091,70 +1058,58 @@ run dry-run -- migrate --dry-run
 expect_run dry-run 0 "dry run: would apply $ALL" "migrate --dry-run lists every pending migration"
 expect_eq "$(applied)" "" "migrate --dry-run applies nothing"
 
-run backup-ro -e BACKUP_DIR=/ro -v "$(native_path "$BACKUPS"):/ro:ro" -- migrate
-expect_run backup-ro 2 "backup failed; nothing was applied" "unwritable BACKUP_DIR stops before applying (exit 2)"
-expect_eq "$(applied)" "" "nothing applied after a failed backup"
+run unconfirmed -- migrate
+expect_run unconfirmed 2 "refusing to apply $ALL without a confirmed backup" "pending migrations are not applied without --backup-confirmed (exit 2)"
+expect_eq "$(applied)" "" "nothing applied without a backup confirmation"
 
-run first -- migrate
-expect_run first 0 "applied: $ALL" "migrate applies every migration to an empty database"
+run first -- migrate --backup-confirmed
+expect_run first 0 "applied: $ALL" "migrate --backup-confirmed applies every migration to an empty database"
+expect_eq "$(grep -c 'restore point (UTC, for PITR)' "$OUT/first.log")" 1 "migrate prints the PITR restore point before applying"
 expect_eq "$(applied)" "$ALL" "history records every migration"
-expect_eq "$(dumps)" 1 "migrate wrote one backup"
 
 run again -- migrate
-expect_run again 0 "up to date" "a second migrate does nothing"
-expect_eq "$(dumps)" 1 "no backup when nothing is pending"
+expect_run again 0 "up to date" "with nothing pending, migrate needs no confirmation and does nothing"
+
+# --- (Task 7 inserts the startup-check scenarios on a matching schema here) ---------
 
 V="$(variant lock 0 990_smoke_lock.sql "select pg_sleep(5); create table if not exists smoke_lock(id int); insert into smoke_lock values (1);")"
-( run lock-a -v "$V:/app/supabase/migrations:ro" -- migrate; echo "$rc" > "$OUT/lock-a.rc" ) &
-( run lock-b -v "$V:/app/supabase/migrations:ro" -- migrate; echo "$rc" > "$OUT/lock-b.rc" ) &
+( run lock-a -v "$V:/app/supabase/migrations:ro" -- migrate --backup-confirmed; echo "$rc" > "$OUT/lock-a.rc" ) &
+( run lock-b -v "$V:/app/supabase/migrations:ro" -- migrate --backup-confirmed; echo "$rc" > "$OUT/lock-b.rc" ) &
 wait
 expect_eq "$(cat "$OUT/lock-a.rc") $(cat "$OUT/lock-b.rc")" "0 0" "two concurrent migrate runs both succeed"
 expect_eq "$(psql_val 'select count(*) from smoke_lock')" 1 "the lock lets only one of them apply"
-expect_eq "$(dumps)" 2 "only the run that applied made a backup"
-
-V="$(variant nobackup 0 991_smoke_nobackup.sql "create table if not exists smoke_nobackup(id int);")"
-run nobackup -v "$V:/app/supabase/migrations:ro" -- migrate --no-backup
-expect_run nobackup 0 "backup skipped (--no-backup)" "--no-backup applies without a backup"
-expect_eq "$(dumps)" 2 "--no-backup wrote nothing"
 
 V="$(variant newer 1)"
-run newer -v "$V:/app/supabase/migrations:ro" -- migrate
+run newer -v "$V:/app/supabase/migrations:ro" -- migrate --backup-confirmed
 expect_run newer 4 "database is newer than this image" "an older image refuses to migrate (exit 4)"
 
-# Image: repo + 992; database: repo + 990 + 991 -> pending 992, unknown here 990 991.
+# Image: repo + 992; database: repo + 990 -> pending 992, unknown here 990.
 V="$(variant diverged 0 992_other.sql "select 1;")"
-run diverged -v "$V:/app/supabase/migrations:ro" -- migrate
+run diverged -v "$V:/app/supabase/migrations:ro" -- migrate --backup-confirmed
 expect_run diverged 3 "history diverged" "diverged history is refused (exit 3)"
-
-DUMP="$(ls -t "$BACKUPS" | head -1)"       # taken right before 990 was applied
-run restore -- restore "$DUMP"
-expect_run restore 0 "[restore] done" "restore of the pre-upgrade backup succeeds"
-expect_eq "$(applied)" "$ALL" "restore brings the history back to the pre-upgrade state"
-
-# --- startup check (Task 7) ------------------------------------------------------
 
 echo "Logs: $OUT" >> "$SUMMARY"
 exit $(( fails > 0 ))
 ```
 
-- [ ] **Step 9: Собрать и прогнать**
+- [ ] **Step 7: Собрать и прогнать**
 
 Run: `npm install && docker build -t supabase-helpdesk:ci --build-arg HELPDESK_VERSION=local . && bash .github/scripts/image-smoke.sh`
-Expected: все строки ✅, exit 0.
+Expected: все строки ✅, exit 0. После прогона вернуть обычный стек: `npm run supabase -- start`.
 
 Проверка защиты `eval` (Review Focus 5):
 Run: `printf "001\n1'; rm -rf /\n" | docker run --rm -i --entrypoint node supabase-helpdesk:ci /app/docker/versions-cli.mjs /app/supabase/migrations; echo "exit $?"`
 Expected: `[migrate] unexpected versions in supabase_migrations.schema_migrations: 1';` и `exit 1`.
 
-- [ ] **Step 10: Проверка сборки без env.** Если сборка Next падает из-за отсутствующего env на prerender
-(страница вызывает `runtimeConfig()` при статической генерации) — сделать эту страницу динамической
-(`await connection()` из `next/server`, см. environment-variables.md) и повторить.
+- [ ] **Step 8: Если сборка в Step 7 упала из-за env на prerender** (страница вызывает `runtimeConfig()`
+при статической генерации) — сделать эту страницу динамической (`await connection()` из `next/server`,
+см. `node_modules/next/dist/docs/01-app/02-guides/environment-variables.md`) и повторить Step 7.
 
-- [ ] **Step 11: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
 git add Dockerfile .dockerignore docker/ .github/scripts/image-smoke.sh tests/unit/deploy-pins.test.ts
-git commit -m "Single-version image with explicit migrate and restore commands
+git commit -m "Single-version image with an explicit migrate command
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -1188,7 +1143,8 @@ run serve-badkey -e SUPABASE_SERVICE_ROLE_KEY=wrong -- serve
 expect_run serve-badkey 1 "HTTP 401" "wrong service-role key fails at once (exit 1)"
 ```
 
-После проверок `first` (после первого успешного `migrate`) вставить:
+На место строки-маркера `# --- (Task 7 inserts the startup-check scenarios on a matching schema here) ---`
+(после `again`, база ровно `$ALL`) вставить:
 
 ```bash
 run status -- status
@@ -1204,7 +1160,7 @@ docker logs image-smoke-app > "$OUT/serve-ok.log" 2>&1; docker rm -f image-smoke
 expect_eq "$version" "$EXPECTED_VERSION" "app starts on a matching schema and reports its version"
 ```
 
-После проверок `restore` (база снова ровно `$ALL`, иначе `pending` превратится в `diverged`):
+Сразу после этого блока, до lock-сценария (миграция 990 превратила бы `pending` в `diverged`):
 
 ```bash
 run serve-newer -v "$(variant newer2 1):/app/supabase/migrations:ro" -- serve
@@ -1297,7 +1253,7 @@ main().then(
   status)  exec node /app/docker/check-schema.mjs --report ;;
 ```
 
-и строку usage: `serve | status | migrate [--dry-run] [--no-backup] | restore <dump>`.
+и строку usage: `serve | status | migrate [--dry-run] [--backup-confirmed]`.
 `set -e` останавливает `serve` с кодом проверки (78 или 1).
 
 - [ ] **Step 4: Пересобрать и прогнать**
@@ -1382,15 +1338,15 @@ Expected: все ✅, exit 0
 
 ```bash
   # The production path: the image's explicit `migrate` command (job `image`;
-  # locally: docker build -t supabase-helpdesk:ci .), backup included.
+  # locally: docker build -t supabase-helpdesk:ci .). The CI database is
+  # disposable, so the backup is confirmed.
   cp "$ROOT"/supabase/migrations/*.sql "$PROJ/supabase/migrations/"   # for the idempotency re-run below
   local dbc image="${MIGRATE_IMAGE:-supabase-helpdesk:ci}"
   dbc="$(db_container)"
-  mkdir -p "$OUT/backups"; chmod 777 "$OUT/backups"
   if MSYS_NO_PATHCONV=1 docker run --rm --network "supabase_network_${dbc#supabase_db_}" \
        -e MIGRATION_DB_URL="postgresql://postgres:postgres@${dbc}:5432/postgres?sslmode=disable" \
-       -v "$(native_path "$OUT/backups"):/backups" "$image" migrate > "$OUT/migrate.log" 2>&1; then
-    note "✅ \`migrate\` ($image) applied: $(paste -sd ' ' "$WORK/new-migrations"), backup $(ls "$OUT/backups")"
+       "$image" migrate --backup-confirmed > "$OUT/migrate.log" 2>&1; then
+    note "✅ \`migrate\` ($image) applied: $(paste -sd ' ' "$WORK/new-migrations")"
   else
     cat "$OUT/migrate.log"
     error "migrate failed (see migrate.log in the diagnostics artifact)"
@@ -1400,8 +1356,7 @@ Expected: все ✅, exit 0
 ```
 
   В шапке скрипта шаг 3 описать как «`migrate` из образа (как в проде)», в `local` — добавить строку
-  `docker build -t supabase-helpdesk:ci .` перед запуском. Так проверяется и `pg_dump` на прод-подобной
-  БД с fixtures.
+  `docker build -t supabase-helpdesk:ci .` перед запуском.
 
 - [ ] **Step 4: `ci-result`** → `needs: [lint, db, e2e, cross-browser, migration-upgrade, image, image-smoke]`.
 

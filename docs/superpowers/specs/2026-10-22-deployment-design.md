@@ -19,7 +19,7 @@
   в runtime, браузер получает публичный конфиг из `/runtime-config.js`.
 - **Состав образа:** standalone-сервер, `supabase/migrations/`, Supabase CLI 2.121.0 (npm, musl),
   `postgresql17-client`, скрипты `docker/`.
-- **Команды:** `serve` (по умолчанию), `status`, `migrate [--dry-run] [--no-backup]`, `restore <dump>`.
+- **Команды:** `serve` (по умолчанию), `status`, `migrate [--dry-run] [--backup-confirmed]`.
   В плане B добавятся `init-env`, `admin create`, `admin reset-password`, `scheduler`.
 - **Адрес Supabase.**
   - `SUPABASE_URL` задан → внешний Supabase: браузер и сервер ходят туда.
@@ -41,10 +41,27 @@
   1. `pg_advisory_lock`;
   2. сравнение версий: разошлась история → exit 3, БД новее → exit 4, нечего применять → exit 0;
   3. `--dry-run` печатает список и выходит;
-  4. обязательный `pg_dump -Fc` в `BACKUP_DIR` (кроме `--no-backup`), при сбое exit 2, ничего не применено;
-  5. `supabase db push --include-all --skip-vault --yes`;
-  6. хранится 5 последних бэкапов.
-- **`restore <dump>`** — явный откат БД.
+  4. без `--backup-confirmed` ничего не применяется (exit 2); перед применением печатается UTC-время —
+     точка восстановления для PITR;
+  5. `supabase db push --include-all --skip-vault --yes`.
+
+## Бэкап и откат (пересмотрено 2026-10-22)
+- **Проверка:** `pg_dump` + `pg_restore --clean` ролью `postgres` поверх живой Supabase-БД невозможны
+  (`must be owner of event trigger pgrst_drop_watch`, 875 ошибок прав в схемах `supabase_admin`).
+- **Supabase отката «на месте» не предлагает.** Откат — это восстановление всей БД:
+  - Cloud: PITR (RPO 2 минуты) или ежедневные бэкапы, восстановление проекта целиком из дашборда
+    или через Management API `restore-pitr`; Storage-объекты в бэкап не входят;
+  - CLI `db dump` (роли, схема, данные) и восстановление через `psql` с
+    `session_replication_role = replica` рассчитаны на новый пустой проект;
+  - self-hosted: `update.sh` сохраняет только конфигурацию, БД нужно бэкапить отдельно.
+- **Решение:**
+  - полный стек: `upgrade.sh` останавливает стек и снимает снимок каталога данных Postgres
+    (`volumes/db/data`), затем поднимает стек и запускает `migrate --backup-confirmed`;
+    `--rollback` возвращает снимок целиком (включая auth и storage-метаданные) и прежний образ;
+  - внешний Supabase: бэкап — PITR или ежедневные бэкапы провайдера; `migrate` применяет только с
+    явным `--backup-confirmed` и печатает точку восстановления; `--rollback` печатает инструкцию для
+    PITR с этой точкой и возвращает прежний образ после восстановления.
+- В образе нет `pg_dump` и `restore`: бэкап и откат — дело `upgrade.sh` (хост) или провайдера.
 
 ## Дистрибутив, CD, сбои (детализация — в планах B и C)
 - **Бандл `deploy/`:**
@@ -54,10 +71,12 @@
 - **`upgrade.sh`:**
   1. pull → `migrate --dry-run`, показать список и размер БД, спросить подтверждение
      (без TTY нужен флаг `--migrate`);
-  2. остановить `app` и `scheduler` → `migrate` → `up -d` → health с новой версией;
+  2. остановить `app` и `scheduler`; в полном стеке — остановить стек, снять снимок `volumes/db/data`,
+     поднять стек; → `migrate --backup-confirmed` → `up -d` → health с новой версией;
   3. если схема не изменилась — поднять прежнюю версию; если изменилась частично — всё остаётся
      остановленным, печатаются два пути;
-  4. `--rollback` = restore pre-upgrade дампа + прежний образ.
+  4. `--rollback`: полный стек — вернуть снимок и прежний образ; внешний режим — инструкция для PITR
+     с сохранённой точкой восстановления, затем прежний образ.
 - **`scheduler`** вызывает `/api/cron/sla` и `/api/cron/notifications`. Миграция 004 снимает
   pg_cron-задачу `check-sla-timers`.
 - **CI:** `image` (одна сборка) → `image-smoke`, `migration-upgrade` через образ, `bundle-e2e` на

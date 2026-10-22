@@ -15,6 +15,18 @@ function url(value) {
 }
 
 /**
+ * @param {string} name
+ * @param {string} value
+ */
+function parseUrl(name, value) {
+  try {
+    return new URL(value);
+  } catch {
+    throw new Error(`Invalid URL in ${name}: ${value}`);
+  }
+}
+
+/**
  * @param {Record<string, string | undefined>} env
  * @returns {{ appUrl: string, browserSupabaseUrl: string, serverSupabaseUrl: string,
  *   anonKey: string, serviceRoleKey: string, authCookieName: string }}
@@ -33,7 +45,9 @@ export function resolveSupabaseEnv(env) {
   if (!anonKey) missing.push('SUPABASE_ANON_KEY');
   if (missing.length) throw new Error(`Missing environment variables: ${missing.join(', ')}`);
 
-  if (!external && new URL(appUrl).pathname !== '/') {
+  const appParsed = parseUrl('APP_URL', appUrl);
+  if (external) parseUrl('SUPABASE_URL', external);
+  if (!external && appParsed.pathname !== '/') {
     throw new Error(`APP_URL must not contain a path when Supabase is served on the app's domain: ${appUrl}`);
   }
 

@@ -1,7 +1,7 @@
 name: Next.js E2E build
 description: >
   Restore .next/cache (Turbopack build cache), run `npm run build:e2e`
-  (.env.test inlined into NEXT_PUBLIC_*), optionally save the cache.
+  (loading .env.test; the browser gets its config from /runtime-config.js), optionally save the cache.
 inputs:
   save-cache:
     description: "'true' = save .next/cache after the build (do it from one job only)"

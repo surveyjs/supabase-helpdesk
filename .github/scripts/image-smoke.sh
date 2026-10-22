@@ -29,7 +29,7 @@ set -a; source "$ROOT/.env.test"; set +a
 DB_URL="postgresql://postgres:postgres@$DBC:5432/postgres?sslmode=disable"
 
 supabase stop --no-backup >/dev/null 2>&1 || true
-trap 'supabase stop --workdir "$(native_path "$PROJ")" --no-backup >/dev/null 2>&1 || true' EXIT
+trap 'docker rm -f image-smoke-app >/dev/null 2>&1 || true; supabase stop --workdir "$(native_path "$PROJ")" --no-backup >/dev/null 2>&1 || true' EXIT
 supabase start --workdir "$(native_path "$PROJ")" -x "$EXCLUDE"
 
 # run <name> [docker run options] -- <image args>   -> $OUT/<name>.log, exit code in $rc

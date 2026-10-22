@@ -10,8 +10,12 @@ import { compareVersions, explain, migrationVersions } from './lib/versions.mjs'
 
 const EXIT_MISMATCH = 78;
 const report = process.argv.includes('--report');
-const waitSeconds = Number(process.env.SCHEMA_CHECK_WAIT_SECONDS ?? 60);
 const log = (message) => console.error(`[schema-check] ${message}`);
+const waitSeconds = Number(process.env.SCHEMA_CHECK_WAIT_SECONDS ?? 60);
+if (!Number.isFinite(waitSeconds) || waitSeconds < 0) {
+  log(`SCHEMA_CHECK_WAIT_SECONDS must be a number >= 0, got: ${process.env.SCHEMA_CHECK_WAIT_SECONDS}`);
+  process.exit(1);
+}
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** One RPC attempt: ok | missing (no function: empty or pre-003 schema) | retry | fatal. */
@@ -21,6 +25,7 @@ async function attempt(url, key) {
       method: 'POST',
       headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: '{}',
+      signal: AbortSignal.timeout(10_000),
     });
     const body = await res.json().catch(() => null);
     if (res.ok) return { kind: 'ok', versions: body };

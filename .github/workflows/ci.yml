@@ -83,6 +83,7 @@ jobs:
         with:
           name: image
           path: ${{ runner.temp }}/image.tar.gz
+          overwrite: true
           retention-days: 3
           compression-level: 0
 

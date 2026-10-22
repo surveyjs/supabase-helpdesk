@@ -26,7 +26,8 @@ describe('schema_migration_versions()', () => {
 
   it('is not callable by a signed-in user', async () => {
     const alice = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'http://127.0.0.1:54321', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
-    await alice.auth.signInWithPassword({ email: 'alice@example.com', password: 'Password123' });
+    const { error: signInError } = await alice.auth.signInWithPassword({ email: 'alice@example.com', password: 'Password123' });
+    expect(signInError).toBeNull();
     const { error } = await alice.rpc('schema_migration_versions');
     expect(error?.code).toBe('42501');
   });

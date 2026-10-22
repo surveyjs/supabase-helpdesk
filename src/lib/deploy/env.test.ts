@@ -38,6 +38,13 @@ describe('resolveSupabaseEnv', () => {
     expect(() => resolveSupabaseEnv({ ...base, SUPABASE_URL: '  ' })).toThrow(/SUPABASE_URL/);
   });
 
+  it('names the variable when a URL is invalid', () => {
+    expect(() => resolveSupabaseEnv({ ...base, APP_URL: 'not a url', SUPABASE_INTERNAL_URL: 'http://kong:8000' }))
+      .toThrow('Invalid URL in APP_URL: not a url');
+    expect(() => resolveSupabaseEnv({ ...base, SUPABASE_URL: 'abc.supabase.co' }))
+      .toThrow('Invalid URL in SUPABASE_URL: abc.supabase.co');
+  });
+
   it('rejects an APP_URL with a path when Supabase is served on the same domain', () => {
     expect(() => resolveSupabaseEnv({ ...base, APP_URL: 'https://corp.example.com/helpdesk', SUPABASE_INTERNAL_URL: 'http://kong:8000' }))
       .toThrow(/APP_URL must not contain a path/);

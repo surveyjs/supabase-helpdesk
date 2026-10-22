@@ -144,12 +144,14 @@ Open [http://localhost:3001](http://localhost:3001) in your browser.
 Create a `.env.local` file:
 
 ```env
-NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-anon-key>
+SUPABASE_URL=http://127.0.0.1:54321
+SUPABASE_ANON_KEY=<your-anon-key>
 SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>
 ```
 
 The anon key and service role key are printed by `supabase start`.
+
+Upgrading: rename the same variables in your existing local `.env.local` files (`NEXT_PUBLIC_SUPABASE_URL` -> `SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` -> `SUPABASE_ANON_KEY`, `NEXT_PUBLIC_APP_URL`/`NEXT_PUBLIC_SITE_URL` -> `APP_URL`).
 
 ### Authentication
 
@@ -162,7 +164,7 @@ The external provider is registered with Supabase Auth as the custom provider `c
 #### SurveyJS SSO preset
 
 1. At [auth.surveyjs.io](https://auth.surveyjs.io), create an OAuth client with the redirect URI
-   `${NEXT_PUBLIC_SUPABASE_URL}/auth/v1/callback` (shown, with a Copy button, on `/admin/auth`).
+   `${SUPABASE_URL}/auth/v1/callback` (shown, with a Copy button, on `/admin/auth`).
 2. On `/admin/auth` (still in Built-in mode), keep the **SurveyJS** preset, paste the client ID and
    secret, and click **Save**. The status line changes to "Registered with Supabase Auth ✓".
 3. Switch the authentication mode to **External**. The login page now shows "Sign in with SurveyJS".

@@ -7,6 +7,7 @@ import {
 } from '@/lib/actions/tiers';
 import { TierApiSecretCard } from './TierApiSecretCard';
 import { TiersSurveyForm } from './TiersSurveyForm';
+import { runtimeConfig } from '@/lib/runtime-config';
 
 export default async function TiersPage() {
   await requireAdmin();
@@ -31,7 +32,7 @@ export default async function TiersPage() {
   }));
 
   const apiStatus = await getTierApiSecretStatus();
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  const appUrl = runtimeConfig().appUrl;
 
   return (
     <div>

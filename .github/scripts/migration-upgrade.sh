@@ -17,10 +17,11 @@
 #   (the caller starts that project: `supabase start --workdir <project>`)
 #   3. verify   guard (old defaults really active) -> supabase/upgrade-fixtures.sql
 #               (production-like volume + edge cases) -> schema + data fingerprint
-#               -> `supabase migration up --include-all` with the new files ->
+#               -> `migrate` from the release image (as in production) ->
 #               data / privileges / idempotency checks -> `npm run test:db`.
 #
 #   local      runs all of the above on this machine (Git Bash + Docker):
+#                docker build -t supabase-helpdesk:ci .
 #                BASE=main bash .github/scripts/migration-upgrade.sh local
 #              Stops any running local stack of this project first.
 #
@@ -268,13 +269,20 @@ cmd_verify() {
   fingerprint "$OUT/fingerprint-before.tsv"
 
   # --- upgrade -----------------------------------------------------------------
-  cp "$ROOT"/supabase/migrations/*.sql "$PROJ/supabase/migrations/"
-  if supabase migration up --local --include-all --workdir "$(native_path "$PROJ")" > "$OUT/migrate.log" 2>&1; then
-    note "✅ \`supabase migration up --include-all\` applied: $(paste -sd ' ' "$WORK/new-migrations")"
+  # The production path: the image's explicit `migrate` command (job `image`;
+  # locally: docker build -t supabase-helpdesk:ci .). The CI database is
+  # disposable, so the backup is confirmed.
+  cp "$ROOT"/supabase/migrations/*.sql "$PROJ/supabase/migrations/"   # for the idempotency re-run below
+  local dbc image="${MIGRATE_IMAGE:-supabase-helpdesk:ci}"
+  dbc="$(db_container)"
+  if MSYS_NO_PATHCONV=1 docker run --rm --network "supabase_network_${dbc#supabase_db_}" \
+       -e MIGRATION_DB_URL="postgresql://postgres:postgres@${dbc}:5432/postgres?sslmode=disable" \
+       "$image" migrate --backup-confirmed > "$OUT/migrate.log" 2>&1; then
+    note "✅ \`migrate\` ($image) applied: $(paste -sd ' ' "$WORK/new-migrations")"
   else
     cat "$OUT/migrate.log"
-    error "supabase migration up failed (see migrate.log in the diagnostics artifact)"
-    note "❌ \`supabase migration up\` failed:"; note '```'; tail -n 30 "$OUT/migrate.log" >> "$SUMMARY"; note '```'
+    error "migrate failed (see migrate.log in the diagnostics artifact)"
+    note "❌ \`migrate\` failed:"; note '```'; tail -n 30 "$OUT/migrate.log" >> "$SUMMARY"; note '```'
     return 1
   fi
   cat "$OUT/migrate.log"

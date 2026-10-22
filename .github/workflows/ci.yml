@@ -64,6 +64,58 @@ jobs:
           retention-days: 14
           overwrite: true
 
+  image:
+    name: Docker image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # Writes package-lock.json: the dependency tree resolved for this commit,
+      # which the Dockerfile installs with `npm ci`.
+      - uses: ./.github/actions/setup
+      - name: docker build
+        run: |
+          docker build -t supabase-helpdesk:ci --build-arg "HELPDESK_VERSION=sha-$GITHUB_SHA" .
+          docker save supabase-helpdesk:ci | gzip -1 > "$RUNNER_TEMP/image.tar.gz"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: image
+          path: ${{ runner.temp }}/image.tar.gz
+          retention-days: 3
+          compression-level: 0
+
+  image-smoke:
+    name: Image smoke (migrate · startup check)
+    needs: image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - uses: actions/download-artifact@v8
+        with:
+          name: image
+          path: ${{ runner.temp }}
+      - name: docker load
+        run: gunzip -c "$RUNNER_TEMP/image.tar.gz" | docker load
+      - name: Smoke scenarios
+        env:
+          IMAGE: supabase-helpdesk:ci
+          EXPECTED_VERSION: sha-${{ github.sha }}
+        run: bash .github/scripts/image-smoke.sh
+      - name: Upload diagnostics
+        if: failure()
+        uses: ./.github/actions/upload-diagnostics
+        with:
+          name: diagnostics-image-smoke
+          extra-path: ${{ runner.temp }}/image-smoke/out
+
   db:
     name: DB tests
     runs-on: ubuntu-24.04
@@ -196,6 +248,7 @@ jobs:
   # See .github/scripts/migration-upgrade.sh for the rules it enforces.
   migration-upgrade:
     name: Migration upgrade (prod-like)
+    needs: image
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -218,6 +271,14 @@ jobs:
           supabase-workdir: ${{ steps.detect.outputs.workdir }}
       - if: steps.detect.outputs.changed == 'true'
         uses: ./.github/actions/supabase-ready
+      - if: steps.detect.outputs.changed == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: image
+          path: ${{ runner.temp }}
+      - name: docker load
+        if: steps.detect.outputs.changed == 'true'
+        run: gunzip -c "$RUNNER_TEMP/image.tar.gz" | docker load
       - name: Upgrade and verify
         if: steps.detect.outputs.changed == 'true'
         run: bash .github/scripts/migration-upgrade.sh verify
@@ -230,7 +291,7 @@ jobs:
 
   ci-result:
     name: ci-result   # the single required status check
-    needs: [lint, db, e2e, cross-browser, migration-upgrade]
+    needs: [lint, db, e2e, cross-browser, migration-upgrade, image, image-smoke]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5

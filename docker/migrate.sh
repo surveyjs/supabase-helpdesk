@@ -31,22 +31,38 @@ if [ "${MIGRATE_LOCKED:-}" != 1 ]; then
   # psql keeps the session (and the lock) open while \! runs the real work.
   rcfile="$(mktemp)"
   log "waiting for the migration lock"
-  if ! psql "$DB" -X -q -o /dev/null -v ON_ERROR_STOP=1 <<SQL
+  psql_rc=0
+  psql "$DB" -X -q -o /dev/null -v ON_ERROR_STOP=1 <<SQL || psql_rc=$?
 select pg_advisory_lock($LOCK_KEY);
 \! MIGRATE_LOCKED=1 sh $0 $* 1>&2; echo \$? > $rcfile
+select 1;
 SQL
-  then log "cannot connect to the database"; rm -f "$rcfile"; exit 1; fi
   rc="$(cat "$rcfile")"; rm -f "$rcfile"
+  if [ "$psql_rc" != 0 ]; then
+    if [ -n "$rc" ] && [ "$rc" != 0 ]; then exit "$rc"; fi
+    if [ -n "$rc" ]; then log "the migration lock session was lost during the run"
+    else log "could not take the migration lock (connection or lock error, see above)"; fi
+    exit 1
+  fi
   exit "${rc:-1}"
 fi
 
-applied="$(psql "$DB" -X -qtA -c 'select version from supabase_migrations.schema_migrations order by 1' 2>/dev/null || true)"
-eval "$(printf '%s\n' "$applied" | node /app/docker/versions-cli.mjs "$MIG")"
+have_history="$(psql "$DB" -X -qtA -v ON_ERROR_STOP=1 -c "select to_regclass('supabase_migrations.schema_migrations') is not null")" \
+  || { log "cannot query the database (see above)"; exit 1; }
+applied=""
+if [ "$have_history" = t ]; then
+  applied="$(psql "$DB" -X -qtA -v ON_ERROR_STOP=1 -c 'select version from supabase_migrations.schema_migrations order by 1')" \
+    || { log "cannot read the migration history"; exit 1; }
+fi
+vars="$(printf '%s\n' "$applied" | node /app/docker/versions-cli.mjs "$MIG")" || exit 1
+eval "$vars"
 log "image: $image | database: ${db:-<empty>}"
 case "$status" in
   ok)       log "up to date"; exit 0 ;;
   newer)    log "database is newer than this image (unknown here: $dbonly); nothing changed"; exit 4 ;;
   diverged) log "history diverged: pending here [$pending], unknown here [$dbonly]; nothing changed"; exit 3 ;;
+  pending)  ;;
+  *)        log "unexpected status: $status"; exit 1 ;;
 esac
 if [ "$dry_run" = 1 ]; then log "dry run: would apply $pending"; exit 0; fi
 

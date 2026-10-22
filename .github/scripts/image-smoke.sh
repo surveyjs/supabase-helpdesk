@@ -2,7 +2,8 @@
 # Smoke test of the release image against a real local Supabase stack that
 # starts with NO schema: the explicit `migrate` command (dry run, backup
 # confirmation, lock, refusals) and the app's startup schema check. CI: job
-# image-smoke. Locally (Git Bash + Docker), stops this project's local stack:
+# image-smoke. Locally (Git Bash + Docker), stops this project's local stack and
+# WIPES its data (volumes are dropped):
 #   docker build -t supabase-helpdesk:ci --build-arg HELPDESK_VERSION=local .
 #   IMAGE=supabase-helpdesk:ci EXPECTED_VERSION=local bash .github/scripts/image-smoke.sh
 set -euo pipefail
@@ -28,8 +29,8 @@ set -a; source "$ROOT/.env.test"; set +a
 DB_URL="postgresql://postgres:postgres@$DBC:5432/postgres?sslmode=disable"
 
 supabase stop --no-backup >/dev/null 2>&1 || true
-supabase start --workdir "$(native_path "$PROJ")" -x "$EXCLUDE"
 trap 'supabase stop --workdir "$(native_path "$PROJ")" --no-backup >/dev/null 2>&1 || true' EXIT
+supabase start --workdir "$(native_path "$PROJ")" -x "$EXCLUDE"
 
 # run <name> [docker run options] -- <image args>   -> $OUT/<name>.log, exit code in $rc
 run() {
@@ -89,14 +90,23 @@ wait
 expect_eq "$(cat "$OUT/lock-a.rc") $(cat "$OUT/lock-b.rc")" "0 0" "two concurrent migrate runs both succeed"
 expect_eq "$(psql_val 'select count(*) from smoke_lock')" 1 "the lock lets only one of them apply"
 
+BEFORE="$(applied)"
 V="$(variant newer 1)"
 run newer -v "$V:/app/supabase/migrations:ro" -- migrate --backup-confirmed
 expect_run newer 4 "database is newer than this image" "an older image refuses to migrate (exit 4)"
+expect_eq "$(applied)" "$BEFORE" "the exit-4 refusal changes nothing"
 
 # Image: repo + 992; database: repo + 990 -> pending 992, unknown here 990.
 V="$(variant diverged 0 992_other.sql "select 1;")"
 run diverged -v "$V:/app/supabase/migrations:ro" -- migrate --backup-confirmed
 expect_run diverged 3 "history diverged" "diverged history is refused (exit 3)"
+expect_eq "$(applied)" "$BEFORE" "the exit-3 refusal changes nothing"
+
+# Duplicate version in the image's migrations: versions-cli fails -> exit 1, not 2.
+V="$(variant dup 0 003_duplicate.sql "select 1;")"
+run dup -v "$V:/app/supabase/migrations:ro" -- migrate --backup-confirmed
+expect_run dup 1 "Duplicate migration version 003" "a duplicate migration version is an error (exit 1)"
+expect_eq "$(applied)" "$BEFORE" "the exit-1 error changes nothing"
 
 echo "Logs: $OUT" >> "$SUMMARY"
 exit $(( fails > 0 ))

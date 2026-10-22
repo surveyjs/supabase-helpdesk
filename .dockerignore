@@ -30,3 +30,4 @@ migration/source-data
 deploy
 docs
 *.md
+**/*.test.ts

@@ -2,7 +2,7 @@
 
 # One image per release, shared by every instance and both Supabase modes:
 # nothing instance-specific is baked in (src/lib/deploy/env.mjs reads it at
-# runtime). Commands (docker/entrypoint.sh): serve (default) | migrate.
+# runtime). Commands (docker/entrypoint.sh): serve (default) | status | migrate.
 ARG NODE_VERSION=24
 
 # ---- deps ---------------------------------------------------------------------

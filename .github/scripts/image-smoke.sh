@@ -64,6 +64,16 @@ variant() {
 ALL="$(ls "$ROOT/supabase/migrations" | sed -n 's/^\([0-9]*\)_.*\.sql$/\1/p' | sort | paste -sd ' ')"
 echo "## Image smoke: $IMAGE" >> "$SUMMARY"
 
+# --- startup check on an empty database -------------------------------------------
+run serve-empty -- serve
+expect_run serve-empty 78 "Run the migration explicitly: docker compose run --rm migrate" "app refuses to start on an empty database (exit 78)"
+
+run serve-down -e SUPABASE_URL=http://nowhere.invalid:8000 -e SCHEMA_CHECK_WAIT_SECONDS=3 -- serve
+expect_run serve-down 1 "did not answer within 3s" "unreachable Supabase: waits, then a clear message (exit 1)"
+
+run serve-badkey -e SUPABASE_SERVICE_ROLE_KEY=wrong -- serve
+expect_run serve-badkey 1 "HTTP 401" "wrong service-role key fails at once (exit 1)"
+
 # --- migrate ---------------------------------------------------------------------
 run dry-run -- migrate --dry-run
 expect_run dry-run 0 "dry run: would apply $ALL" "migrate --dry-run lists every pending migration"
@@ -81,7 +91,20 @@ expect_eq "$(applied)" "$ALL" "history records every migration"
 run again -- migrate
 expect_run again 0 "up to date" "with nothing pending, migrate needs no confirmation and does nothing"
 
-# --- (Task 7 inserts the startup-check scenarios on a matching schema here) ---------
+run status -- status
+expect_run status 0 "Database schema matches this image." "status reports a matching schema"
+docker run -d --name image-smoke-app --network "$NET" -p 13001:3001   -e SUPABASE_URL="http://supabase_kong_$PID:8000" -e APP_URL=http://localhost:3001   -e SUPABASE_ANON_KEY -e SUPABASE_SERVICE_ROLE_KEY "$IMAGE" serve >/dev/null
+version=""; for _ in $(seq 60); do
+  version="$(curl -fsS http://localhost:13001/api/health 2>/dev/null | node -pe 'JSON.parse(require("fs").readFileSync(0)).version' 2>/dev/null || true)"
+  [[ -n "$version" ]] && break; sleep 1
+done
+docker logs image-smoke-app > "$OUT/serve-ok.log" 2>&1; docker rm -f image-smoke-app >/dev/null
+expect_eq "$version" "$EXPECTED_VERSION" "app starts on a matching schema and reports its version"
+
+run serve-newer -v "$(variant newer2 1):/app/supabase/migrations:ro" -- serve
+expect_run serve-newer 78 "./upgrade.sh --rollback" "an older image refuses to start on a newer schema (exit 78)"
+run serve-pending -v "$(variant pending 0 993_pending.sql "select 1;"):/app/supabase/migrations:ro" -- serve
+expect_run serve-pending 78 "Pending migrations: 993" "a newer image refuses to start before migrate (exit 78)"
 
 V="$(variant lock 0 990_smoke_lock.sql "select pg_sleep(5); create table if not exists smoke_lock(id int); insert into smoke_lock values (1);")"
 ( run lock-a -v "$V:/app/supabase/migrations:ro" -- migrate --backup-confirmed; echo "$rc" > "$OUT/lock-a.rc" ) &

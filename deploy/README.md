@@ -96,23 +96,29 @@ empty directory, e.g. `/opt/helpdesk`, and run everything below from there.
 ./upgrade.sh X.Y.Z                 # asks before applying migrations
 ./upgrade.sh --migrate X.Y.Z       # no terminal (CI, cron): migrations are pre-approved
 ./upgrade.sh --bundle FILE X.Y.Z   # use a downloaded bundle instead of the GitHub release
+./upgrade.sh --help
 ```
 
-`upgrade.sh` unpacks the new bundle (`.env`, `backups/` and data stay), shows what `migrate` would
-change and the database size, asks for confirmation, then:
+`upgrade.sh` checks that the bundle is the one of X.Y.Z, unpacks it over this directory (`.env`,
+`backups/` and data stay; the replaced files are saved in `backups/files-<previous>-<UTC>.tgz`),
+pulls the images and runs `migrate --dry-run`. With pending migrations it prints them and the
+database size and asks `Apply …? [y/N]` (without a terminal `--migrate` is that yes). Then:
 
-- bundled: stops the stack and snapshots the Postgres data directory into `backups/`;
-- external: relies on your provider's backups (PITR) and records the restore point;
+- bundled: stops the whole stack and snapshots the Postgres data directory into
+  `backups/db-<previous>-<UTC>.tar.gz`, then starts the database again;
+- external: relies on your provider's backups (PITR) and records the restore point `migrate` prints;
 
-and migrates, starts the new version and waits until `/api/health` reports it.
+and migrates, starts the new version and waits until `/api/health` reports it. Without pending
+migrations it only restarts HelpDesk on the new version (no snapshot). The way back is recorded in
+`.upgrade-state` for `--rollback`.
 
 | Exit | Meaning |
 |------|---------|
 | 0 | Upgraded. |
-| 1 | Error before any change (bad arguments, wrong bundle, download failed). Nothing changed. |
-| 2 | Migrations pending but not confirmed (no terminal and no `--migrate`). Nothing changed. |
-| 3 | Failed; the schema is unchanged and the previous version runs again. |
-| 4 | Failed after the schema changed; HelpDesk stays stopped. Fix and upgrade again, or roll back. |
+| 1 | Error before any change (bad arguments, wrong bundle, download failed, image missing, `migrate --dry-run` refused, e.g. a database newer than X.Y.Z). Nothing changed. |
+| 2 | Migrations pending but not confirmed (answered no, or no terminal and no `--migrate`). Nothing changed. |
+| 3 | Failed before the schema changed (snapshot, migration or start of X.Y.Z); the previous version runs again. |
+| 4 | Failed after the schema changed; HelpDesk stays stopped. Fix the cause and run `./upgrade.sh` again (the run continues the upgrade and keeps the snapshot taken before it), or roll back. |
 
 ## 5. Rollback
 
@@ -120,17 +126,23 @@ and migrates, starts the new version and waits until `/api/health` reports it.
 ./upgrade.sh --rollback            # asks for confirmation; --yes without a terminal
 ```
 
-- **Bundled:** restores the snapshot taken before the last upgrade (the whole database — auth,
-  storage metadata, HelpDesk data) and the previous version. Everything written since the upgrade
-  is lost.
-- **External:** Supabase has no in-place restore. `--rollback` prints the restore point; restore
-  the project to it (Dashboard → Database → Backups → Point in time, or the Management API
-  `restore-pitr`), then run `./upgrade.sh --rollback --restored` to start the previous version.
+It undoes the last upgrade — one step, to the version recorded in `.upgrade-state`:
+
+- **Bundled:** restores the snapshot taken before that upgrade (the whole database — auth,
+  storage metadata, HelpDesk data), the previous files and version. Everything written since the
+  upgrade is lost. If that upgrade had no migrations there is no snapshot: only the files and the
+  version go back.
+- **External:** Supabase has no in-place restore. `--rollback` prints the restore point and stops
+  (exit 1); restore the project to it (Dashboard → Database → Backups → Point in time, or the
+  Management API `restore-pitr`), then run `./upgrade.sh --rollback --restored` (`--yes` too
+  without a terminal) to start the previous version.
 
 ## 6. Backups
 
-- `upgrade.sh` keeps the last 3 snapshots of the database in `backups/` (bundled mode). They are
-  taken with the stack stopped, so they are consistent. Copy them off the host if you need more.
+- `upgrade.sh` keeps the last 3 snapshots of the database, `backups/db-*.tar.gz` (bundled mode),
+  and deletes older ones — do not name your own archives `db-*.tar.gz` there. They are taken with
+  the stack stopped, so they are consistent, and hold the database only, not the uploaded files in
+  `supabase/volumes/storage` (as with Supabase's own backups). Copy them off the host if you need more.
 - For regular backups of a bundled installation: stop the stack (`docker compose stop`), archive
   `supabase/volumes/db/data` and `supabase/volumes/storage` (uploaded files) as root — the files
   belong to the containers' users — and start again.

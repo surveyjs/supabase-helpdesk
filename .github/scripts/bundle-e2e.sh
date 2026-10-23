@@ -3,7 +3,8 @@
 # way an operator runs it (README.md, Install): pack -> init-env -> (app refuses
 # before migrate) -> migrate -> up -> admin create -> sign in through the proxy on
 # one domain. Also checks that pack-bundle.sh leaks no ignored files.
-# Task 6 adds upgrade.sh to a next version and --rollback. CI: job bundle-e2e.
+# Then upgrade.sh to a next version (this image + one migration) and --rollback.
+# CI: job bundle-e2e.
 # Locally (Linux, or Git Bash + Docker Desktop; needs port 80 and Supabase's
 # fixed container names supabase-*, so no other official-compose stack may run):
 #   docker build -t supabase-helpdesk:ci --build-arg HELPDESK_VERSION=ci .
@@ -100,6 +101,45 @@ if curl -fsS -X POST "$APP_URL/auth/v1/token?grant_type=password" -H "apikey: $A
 then pass "GoTrue answers on /auth/v1 through the proxy"; else fail "no token from /auth/v1 through the proxy"; fi
 login install
 
-# --- (Task 6 adds the upgrade and rollback scenarios here) -------------------------
+# --- upgrade to a next version with a new migration, then roll back --------------------
+# The next version: this image plus one migration (spec: a synthetic next version).
+NEXT="$VERSION-next"
+printf 'create table if not exists public.bundle_e2e_marker (id int);\n' > "$WORK/999_bundle_e2e.sql"
+printf 'FROM %s:%s\nCOPY 999_bundle_e2e.sql /app/supabase/migrations/\nENV HELPDESK_VERSION=%s\n' \
+  "$IMAGE" "$VERSION" "$NEXT" > "$WORK/Dockerfile.next"
+marker() { compose exec -T db psql -U postgres -tAc "select to_regclass('public.bundle_e2e_marker') is not null" | tr -d '\r '; }
+snapshots() { find "$DIR/backups" -name 'db-*.tar.gz' 2>/dev/null | wc -l | tr -d ' '; }
+upgrade() { # upgrade <log name> <args...>: sets rc
+  local name="$1"; shift
+  set +e; "$DIR/upgrade.sh" "$@" </dev/null > "$OUT/$name.log" 2>&1; rc=$?; set -e
+}
+
+if docker build -q -t "$IMAGE:$NEXT" -f "$(native_path "$WORK/Dockerfile.next")" "$(native_path "$WORK")" > "$OUT/build-next.log" 2>&1 \
+   && bash "$ROOT/deploy/scripts/pack-bundle.sh" "$NEXT" "$WORK/bundle-$NEXT.tgz" >> "$OUT/build-next.log" 2>&1; then
+  upgrade upgrade-unconfirmed --bundle "$WORK/bundle-$NEXT.tgz" "$NEXT"
+  if [[ $rc == 2 ]] && health_is "$VERSION" && [[ "$(marker)" == f ]]; then
+    pass "upgrade without --migrate and without a terminal stops, nothing changed (exit 2)"
+  else
+    fail "unconfirmed upgrade: exit $rc, version $(health_version), marker $(marker)"; tail -30 "$OUT/upgrade-unconfirmed.log"
+  fi
+
+  upgrade upgrade --bundle "$WORK/bundle-$NEXT.tgz" --migrate "$NEXT"
+  if [[ $rc == 0 ]] && health_is "$NEXT" && [[ "$(marker)" == t && "$(snapshots)" == 1 ]]; then
+    pass "upgrade --migrate snapshots the database, migrates and runs $NEXT"
+  else
+    fail "upgrade: exit $rc, version $(health_version), marker $(marker), snapshots $(snapshots)"; tail -40 "$OUT/upgrade.log"
+  fi
+  login upgraded
+
+  upgrade rollback --rollback --yes
+  if [[ $rc == 0 ]] && health_is "$VERSION" && [[ "$(marker)" == f && ! -e "$DIR/.upgrade-state" ]]; then
+    pass "--rollback restores the database and $VERSION"
+  else
+    fail "rollback: exit $rc, version $(health_version), marker $(marker)"; tail -40 "$OUT/rollback.log"
+  fi
+  login rolled-back
+else
+  fail "cannot build the next version $IMAGE:$NEXT or its bundle"; tail -30 "$OUT/build-next.log"
+fi
 
 exit $(( fails > 0 ))

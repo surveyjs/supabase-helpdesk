@@ -46,6 +46,9 @@ jobs:
       - name: Unit tests
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: npm run test:unit
+      - name: Deploy script tests
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: bash deploy/tests/upgrade.test.sh
       - name: Record resolved dependency versions
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: |

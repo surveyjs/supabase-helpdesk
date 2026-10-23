@@ -1,11 +1,15 @@
 // `admin create --email E` / `admin reset-password --email E`: prints a one-time
 // password for the account (src/lib/deploy/admin.mjs).
 import { resolveSupabaseEnv } from './lib/env.mjs';
-import { createAdmin, generatePassword, resetPassword } from './lib/admin.mjs';
+import { createAdmin, generatePassword, parseAdminArgs, resetPassword } from './lib/admin.mjs';
 
 const usage = 'usage: admin create|reset-password --email EMAIL';
-const [action, flag, email] = process.argv.slice(2);
-if (!['create', 'reset-password'].includes(action ?? '') || flag !== '--email' || !email) {
+let action;
+let email;
+try {
+  ({ action, email } = parseAdminArgs(process.argv.slice(2)));
+} catch (err) {
+  console.error(`[admin] ${err instanceof Error ? err.message : String(err)}`);
   console.error(usage);
   process.exit(64);
 }

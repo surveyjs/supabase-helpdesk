@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createAdmin, generatePassword, resetPassword } from './admin.mjs';
+import { createAdmin, generatePassword, parseAdminArgs, resetPassword } from './admin.mjs';
 
 const base = { supabaseUrl: 'http://api-gw:8000', serviceRoleKey: 'svc', email: 'boss@example.com', password: 'pw' };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -27,6 +27,63 @@ describe('createAdmin', () => {
   it('fails if no profile got the admin role', async () => {
     const fetchImpl = vi.fn().mockResolvedValueOnce(json({ id: 'u1' })).mockResolvedValueOnce(json([]));
     await expect(createAdmin({ ...base, fetchImpl })).rejects.toThrow(/no profile for user u1/);
+  });
+});
+
+describe('createAdmin rollback', () => {
+  it('removes the user when the role grant fails', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(json({ id: 'u1' }))
+      .mockResolvedValueOnce(json([]))
+      .mockResolvedValueOnce(json({}));
+    await expect(createAdmin({ ...base, fetchImpl })).rejects.toThrow(/no profile for user u1.*rolled back.*re-run/);
+    const [url, init] = fetchImpl.mock.calls[2];
+    expect(url).toBe('http://api-gw:8000/auth/v1/admin/users/u1');
+    expect(init.method).toBe('DELETE');
+    expect(init.headers).toMatchObject({ apikey: 'svc', Authorization: 'Bearer svc' });
+  });
+
+  it('removes the user when the PATCH request errors', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(json({ id: 'u1' }))
+      .mockResolvedValueOnce(json({ message: 'boom' }, 500))
+      .mockResolvedValueOnce(json({}));
+    await expect(createAdmin({ ...base, fetchImpl })).rejects.toThrow(/HTTP 500 boom.*rolled back/);
+    expect(fetchImpl.mock.calls[2][1].method).toBe('DELETE');
+  });
+
+  it('names the user for manual cleanup when the rollback fails too', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(json({ id: 'u1' }))
+      .mockResolvedValueOnce(json([]))
+      .mockResolvedValueOnce(json({ msg: 'down' }, 500));
+    await expect(createAdmin({ ...base, fetchImpl })).rejects.toThrow(/user u1 exists without the admin role.*manually/);
+  });
+
+  it('fails before the PATCH if the response has no id', async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce(json({}));
+    await expect(createAdmin({ ...base, fetchImpl })).rejects.toThrow(/no user id/);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('parseAdminArgs', () => {
+  it('normalizes the email', () => {
+    expect(parseAdminArgs(['create', '--email', ' Boss@Example.COM '])).toEqual({ action: 'create', email: 'boss@example.com' });
+    expect(parseAdminArgs(['reset-password', '--email', 'a@b.c']).action).toBe('reset-password');
+  });
+
+  it.each([
+    [[]],
+    [['nuke', '--email', 'a@b.c']],
+    [['create']],
+    [['create', '--email']],
+    [['create', '--mail', 'a@b.c']],
+    [['create', '--email', 'a@b.c', 'extra']],
+    [['create', '--email', '--x@b.c']],
+    [['create', '--email', 'no-at-sign']],
+  ])('rejects %j', (argv) => {
+    expect(() => parseAdminArgs(argv)).toThrow();
   });
 });
 

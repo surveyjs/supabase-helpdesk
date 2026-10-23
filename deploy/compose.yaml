@@ -61,6 +61,8 @@ services:
       - ${PROXY_HTTPS_PORT:-443}:443/udp   # HTTP/3
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+      # --edge own: private_ranges, so the https of your proxy's X-Forwarded-Proto stays.
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data

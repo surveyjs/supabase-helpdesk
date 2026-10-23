@@ -3,6 +3,8 @@
 # $STUB_LOG and answers from STUB_* variables.
 echo "docker $*" >> "$STUB_LOG"
 case "$*" in
+  "pull -q alpine:"*|"image inspect alpine:"*)
+    exit "${STUB_HELPER_MISSING:-0}" ;;
   "image inspect"*)
     exit "${STUB_IMAGE_MISSING:-0}" ;;
   "compose run --rm -T migrate --dry-run")

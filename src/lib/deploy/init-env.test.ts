@@ -73,10 +73,15 @@ describe('renderEnv bundled', () => {
     expect(e.PROXY_HTTPS_PORT).toBe('443');
   });
 
-  it('serves plain HTTP on the port of an http APP_URL', () => {
+  it('with --edge caddy trusts no forwarded headers (Caddy is the edge)', () => {
+    expect(e.TRUSTED_PROXIES).toBeUndefined();
+  });
+
+  it('serves plain HTTP on the port of an http APP_URL and keeps 443 on localhost', () => {
     const e2 = env(renderEnv({ mode: 'bundled', appUrl: 'http://localhost:8080', version: 'x', supabaseEnvExample: example }));
     expect(e2.SITE_ADDRESS).toBe(':80');
     expect(e2.PROXY_HTTP_PORT).toBe('8080');
+    expect(e2.PROXY_HTTPS_PORT).toBe('127.0.0.1:443');
   });
 
   it('with --edge own, leaves TLS to your proxy and listens on localhost only', () => {
@@ -84,6 +89,11 @@ describe('renderEnv bundled', () => {
     expect(e3.SITE_ADDRESS).toBe(':80');
     expect(e3.PROXY_HTTP_PORT).toBe('127.0.0.1:8080');
     expect(e3.PROXY_HTTPS_PORT).toBe('127.0.0.1:8443');
+  });
+
+  it('with --edge own, trusts the X-Forwarded-* headers of your proxy (private networks)', () => {
+    const e3 = env(renderEnv({ mode: 'bundled', appUrl: 'https://help.example.com', version: 'x', edge: 'own', supabaseEnvExample: example }));
+    expect(e3.TRUSTED_PROXIES).toBe('private_ranges');
   });
 
   it('rejects an unknown edge', () => {
@@ -142,6 +152,8 @@ describe('parseInitEnvArgs', () => {
     ['flag without value at the end', [...ok, '--edge'], /--edge needs a value/],
     ['flag followed by a flag', ['--mode', 'bundled', '--app-url', '--edge', 'own'], /--app-url needs a value/],
     ['version without value', [...ok, '--version', '--edge', 'own'], /--version needs a value/],
+    ['empty version', [...ok, '--version', ''], /--version needs a value/],
+    ['empty mode', ['--mode', '', '--app-url', 'https://h.example.com'], /--mode needs a value/],
     ['missing mode', ['--app-url', 'https://h.example.com'], /--mode/],
     ['bad mode', ['--mode', 'x', '--app-url', 'https://h.example.com'], /--mode/],
     ['bad edge', [...ok, '--edge', 'nginx'], /--edge/],

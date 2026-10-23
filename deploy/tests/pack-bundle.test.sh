@@ -53,6 +53,7 @@ has() { grep -qx "$1" <<<"$files"; }
 check "tracked files are packed" 'has compose.yaml && has supabase/docker-compose.yml && has supabase/volumes/functions/main/index.ts'
 check "a new file that is not ignored is packed" 'has examples/new.yml'
 check "VERSION holds the version" '[[ "$(tar -xzOf "$T/out/bundle.tgz" ./VERSION)" == 9.9.9 ]]'
+check "every entry is owned by 0/0, not by the packer's user" '[[ "$(awk "{print \$2}" "$T/listing" | sort -u)" == 0/0 ]]'
 check "executables stay executable" 'grep -E " \./supabase/run\.sh$" "$T/listing" | grep -q "^-rwx"'
 check "no .env, local, override, snippets, functions, data, storage, backups or state" \
   '! grep -Eq "(^|/)\.env$|^local/|override|snippets|functions/mine|db/data|volumes/storage|^backups/|upgrade-state" <<<"$files"'

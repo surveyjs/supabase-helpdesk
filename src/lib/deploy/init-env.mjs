@@ -48,6 +48,8 @@ function edgeLines(edge, url) {
       'SITE_ADDRESS=:80',
       'PROXY_HTTP_PORT=127.0.0.1:8080',
       'PROXY_HTTPS_PORT=127.0.0.1:8443',
+      '# Keep the X-Forwarded-* headers (https) of proxies on private networks',
+      'TRUSTED_PROXIES=private_ranges',
     ];
   }
   if (edge !== 'caddy') throw new Error(`Unknown edge "${edge}": use caddy or own`);
@@ -56,7 +58,8 @@ function edgeLines(edge, url) {
     '# The bundled Caddy takes ports 80/443 and gets the certificate for APP_URL',
     `SITE_ADDRESS=${https ? url.hostname : ':80'}`,
     `PROXY_HTTP_PORT=${!https && url.port ? url.port : '80'}`,
-    'PROXY_HTTPS_PORT=443',
+    // Plain HTTP serves nothing on 443: keep it off the public interfaces.
+    `PROXY_HTTPS_PORT=${https ? '443' : '127.0.0.1:443'}`,
   ];
 }
 
@@ -130,7 +133,7 @@ export function parseInitEnvArgs(argv) {
     const flag = argv[i];
     if (!Object.hasOwn(FLAGS, flag)) throw new Error(`Unknown argument "${flag}"`);
     const value = argv[i + 1];
-    if (value === undefined || value.startsWith('--')) throw new Error(`${flag} needs a value`);
+    if (value === undefined || value === '' || value.startsWith('--')) throw new Error(`${flag} needs a value`);
     got[FLAGS[flag]] = value;
   }
   const { mode, appUrl, version } = got;

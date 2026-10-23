@@ -21,8 +21,11 @@ git -C "$ROOT" -c core.quotePath=false ls-files -co --exclude-standard -- deploy
   | while IFS= read -r f; do if [[ -f "$ROOT/deploy/$f" ]]; then printf '%s\n' "$f"; fi; done \
   > "$STAGE/files"
 mkdir "$STAGE/bundle"
-tar -C "$ROOT/deploy" -cf - -T "$STAGE/files" | tar -xpf - -C "$STAGE/bundle"
+# Owned by root (0/0): the packer's uid means nothing on the host, and root unpacking it
+# (tar keeps owners for root) must not hand the files to some local user.
+OWNER=(--owner=0 --group=0 --numeric-owner)
+tar -C "$ROOT/deploy" "${OWNER[@]}" -cf - -T "$STAGE/files" | tar -xpf - -C "$STAGE/bundle"
 printf '%s\n' "$VERSION" > "$STAGE/bundle/VERSION"
 mkdir -p "$(dirname "$OUT")"
-tar -C "$STAGE/bundle" -czf "$OUT" .
+tar -C "$STAGE/bundle" "${OWNER[@]}" -czf "$OUT" .
 echo "$OUT"

@@ -26,6 +26,14 @@ In bundled mode only `proxy` listens on public ports. Supabase's gateway (with S
 - Ports 80 and 443 free for `proxy` (unless your own reverse proxy takes them — section 8).
 - Bundled mode runs about a dozen Supabase containers: size the host for them (see Supabase's
   self-hosting guide), not just for HelpDesk.
+- **One bundled installation per Docker host.** Supabase's compose file gives its containers fixed
+  names (`supabase-db`, `supabase-auth`, …), so a second bundled installation, or any other stack
+  from Supabase's official compose file, cannot run on the same host.
+
+`supabase/` is Supabase's own `docker/` directory, unmodified. Do not use its scripts
+(`setup.sh`, `update.sh`, `run.sh`, `reset.sh`): they act on `supabase/.env`, which this
+installation does not use (everything is in `.env` here), and **`reset.sh` deletes the database**.
+`upgrade.sh` upgrades Supabase together with HelpDesk.
 
 ## 2. Install — bundled Supabase
 
@@ -99,33 +107,38 @@ empty directory, e.g. `/opt/helpdesk`, and run everything below from there.
 ./upgrade.sh --help
 ```
 
-The mode comes from `COMPOSE_FILE` in `.env`: bundled when it includes `compose.bundled.yaml`.
-`SUPABASE_URL` must agree (empty for bundled, set for external), otherwise `upgrade.sh` stops with
+The mode comes from `COMPOSE_FILE` in `.env` (or exported in the shell, which wins, as in
+`docker compose`): bundled when it includes `compose.bundled.yaml`. `SUPABASE_URL` must agree (empty for bundled, set for external), otherwise `upgrade.sh` stops with
 exit 1 before changing anything.
 
 `upgrade.sh` checks that the bundle is the one of X.Y.Z, unpacks it over this directory (`.env`,
 `backups/` and data stay, even if a bundle contains them; the replaced files are saved in
-`backups/files-<previous>-<UTC>.tgz`), pulls the images and runs `migrate --dry-run`. With pending
-migrations it prints them and the database size and asks `Apply …? [y/N]` (without a terminal
-`--migrate` is that yes). Up to here any stop — an error, `n`, Ctrl-C — puts the previous files
-back: nothing changed. Then:
+`backups/files-<previous>-<UTC>.tgz`), pulls the images (bundled: also `alpine:3.22`, which takes
+the snapshot) and runs `migrate --dry-run`. With pending migrations — or a bundle with another
+Supabase version (`supabase/VENDORED`; Supabase migrates its own schemas when it starts) — it
+prints them and the database size and asks `Apply …? [y/N]` (without a terminal `--migrate` is
+that yes). Up to here any stop — an error, `n`, Ctrl-C — puts the previous files back: nothing
+changed. Then:
 
 - bundled: stops the whole stack and snapshots the Postgres data directory into
   `backups/db-<previous>-<UTC>.tar.gz`, checks the archive (not empty, a Postgres data directory),
   then starts the database again;
 - external: relies on your provider's backups (PITR) and records the restore point `migrate` prints;
 
-and migrates, starts the new version and waits until `/api/health` reports it. Without pending
-migrations it only restarts HelpDesk on the new version (no snapshot). The way back is recorded in
-`.upgrade-state` for `--rollback`.
+and migrates, starts the new version and waits until `/api/health` reports it. `proxy` is always
+recreated (Caddy reads the `Caddyfile` only at start), and every service when the bundle changed
+anything under `supabase/`. Without pending migrations and without a new Supabase version it only
+restarts HelpDesk on the new version (no snapshot). The way back is recorded in `.upgrade-state`
+for `--rollback`.
 
 | Exit | Meaning |
 |------|---------|
 | 0 | Upgraded. |
 | 1 | Error before any change (bad arguments, wrong bundle, download failed, image missing, `migrate --dry-run` refused, e.g. a database newer than X.Y.Z). Nothing changed. |
-| 2 | Migrations pending but not confirmed (answered no, or no terminal and no `--migrate`). Nothing changed. |
-| 3 | Failed before the schema changed (snapshot, migration or start of X.Y.Z); the previous version runs again. |
-| 4 | Failed after the schema changed; HelpDesk stays stopped and `.env` keeps the previous version. Fix the cause and run `./upgrade.sh` again (the run continues the upgrade and keeps the snapshot taken before it), or roll back. |
+| 2 | Migrations pending, or a Supabase upgrade, not confirmed (answered no, or no terminal and no `--migrate`). Nothing changed. |
+| 3 | Failed before the schema changed (snapshot, migration or start of X.Y.Z); the previous version was restarted. If the script also says it did not become healthy, check `docker compose ps` and `docker compose logs app`. |
+| 4 | Failed after the schema changed (or after a new Supabase version started); HelpDesk stays stopped and `.env` keeps the previous version. Fix the cause and run `./upgrade.sh` again (the run continues the upgrade and keeps the snapshot taken before it), or roll back. |
+| 130, 143 | Interrupted (Ctrl-C, `kill`). Before the confirmation: the previous files are back, nothing changed. Later: HelpDesk may be stopped, as with exit 4 — run `./upgrade.sh X.Y.Z` again (it continues) or `./upgrade.sh --rollback`. |
 
 ## 5. Rollback
 
@@ -163,8 +176,11 @@ It undoes the last upgrade — one step, to the version recorded in `.upgrade-st
 
   ```sh
   docker run --rm -v helpdesk_db-config:/k:ro -v "$PWD/backups:/b" alpine:3.22 \
-    tar -C /k -czf /b/vault-key-db-config.tar.gz .
+    sh -c 'umask 077; tar -C /k -czf /b/vault-key-db-config.tar.gz .'
   ```
+
+- `backups/` is readable by its owner only (`upgrade.sh` keeps it at mode 700, and snapshots are
+  written with mode 600): keep it that way, and keep copies as private.
 
 ## 7. Supabase Studio
 
@@ -196,11 +212,16 @@ listens on `127.0.0.1:8080` and on `proxy:80` in the compose network, without TL
       proxy_set_header Upgrade $http_upgrade;
       proxy_set_header Connection "upgrade";
       proxy_set_header Host $host;
+      proxy_set_header X-Forwarded-Proto $scheme;
   }
   ```
 
-  (Caddy replaces `X-Forwarded-*` headers from your proxy with its own; HelpDesk and Supabase take
-  their public URLs from `.env`, not from these headers.)
+- Your proxy must send `Host` and `X-Forwarded-Proto: https` (Traefik does by default): HelpDesk
+  builds its redirects (sign-in, `/auth/callback`) from them. Caddy keeps the `X-Forwarded-*`
+  headers only from the addresses in `TRUSTED_PROXIES` (`.env`; `--edge own` writes
+  `private_ranges` — the Docker networks and localhost) and replaces them for anyone else, so
+  redirects would go to `http://`. If your proxy reaches Caddy from a public address, list it
+  there (space-separated IPs or CIDRs) and run `docker compose up -d proxy`.
 
 ## 9. Troubleshooting
 

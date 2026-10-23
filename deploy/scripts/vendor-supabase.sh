@@ -22,4 +22,14 @@ mkdir -p "$DEST"
 tar -C "$TMP/repo/docker" --exclude=./tests --exclude=./dev -cf - . | tar -xf - -C "$DEST"
 # Not .supabase-version: upstream's .gitignore ignores that name.
 printf 'ref=%s\nsha=%s\n' "$TAG" "$sha" > "$DEST/VENDORED"
+
+# Windows checkouts do not carry the executable bit, so tar loses it: restore
+# exactly the modes upstream has (100755) in the working tree and in the index.
+git -C "$ROOT" add deploy/supabase
+git -C "$TMP/repo" ls-files -s docker | awk '$1 == "100755" { print $4 }' \
+  | grep -vE '^docker/(tests|dev)/' | sed 's#^docker/#deploy/supabase/#' \
+  | while IFS= read -r f; do
+      chmod +x "$ROOT/$f"
+      git -C "$ROOT" update-index --chmod=+x -- "$f"
+    done
 echo "Vendored $TAG ($sha) into deploy/supabase"

@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 
@@ -21,5 +22,21 @@ describe('vendored Supabase self-hosted setup', () => {
 
   it("keeps LF line endings (Envoy's entrypoint breaks on CRLF)", () => {
     expect(readFileSync(`${DIR}/volumes/api/envoy/docker-entrypoint.sh`, 'utf8')).not.toContain('\r');
+  });
+
+  it('keeps the executable bit upstream has (Windows checkouts lose it)', () => {
+    const modes = new Map(
+      execFileSync('git', ['ls-files', '-s', 'deploy'], { encoding: 'utf8' })
+        .split('\n')
+        .filter(Boolean)
+        .map((l) => [l.split('\t')[1], l.split(' ')[0]] as const),
+    );
+    // Upstream ships utils/*.sh as 100644 (run as `bash utils/x.sh`); keep as is.
+    const scripts = [...modes.keys()].filter(
+      (p) => p.endsWith('.sh') && !p.startsWith('deploy/supabase/utils/'),
+    );
+    expect(scripts.length).toBeGreaterThan(5);
+    for (const p of scripts) expect(modes.get(p), p).toBe('100755');
+    expect(modes.get('deploy/supabase/volumes/api/envoy/docker-entrypoint.sh')).toBe('100755');
   });
 });

@@ -8,5 +8,6 @@ case "$cmd" in
   status)  exec node /app/docker/check-schema.mjs --report ;;
   migrate) exec sh /app/docker/migrate.sh "$@" ;;
   scheduler) exec node /app/docker/scheduler.mjs ;;
-  *) echo "usage: serve | status | migrate [--dry-run] [--backup-confirmed] | scheduler" >&2; exit 64 ;;
+  init-env) exec node /app/docker/init-env.mjs "$@" ;;
+  *) echo "usage: serve | status | migrate [--dry-run] [--backup-confirmed] | scheduler | init-env --mode bundled|external --app-url URL [--edge caddy|own] [--version V]" >&2; exit 64 ;;
 esac

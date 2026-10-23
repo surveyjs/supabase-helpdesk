@@ -44,6 +44,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY supabase/migrations ./supabase/migrations
 COPY docker ./docker
 COPY src/lib/deploy ./docker/lib
+COPY deploy/supabase/.env.example ./docker/supabase.env.example
 USER nextjs
 EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

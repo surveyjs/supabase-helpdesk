@@ -1,0 +1,6 @@
+# Our changes to the vendored Supabase stack (deploy/supabase/ stays pristine).
+services:
+  # The database is not published on the host: `migrate` reaches db over the
+  # compose network. (The gateway binds to 127.0.0.1 via API_GW_HTTP_PORT.)
+  supavisor:
+    ports: !reset []

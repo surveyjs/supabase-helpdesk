@@ -1,0 +1,71 @@
+# HelpDesk — the services of both Supabase modes. The mode is chosen by
+# COMPOSE_FILE in .env (written by `init-env`):
+#   bundled:  compose.yaml:compose.bundled.yaml  (Supabase runs here, on APP_URL)
+#   external: compose.yaml                       (Supabase Cloud or another server)
+# Operator guide: README.md
+name: helpdesk
+
+x-image: &image ${HELPDESK_IMAGE:-ghcr.io/surveyjs/supabase-helpdesk}:${HELPDESK_VERSION:?HELPDESK_VERSION is not set in .env}
+
+services:
+  app:
+    image: *image
+    restart: unless-stopped
+    init: true
+    environment:
+      APP_URL: ${APP_URL:?APP_URL is not set in .env}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-${ANON_KEY:-}}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-${SERVICE_ROLE_KEY:-}}
+      CRON_SECRET: ${CRON_SECRET:?CRON_SECRET is not set in .env}
+      INBOUND_EMAIL_WEBHOOK_SECRET: ${INBOUND_EMAIL_WEBHOOK_SECRET:-}
+      AI_PROVIDER: ${AI_PROVIDER:-}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-}
+      AI_CUSTOM_ENDPOINT_URL: ${AI_CUSTOM_ENDPOINT_URL:-}
+
+  scheduler:
+    image: *image
+    command: scheduler
+    restart: unless-stopped
+    init: true
+    # The image's HEALTHCHECK probes the web server, which this container does
+    # not run. (`disable: true` would make `docker compose up --wait` fail.)
+    healthcheck:
+      test: [CMD, pgrep, -f, docker/scheduler.mjs]
+      interval: 30s
+      start_period: 10s
+    environment:
+      APP_INTERNAL_URL: http://app:3001
+      CRON_SECRET: ${CRON_SECRET:?CRON_SECRET is not set in .env}
+    depends_on: [app]
+
+  # One-off: docker compose run --rm migrate [--dry-run] [--backup-confirmed]
+  # (`run` replaces `command` with its arguments, so the command is in the entrypoint.)
+  migrate:
+    image: *image
+    entrypoint: [sh, /app/docker/entrypoint.sh, migrate]
+    profiles: [tools]
+    environment:
+      MIGRATION_DB_URL: ${MIGRATION_DB_URL:-}
+
+  # Same-domain router (Caddyfile): Supabase's API paths -> api-gw, the rest -> app.
+  # Public entry and TLS: Caddy itself (init-env --edge caddy) or your proxy in
+  # front of proxy:80 / 127.0.0.1:8080 (--edge own, examples/traefik.yml).
+  proxy:
+    image: caddy:2.11.7-alpine
+    restart: unless-stopped
+    ports:
+      - ${PROXY_HTTP_PORT:-80}:80
+      - ${PROXY_HTTPS_PORT:-443}:443
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [app]
+
+volumes:
+  caddy-data:
+  caddy-config:

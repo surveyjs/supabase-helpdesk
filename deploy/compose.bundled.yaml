@@ -1,0 +1,26 @@
+# Bundled mode: Supabase's official self-hosted stack (deploy/supabase/,
+# unmodified) plus our overrides, with HelpDesk wired to it.
+include:
+  - path:
+      - supabase/docker-compose.yml
+      - supabase.override.yml
+
+services:
+  app:
+    environment:
+      SUPABASE_INTERNAL_URL: http://api-gw:8000
+    depends_on:
+      api-gw: { condition: service_healthy }
+      auth: { condition: service_healthy }
+      rest: { condition: service_healthy }
+
+  migrate:
+    environment:
+      # Postgres in the stack has ssl=off; the hex password from init-env is URL-safe.
+      MIGRATION_DB_URL: postgresql://postgres:${POSTGRES_PASSWORD:?}@db:5432/postgres?sslmode=disable
+    # Our migrations use the auth and storage schemas, which GoTrue and Storage
+    # create on their first start (storage.buckets does not exist before).
+    depends_on:
+      db: { condition: service_healthy }
+      auth: { condition: service_healthy }
+      storage: { condition: service_healthy }

@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
-import { generateSupabaseSecrets, renderEnv, signApiKey } from './init-env.mjs';
+import { generateSupabaseSecrets, parseInitEnvArgs, renderEnv, signApiKey } from './init-env.mjs';
 
 const example = readFileSync('deploy/supabase/.env.example', 'utf8');
 const env = (text: string) => Object.fromEntries(
@@ -107,5 +107,50 @@ describe('renderEnv external', () => {
     expect(e.SUPABASE_SERVICE_ROLE_KEY).toBe('');
     expect(e.MIGRATION_DB_URL).toBe('');
     expect(e.POSTGRES_PASSWORD).toBeUndefined();
+  });
+});
+
+describe('renderEnv output shape', () => {
+  it('ends with exactly one newline', () => {
+    const text = renderEnv({ mode: 'bundled', appUrl: 'https://h.example.com', version: 'x', supabaseEnvExample: 'COMPOSE_FILE=a\n' + example });
+    expect(text.endsWith('\n')).toBe(true);
+    expect(text.endsWith('\n\n')).toBe(false);
+  });
+});
+
+describe('parseInitEnvArgs', () => {
+  const ok = ['--mode', 'bundled', '--app-url', 'https://help.example.com'];
+
+  it('parses a full set', () => {
+    expect(parseInitEnvArgs([...ok, '--edge', 'own', '--version', '1.2.0']))
+      .toEqual({ mode: 'bundled', appUrl: 'https://help.example.com', edge: 'own', version: '1.2.0' });
+  });
+
+  it('defaults edge to caddy and leaves version undefined', () => {
+    const r = parseInitEnvArgs(ok);
+    expect(r.edge).toBe('caddy');
+    expect(r.version).toBeUndefined();
+  });
+
+  it('accepts a root slash and an http URL with a port', () => {
+    expect(parseInitEnvArgs(['--mode', 'external', '--app-url', 'https://h.example.com/']).appUrl).toBe('https://h.example.com/');
+    expect(parseInitEnvArgs(['--mode', 'bundled', '--app-url', 'http://localhost:8080']).appUrl).toBe('http://localhost:8080');
+  });
+
+  it.each([
+    ['unknown flag', [...ok, '--bogus', 'x'], /Unknown argument/],
+    ['flag without value at the end', [...ok, '--edge'], /--edge needs a value/],
+    ['flag followed by a flag', ['--mode', 'bundled', '--app-url', '--edge', 'own'], /--app-url needs a value/],
+    ['version without value', [...ok, '--version', '--edge', 'own'], /--version needs a value/],
+    ['missing mode', ['--app-url', 'https://h.example.com'], /--mode/],
+    ['bad mode', ['--mode', 'x', '--app-url', 'https://h.example.com'], /--mode/],
+    ['bad edge', [...ok, '--edge', 'nginx'], /--edge/],
+    ['missing app-url', ['--mode', 'bundled'], /--app-url/],
+    ['no scheme', ['--mode', 'bundled', '--app-url', 'help.example.com'], /absolute URL/],
+    ['non-http scheme', ['--mode', 'bundled', '--app-url', 'ftp://h.example.com'], /http/],
+    ['path', ['--mode', 'bundled', '--app-url', 'https://h.example.com/app'], /without a path/],
+    ['https with port', ['--mode', 'bundled', '--app-url', 'https://h.example.com:8443'], /443/],
+  ])('rejects %s', (_name, argv, message) => {
+    expect(() => parseInitEnvArgs(argv)).toThrow(message);
   });
 });

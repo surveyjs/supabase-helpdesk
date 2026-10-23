@@ -112,6 +112,42 @@ export function renderEnv({ mode, appUrl, version, edge = 'caddy', supabaseEnvEx
     lines[i] = `${name}=${value}`;
   }
   // HelpDesk's section sets COMPOSE_FILE.
-  const upstream = lines.filter((l) => !l.startsWith('COMPOSE_FILE=')).join('\n');
+  const upstream = lines.filter((l) => !l.startsWith('COMPOSE_FILE=')).join('\n').trimEnd();
   return `${ours}\n\n# ---- Supabase (from deploy/supabase/.env.example) -------------------------\n${upstream}\n`;
+}
+
+const FLAGS = { '--mode': 'mode', '--app-url': 'appUrl', '--edge': 'edge', '--version': 'version' };
+
+/**
+ * Parses the `init-env` command line. Throws an Error with a clear message on
+ * anything it cannot use, so the CLI can print usage and exit 64.
+ * @param {string[]} argv
+ * @returns {{ mode: 'bundled'|'external', appUrl: string, edge: 'caddy'|'own', version?: string }}
+ */
+export function parseInitEnvArgs(argv) {
+  const got = {};
+  for (let i = 0; i < argv.length; i += 2) {
+    const flag = argv[i];
+    if (!Object.hasOwn(FLAGS, flag)) throw new Error(`Unknown argument "${flag}"`);
+    const value = argv[i + 1];
+    if (value === undefined || value.startsWith('--')) throw new Error(`${flag} needs a value`);
+    got[FLAGS[flag]] = value;
+  }
+  const { mode, appUrl, version } = got;
+  const edge = got.edge ?? 'caddy';
+  if (mode !== 'bundled' && mode !== 'external') throw new Error('--mode must be bundled or external');
+  if (edge !== 'caddy' && edge !== 'own') throw new Error('--edge must be caddy or own');
+  if (!appUrl) throw new Error('--app-url is required');
+  let url;
+  try {
+    url = new URL(appUrl);
+  } catch {
+    throw new Error(`--app-url "${appUrl}" is not an absolute URL (expected https://help.example.com)`);
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new Error('--app-url must start with http:// or https://');
+  if (url.pathname !== '/' || url.search || url.hash) throw new Error('--app-url must be the site root, without a path (e.g. https://help.example.com)');
+  if (url.protocol === 'https:' && url.port) {
+    throw new Error('--app-url: an https URL must use the default port 443 (Caddy obtains the certificate on 443); use http:// for a custom port or --edge own behind your proxy');
+  }
+  return { mode, appUrl, edge, ...(version === undefined ? {} : { version }) };
 }

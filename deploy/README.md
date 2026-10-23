@@ -79,7 +79,7 @@ empty directory, e.g. `/opt/helpdesk`, and run everything below from there.
    chmod 600 .env
    ```
 
-2. Fill in your project's values (Supabase Cloud: Project Settings → API and → Database):
+2. Fill in your project's values (Supabase Cloud: Project Settings → API, and Project Settings → Database):
    - `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`;
    - `MIGRATION_DB_URL` — the **direct** connection or the **session** pooler (port 5432), not the
      transaction pooler: `migrate` holds a lock for the whole session.
@@ -134,12 +134,15 @@ and migrates, starts the new version and waits until `/api/health` reports it.
 - For regular backups of a bundled installation: stop the stack (`docker compose stop`), archive
   `supabase/volumes/db/data` and `supabase/volumes/storage` (uploaded files) as root — the files
   belong to the containers' users — and start again.
-- **Never delete the `db-config` volume** (`helpdesk_db-config`): it holds the pgsodium/Vault key the
-  database's encrypted secrets depend on, and a restored data directory is unreadable without it.
-  `docker compose down -v` deletes it — use `docker compose down` without `-v`. Back it up once:
+- **Never delete the `db-config` volume** (`helpdesk_db-config`): it holds the pgsodium/Vault key
+  of the database. Without it the encrypted secrets in the database (and in every snapshot) cannot
+  be decrypted. `docker compose down -v` deletes it — use `docker compose down` without `-v`.
+  Back it up once, and keep that copy forever (it is not a `db-*` snapshot, so `upgrade.sh` never
+  rotates it; copy it off the host too):
 
   ```sh
-  docker run --rm -v helpdesk_db-config:/k:ro -v "$PWD/backups:/b" alpine:3.22 tar -C /k -czf /b/db-config.tar.gz .
+  docker run --rm -v helpdesk_db-config:/k:ro -v "$PWD/backups:/b" alpine:3.22 \
+    tar -C /k -czf /b/vault-key-db-config.tar.gz .
   ```
 
 ## 7. Supabase Studio
@@ -172,16 +175,19 @@ listens on `127.0.0.1:8080` and on `proxy:80` in the compose network, without TL
       proxy_set_header Upgrade $http_upgrade;
       proxy_set_header Connection "upgrade";
       proxy_set_header Host $host;
-      proxy_set_header X-Forwarded-Proto $scheme;
   }
   ```
+
+  (Caddy replaces `X-Forwarded-*` headers from your proxy with its own; HelpDesk and Supabase take
+  their public URLs from `.env`, not from these headers.)
 
 ## 9. Troubleshooting
 
 - **`app` keeps restarting and its log says "Run the migration explicitly"** — the database schema
   does not match the image (new installation, or an upgrade done by hand). Run
-  `docker compose run --rm migrate` (it lists what it would apply; add `--backup-confirmed` once
-  you have a backup), then `docker compose restart app`.
+  `docker compose run --rm migrate --dry-run` to see what it would apply, then
+  `docker compose run --rm migrate --backup-confirmed` once you have a backup (without that flag
+  `migrate` applies nothing and exits with 2), then `docker compose restart app`.
 - **The log says the database is newer than the image** — you started an older version on an
   upgraded database: `./upgrade.sh --rollback`, or start the newer version again.
 - `docker compose ps` shows health; `docker compose logs -f app proxy` shows what happens.

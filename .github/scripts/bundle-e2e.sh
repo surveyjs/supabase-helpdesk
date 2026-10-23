@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # End-to-end test of the deploy bundle with the bundled Supabase stack, run the
-# way an operator runs it: pack -> init-env -> (app refuses before migrate) ->
-# migrate -> up -> admin create -> sign in through the proxy on one domain.
+# way an operator runs it (README.md, Install): pack -> init-env -> (app refuses
+# before migrate) -> migrate -> up -> admin create -> sign in through the proxy on
+# one domain. Also checks that pack-bundle.sh leaks no ignored files.
 # Task 6 adds upgrade.sh to a next version and --rollback. CI: job bundle-e2e.
 # Locally (Linux, or Git Bash + Docker Desktop; needs port 80 and Supabase's
 # fixed container names supabase-*, so no other official-compose stack may run):
@@ -33,13 +34,14 @@ compose() { (cd "$DIR" && docker compose "$@"); }
 cleanup() {
   compose logs --no-color > "$OUT/compose.log" 2>&1 || true
   compose --profile tools down -v --remove-orphans >/dev/null 2>&1 || true
+  echo "Logs: $OUT" >> "$SUMMARY"
 }
 trap cleanup EXIT
-wait_for() { # wait_for <description> <seconds> <command...>
+wait_for() { # wait_for <description> <seconds> <command...>; records ✅/❌, never aborts the run
   local d="$1" t="$2"; shift 2
   local end=$((SECONDS + t))
   until "$@" >/dev/null 2>&1; do
-    (( SECONDS < end )) || { fail "$d (timed out after ${t}s)"; return 1; }
+    (( SECONDS < end )) || { fail "$d (timed out after ${t}s)"; return 0; }
     sleep 3
   done
   pass "$d"
@@ -54,22 +56,32 @@ login() { # login <description>
 echo "## Bundle e2e: $IMAGE:$VERSION" >> "$SUMMARY"
 
 # --- install -------------------------------------------------------------------------
+if bash "$ROOT/deploy/tests/pack-bundle.test.sh" > "$OUT/pack-bundle-test.log" 2>&1; then
+  pass "the bundle holds what git tracks in deploy/, no ignored files (.env, data, snippets)"
+else
+  fail "pack-bundle.sh packs the wrong files"; cat "$OUT/pack-bundle-test.log"
+fi
 bash "$ROOT/deploy/scripts/pack-bundle.sh" "$VERSION" "$WORK/bundle-$VERSION.tgz" >/dev/null
 tar -xzf "$WORK/bundle-$VERSION.tgz" -C "$DIR"
 docker run --rm "$IMAGE:$VERSION" init-env --mode bundled --app-url "$APP_URL" --version "$VERSION" > "$DIR/.env"
 printf 'HELPDESK_IMAGE=%s\n' "$IMAGE" >> "$DIR/.env"
 sed -i 's/^ENABLE_EMAIL_AUTOCONFIRM=.*/ENABLE_EMAIL_AUTOCONFIRM=true/' "$DIR/.env"   # no SMTP in CI
 
-compose up -d
-app_waits_for_migrate() { compose logs app 2>&1 | grep -q 'Run the migration explicitly'; }
-wait_for "app refuses to start before migrate and says what to do" 240 app_waits_for_migrate
+# The README's order: migrate, then up. The app started first refuses and says why.
+set +e; compose run --rm -T app > "$OUT/app-before-migrate.log" 2>&1; rc=$?; set -e
+if [[ $rc == 78 ]] && grep -q 'Run the migration explicitly' "$OUT/app-before-migrate.log"; then
+  pass "app refuses to start before migrate (exit 78) and says what to do"
+else
+  fail "app before migrate: exit $rc, expected 78 and 'Run the migration explicitly'"; tail -30 "$OUT/app-before-migrate.log"
+fi
 
+# On a fresh stack: needs the auth and storage schemas their services create.
 if compose run --rm -T migrate --backup-confirmed > "$OUT/install-migrate.log" 2>&1; then
   pass "migrate --backup-confirmed builds the schema of the new installation"
 else
   fail "migrate failed on the new installation"; tail -30 "$OUT/install-migrate.log"
 fi
-compose restart app >/dev/null
+compose up -d
 wait_for "HelpDesk $VERSION answers through the proxy" 180 health_is "$VERSION"
 
 if curl -fsS "$APP_URL/runtime-config.js" | grep -qF "\"supabaseUrl\":\"$APP_URL\""; then
@@ -90,5 +102,4 @@ login install
 
 # --- (Task 6 adds the upgrade and rollback scenarios here) -------------------------
 
-echo "Logs: $OUT" >> "$SUMMARY"
 exit $(( fails > 0 ))

@@ -99,13 +99,20 @@ empty directory, e.g. `/opt/helpdesk`, and run everything below from there.
 ./upgrade.sh --help
 ```
 
+The mode comes from `COMPOSE_FILE` in `.env`: bundled when it includes `compose.bundled.yaml`.
+`SUPABASE_URL` must agree (empty for bundled, set for external), otherwise `upgrade.sh` stops with
+exit 1 before changing anything.
+
 `upgrade.sh` checks that the bundle is the one of X.Y.Z, unpacks it over this directory (`.env`,
-`backups/` and data stay; the replaced files are saved in `backups/files-<previous>-<UTC>.tgz`),
-pulls the images and runs `migrate --dry-run`. With pending migrations it prints them and the
-database size and asks `Apply …? [y/N]` (without a terminal `--migrate` is that yes). Then:
+`backups/` and data stay, even if a bundle contains them; the replaced files are saved in
+`backups/files-<previous>-<UTC>.tgz`), pulls the images and runs `migrate --dry-run`. With pending
+migrations it prints them and the database size and asks `Apply …? [y/N]` (without a terminal
+`--migrate` is that yes). Up to here any stop — an error, `n`, Ctrl-C — puts the previous files
+back: nothing changed. Then:
 
 - bundled: stops the whole stack and snapshots the Postgres data directory into
-  `backups/db-<previous>-<UTC>.tar.gz`, then starts the database again;
+  `backups/db-<previous>-<UTC>.tar.gz`, checks the archive (not empty, a Postgres data directory),
+  then starts the database again;
 - external: relies on your provider's backups (PITR) and records the restore point `migrate` prints;
 
 and migrates, starts the new version and waits until `/api/health` reports it. Without pending
@@ -118,7 +125,7 @@ migrations it only restarts HelpDesk on the new version (no snapshot). The way b
 | 1 | Error before any change (bad arguments, wrong bundle, download failed, image missing, `migrate --dry-run` refused, e.g. a database newer than X.Y.Z). Nothing changed. |
 | 2 | Migrations pending but not confirmed (answered no, or no terminal and no `--migrate`). Nothing changed. |
 | 3 | Failed before the schema changed (snapshot, migration or start of X.Y.Z); the previous version runs again. |
-| 4 | Failed after the schema changed; HelpDesk stays stopped. Fix the cause and run `./upgrade.sh` again (the run continues the upgrade and keeps the snapshot taken before it), or roll back. |
+| 4 | Failed after the schema changed; HelpDesk stays stopped and `.env` keeps the previous version. Fix the cause and run `./upgrade.sh` again (the run continues the upgrade and keeps the snapshot taken before it), or roll back. |
 
 ## 5. Rollback
 
@@ -130,7 +137,8 @@ It undoes the last upgrade — one step, to the version recorded in `.upgrade-st
 
 - **Bundled:** restores the snapshot taken before that upgrade (the whole database — auth,
   storage metadata, HelpDesk data), the previous files and version. Everything written since the
-  upgrade is lost. If that upgrade had no migrations there is no snapshot: only the files and the
+  upgrade is lost. The snapshot is unpacked next to the current data first; if that fails, the
+  current database stays as it was (exit 1, the stack stopped). If that upgrade had no migrations there is no snapshot: only the files and the
   version go back.
 - **External:** Supabase has no in-place restore. `--rollback` prints the restore point and stops
   (exit 1); restore the project to it (Dashboard → Database → Backups → Point in time, or the
@@ -140,7 +148,8 @@ It undoes the last upgrade — one step, to the version recorded in `.upgrade-st
 ## 6. Backups
 
 - `upgrade.sh` keeps the last 3 snapshots of the database, `backups/db-*.tar.gz` (bundled mode),
-  and deletes older ones — do not name your own archives `db-*.tar.gz` there. They are taken with
+  plus the one `.upgrade-state` points at, and deletes older ones — do not name your own archives
+  `db-*.tar.gz` there. They are taken with
   the stack stopped, so they are consistent, and hold the database only, not the uploaded files in
   `supabase/volumes/storage` (as with Supabase's own backups). Copy them off the host if you need more.
 - For regular backups of a bundled installation: stop the stack (`docker compose stop`), archive

@@ -120,6 +120,44 @@ jobs:
           name: diagnostics-image-smoke
           extra-path: ${{ runner.temp }}/image-smoke/out
 
+  # Installs the deploy bundle from the CI image, signs in, upgrades with
+  # --migrate, then rolls back. See .github/scripts/bundle-e2e.sh.
+  bundle-e2e:
+    name: Bundle e2e (install · upgrade · rollback)
+    needs: image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - id: setup
+        uses: ./.github/actions/setup          # node_modules for Playwright
+      - name: Install Chromium (background)
+        run: bash .github/scripts/bg.sh start playwright npx playwright install --with-deps --only-shell chromium
+      - uses: actions/download-artifact@v8
+        with:
+          name: image
+          path: ${{ runner.temp }}
+      - name: docker load
+        # The bundle's image tag is the version the image reports.
+        run: |
+          gunzip -c "$RUNNER_TEMP/image.tar.gz" | docker load
+          docker tag supabase-helpdesk:ci "supabase-helpdesk:sha-$GITHUB_SHA"
+      - name: Wait for Chromium
+        run: bash .github/scripts/bg.sh wait playwright 600
+      - name: Install, upgrade and roll back the bundle
+        env:
+          IMAGE: supabase-helpdesk
+          VERSION: sha-${{ github.sha }}
+        run: bash .github/scripts/bundle-e2e.sh
+      - name: Upload diagnostics
+        if: failure()
+        uses: ./.github/actions/upload-diagnostics
+        with:
+          name: diagnostics-bundle-e2e
+          extra-path: ${{ runner.temp }}/bundle-e2e/out
+
   db:
     name: DB tests
     runs-on: ubuntu-24.04
@@ -295,7 +333,7 @@ jobs:
 
   ci-result:
     name: ci-result   # the single required status check
-    needs: [lint, db, e2e, cross-browser, migration-upgrade, image, image-smoke]
+    needs: [lint, db, e2e, cross-browser, migration-upgrade, image, image-smoke, bundle-e2e]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5

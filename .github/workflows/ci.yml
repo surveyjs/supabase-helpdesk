@@ -79,8 +79,11 @@ jobs:
       # which the Dockerfile installs with `npm ci`.
       - uses: ./.github/actions/setup
       - name: docker build
+        # The Dockerfile sets the source and licenses labels; the commit's are added here.
         run: |
-          docker build -t supabase-helpdesk:ci --build-arg "HELPDESK_VERSION=sha-$GITHUB_SHA" .
+          docker build -t supabase-helpdesk:ci --build-arg "HELPDESK_VERSION=sha-$GITHUB_SHA" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.version=sha-$GITHUB_SHA" .
           docker save supabase-helpdesk:ci | gzip -1 > "$RUNNER_TEMP/image.tar.gz"
       - uses: actions/upload-artifact@v7
         with:

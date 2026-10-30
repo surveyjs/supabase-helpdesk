@@ -25,6 +25,10 @@ RUN npm run build
 FROM node:${NODE_VERSION}-alpine AS runner
 ARG SUPABASE_CLI_VERSION=2.121.0
 ARG HELPDESK_VERSION=dev
+# source links the GHCR package to the repository (and so gives the workflow's
+# GITHUB_TOKEN access to it). CI adds revision and version with --label.
+LABEL org.opencontainers.image.source="https://github.com/surveyjs/supabase-helpdesk" \
+      org.opencontainers.image.licenses="MIT"
 # psql holds the migration lock for `migrate`; the CLI's npm package brings a
 # musl binary (@supabase/cli-linux-x64-musl) — no Docker needed.
 RUN apk add --no-cache postgresql17-client \

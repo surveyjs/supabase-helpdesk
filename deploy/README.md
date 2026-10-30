@@ -137,7 +137,7 @@ for `--rollback`.
 | 1 | Error before any change (bad arguments, wrong bundle, download failed, image missing, `migrate --dry-run` refused, e.g. a database newer than X.Y.Z, or failed because the stack is not running — bundled mode needs it up: `docker compose up -d`, except after an interrupted Supabase upgrade, see below). Nothing changed. |
 | 2 | Migrations pending, or a Supabase upgrade, not confirmed (answered no, or no terminal and no `--migrate`). Nothing changed. |
 | 3 | Failed before the schema changed (snapshot, migration or start of X.Y.Z); the previous version was restarted. If the script also says it did not become healthy, check `docker compose ps` and `docker compose logs app`. |
-| 4 | Failed after the schema changed (or after a new Supabase version started); HelpDesk stays stopped and `.env` keeps the previous version. Fix the cause and run `./upgrade.sh` again (the run continues the upgrade and keeps the snapshot taken before it), or roll back. |
+| 4 | Failed after the schema changed (or after a new Supabase version started); HelpDesk stays stopped and `.env` keeps the previous version. Fix the cause and run `./upgrade.sh` again (the run continues the upgrade and keeps the snapshot taken before it; a Supabase upgrade whose snapshot was taken is not asked about again), or roll back. |
 | 130, 143 | Interrupted (Ctrl-C, `kill`). Before the confirmation: the previous files are back, nothing changed. Later: HelpDesk may be stopped, as with exit 4 — run `./upgrade.sh X.Y.Z` again (it continues) or `./upgrade.sh --rollback`. |
 
 **A Supabase upgrade that stopped before its snapshot** (interrupted, or failed while stopping the
@@ -159,7 +159,10 @@ It undoes the last upgrade — one step, to the version recorded in `.upgrade-st
   storage metadata, HelpDesk data), the previous files and version. Everything written since the
   upgrade is lost. The snapshot is unpacked next to the current data first; if that fails, the
   current database stays as it was (exit 1, the stack stopped). If that upgrade had no migrations there is no snapshot: only the files and the
-  version go back.
+  version go back. The previous files come from `backups/files-<previous>-<UTC>.tgz`; if that
+  archive is gone after a Supabase upgrade, `--rollback` stops (exit 1, nothing changed) rather
+  than start the new Supabase: unpack the bundle of the previous version into this directory
+  first, then run it again.
 - **External:** Supabase has no in-place restore. `--rollback` prints the restore point and stops
   (exit 1); restore the project to it (Dashboard → Database → Backups → Point in time, or the
   Management API `restore-pitr`), then run `./upgrade.sh --rollback --restored` (`--yes` too
@@ -172,6 +175,8 @@ It undoes the last upgrade — one step, to the version recorded in `.upgrade-st
   `db-*.tar.gz` there. They are taken with
   the stack stopped, so they are consistent, and hold the database only, not the uploaded files in
   `supabase/volumes/storage` (as with Supabase's own backups). Copy them off the host if you need more.
+  A snapshot is written as `db-*.tar.gz.part` and renamed once checked; an interrupted one stays
+  `.part` and the next `upgrade.sh` run deletes it.
 - For regular backups of a bundled installation: stop the stack (`docker compose stop`), archive
   `supabase/volumes/db/data` and `supabase/volumes/storage` (uploaded files) as root — the files
   belong to the containers' users — and start again.

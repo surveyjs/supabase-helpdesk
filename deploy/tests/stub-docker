@@ -20,13 +20,16 @@ case "$*" in
     printf '{"status":"ok","version":"%s"}\n' "${STUB_HEALTH_VERSION:-$(sed -n 's/^HELPDESK_VERSION=//p' .env | tail -n 1)}"; exit 0 ;;
   "compose exec -T db psql"*) echo "42 MB"; exit 0 ;;
   "run --rm -v"*"tar -C /src -czf"*)
-    # The snapshot: creates the archive in the directory mounted at /dst.
-    # STUB_SNAPSHOT_KILL: upgrade.sh gets TERM (Ctrl-C) while it runs.
-    if [[ -n "${STUB_SNAPSHOT_KILL:-}" ]]; then kill -TERM "$PPID"; exit 1; fi
-    [[ "${STUB_SNAPSHOT_RC:-0}" == 0 ]] || exit "$STUB_SNAPSHOT_RC"
+    # The snapshot: creates the archive in the directory mounted at /dst, and
+    # renames it as the command does once it is verified (`mv /dst/x.part /dst/x`).
     for a in "$@"; do [[ "$a" == *:/dst ]] && dst="${a%:/dst}"; done
     name="$(sed -n 's|.*-czf /dst/\([^ ]*\) .*|\1|p' <<<"$*")"
-    echo snapshot > "$dst/$name"; exit 0 ;;
+    # STUB_SNAPSHOT_KILL: upgrade.sh gets TERM (Ctrl-C) while the archive is half written.
+    if [[ -n "${STUB_SNAPSHOT_KILL:-}" ]]; then echo partial > "$dst/$name"; kill -TERM "$PPID"; exit 1; fi
+    [[ "${STUB_SNAPSHOT_RC:-0}" == 0 ]] || { echo partial > "$dst/$name"; exit "$STUB_SNAPSHOT_RC"; }
+    echo snapshot > "$dst/$name"
+    if [[ "$*" == *"mv /dst/$name /dst/"* ]]; then mv "$dst/$name" "$dst/${name%.part}"; fi
+    exit 0 ;;
   "run --rm -v"*"data.restore"*)
     exit "${STUB_RESTORE_RC:-0}" ;;
   *) exit 0 ;;

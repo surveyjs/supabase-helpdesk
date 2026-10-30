@@ -179,6 +179,18 @@ still_unsnapshotted() { # after a run that changed nothing, in a continued upgra
     rollback_instead
   fi
 }
+# The files here are those of the new Supabase of the recorded upgrade
+# (supabase_from: the Supabase version of the way back).
+new_supabase_files() {
+  local from; from="$(state_get supabase_from)"
+  [[ -n "$from" && "$(vendored_ref "$(vendored supabase/VENDORED)")" != "$from" ]]
+}
+unpack_previous_first() {
+  local previous; previous="$(state_get previous_version)"
+  log "The files of $previous (${1:-not recorded}) are missing, and the files here are those of the new Supabase"
+  log "($(vendored_ref "$(vendored supabase/VENDORED)"), not $(state_get supabase_from)): starting them would start it."
+  log "Unpack the bundle of $previous into this directory first (.env, backups/ and data stay), then run ./upgrade.sh --rollback."
+}
 
 # Exit, Ctrl-C (INT) or TERM at any point: see what this run leaves behind.
 on_exit() {
@@ -241,6 +253,13 @@ restore_previous() { # restore_previous <message>
     rm -f "$STATE"
   fi
   (( CARRY )) || rm -f "$UNDO"
+  # Continuing a Supabase upgrade before its snapshot, without the files of the
+  # way back: the files of this run are the new Supabase's — start nothing.
+  if (( ! origin )) && supabase_unsnapshotted && new_supabase_files; then
+    log "HelpDesk stays stopped."
+    unpack_previous_first "$(state_get previous_files)"
+    exit 4
+  fi
   prune_saved_files
   start_stack "$SUPABASE_CHANGED" || true
   if wait_healthy "$version"; then log "$version runs again; the schema is unchanged"; else log "$version did not become healthy either — check: docker compose logs app"; fi
@@ -315,14 +334,14 @@ upgrade() { # upgrade <target> <bundle or ""> <confirmed 0|1>
   fi
   if (( CARRY )); then UNDO="$STAGING/files.tgz"; else UNDO="backups/files-${CURRENT:-none}-$ts.tgz"; fi
   save_files "$UNDO" || { rm -f "$UNDO"; die "cannot save the current files into $UNDO; nothing changed"; }
-  local vendored_from vendored_to sum_before supabase_log=""
+  local vendored_from vendored_to sum_before supabase_log="" supabase_continued=0
   vendored_from="$(vendored supabase/VENDORED)" vendored_to="$(vendored "$STAGING/files/supabase/VENDORED")"
   if bundled && [[ -n "$vendored_to" && "$vendored_to" != "$vendored_from" ]]; then
     SUPABASE_UPGRADE=1
     supabase_log="Supabase is upgraded: $(vendored_ref "$vendored_from") -> $(vendored_ref "$vendored_to")"
   elif bundled && (( CARRY )) && [[ "$(state_get supabase_upgrade)" == 1 ]]; then
     # Its new files are already here: the upgrade this run continues says so.
-    SUPABASE_UPGRADE=1
+    SUPABASE_UPGRADE=1 supabase_continued=1
     supabase_log="continuing the Supabase upgrade to $(vendored_ref "${vendored_to:-$vendored_from}")"
   fi
   sum_before="$(supabase_sum)"
@@ -364,12 +383,18 @@ upgrade() { # upgrade <target> <bundle or ""> <confirmed 0|1>
   fi
 
   if [[ -n "$schema" ]]; then
-    if bundled; then
+    local kept=""   # a continued upgrade keeps the snapshot it took before
+    if bundled; then kept="$(state_get snapshot)"; fi
+    if [[ -n "$kept" ]]; then
+      log "the snapshot taken before ($kept) stays the way back: ./upgrade.sh --rollback restores it"
+    elif bundled; then
       log "HelpDesk and Supabase stop while the database ($(db_size)) is snapshotted into backups/"
     else
       log "Supabase is external: its PITR or a recent backup is the only way back — make sure it exists"
     fi
-    if [[ "$confirmed" != 1 ]]; then
+    # A Supabase upgrade continued after its snapshot was confirmed back then,
+    # and the new Supabase already ran: HelpDesk would stay stopped on a "no".
+    if [[ "$confirmed" != 1 ]] && ! [[ -z "$pending" && "$supabase_continued" == 1 && -n "$kept" ]]; then
       [[ -t 0 ]] || nothing_changed 2 "pending migrations and Supabase upgrades need --migrate when there is no terminal; nothing changed"
       local answer; read -r -p "Apply $schema? [y/N] " answer || answer=""
       [[ "$answer" == [yY]* ]] || nothing_changed 2 "not confirmed; nothing changed"
@@ -388,7 +413,11 @@ upgrade() { # upgrade <target> <bundle or ""> <confirmed 0|1>
   # Recorded with the way back, before the new Supabase can start: a continued
   # run is a Supabase upgrade too, and once the new Supabase ran a failure goes
   # back only through the snapshot (exit 4).
-  if (( SUPABASE_UPGRADE )); then state_set supabase_upgrade 1; fi
+  if (( SUPABASE_UPGRADE )); then
+    state_set supabase_upgrade 1
+    # The Supabase of the way back (the first one, in a continued upgrade).
+    if [[ -z "$(state_get supabase_from)" ]]; then state_set supabase_from "$(vendored_ref "$vendored_from")"; fi
+  fi
   COMMITTED=1 INSTALLED=0
   compose stop app scheduler || after_failure "cannot stop HelpDesk" "$changed"
 
@@ -398,10 +427,12 @@ upgrade() { # upgrade <target> <bundle or ""> <confirmed 0|1>
       local snapshot="backups/db-${CURRENT:-none}-$ts.tar.gz"
       local name; name="$(basename "$snapshot")"
       compose stop || after_failure "cannot stop the stack for the database snapshot" 0
-      # Verified before anything relies on it: non-empty and a Postgres data directory.
+      # Written as <name>.part and renamed once verified (non-empty, a Postgres
+      # data directory): an interrupted one never looks like a snapshot.
       if ! docker run --rm -v "$(host_path supabase/volumes/db):/src:ro" -v "$(host_path backups):/dst" "$HELPER_IMAGE" \
-           sh -c "umask 077; tar -C /src -czf /dst/$name data && test -s /dst/$name && tar -tzf /dst/$name | grep -qx data/PG_VERSION"; then
-        rm -f "$snapshot"
+           sh -c "umask 077; tar -C /src -czf /dst/$name.part data && test -s /dst/$name.part \
+                  && tar -tzf /dst/$name.part | grep -qx data/PG_VERSION && mv /dst/$name.part /dst/$name"; then
+        rm -f "$snapshot.part" "$snapshot"
         restore_previous "the database snapshot failed or is incomplete; nothing was migrated"
       fi
       state_set snapshot "$snapshot"
@@ -439,6 +470,12 @@ rollback() { # rollback <yes 0|1> <restored 0|1>
   previous="$(state_get previous_version)"; target="$(state_get target_version)"
   files="$(state_get previous_files)"; snapshot="$(state_get snapshot)"; point="$(state_get restore_point)"
 
+  # Without the files of the way back the current ones would start, and after a
+  # Supabase upgrade those are the new Supabase's: checked before anything changes.
+  if [[ -z "$files" || ! -f "$files" ]] && bundled && new_supabase_files; then
+    unpack_previous_first "$files"
+    die "Nothing changed."
+  fi
   if bundled && [[ -n "$snapshot" ]]; then
     [[ -f "$snapshot" ]] || die "the snapshot $snapshot is missing"
     confirm "$1" "Restore the database to the snapshot taken before $target ($snapshot)? Everything written since is lost." \
@@ -504,6 +541,8 @@ main() {
   cd "$(dirname "$0")"
   [[ -f .env ]] || die "no .env here — create it with init-env (see README.md)"
   detect_mode
+  # A snapshot interrupted while it was written (never a way back).
+  rm -f backups/*.part || log "warning: cannot remove backups/*.part"
 
   if (( do_rollback )); then rollback "$yes" "$restored"; else upgrade "$target" "$bundle" "$migrate"; fi
 }

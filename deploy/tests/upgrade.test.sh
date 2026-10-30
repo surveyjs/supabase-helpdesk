@@ -175,6 +175,30 @@ check "... --rollback puts back the previous files and stack, no snapshot to res
 interrupted; STUB_DRY_RUN="$PENDING" STUB_DB_START_RC=1 upgrade --bundle bundle.tgz --migrate 1.1.0
 check "... the next run with migrations whose database does not start: exit 4, the snapshot stays recorded" '[[ $rc == 4 && $(state incomplete) == 1 && $(state supabase_upgrade) == 1 && -s $T/inst/$(state snapshot) ]] && before_any_up'
 
+snapshots_here() { find "$T/inst/backups" -name 'db-*.tar.gz' 2>/dev/null | wc -l | tr -d ' '; }
+parts_here() { find "$T/inst/backups" -name '*.part' 2>/dev/null | wc -l | tr -d ' '; }
+interrupted
+check "an interrupted snapshot leaves no archive named like a snapshot (only *.part)" '[[ $first == 143 && $(snapshots_here) == 0 && $(parts_here) == 1 ]]'
+upgrade --bundle bundle.tgz --migrate 1.1.0
+check "... the next run removes the *.part and keeps only the snapshot it took" '[[ $rc == 0 && $(snapshots_here) == 1 && $(parts_here) == 0 && -s $T/inst/$(state snapshot) ]]'
+
+# --- the way back when the previous files are gone -------------------------------------
+interrupted; rm -f "$T"/inst/backups/files-*.tgz
+upgrade --rollback --yes
+check "--rollback of a Supabase upgrade whose previous files are missing: exit 1, starts nothing" '[[ $rc == 1 && $(version) == 1.0.0 && $(cat "$T/inst/supabase/VENDORED") == ref=v2 && $(state supabase_upgrade) == 1 ]] && grep -qi "unpack the bundle of 1.0.0" "$T/out.log" && ! called "compose up" && ! called "compose stop"'
+echo ref=v1 > "$T/inst/supabase/VENDORED"; echo old > "$T/inst/compose.yaml"   # the operator unpacks the bundle of 1.0.0
+upgrade --rollback --yes
+check "... after the bundle of the previous version is unpacked, --rollback goes back" '[[ $rc == 0 && $(version) == 1.0.0 && ! -f $T/inst/.upgrade-state ]] && called "compose up"'
+
+interrupted; rm -f "$T"/inst/backups/files-*.tgz
+STUB_SNAPSHOT_RC=1 upgrade --bundle bundle.tgz --migrate 1.1.0
+check "a continued Supabase upgrade that fails before its snapshot, previous files missing: stopped, nothing started" '[[ $rc == 4 && $(cat "$T/inst/supabase/VENDORED") == ref=v2 && $(state supabase_upgrade) == 1 && $(state incomplete) == 1 && -z $(state snapshot) ]] && grep -qi "unpack the bundle of 1.0.0" "$T/out.log" && ! called "compose up"'
+
+# --- continuing after exit 4 ------------------------------------------------------------
+setup bundled; revendor; STUB_HEALTH_VERSION=1.0.0 upgrade --bundle bundle.tgz --migrate 1.1.0; a=$rc; : > "$STUB_LOG"
+upgrade --bundle bundle.tgz 1.1.0
+check "after exit 4 of a Supabase upgrade (snapshot taken) the next run continues without asking again" '[[ $a == 4 && $rc == 0 && $(version) == 1.1.0 && -n $(state snapshot) ]] && grep -q "stays the way back" "$T/out.log" && ! grep -q "is snapshotted" "$T/out.log" && ! called "tar -C /src"'
+
 setup bundled; mkdir -p "$T/inst/supabase/volumes/api" "$T/b/supabase/volumes/api"
 echo old > "$T/inst/supabase/volumes/api/envoy.yaml"; echo new > "$T/b/supabase/volumes/api/envoy.yaml"; pack
 upgrade --bundle bundle.tgz 1.1.0

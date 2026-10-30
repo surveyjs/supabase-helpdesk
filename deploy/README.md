@@ -37,8 +37,8 @@ installation does not use (everything is in `.env` here), and **`reset.sh` delet
 
 ## 2. Install — bundled Supabase
 
-Unpack the bundle of the version (`helpdesk-deploy-vX.Y.Z.tar.gz` from the GitHub release) into an
-empty directory, e.g. `/opt/helpdesk`, and run everything below from there.
+Unpack the bundle of the version (`helpdesk-deploy-vX.Y.Z.tar.gz` from the GitHub release, see
+section 10) into an empty directory, e.g. `/opt/helpdesk`, and run everything below from there.
 
 1. Generate `.env` (fresh secrets for Supabase and HelpDesk):
 
@@ -260,3 +260,47 @@ listens on `127.0.0.1:8080` and on `proxy:80` in the compose network, without TL
 - **The log says the database is newer than the image** — you started an older version on an
   upgraded database: `./upgrade.sh --rollback`, or start the newer version again.
 - `docker compose ps` shows health; `docker compose logs -f app proxy` shows what happens.
+
+## 10. Where the images and bundles come from
+
+Every version is published in two places: the image in GitHub Container Registry
+(`ghcr.io/surveyjs/supabase-helpdesk`, linux/amd64 only) and the deploy bundle (what `upgrade.sh`
+unpacks over your directory). Nothing is deployed for you: you run `upgrade.sh` yourself.
+
+| Image tag | What it is | Bundle |
+|-----------|------------|--------|
+| `X.Y.Z` (e.g. `1.2.3`) | A release. Never moves. Use this one in production. | `helpdesk-deploy-vX.Y.Z.tar.gz`, with `helpdesk-deploy-vX.Y.Z.tar.gz.sha256`, in the [GitHub release](https://github.com/surveyjs/supabase-helpdesk/releases) `vX.Y.Z` |
+| `X.Y` (e.g. `1.2`) | The newest release of that line. Moves with each patch release. | that release's |
+| `latest` | The newest stable release. | that release's |
+| `X.Y.Z-pre` (e.g. `1.3.0-rc.1`) | A prerelease: has no `X.Y` or `latest` tag, and GitHub does not show it as the latest release. | in its (pre)release |
+| `edge` | The newest commit of `main` that passed CI. For trying things out. | none; take `sha-<sha>` |
+| `sha-<sha>` (the full 40-character commit hash) | One commit of `main` that passed CI. Never moves. | artifact `helpdesk-deploy-sha-<sha>` of that commit's CI run (it expires after GitHub's artifact retention, 90 days by default) |
+
+`.env` holds the exact version (`HELPDESK_VERSION`), never `X.Y` or `latest`: `upgrade.sh` waits
+until `/api/health` reports the version you asked for, and a release image reports `X.Y.Z`, so
+upgrade with `./upgrade.sh X.Y.Z` (the version without the `v`).
+
+**Checking a download.** Each release has a SHA-256 file next to the bundle:
+
+```sh
+curl -fsSLO https://github.com/surveyjs/supabase-helpdesk/releases/download/vX.Y.Z/helpdesk-deploy-vX.Y.Z.tar.gz
+curl -fsSLO https://github.com/surveyjs/supabase-helpdesk/releases/download/vX.Y.Z/helpdesk-deploy-vX.Y.Z.tar.gz.sha256
+sha256sum -c helpdesk-deploy-vX.Y.Z.tar.gz.sha256
+./upgrade.sh --bundle helpdesk-deploy-vX.Y.Z.tar.gz X.Y.Z
+```
+
+Every image carries a signed build provenance attestation (what built it, from which commit).
+Verify it with the [GitHub CLI](https://cli.github.com/):
+
+```sh
+gh attestation verify oci://ghcr.io/surveyjs/supabase-helpdesk:X.Y.Z --repo surveyjs/supabase-helpdesk
+```
+
+**Upgrading to a commit of `main`** (our demo instance does this; not for production). In the
+deploy directory of the installation, with `RUN_ID` of the CI run of that commit on GitHub
+(the Summary of its `Publish image (GHCR)` job prints exactly these commands, with the values filled in):
+
+```sh
+gh run download RUN_ID -R surveyjs/supabase-helpdesk -n helpdesk-deploy-sha-<sha>
+./upgrade.sh --bundle helpdesk-deploy-sha-<sha>.tar.gz sha-<sha>
+```

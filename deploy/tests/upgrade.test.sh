@@ -24,6 +24,7 @@ setup() { # setup bundled|external
   echo 1.1.0 > "$T/b/VERSION"; echo new > "$T/b/compose.yaml"
   pack
   export STUB_LOG="$T/calls.log"; : > "$STUB_LOG"
+  export STUB_LOCKS="$T/locks"; : > "$STUB_LOCKS"
   unset STUB_DRY_RUN STUB_DRY_RUN_RC STUB_DRY_RUN_SLEEP STUB_MIGRATE_RC STUB_SNAPSHOT_RC STUB_RESTORE_RC \
     STUB_OLD_SCHEMA_MATCHES STUB_HEALTH_VERSION STUB_IMAGE_MISSING STUB_HELPER_MISSING STUB_DB_START_RC STUB_SNAPSHOT_KILL COMPOSE_FILE
 }
@@ -31,7 +32,7 @@ setup() { # setup bundled|external
 revendor() { mkdir -p "$T/inst/supabase" "$T/b/supabase"; echo ref=v1 > "$T/inst/supabase/VENDORED"; echo ref=v2 > "$T/b/supabase/VENDORED"; pack; }
 pack() { tar -czf "$T/bundle.tgz" -C "$T/b" .; }
 # Runs from $T (not the install directory) with a bundle path relative to $T.
-upgrade() { (cd "$T" && PATH="$T/bin:$PATH" HEALTH_TIMEOUT=2 bash inst/upgrade.sh "$@" </dev/null >"$T/out.log" 2>&1); rc=$?; }
+upgrade() { : > "$T/locks"; (cd "$T" && PATH="$T/bin:$PATH" HEALTH_TIMEOUT=2 bash inst/upgrade.sh "$@" </dev/null >"$T/out.log" 2>&1); rc=$?; }
 check() { if eval "$2"; then echo "✅ $1"; else echo "❌ $1 (exit $rc)"; sed 's/^/    /' "$T/out.log"; fails=$((fails + 1)); fi; }
 called() { grep -qF -- "$1" "$STUB_LOG"; }
 version() { sed -n 's/^HELPDESK_VERSION=//p' "$T/inst/.env"; }
@@ -40,11 +41,14 @@ state() { sed -n "s/^$1=//p" "$T/inst/.upgrade-state"; }
 archives() { find "$T/inst/backups" -name 'files-*' 2>/dev/null | wc -l | tr -d ' '; }
 recreated_all() { grep -qx "docker compose up -d --force-recreate" "$STUB_LOG"; }
 # chmod is a no-op on Git Bash/Windows: mode assertions only where it works.
+# Every docker call of the last run ran under .upgrade.lock (one PID), and the lock is gone now.
+locked_throughout() { [[ -s $T/locks && $(sort -u "$T/locks" | wc -l) == 1 && ! -e $T/inst/.upgrade.lock ]] && grep -qx '[0-9][0-9]*' "$T/locks"; }
 modes_work() { local d; d="$(mktemp -d)"; chmod 755 "$d"; local a; a="$(ls -ld "$d" | cut -c1-10)"; chmod 700 "$d"; local b; b="$(ls -ld "$d" | cut -c1-10)"; rm -rf "$d"; [[ $a == drwxr-xr-x && $b == drwx------ ]]; }
 
 setup bundled; upgrade --bundle bundle.tgz 1.1.0
 check "no pending migrations: upgrades without a snapshot" '[[ $rc == 0 && $(version) == 1.1.0 && $(files) == new ]] && ! called "tar -C /src" && ! called "migrate --backup-confirmed"'
 check "... and recreates proxy (a new Caddyfile), not the Supabase services" 'called "compose up -d --force-recreate proxy" && ! recreated_all'
+check "... every docker call ran under .upgrade.lock, released at the end" 'locked_throughout'
 if modes_work; then
   check "backups/ is private (700)" '[[ $(ls -ld "$T/inst/backups" | cut -c1-10) == drwx------ ]]'
 else
@@ -61,9 +65,11 @@ check "... the snapshot is written with umask 077 (private)" 'called "sh -c umas
 check "--rollback without --yes and without a terminal refuses" '[[ $rc == 1 && $(version) == 1.1.0 ]] && grep -q -- "--yes" "$T/out.log"'
 STUB_RESTORE_RC=1 upgrade --rollback --yes
 check "--rollback whose restore fails: exit 1, the current database untouched, the way back kept" '[[ $rc == 1 && $(version) == 1.1.0 && -f $T/inst/.upgrade-state ]] && grep -q "untouched" "$T/out.log"'
+check "... under the lock, released on that exit 1" 'locked_throughout'
 upgrade --rollback --yes
 check "--rollback restores the snapshot, the files and the previous version" '[[ $rc == 0 && $(version) == 1.0.0 && $(files) == old && ! -f $T/inst/.upgrade-state && $(archives) == 0 ]] && called "mv /dst/data.restore/data /dst/data"'
 check "... with umask 077, and recreates proxy (the previous Caddyfile)" 'called "sh -c umask 077; rm -rf /dst/data.restore" && [[ $(grep -c "compose up -d --force-recreate proxy" "$STUB_LOG") == 2 ]]'
+check "... under the lock, released after the rollback" 'locked_throughout'
 
 setup bundled; STUB_DRY_RUN="$PENDING" STUB_SNAPSHOT_RC=1 upgrade --bundle bundle.tgz --migrate 1.1.0
 check "snapshot fails: no migration, previous version back, exit 3" '[[ $rc == 3 && $(version) == 1.0.0 && $(files) == old && $(archives) == 0 ]] && ! called "migrate --backup-confirmed"'
@@ -73,6 +79,7 @@ check "migrate fails, schema unchanged: previous version back, exit 3" '[[ $rc =
 
 setup bundled; STUB_DRY_RUN="$PENDING" STUB_MIGRATE_RC=1 upgrade --bundle bundle.tgz --migrate 1.1.0
 check "migrate fails after changing the schema: stopped, exit 4, rollback offered" '[[ $rc == 4 && $(version) == 1.0.0 && $(state incomplete) == 1 ]] && tail -n 1 "$STUB_LOG" | grep -q "compose stop app scheduler" && grep -q -- "--rollback" "$T/out.log"'
+check "... the lock is released on exit 4" 'locked_throughout'
 
 setup bundled; STUB_DRY_RUN="$PENDING" STUB_HEALTH_VERSION=1.0.0 upgrade --bundle bundle.tgz --migrate 1.1.0
 check "migrated, then the new version never healthy: stopped, exit 4, .env back at the previous version" '[[ $rc == 4 && $(version) == 1.0.0 && $(state incomplete) == 1 ]] && tail -n 1 "$STUB_LOG" | grep -q "compose stop app scheduler"'
@@ -80,6 +87,7 @@ check "migrated, then the new version never healthy: stopped, exit 4, .env back 
 setup bundled; STUB_HEALTH_VERSION=1.0.0 upgrade --bundle bundle.tgz 1.1.0
 check "new version never healthy, no migrations: previous version back, exit 3" '[[ $rc == 3 && $(version) == 1.0.0 && $(files) == old && $(archives) == 0 ]]'
 check "... and proxy recreated on the previous Caddyfile" '[[ $(grep -c "compose up -d --force-recreate proxy" "$STUB_LOG") == 2 ]]'
+check "... the lock is released on exit 3" 'locked_throughout'
 
 setup bundled; upgrade --bundle bundle.tgz 1.2.0
 check "bundle of another version: exit 1 before any change" '[[ $rc == 1 && $(version) == 1.0.0 && $(files) == old ]] && ! [[ -s "$STUB_LOG" ]]'
@@ -108,6 +116,7 @@ pid=$!
 for _ in $(seq 100); do called "migrate --dry-run" && break; sleep 0.1; done
 kill -TERM "$pid"; wait "$pid"; rc=$?
 check "TERM (like Ctrl-C) before the confirmation: old files back, no archive, no state" '[[ $rc == 143 && $(version) == 1.0.0 && $(files) == old && $(archives) == 0 && ! -f $T/inst/.upgrade-state ]] && ! called "compose stop"'
+check "... the lock is released on TERM" 'locked_throughout'
 
 # --- the way back survives a retry, a failure and rotation ------------------------------
 setup bundled; STUB_DRY_RUN="$PENDING" STUB_MIGRATE_RC=1 upgrade --bundle bundle.tgz --migrate 1.1.0
@@ -204,6 +213,59 @@ echo old > "$T/inst/supabase/volumes/api/envoy.yaml"; echo new > "$T/b/supabase/
 upgrade --bundle bundle.tgz 1.1.0
 check "a changed Supabase config file (same version): every service recreated, no snapshot" '[[ $rc == 0 && $(version) == 1.1.0 ]] && recreated_all && ! called "tar -C /src"'
 
+# --- one run at a time (.upgrade.lock) --------------------------------------------------
+setup bundled
+(cd "$T" && PATH="$T/bin:$PATH" STUB_LOCKS="$T/a.locks" STUB_DRY_RUN="$PENDING" STUB_DRY_RUN_SLEEP=4 HEALTH_TIMEOUT=2 \
+  exec bash inst/upgrade.sh --bundle bundle.tgz --migrate 1.1.0 </dev/null >"$T/a.log" 2>&1) &
+pid=$!
+for _ in $(seq 100); do called "migrate --dry-run" && break; sleep 0.1; done
+held="$(cat "$T/inst/.upgrade.lock/pid" 2>/dev/null)"; calls="$(wc -l < "$STUB_LOG")"
+mkdir -p "$T/inst/backups"; echo partial > "$T/inst/backups/db-a.tar.gz.part"   # as if the first run were writing it
+upgrade --bundle bundle.tgz --migrate 1.1.0
+check "a second run while one runs: exit 1, says so, removes no *.part, calls no docker" '[[ $rc == 1 && -n $held && -e $T/inst/backups/db-a.tar.gz.part && $(wc -l < "$STUB_LOG") == "$calls" ]] && grep -q "another upgrade.sh is running (PID $held" "$T/out.log"'
+wait "$pid"; rc=$?; cp "$T/a.log" "$T/out.log"
+check "... the first run goes on under its lock and releases it" '[[ $rc == 0 && $(version) == 1.1.0 && -s $T/inst/$(state snapshot) && $(sort -u "$T/a.locks") == "$held" && ! -e $T/inst/.upgrade.lock ]]'
+
+setup bundled; STUB_DRY_RUN="$PENDING" upgrade --bundle bundle.tgz --migrate 1.1.0
+mkdir "$T/inst/.upgrade.lock"; echo $$ > "$T/inst/.upgrade.lock/pid"   # this test's shell: a process that runs
+: > "$STUB_LOG"; upgrade --rollback --yes
+check "--rollback while the lock is held: exit 1, nothing changed, the lock stays" '[[ $rc == 1 && $(version) == 1.1.0 && -f $T/inst/.upgrade-state && $(cat "$T/inst/.upgrade.lock/pid") == $$ ]] && ! [[ -s "$STUB_LOG" ]] && grep -q "another upgrade.sh is running" "$T/out.log" && grep -q "rm -r .upgrade.lock" "$T/out.log"'
+bash -c 'exit 0' & dead=$!; wait "$dead"   # a PID that no longer runs (a run killed with kill -9)
+echo "$dead" > "$T/inst/.upgrade.lock/pid"
+upgrade --rollback --yes
+check "a stale lock (its PID no longer runs) is taken over, said so, and released" '[[ $rc == 0 && $(version) == 1.0.0 && ! -f $T/inst/.upgrade-state ]] && grep -q "stale .upgrade.lock: PID $dead" "$T/out.log" && locked_throughout'
+
+setup bundled; mkdir "$T/inst/.upgrade.lock"; upgrade --bundle bundle.tgz 1.1.0
+check "a lock without a PID (being taken, or made by hand) is held: exit 1, says how to remove it" '[[ $rc == 1 && $(version) == 1.0.0 && $(files) == old && -d $T/inst/.upgrade.lock ]] && ! [[ -s "$STUB_LOG" ]] && grep -q "rm -r .upgrade.lock" "$T/out.log"'
+
+# --- the Supabase of the way back is the whole supabase/VENDORED (ref and sha) ----------
+# interrupted_from <VENDORED here, "" for none> <VENDORED of the bundle>: as interrupted
+# (a Supabase upgrade stopped before its snapshot), then the previous files are lost.
+interrupted_from() {
+  setup bundled; mkdir -p "$T/inst/supabase" "$T/b/supabase"
+  if [[ -n $1 ]]; then printf '%s\n' "$1" > "$T/inst/supabase/VENDORED"; fi
+  printf '%s\n' "$2" > "$T/b/supabase/VENDORED"; pack
+  STUB_SNAPSHOT_KILL=1 upgrade --bundle bundle.tgz --migrate 1.1.0; first=$rc; : > "$STUB_LOG"
+  rm -f "$T"/inst/backups/files-*.tgz
+}
+interrupted_from $'ref=self-hosted/v1\nsha=aaa' $'ref=self-hosted/v1\nsha=bbb'
+upgrade --rollback --yes
+check "the same tag re-vendored at another sha is another Supabase: --rollback without the previous files starts nothing" '[[ $first == 143 && $rc == 1 && $(state supabase_from) == v1@aaa && $(state supabase_upgrade) == 1 ]] && grep -qi "unpack the bundle of 1.0.0" "$T/out.log" && grep -q "v1@bbb" "$T/out.log" && ! called "compose up"'
+printf 'ref=self-hosted/v1\nsha=aaa\n' > "$T/inst/supabase/VENDORED"; echo old > "$T/inst/compose.yaml"   # the bundle of 1.0.0
+upgrade --rollback --yes
+check "... after the bundle of the previous version is unpacked, --rollback goes back" '[[ $rc == 0 && $(version) == 1.0.0 && ! -f $T/inst/.upgrade-state ]] && called "compose up"'
+
+interrupted_from "" $'ref=self-hosted/v2\nsha=bbb'
+upgrade --rollback --yes
+check "no supabase/VENDORED before is recorded as none: --rollback without the previous files starts nothing" '[[ $first == 143 && $rc == 1 && $(state supabase_from) == none ]] && grep -qi "unpack the bundle of 1.0.0" "$T/out.log" && grep -q "remove supabase/VENDORED" "$T/out.log" && ! called "compose up"'
+rm "$T/inst/supabase/VENDORED"; echo old > "$T/inst/compose.yaml"   # the bundle of 1.0.0 (no VENDORED), and the new one removed
+upgrade --rollback --yes
+check "... after that bundle is unpacked and supabase/VENDORED removed, --rollback goes back" '[[ $rc == 0 && $(version) == 1.0.0 && ! -f $T/inst/.upgrade-state ]] && called "compose up"'
+
+interrupted_from "" $'ref=self-hosted/v2\nsha=bbb'
+STUB_SNAPSHOT_RC=1 upgrade --bundle bundle.tgz --migrate 1.1.0
+check "... a continued upgrade keeps none as the way back: failing before its snapshot, it starts nothing (exit 4)" '[[ $rc == 4 && $(state supabase_from) == none && $(state incomplete) == 1 ]] && grep -qi "unpack the bundle of 1.0.0" "$T/out.log" && ! called "compose up"'
+
 # --- inputs that must not be trusted ----------------------------------------------------
 setup bundled; printf 'HELPDESK_VERSION="1.0.0"\nCOMPOSE_FILE='"'"'compose.yaml:compose.bundled.yaml'"'"'\nSUPABASE_URL=""\n' > "$T/inst/.env"
 STUB_DRY_RUN="$PENDING" upgrade --bundle bundle.tgz --migrate 1.1.0
@@ -219,9 +281,10 @@ setup external; sed -i 's|^SUPABASE_URL=.*|SUPABASE_URL=|' "$T/inst/.env"
 STUB_DRY_RUN="$PENDING" upgrade --bundle bundle.tgz --migrate 1.1.0
 check "COMPOSE_FILE and SUPABASE_URL disagree on the mode: exit 1, nothing changed" '[[ $a == 1 && $rc == 1 && $(version) == 1.0.0 && $(files) == old ]] && grep -q "SUPABASE_URL is empty" "$T/out.log" && ! [[ -s "$STUB_LOG" ]]'
 
-setup bundled; printf 'HELPDESK_VERSION=evil\nSECRET=x\n' > "$T/b/.env"; mkdir -p "$T/b/backups"; echo x > "$T/b/backups/x"; pack
+setup bundled; printf 'HELPDESK_VERSION=evil\nSECRET=x\n' > "$T/b/.env"; mkdir -p "$T/b/backups" "$T/b/.upgrade.lock"; echo x > "$T/b/backups/x"; echo 1 > "$T/b/.upgrade.lock/pid"; pack
 upgrade --bundle bundle.tgz 1.1.0
 check "a bundle with .env or backups/ never replaces them" '[[ $rc == 0 && $(version) == 1.1.0 && ! -e $T/inst/backups/x ]] && ! grep -q SECRET "$T/inst/.env"'
+check "... nor brings in an .upgrade.lock" '[[ $rc == 0 && ! -e $T/inst/.upgrade.lock ]]'
 
 setup bundled; upgrade --rollback 1.1.0; a=$rc; upgrade --yes 1.1.0; b=$rc; upgrade 1.1.0 1.2.0; c=$rc
 check "bad arguments: exit 1 before anything runs" '[[ $a == 1 && $b == 1 && $c == 1 && $(version) == 1.0.0 ]] && ! [[ -s "$STUB_LOG" ]]'

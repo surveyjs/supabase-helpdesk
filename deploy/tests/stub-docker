@@ -2,6 +2,8 @@
 # Test double for `docker` (deploy/tests/upgrade.test.sh): records each call in
 # $STUB_LOG and answers from STUB_* variables.
 echo "docker $*" >> "$STUB_LOG"
+# STUB_LOCKS: the PID in .upgrade.lock (upgrade.sh runs docker from its directory) at each call, "-" without one.
+if [[ -n "${STUB_LOCKS:-}" ]]; then { cat .upgrade.lock/pid 2>/dev/null || echo -; } >> "$STUB_LOCKS"; fi
 case "$*" in
   "pull -q alpine:"*|"image inspect alpine:"*)
     exit "${STUB_HELPER_MISSING:-0}" ;;

@@ -115,7 +115,7 @@ exit 1 before changing anything.
 `backups/` and data stay, even if a bundle contains them; the replaced files are saved in
 `backups/files-<previous>-<UTC>.tgz`), pulls the images (bundled: also `alpine:3.22`, which takes
 the snapshot) and runs `migrate --dry-run`. With pending migrations — or a bundle with another
-Supabase version (`supabase/VENDORED`; Supabase migrates its own schemas when it starts) — it
+Supabase version (`supabase/VENDORED`, tag and commit; Supabase migrates its own schemas when it starts) — it
 prints them and the database size and asks `Apply …? [y/N]` (without a terminal `--migrate` is
 that yes). Up to here any stop — an error, `n`, Ctrl-C — puts the previous files back: nothing
 changed. Then:
@@ -134,7 +134,7 @@ for `--rollback`.
 | Exit | Meaning |
 |------|---------|
 | 0 | Upgraded. |
-| 1 | Error before any change (bad arguments, wrong bundle, download failed, image missing, `migrate --dry-run` refused, e.g. a database newer than X.Y.Z, or failed because the stack is not running — bundled mode needs it up: `docker compose up -d`, except after an interrupted Supabase upgrade, see below). Nothing changed. |
+| 1 | Error before any change (bad arguments, another `upgrade.sh` running — see below, wrong bundle, download failed, image missing, `migrate --dry-run` refused, e.g. a database newer than X.Y.Z, or failed because the stack is not running — bundled mode needs it up: `docker compose up -d`, except after an interrupted Supabase upgrade, see below). Nothing changed. |
 | 2 | Migrations pending, or a Supabase upgrade, not confirmed (answered no, or no terminal and no `--migrate`). Nothing changed. |
 | 3 | Failed before the schema changed (snapshot, migration or start of X.Y.Z); the previous version was restarted. If the script also says it did not become healthy, check `docker compose ps` and `docker compose logs app`. |
 | 4 | Failed after the schema changed (or after a new Supabase version started); HelpDesk stays stopped and `.env` keeps the previous version. Fix the cause and run `./upgrade.sh` again (the run continues the upgrade and keeps the snapshot taken before it; a Supabase upgrade whose snapshot was taken is not asked about again), or roll back. |
@@ -146,6 +146,19 @@ says so. Run `./upgrade.sh --rollback`: it puts back the previous files and star
 stack (there is no snapshot to restore). Do **not** start the stack with `docker compose up -d`:
 that starts the new Supabase without a snapshot. A run of `./upgrade.sh X.Y.Z` while the stack
 still runs continues the Supabase upgrade: it asks again and takes the snapshot first.
+
+**One run at a time.** `upgrade.sh` (upgrade and `--rollback`) holds the directory `.upgrade.lock`,
+with its PID inside, while it runs, and removes it when it exits — also on an error or Ctrl-C. A
+second run meanwhile stops with exit 1 and changes nothing:
+
+```text
+[upgrade] another upgrade.sh is running (PID 1234, .upgrade.lock); nothing changed — wait for it to finish.
+```
+
+A lock left by a run that could not clean up (`kill -9`, a reboot) is stale: when its PID no longer
+runs, the next run removes it, says so, and goes on. If the message appears while no `upgrade.sh`
+runs (`ps -p 1234` shows another program — the PID was reused — or the lock has no PID in it),
+remove the lock yourself: `rm -r .upgrade.lock`.
 
 ## 5. Rollback
 
@@ -162,7 +175,9 @@ It undoes the last upgrade — one step, to the version recorded in `.upgrade-st
   version go back. The previous files come from `backups/files-<previous>-<UTC>.tgz`; if that
   archive is gone after a Supabase upgrade, `--rollback` stops (exit 1, nothing changed) rather
   than start the new Supabase: unpack the bundle of the previous version into this directory
-  first, then run it again.
+  first, then run it again. The Supabase version is the whole `supabase/VENDORED` (tag and
+  commit). If the previous installation had no `supabase/VENDORED`, also remove the one here
+  (unpacking does not), as the message says.
 - **External:** Supabase has no in-place restore. `--rollback` prints the restore point and stops
   (exit 1); restore the project to it (Dashboard → Database → Backups → Point in time, or the
   Management API `restore-pitr`), then run `./upgrade.sh --rollback --restored` (`--yes` too

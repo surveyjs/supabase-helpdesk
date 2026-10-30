@@ -38,16 +38,19 @@
 #       everything stays stopped: ship a fix and upgrade, or ./upgrade.sh
 #       --rollback; 130/143 interrupted (Ctrl-C/TERM): before step 4 nothing
 #       changed, from step 4 on HelpDesk may be stopped, as after exit 4.
+#
+# One run at a time (.upgrade.lock): while another runs, exit 1, nothing changed.
 set -euo pipefail
 
 RELEASES_URL="${HELPDESK_RELEASES_URL:-https://github.com/surveyjs/supabase-helpdesk/releases/download}"
 STATE=.upgrade-state
+LOCK=.upgrade.lock
 KEEP_SNAPSHOTS=3
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-180}"
 HELPER_IMAGE=alpine:3.22
 USAGE="usage: ./upgrade.sh [--bundle FILE] [--migrate] VERSION | ./upgrade.sh --rollback [--yes] [--restored]"
 # Never taken from a bundle, never saved with the files.
-PROTECTED=(.env backups "$STATE" supabase/volumes/db/data supabase/volumes/storage supabase/volumes/snippets)
+PROTECTED=(.env backups "$STATE" "$LOCK" supabase/volumes/db/data supabase/volumes/storage supabase/volumes/snippets)
 
 log() { echo "[upgrade] $*" >&2; }
 die() { log "$*"; exit 1; }
@@ -151,6 +154,16 @@ confirm() { # confirm <yes 0|1> <question>
 # supabase/VENDORED (ref=self-hosted/vX, sha=...) names the Supabase version.
 vendored() { if [[ -f "$1" ]]; then tr -d '\r' < "$1"; fi; } # vendored <file>
 vendored_ref() { sed -n 's/^ref=//p' <<<"$1" | sed 's|^self-hosted/||'; } # vendored_ref <contents>
+# The whole identity, as supabase_from in .upgrade-state records it: <ref>@<sha>
+# (a tag vendored again at another commit is another Supabase), or "none" — no
+# VENDORED file (an installation from before it), which is an identity too.
+vendored_id() { # vendored_id <contents>
+  if [[ -z "$1" ]]; then echo none; return; fi
+  local sha; sha="$(sed -n 's/^sha=//p' <<<"$1")"
+  echo "$(vendored_ref "$1")${sha:+@$sha}"
+}
+vendored_show() { sed 's/\(@.\{12\}\).*/\1/' <<<"$1"; } # vendored_show <id>: for messages, the sha cut to 12
+vendored_label() { vendored_show "$(vendored_id "$1")"; } # vendored_label <contents>
 db_size() {
   compose exec -T db psql -U postgres -tAc "select pg_size_pretty(pg_database_size('postgres'))" 2>/dev/null \
     | tr -d '\r' || echo "size unknown"
@@ -179,20 +192,73 @@ still_unsnapshotted() { # after a run that changed nothing, in a continued upgra
     rollback_instead
   fi
 }
-# The files here are those of the new Supabase of the recorded upgrade
-# (supabase_from: the Supabase version of the way back).
+# The files here are those of the new Supabase of the recorded upgrade: their
+# supabase/VENDORED is not the whole identity of the way back (supabase_from).
+# Recorded "none" (no VENDORED before), files with a VENDORED count as the new
+# Supabase's — the safe side: nothing starts them, and the operator, told to
+# unpack the previous bundle, also removes the VENDORED it does not replace.
 new_supabase_files() {
   local from; from="$(state_get supabase_from)"
-  [[ -n "$from" && "$(vendored_ref "$(vendored supabase/VENDORED)")" != "$from" ]]
+  [[ -n "$from" && "$(vendored_id "$(vendored supabase/VENDORED)")" != "$from" ]]
 }
 unpack_previous_first() {
-  local previous; previous="$(state_get previous_version)"
+  local previous from was; previous="$(state_get previous_version)"; from="$(state_get supabase_from)"
+  if [[ "$from" == none ]]; then was="no supabase/VENDORED"; else was="$(vendored_show "$from")"; fi
   log "The files of $previous (${1:-not recorded}) are missing, and the files here are those of the new Supabase"
-  log "($(vendored_ref "$(vendored supabase/VENDORED)"), not $(state_get supabase_from)): starting them would start it."
-  log "Unpack the bundle of $previous into this directory first (.env, backups/ and data stay), then run ./upgrade.sh --rollback."
+  log "($(vendored_label "$(vendored supabase/VENDORED)"); before the upgrade: $was): starting them would start it."
+  if [[ "$from" == none ]]; then
+    log "Unpack the bundle of $previous into this directory first (.env, backups/ and data stay), remove supabase/VENDORED"
+    log "(that bundle has none, and unpacking leaves this one), then run ./upgrade.sh --rollback."
+  else
+    log "Unpack the bundle of $previous into this directory first (.env, backups/ and data stay), then run ./upgrade.sh --rollback."
+  fi
 }
 
-# Exit, Ctrl-C (INT) or TERM at any point: see what this run leaves behind.
+# One run at a time: a second run would delete the first one's *.part snapshot
+# and saved files (prune_saved_files) and stop and start the same stack.
+# mkdir is atomic (flock is missing on Git Bash); the lock holds its run's PID.
+#  - Stale: its PID no longer runs (kill -0; "not permitted" means it runs as
+#    another user) — a run killed with kill -9, or a reboot. It is taken over,
+#    and said so. A PID reused since by another process keeps it held: the
+#    message says how to remove it.
+#  - No PID in it (a run between mkdir and writing it, or made by hand): held.
+#  - Released by on_exit, the EXIT trap of both paths, after the rest of its
+#    cleanup — never by a run that did not take it (LOCKED).
+LOCKED=0
+lock_pid() { tr -d '\r\n ' < "$1/pid" 2>/dev/null || true; } # lock_pid <lock dir>
+pid_runs() { kill -0 "$1" 2>/dev/null || [[ "$(kill -0 "$1" 2>&1)" == *ermitted* ]]; }
+lock_held() { # lock_held <its PID or "">
+  log "another upgrade.sh is running (${1:+PID $1, }$LOCK); nothing changed — wait for it to finish."
+  die "If none runs (its PID is now another process, or $LOCK has no PID in it): rm -r $LOCK"
+}
+take_lock() {
+  if ! mkdir "$LOCK" 2>/dev/null; then
+    [[ -d "$LOCK" ]] || die "cannot create $LOCK in $PWD; nothing changed"
+    local pid stale="$LOCK.stale.$$"; pid="$(lock_pid "$LOCK")"
+    if [[ ! "$pid" =~ ^[0-9]+$ ]] || pid_runs "$pid"; then lock_held "$pid"; fi
+    # Renamed, then checked: of two runs that found it stale only one removes
+    # it, and never the lock the other one took meanwhile (that goes back).
+    mv "$LOCK" "$stale" 2>/dev/null || lock_held "$(lock_pid "$LOCK")"
+    if [[ "$(lock_pid "$stale")" != "$pid" ]]; then
+      mv "$stale" "$LOCK" 2>/dev/null || true
+      lock_held "$(lock_pid "$LOCK")"
+    fi
+    rm -rf "$stale"
+    log "removed a stale $LOCK: PID $pid no longer runs (killed with kill -9, or before a reboot)"
+    mkdir "$LOCK" 2>/dev/null || lock_held "$(lock_pid "$LOCK")"
+  fi
+  LOCKED=1
+  echo "$$" > "$LOCK/pid"
+}
+release_lock() {
+  if (( LOCKED )); then
+    LOCKED=0
+    rm -rf "$LOCK" 2>/dev/null || log "warning: cannot remove $LOCK — remove it: rm -r $LOCK"
+  fi
+}
+
+# Exit, Ctrl-C (INT) or TERM at any point (upgrade or rollback): see what this
+# run leaves behind, then release the lock.
 on_exit() {
   local rc=$?
   if (( INSTALLED )); then
@@ -218,6 +284,7 @@ on_exit() {
     if (( rc != 130 && rc != 143 )); then rc=4; fi
   fi
   if [[ -n "$STAGING" ]]; then rm -rf "$STAGING"; fi
+  release_lock
   exit "$rc"
 }
 
@@ -305,10 +372,7 @@ upgrade() { # upgrade <target> <bundle or ""> <confirmed 0|1>
   local target="$1" bundle="$2" confirmed="$3"
   local ts; ts="$(date -u +%Y%m%dT%H%M%SZ)"
   CURRENT="$(env_get HELPDESK_VERSION)"
-  STAGING="$(mktemp -d)"
-  trap on_exit EXIT
-  trap 'exit 130' INT
-  trap 'exit 143' TERM
+  STAGING="$(mktemp -d)"   # (on_exit, set in main, removes it)
 
   if [[ -z "$bundle" ]]; then
     bundle="$STAGING/bundle.tgz"
@@ -338,11 +402,11 @@ upgrade() { # upgrade <target> <bundle or ""> <confirmed 0|1>
   vendored_from="$(vendored supabase/VENDORED)" vendored_to="$(vendored "$STAGING/files/supabase/VENDORED")"
   if bundled && [[ -n "$vendored_to" && "$vendored_to" != "$vendored_from" ]]; then
     SUPABASE_UPGRADE=1
-    supabase_log="Supabase is upgraded: $(vendored_ref "$vendored_from") -> $(vendored_ref "$vendored_to")"
+    supabase_log="Supabase is upgraded: $(vendored_label "$vendored_from") -> $(vendored_label "$vendored_to")"
   elif bundled && (( CARRY )) && [[ "$(state_get supabase_upgrade)" == 1 ]]; then
     # Its new files are already here: the upgrade this run continues says so.
     SUPABASE_UPGRADE=1 supabase_continued=1
-    supabase_log="continuing the Supabase upgrade to $(vendored_ref "${vendored_to:-$vendored_from}")"
+    supabase_log="continuing the Supabase upgrade to $(vendored_label "${vendored_to:-$vendored_from}")"
   fi
   sum_before="$(supabase_sum)"
   INSTALLED=1
@@ -415,8 +479,9 @@ upgrade() { # upgrade <target> <bundle or ""> <confirmed 0|1>
   # back only through the snapshot (exit 4).
   if (( SUPABASE_UPGRADE )); then
     state_set supabase_upgrade 1
-    # The Supabase of the way back (the first one, in a continued upgrade).
-    if [[ -z "$(state_get supabase_from)" ]]; then state_set supabase_from "$(vendored_ref "$vendored_from")"; fi
+    # The Supabase of the way back (the first one, in a continued upgrade):
+    # never empty, "none" without a VENDORED file, so a continued run keeps it.
+    if [[ -z "$(state_get supabase_from)" ]]; then state_set supabase_from "$(vendored_id "$vendored_from")"; fi
   fi
   COMMITTED=1 INSTALLED=0
   compose stop app scheduler || after_failure "cannot stop HelpDesk" "$changed"
@@ -541,7 +606,15 @@ main() {
   cd "$(dirname "$0")"
   [[ -f .env ]] || die "no .env here — create it with init-env (see README.md)"
   detect_mode
-  # A snapshot interrupted while it was written (never a way back).
+  # One exit path for both modes: on_exit restores what an upgrade leaves
+  # half done, then releases the lock. Set before the lock is taken: a run
+  # that stops right after taking it still releases it.
+  trap on_exit EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  take_lock
+  # A snapshot interrupted while it was written (never a way back) — not one
+  # being written now: the lock says no other run is.
   rm -f backups/*.part || log "warning: cannot remove backups/*.part"
 
   if (( do_rollback )); then rollback "$yes" "$restored"; else upgrade "$target" "$bundle" "$migrate"; fi

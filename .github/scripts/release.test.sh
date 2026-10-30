@@ -2,7 +2,7 @@
 # Tests of the release rules (release-version.sh: tags, the highest version)
 # and of release-image.sh against a local registry:2: the derived image reports
 # X.Y.Z, keeps the layers of :sha-<sha>, and :X.Y / :latest move only for the
-# highest version. release.yml itself runs only on a tag in GitHub.
+# highest published version. release.yml itself runs only on a tag in GitHub.
 #   bash .github/scripts/release.test.sh              # all (needs Docker)
 #   bash .github/scripts/release.test.sh --no-docker  # the rules only
 set -uo pipefail
@@ -83,11 +83,15 @@ out="$(printf 'FROM node:24-alpine\nENV HELPDESK_VERSION=sha-test\n' | docker bu
 check "base image pushed as :sha-<sha> to $IMAGE" '[[ $rc == 0 ]]'
 BASE_LAYERS="$(docker inspect --format '{{json .RootFS.Layers}}' "$IMAGE:sha-$SHA")"
 
-# A scratch repository with the release tags (release-image.sh reads `git tag`).
+# The published releases (release.yml reads them with gh release list), and a
+# scratch repository whose git tags must not count: v9.9.9 was tagged, but its
+# release was rejected.
 REPO="$T/repo"
-git init -q "$REPO" && git -C "$REPO" -c user.name=t -c user.email=t@t commit -q --allow-empty -m x
-tag() { local t; for t in "$@"; do git -C "$REPO" tag "$t"; done; }
-release() { out="$(cd "$REPO" && bash "$HERE/release-image.sh" "$@" 2>"$T/err")"; rc=$?; out+=$'\n'"$(cat "$T/err")"; }
+git init -q "$REPO" && git -C "$REPO" -c user.name=t -c user.email=t@t commit -q --allow-empty -m x && git -C "$REPO" tag v9.9.9
+RELEASED=v1.0.0
+publish() { local t; for t in "$@"; do RELEASED+=$'\n'"$t"; done; }
+run_release() { out="$(cd "$REPO" && bash "$HERE/release-image.sh" "$@" 2>"$T/err")"; rc=$?; out+=$'\n'"$(cat "$T/err")"; }
+release() { RELEASED_TAGS="$RELEASED" run_release "$@"; }
 digest_of() { # the digest the registry serves for a tag
   api -S -O - "$API/manifests/$1" \
     --header 'Accept: application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json' \
@@ -99,26 +103,35 @@ reports() { docker rmi -f "$IMAGE:$1" >/dev/null 2>&1; docker pull -q "$IMAGE:$1
   && docker run --rm --entrypoint node "$IMAGE:$1" -p process.env.HELPDESK_VERSION | tr -d '\r'; }
 layers_of() { docker inspect --format '{{json .RootFS.Layers}}' "$IMAGE:$1"; }
 
-tag v1.0.0 v1.2.3 v2.0.0-rc.1
 release 1.2.3 "$SHA"
 D123="$(sed -n 's/^digest=//p' <<<"$out")"
-check "1.2.3, the highest stable: pushes :1.2.3, :1.2 and :latest" '[[ $rc == 0 && $(sed -n "s/^tags=//p" <<<"$out") == "1.2.3 1.2 latest" && $(registry_tags) == "1.2 1.2.3 latest sha-$SHA" ]]'
+check "1.2.3, the highest published stable: pushes :1.2.3, :1.2 and :latest (the stray git tag v9.9.9 does not count)" '[[ $rc == 0 && $(sed -n "s/^tags=//p" <<<"$out") == "1.2.3 1.2 latest" && $(registry_tags) == "1.2 1.2.3 latest sha-$SHA" ]]'
 check "... the registry serves the printed digest for all three" '[[ $D123 == sha256:* && $(digest_of 1.2.3) == "$D123" && $(digest_of 1.2) == "$D123" && $(digest_of latest) == "$D123" ]]'
 check "... :1.2.3 from the registry reports HELPDESK_VERSION=1.2.3" '[[ $(reports 1.2.3) == 1.2.3 ]]'
 check "... with the layers of :sha-<sha>" '[[ -n $BASE_LAYERS && $(layers_of 1.2.3) == "$BASE_LAYERS" ]]'
 check "... and the version label 1.2.3" '[[ $(docker inspect --format "{{index .Config.Labels \"org.opencontainers.image.version\"}}" "$IMAGE:1.2.3") == 1.2.3 ]]'
 
-tag v1.1.9
+publish v1.2.3
 release 1.1.9 "$SHA"
 check "1.1.9, an older line: pushes :1.1.9 and :1.1, not :latest" '[[ $rc == 0 && $(sed -n "s/^tags=//p" <<<"$out") == "1.1.9 1.1" && $(digest_of latest) == "$D123" ]] && grep -q "::notice::.*:latest is left" <<<"$out"'
 check "... :1.1.9 reports 1.1.9 with the same layers" '[[ $(reports 1.1.9) == 1.1.9 && $(layers_of 1.1.9) == "$BASE_LAYERS" ]]'
 
-tag v1.2.4
+publish v1.1.9 v1.2.4
 release 1.2.3 "$SHA"
 check "1.2.3 released again after v1.2.4: only :1.2.3 moves, :1.2 and :latest stay" '[[ $rc == 0 && $(sed -n "s/^tags=//p" <<<"$out") == "1.2.3" && $(digest_of 1.2.3) == "$(sed -n "s/^digest=//p" <<<"$out")" && $(digest_of 1.2) == "$D123" && $(digest_of latest) == "$D123" ]]'
 
 release 2.0.0-rc.1 "$SHA"
 check "2.0.0-rc.1, a prerelease: only :2.0.0-rc.1, reporting 2.0.0-rc.1" '[[ $rc == 0 && $(sed -n "s/^tags=//p" <<<"$out") == "2.0.0-rc.1" && $(digest_of latest) == "$D123" && $(reports 2.0.0-rc.1) == 2.0.0-rc.1 ]]'
+
+publish v1.2.5
+release 1.2.4 "$SHA"
+check "a published higher release, v1.2.5, keeps :1.2 and :latest" '[[ $rc == 0 && $(sed -n "s/^tags=//p" <<<"$out") == "1.2.4" && $(digest_of latest) == "$D123" ]]'
+
+RELEASED='' release 0.1.0 "$SHA"
+check "no published release yet (empty list): the first release gets :0.1 and :latest" '[[ $rc == 0 && $(sed -n "s/^tags=//p" <<<"$out") == "0.1.0 0.1 latest" && $(digest_of latest) == "$(sed -n "s/^digest=//p" <<<"$out")" ]]'
+
+run_release 1.5.0 "$SHA"
+check "RELEASED_TAGS not set for a stable version: ::error::, exit 1, nothing pushed" '[[ $rc == 1 && $out == *"::error::RELEASED_TAGS is not set"* && $(registry_tags) != *1.5.0* ]]'
 
 release 1.3.0 "$OTHER_SHA"
 check "a commit without :sha-<sha>: ::error::, exit 1, nothing pushed" '[[ $rc == 1 && $out == *"::error::Cannot pull"* && $(registry_tags) == *latest* && $(registry_tags) != *1.3.0* ]]'

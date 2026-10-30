@@ -5,14 +5,15 @@ name: Release
 # same layers, HELPDESK_VERSION=X.Y.Z) and the deploy bundle goes to the GitHub
 # release vX.Y.Z, where deploy/upgrade.sh downloads it. No deployment.
 # Re-running a tag is safe: the image is rebuilt and the release assets replaced.
+# Push one release tag at a time: :latest and :X.Y are decided from the releases
+# already published, so two runs at once could each miss the other.
 on:
   push:
     tags: ['v*.*.*']
 
-# One release at a time: :latest and :X.Y are decided from the tags, and two
-# releases racing could move them in the wrong order.
+# Per tag: a shared group would keep one pending run and cancel the others.
 concurrency:
-  group: release
+  group: release-${{ github.ref_name }}
   cancel-in-progress: false
 
 permissions:
@@ -83,10 +84,17 @@ jobs:
       - id: image
         name: Release image (:X.Y.Z, :X.Y, :latest)
         # Builds the derived image, checks its version and layers, then pushes.
+        # :X.Y and :latest are decided against the published stable releases
+        # (not git tags: a tag whose release was rejected must not count),
+        # read just before the push.
         env:
           VERSION: ${{ steps.tag.outputs.version }}
           SHA: ${{ steps.tag.outputs.sha }}
-        run: bash .github/scripts/release-image.sh "$VERSION" "$SHA" >> "$GITHUB_OUTPUT"
+        run: |
+          RELEASED_TAGS="$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases \
+            --limit 1000 --json tagName --jq '.[].tagName')"
+          export RELEASED_TAGS
+          bash .github/scripts/release-image.sh "$VERSION" "$SHA" >> "$GITHUB_OUTPUT"
       - uses: actions/attest-build-provenance@v4
         with:
           subject-name: ${{ env.IMAGE }}
@@ -104,18 +112,26 @@ jobs:
           bash deploy/scripts/pack-bundle.sh "$VERSION" "dist/$bundle"
           (cd dist && sha256sum "$bundle" > "$bundle.sha256")
       - name: GitHub release
-        # A re-run finds the release and replaces its assets.
+        # `gh release create` with assets makes a draft, uploads, then publishes:
+        # a failed upload leaves the draft behind. A re-run finds the release
+        # (draft or not), replaces its assets and publishes it. GitHub's "Latest"
+        # follows :latest, so the API's latest release and the image agree.
         env:
           VERSION: ${{ steps.tag.outputs.version }}
           PRERELEASE: ${{ steps.tag.outputs.prerelease }}
+          IMAGE_TAGS: ${{ steps.image.outputs.tags }}
         run: |
           assets=("dist/helpdesk-deploy-v$VERSION.tar.gz" "dist/helpdesk-deploy-v$VERSION.tar.gz.sha256")
+          flags=(--prerelease="$PRERELEASE")
+          if [[ "$PRERELEASE" == false ]]; then
+            if [[ " $IMAGE_TAGS " == *" latest "* ]]; then flags+=(--latest); else flags+=(--latest=false); fi
+          fi
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             gh release upload "$TAG" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false "${flags[@]}"
           else
-            flags=(--verify-tag --generate-notes --title "$TAG")
-            if [[ "$PRERELEASE" == true ]]; then flags+=(--prerelease); fi
-            gh release create "$TAG" "${assets[@]}" --repo "$GITHUB_REPOSITORY" "${flags[@]}"
+            gh release create "$TAG" "${assets[@]}" --repo "$GITHUB_REPOSITORY" \
+              --verify-tag --generate-notes --title "$TAG" "${flags[@]}"
           fi
       - name: Summary
         env:

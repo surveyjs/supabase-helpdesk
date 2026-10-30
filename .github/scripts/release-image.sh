@@ -8,7 +8,10 @@
 # upgrade.sh compares with /api/health) and that its layers equal the base's.
 # Tags pushed: :X.Y.Z; for a stable version also :X.Y if X.Y.Z is the highest
 # of the X.Y line, and :latest if it is the highest stable version, both judged
-# against the v* tags of the git repository in the working directory.
+# against RELEASED_TAGS: the tags of the published (not draft, not prerelease)
+# releases, one per line, which release.yml reads with `gh release list`. Git
+# tags are not used: a tag whose release was rejected must not hold :latest.
+# RELEASED_TAGS must be set (empty for the first release) for a stable version.
 # Docker's output goes to stderr; stdout gets digest=sha256:… and tags=… (the
 # $GITHUB_OUTPUT format). IMAGE defaults to ghcr.io/surveyjs/supabase-helpdesk;
 # the test points it at a local registry: .github/scripts/release.test.sh
@@ -23,6 +26,8 @@ info="$(bash "$HERE/release-version.sh" parse "v$VERSION")" || exit 1
 minor="$(sed -n 's/^minor=//p' <<<"$info")"
 prerelease="$(sed -n 's/^prerelease=//p' <<<"$info")"
 [[ $SHA =~ ^[0-9a-f]{40}$ ]] || die "'$SHA' is not a full commit sha"
+[[ $prerelease == true || -n ${RELEASED_TAGS+set} ]] \
+  || die "RELEASED_TAGS is not set: the published release tags decide :$minor and :latest"
 
 BASE="$IMAGE:sha-$SHA"
 REF="$IMAGE:$VERSION"
@@ -44,7 +49,7 @@ base_layers="$(layers "$BASE")"
 # --- tags ----------------------------------------------------------------------------------
 tags=("$VERSION")
 if [[ $prerelease == false ]]; then
-  released="$(git tag -l 'v*')"
+  released="$RELEASED_TAGS"$'\n'"v$VERSION"
   if [[ "$(bash "$HERE/release-version.sh" highest "$VERSION" "$minor" <<<"$released")" == true ]]; then
     tags+=("$minor")
   else

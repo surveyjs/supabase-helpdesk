@@ -134,11 +134,18 @@ for `--rollback`.
 | Exit | Meaning |
 |------|---------|
 | 0 | Upgraded. |
-| 1 | Error before any change (bad arguments, wrong bundle, download failed, image missing, `migrate --dry-run` refused, e.g. a database newer than X.Y.Z, or failed because the stack is not running — bundled mode needs it up: `docker compose up -d`). Nothing changed. |
+| 1 | Error before any change (bad arguments, wrong bundle, download failed, image missing, `migrate --dry-run` refused, e.g. a database newer than X.Y.Z, or failed because the stack is not running — bundled mode needs it up: `docker compose up -d`, except after an interrupted Supabase upgrade, see below). Nothing changed. |
 | 2 | Migrations pending, or a Supabase upgrade, not confirmed (answered no, or no terminal and no `--migrate`). Nothing changed. |
 | 3 | Failed before the schema changed (snapshot, migration or start of X.Y.Z); the previous version was restarted. If the script also says it did not become healthy, check `docker compose ps` and `docker compose logs app`. |
 | 4 | Failed after the schema changed (or after a new Supabase version started); HelpDesk stays stopped and `.env` keeps the previous version. Fix the cause and run `./upgrade.sh` again (the run continues the upgrade and keeps the snapshot taken before it), or roll back. |
 | 130, 143 | Interrupted (Ctrl-C, `kill`). Before the confirmation: the previous files are back, nothing changed. Later: HelpDesk may be stopped, as with exit 4 — run `./upgrade.sh X.Y.Z` again (it continues) or `./upgrade.sh --rollback`. |
+
+**A Supabase upgrade that stopped before its snapshot** (interrupted, or failed while stopping the
+stack): the new `supabase/` files are in place, but the new Supabase has not run. `upgrade.sh`
+says so. Run `./upgrade.sh --rollback`: it puts back the previous files and starts the previous
+stack (there is no snapshot to restore). Do **not** start the stack with `docker compose up -d`:
+that starts the new Supabase without a snapshot. A run of `./upgrade.sh X.Y.Z` while the stack
+still runs continues the Supabase upgrade: it asks again and takes the snapshot first.
 
 ## 5. Rollback
 

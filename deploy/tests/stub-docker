@@ -21,6 +21,8 @@ case "$*" in
   "compose exec -T db psql"*) echo "42 MB"; exit 0 ;;
   "run --rm -v"*"tar -C /src -czf"*)
     # The snapshot: creates the archive in the directory mounted at /dst.
+    # STUB_SNAPSHOT_KILL: upgrade.sh gets TERM (Ctrl-C) while it runs.
+    if [[ -n "${STUB_SNAPSHOT_KILL:-}" ]]; then kill -TERM "$PPID"; exit 1; fi
     [[ "${STUB_SNAPSHOT_RC:-0}" == 0 ]] || exit "$STUB_SNAPSHOT_RC"
     for a in "$@"; do [[ "$a" == *:/dst ]] && dst="${a%:/dst}"; done
     name="$(sed -n 's|.*-czf /dst/\([^ ]*\) .*|\1|p' <<<"$*")"

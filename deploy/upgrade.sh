@@ -161,8 +161,24 @@ db_size() {
 # INSTALLED — the new files are in place, nothing stopped yet;
 # COMMITTED — the way back is written and HelpDesk is being stopped/migrated.
 # SUPABASE_CHANGED: the new files change supabase/; SUPABASE_UPGRADE: to
-# another Supabase version (supabase/VENDORED).
+# another Supabase version (supabase/VENDORED), or continuing such an upgrade
+# (supabase_upgrade in .upgrade-state).
 CURRENT="" UNDO="" STAGING="" CARRY=0 INSTALLED=0 COMMITTED=0 SUPABASE_CHANGED=0 SUPABASE_UPGRADE=0
+
+# A Supabase upgrade that stopped before its snapshot: the new supabase/ files
+# are here, but the new Supabase has not run. `docker compose up -d` would
+# start it without a snapshot; --rollback puts back the previous files and stack.
+supabase_unsnapshotted() { bundled && [[ "$(state_get supabase_upgrade)" == 1 && -z "$(state_get snapshot)" ]]; }
+rollback_instead() {
+  log "Run ./upgrade.sh --rollback to start $(state_get previous_version) again — not docker compose up -d,"
+  log "which would start the new Supabase without a snapshot — then upgrade again."
+}
+still_unsnapshotted() { # after a run that changed nothing, in a continued upgrade
+  if (( CARRY )) && supabase_unsnapshotted; then
+    log "This installation is still in a Supabase upgrade that stopped before its snapshot (the new Supabase has not run)."
+    rollback_instead
+  fi
+}
 
 # Exit, Ctrl-C (INT) or TERM at any point: see what this run leaves behind.
 on_exit() {
@@ -173,14 +189,20 @@ on_exit() {
     if [[ -f "$STAGING/state" ]]; then cp "$STAGING/state" "$STATE"; else rm -f "$STATE"; fi
     (( CARRY )) || rm -f "$UNDO"
     log "stopped (exit $rc) before anything was stopped or migrated: the previous files are back; nothing changed"
+    still_unsnapshotted
     (( rc != 0 )) || rc=1
   elif (( COMMITTED )); then
     COMMITTED=0
     # Conservative: the next run continues this upgrade and keeps its way back.
     state_set incomplete 1
     env_set HELPDESK_VERSION "$CURRENT"
-    log "stopped (exit $rc) during the upgrade; HelpDesk may be stopped. Run ./upgrade.sh <version> again"
-    log "(it continues this upgrade) or ./upgrade.sh --rollback."
+    if supabase_unsnapshotted; then
+      log "stopped (exit $rc) before the database snapshot of the Supabase upgrade: the new Supabase has not run."
+      rollback_instead
+    else
+      log "stopped (exit $rc) during the upgrade; HelpDesk may be stopped. Run ./upgrade.sh <version> again"
+      log "(it continues this upgrade) or ./upgrade.sh --rollback."
+    fi
     if (( rc != 130 && rc != 143 )); then rc=4; fi
   fi
   if [[ -n "$STAGING" ]]; then rm -rf "$STAGING"; fi
@@ -193,6 +215,7 @@ nothing_changed() { # nothing_changed <exit code> <message>
   (( CARRY )) || rm -f "$UNDO"
   INSTALLED=0
   log "$2"
+  still_unsnapshotted
   exit "$1"
 }
 
@@ -206,7 +229,9 @@ restore_previous() { # restore_previous <message>
   if (( CARRY )) && [[ "$(state_get incomplete)" == 1 && -f "$(state_get previous_files)" ]]; then
     files="$(state_get previous_files)"; version="$(state_get previous_version)"; origin=1
   fi
+  local sum_before; sum_before="$(supabase_sum)"
   tar -xzf "$files" -C .
+  if [[ "$(supabase_sum)" != "$sum_before" ]]; then SUPABASE_CHANGED=1; fi
   env_set HELPDESK_VERSION "$version"
   if (( origin )); then
     rm -f "$STATE"
@@ -242,6 +267,11 @@ after_failure() { # after_failure <message> <schema may have changed 0|1>
   state_set incomplete 1
   env_set HELPDESK_VERSION "$CURRENT"
   compose stop app scheduler >/dev/null 2>&1 || true
+  if supabase_unsnapshotted; then
+    log "HelpDesk stays stopped; the new Supabase has not run (no snapshot was taken)."
+    rollback_instead
+    exit 4
+  fi
   if (( supabase )); then
     log "Supabase was upgraded and may have migrated its schemas, so $CURRENT stays stopped. Either:"
   else
@@ -285,9 +315,16 @@ upgrade() { # upgrade <target> <bundle or ""> <confirmed 0|1>
   fi
   if (( CARRY )); then UNDO="$STAGING/files.tgz"; else UNDO="backups/files-${CURRENT:-none}-$ts.tgz"; fi
   save_files "$UNDO" || { rm -f "$UNDO"; die "cannot save the current files into $UNDO; nothing changed"; }
-  local vendored_from vendored_to sum_before
+  local vendored_from vendored_to sum_before supabase_log=""
   vendored_from="$(vendored supabase/VENDORED)" vendored_to="$(vendored "$STAGING/files/supabase/VENDORED")"
-  if bundled && [[ -n "$vendored_to" && "$vendored_to" != "$vendored_from" ]]; then SUPABASE_UPGRADE=1; fi
+  if bundled && [[ -n "$vendored_to" && "$vendored_to" != "$vendored_from" ]]; then
+    SUPABASE_UPGRADE=1
+    supabase_log="Supabase is upgraded: $(vendored_ref "$vendored_from") -> $(vendored_ref "$vendored_to")"
+  elif bundled && (( CARRY )) && [[ "$(state_get supabase_upgrade)" == 1 ]]; then
+    # Its new files are already here: the upgrade this run continues says so.
+    SUPABASE_UPGRADE=1
+    supabase_log="continuing the Supabase upgrade to $(vendored_ref "${vendored_to:-$vendored_from}")"
+  fi
   sum_before="$(supabase_sum)"
   INSTALLED=1
   cp -R "$STAGING/files/." .
@@ -311,7 +348,10 @@ upgrade() { # upgrade <target> <bundle or ""> <confirmed 0|1>
   printf '%s\n' "$dry" >&2
   if (( rc != 0 )); then
     local hint=""
-    if bundled; then hint=" — it needs the running stack (db, auth, storage): start it with docker compose up -d, then run this again"; fi
+    # (A continued Supabase upgrade without its snapshot: nothing_changed points at --rollback.)
+    if bundled && ! supabase_unsnapshotted; then
+      hint=" — if the stack is not running (db, auth, storage), start it with docker compose up -d and run this again"
+    fi
     nothing_changed 1 "migrate --dry-run failed (exit $rc); nothing changed$hint"
   fi
   local pending; pending="$(sed -n 's/.*dry run: would apply //p' <<<"$dry" | tr -d '\r')"
@@ -319,8 +359,7 @@ upgrade() { # upgrade <target> <bundle or ""> <confirmed 0|1>
   local schema="$pending"
   if [[ -n "$pending" ]]; then log "pending migrations: $pending"; fi
   if (( SUPABASE_UPGRADE )); then
-    log "Supabase is upgraded: $(vendored_ref "$vendored_from") -> $(vendored_ref "$vendored_to")" \
-        "(it migrates its own schemas when it starts)"
+    log "$supabase_log (it migrates its own schemas when it starts)"
     schema="${schema:+$schema and }the Supabase upgrade"
   fi
 
@@ -346,13 +385,14 @@ upgrade() { # upgrade <target> <bundle or ""> <confirmed 0|1>
   else
     printf 'previous_version=%s\ntarget_version=%s\nprevious_files=%s\n' "$CURRENT" "$target" "$UNDO" > "$STATE"
   fi
+  # Recorded with the way back, before the new Supabase can start: a continued
+  # run is a Supabase upgrade too, and once the new Supabase ran a failure goes
+  # back only through the snapshot (exit 4).
+  if (( SUPABASE_UPGRADE )); then state_set supabase_upgrade 1; fi
   COMMITTED=1 INSTALLED=0
   compose stop app scheduler || after_failure "cannot stop HelpDesk" "$changed"
 
   if [[ -n "$schema" ]]; then
-    # Recorded before the new Supabase can start: once it ran, a failure goes
-    # back only through the snapshot (exit 4), also in a continued run.
-    if (( SUPABASE_UPGRADE )); then state_set supabase_upgrade 1; fi
     # A continued upgrade keeps the snapshot taken before the schema changed.
     if bundled && [[ -z "$(state_get snapshot)" ]]; then
       local snapshot="backups/db-${CURRENT:-none}-$ts.tar.gz"

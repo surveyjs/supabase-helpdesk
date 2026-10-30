@@ -25,7 +25,7 @@ setup() { # setup bundled|external
   pack
   export STUB_LOG="$T/calls.log"; : > "$STUB_LOG"
   unset STUB_DRY_RUN STUB_DRY_RUN_RC STUB_DRY_RUN_SLEEP STUB_MIGRATE_RC STUB_SNAPSHOT_RC STUB_RESTORE_RC \
-    STUB_OLD_SCHEMA_MATCHES STUB_HEALTH_VERSION STUB_IMAGE_MISSING STUB_HELPER_MISSING STUB_DB_START_RC COMPOSE_FILE
+    STUB_OLD_SCHEMA_MATCHES STUB_HEALTH_VERSION STUB_IMAGE_MISSING STUB_HELPER_MISSING STUB_DB_START_RC STUB_SNAPSHOT_KILL COMPOSE_FILE
 }
 # setup's installation and bundle with different Supabase versions (supabase/VENDORED).
 revendor() { mkdir -p "$T/inst/supabase" "$T/b/supabase"; echo ref=v1 > "$T/inst/supabase/VENDORED"; echo ref=v2 > "$T/b/supabase/VENDORED"; pack; }
@@ -94,7 +94,7 @@ check "external --rollback --restored returns to the previous version" '[[ $rc =
 # --- stops before anything was stopped: the files go back ------------------------------
 setup bundled; STUB_DRY_RUN_RC=1 upgrade --bundle bundle.tgz --migrate 1.1.0
 check "dry run fails after the new files were unpacked: exit 1, old files, no archive left" '[[ $rc == 1 && $(version) == 1.0.0 && $(files) == old && $(archives) == 0 && ! -f $T/inst/.upgrade-state ]]'
-check "... the dry run starts no dependencies (--no-deps) and the message says to start the stack" 'called "compose run --rm -T --no-deps migrate --dry-run" && grep -q "docker compose up -d" "$T/out.log"'
+check "... the dry run starts no dependencies (--no-deps); the message: if the stack is not running, start it" 'called "compose run --rm -T --no-deps migrate --dry-run" && grep -q "if the stack is not running.*docker compose up -d" "$T/out.log"'
 
 setup bundled; STUB_IMAGE_MISSING=1 upgrade --bundle bundle.tgz --migrate 1.1.0
 check "image missing: exit 1, old files, no archive left" '[[ $rc == 1 && $(version) == 1.0.0 && $(files) == old && $(archives) == 0 ]] && ! called "migrate --dry-run"'
@@ -152,6 +152,28 @@ check "... while without a new Supabase that is still before any change: exit 3"
 setup bundled; revendor; upgrade --bundle bundle.tgz --migrate 1.1.0; a=$rc
 STUB_DRY_RUN="$PENDING" STUB_MIGRATE_RC=1 STUB_OLD_SCHEMA_MATCHES=1 upgrade --bundle bundle.tgz --migrate 1.1.0
 check "a finished Supabase upgrade is forgotten: a later run whose schema stayed the same goes back (exit 3)" '[[ $a == 0 && $rc == 3 && $(version) == 1.1.0 && -z $(state supabase_upgrade) ]]'
+
+# --- a Supabase upgrade interrupted during its snapshot ---------------------------------
+# Leaves the new files (supabase/ v2), the old containers and no recorded snapshot.
+interrupted() { setup bundled; revendor; STUB_SNAPSHOT_KILL=1 upgrade --bundle bundle.tgz --migrate 1.1.0; first=$rc; cp "$T/out.log" "$T/first.log"; : > "$STUB_LOG"; }
+before_any_up() { # the snapshot of this run comes before any compose up
+  local s u; s="$(grep -n "tar -C /src" "$STUB_LOG" | head -n 1 | cut -d: -f1)"; u="$(grep -n "compose up" "$STUB_LOG" | head -n 1 | cut -d: -f1)"
+  [[ -n $s && ( -z $u || $s -lt $u ) ]]
+}
+interrupted
+check "interrupted before the snapshot of a Supabase upgrade: exit 143, points at --rollback, not at compose up" '[[ $first == 143 && $(state incomplete) == 1 && $(state supabase_upgrade) == 1 && -z $(state snapshot) ]] && grep -q "new Supabase has not run" "$T/first.log" && grep -q -- "--rollback" "$T/first.log"'
+upgrade --bundle bundle.tgz 1.1.0
+check "... the next run still is a Supabase upgrade: without --migrate exit 2, nothing started" '[[ $rc == 2 && $(state supabase_upgrade) == 1 && -z $(state snapshot) ]] && grep -q "continuing the Supabase upgrade" "$T/out.log" && grep -q "Run ./upgrade.sh --rollback" "$T/out.log" && ! grep -q "v2 -> v2" "$T/out.log" && ! called "compose up"'
+upgrade --bundle bundle.tgz --migrate 1.1.0
+check "... with --migrate: snapshot before any service starts, then the upgrade" '[[ $rc == 0 && $(version) == 1.1.0 && -s $T/inst/$(state snapshot) && -z $(state supabase_upgrade) ]] && before_any_up'
+
+interrupted; STUB_DRY_RUN_RC=1 upgrade --bundle bundle.tgz --migrate 1.1.0
+check "... stack stopped, so the dry run fails: exit 1, points at --rollback, not at docker compose up -d" '[[ $rc == 1 && $(state supabase_upgrade) == 1 && $(cat "$T/inst/supabase/VENDORED") == ref=v2 ]] && grep -q "Run ./upgrade.sh --rollback" "$T/out.log" && ! grep -q "start it with docker compose up -d" "$T/out.log" && ! called "compose up"'
+upgrade --rollback --yes
+check "... --rollback puts back the previous files and stack, no snapshot to restore" '[[ $rc == 0 && $(version) == 1.0.0 && $(files) == old && $(cat "$T/inst/supabase/VENDORED") == ref=v1 && ! -f $T/inst/.upgrade-state ]] && ! called "data.restore" && recreated_all'
+
+interrupted; STUB_DRY_RUN="$PENDING" STUB_DB_START_RC=1 upgrade --bundle bundle.tgz --migrate 1.1.0
+check "... the next run with migrations whose database does not start: exit 4, the snapshot stays recorded" '[[ $rc == 4 && $(state incomplete) == 1 && $(state supabase_upgrade) == 1 && -s $T/inst/$(state snapshot) ]] && before_any_up'
 
 setup bundled; mkdir -p "$T/inst/supabase/volumes/api" "$T/b/supabase/volumes/api"
 echo old > "$T/inst/supabase/volumes/api/envoy.yaml"; echo new > "$T/b/supabase/volumes/api/envoy.yaml"; pack

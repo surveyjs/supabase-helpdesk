@@ -95,13 +95,16 @@ export async function loginViaForm(
     await page.getByRole('button', { name: 'Log in' }).click();
     // Race the success URL against the failure alert. Whichever fires first
     // wins; we never block for the full 10s on a guaranteed failure.
+    // Next's route announcer is also a (1px, always "visible") role=alert, so
+    // getByRole('alert') would win this race the moment the page hydrates.
     const result = await Promise.race([
       page
         .waitForURL('/', { timeout: 10000 })
         .then(() => 'ok' as const)
         .catch(() => 'timeout' as const),
       page
-        .getByRole('alert')
+        .locator('[role="alert"]:not(#__next-route-announcer__)')
+        .first()
         .waitFor({ state: 'visible', timeout: 10000 })
         .then(() => 'alert' as const)
         .catch(() => 'no-alert' as const),

@@ -67,3 +67,4 @@ package-lock.json
 # deploy bundle runtime state
 /deploy/backups/
 /deploy/.upgrade-state
+/deploy/.upgrade.lock/

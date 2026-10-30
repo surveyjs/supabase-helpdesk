@@ -57,7 +57,7 @@ rm -rf "$WORK"; mkdir -p "$DIR" "$OUT"
 latest_release() { # the X.Y.Z of REPO's latest stable release; nothing if it has none
   local auth=() body="$OUT/latest-release.json" code tag
   if [[ -n "${GH_TOKEN:-}" ]]; then auth=(-H "Authorization: Bearer $GH_TOKEN"); fi
-  code="$(curl -sS -o "$(native_path "$body")" -w '%{http_code}' "${auth[@]}" -H 'Accept: application/vnd.github+json' \
+  code="$(curl -sS -o "$(native_path "$body")" -w '%{http_code}' --retry 3 --retry-all-errors "${auth[@]}" -H 'Accept: application/vnd.github+json' \
             "${GITHUB_API_URL:-https://api.github.com}/repos/$REPO/releases/latest")" \
     || { echo "cannot reach the GitHub API for the latest release of $REPO" >&2; return 1; }
   case "$code" in
@@ -121,7 +121,7 @@ login() { # login <description>
 # --- install -------------------------------------------------------------------------
 if [[ "$FROM_RELEASE" == 1 ]]; then
   echo "## Bundle e2e: upgrade from release v$BASE ($FROM_IMAGE:$BASE) to $IMAGE:$VERSION" >> "$SUMMARY"
-  if ! curl -fsSL "$BUNDLE_URL" -o "$(native_path "$WORK/bundle-$BASE.tgz")"; then
+  if ! curl -fsSL --retry 3 --retry-all-errors "$BUNDLE_URL" -o "$(native_path "$WORK/bundle-$BASE.tgz")"; then
     fail "cannot download the bundle of v$BASE from $BUNDLE_URL"; exit 1
   fi
   if ! docker image inspect "$FROM_IMAGE:$BASE" >/dev/null 2>&1 && ! docker pull -q "$FROM_IMAGE:$BASE"; then

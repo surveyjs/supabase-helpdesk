@@ -17,7 +17,7 @@ trap 'rm -rf "$STAGE"' EXIT
 # tracked file deleted in the working tree is skipped.
 git -C "$ROOT" -c core.quotePath=false ls-files -co --exclude-standard -- deploy \
   | sed -n 's|^deploy/||p' \
-  | grep -Ev '^(scripts|tests|backups)/|^\.upgrade-state$|(^|/)\.env$' \
+  | grep -Ev '^(scripts|tests|backups)/|^\.upgrade-state$|^\.upgrade\.lock/|(^|/)\.env$' \
   | while IFS= read -r f; do if [[ -f "$ROOT/deploy/$f" ]]; then printf '%s\n' "$f"; fi; done \
   > "$STAGE/files"
 mkdir "$STAGE/bundle"

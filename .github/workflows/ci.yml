@@ -407,7 +407,7 @@ jobs:
   publish:
     name: Publish image (GHCR)
     needs: ci-result
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'surveyjs/supabase-helpdesk'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -498,7 +498,7 @@ jobs:
             echo
             echo "Upgrade demo to this commit (in its deploy directory):"
             echo '```sh'
-            echo "gh run download $RUN_ID -R $GITHUB_REPOSITORY -n $bundle"
+            echo "gh run download $RUN_ID -R $GITHUB_REPOSITORY -n $bundle   # requires gh auth login"
             echo "./upgrade.sh --bundle $bundle.tar.gz $VERSION"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

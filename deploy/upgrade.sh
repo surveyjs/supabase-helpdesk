@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Upgrade or roll back this HelpDesk installation — the same script for
-# operators and for CD.
+# Upgrade or roll back this HelpDesk installation. The operator runs it by hand
+# (CI publishes images and bundles; it never deploys).
 #
 #   ./upgrade.sh [--bundle FILE] [--migrate] VERSION   upgrade to VERSION
 #   ./upgrade.sh --rollback [--yes] [--restored]       undo the last upgrade
@@ -226,7 +226,7 @@ unpack_previous_first() {
 #    cleanup — never by a run that did not take it (LOCKED).
 LOCKED=0
 lock_pid() { tr -d '\r\n ' < "$1/pid" 2>/dev/null || true; } # lock_pid <lock dir>
-pid_runs() { kill -0 "$1" 2>/dev/null || [[ "$(kill -0 "$1" 2>&1)" == *ermitted* ]]; }
+pid_runs() { kill -0 "$1" 2>/dev/null || [[ "$(LC_ALL=C kill -0 "$1" 2>&1)" == *ermitted* ]]; }
 lock_held() { # lock_held <its PID or "">
   log "another upgrade.sh is running (${1:+PID $1, }$LOCK); nothing changed — wait for it to finish."
   die "If none runs (its PID is now another process, or $LOCK has no PID in it): rm -r $LOCK"

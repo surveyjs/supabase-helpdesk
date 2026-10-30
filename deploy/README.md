@@ -269,7 +269,7 @@ unpacks over your directory). Nothing is deployed for you: you run `upgrade.sh` 
 
 | Image tag | What it is | Bundle |
 |-----------|------------|--------|
-| `X.Y.Z` (e.g. `1.2.3`) | A release. Never moves. Use this one in production. | `helpdesk-deploy-vX.Y.Z.tar.gz`, with `helpdesk-deploy-vX.Y.Z.tar.gz.sha256`, in the [GitHub release](https://github.com/surveyjs/supabase-helpdesk/releases) `vX.Y.Z` |
+| `X.Y.Z` (e.g. `1.2.3`) | A release. Not moved to other content (a re-run of the release re-pushes the same layers). Use this one in production. | `helpdesk-deploy-vX.Y.Z.tar.gz`, with `helpdesk-deploy-vX.Y.Z.tar.gz.sha256`, in the [GitHub release](https://github.com/surveyjs/supabase-helpdesk/releases) `vX.Y.Z` |
 | `X.Y` (e.g. `1.2`) | The newest release of that line. Moves with each patch release. | that release's |
 | `latest` | The newest stable release. | that release's |
 | `X.Y.Z-pre` (e.g. `1.3.0-rc.1`) | A prerelease: has no `X.Y` or `latest` tag, and GitHub does not show it as the latest release. | in its (pre)release |
@@ -301,6 +301,6 @@ deploy directory of the installation, with `RUN_ID` of the CI run of that commit
 (the Summary of its `Publish image (GHCR)` job prints exactly these commands, with the values filled in):
 
 ```sh
-gh run download RUN_ID -R surveyjs/supabase-helpdesk -n helpdesk-deploy-sha-<sha>
+gh run download RUN_ID -R surveyjs/supabase-helpdesk -n helpdesk-deploy-sha-<sha>   # requires `gh auth login`
 ./upgrade.sh --bundle helpdesk-deploy-sha-<sha>.tar.gz sha-<sha>
 ```

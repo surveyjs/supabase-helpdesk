@@ -16,7 +16,7 @@ The `publish` job of `.github/workflows/ci.yml` runs on a push to `main` once ev
 - prints in its Summary the commands to upgrade demo to that commit:
 
   ```sh
-  gh run download RUN_ID -R surveyjs/supabase-helpdesk -n helpdesk-deploy-sha-<sha>
+  gh run download RUN_ID -R surveyjs/supabase-helpdesk -n helpdesk-deploy-sha-<sha>   # requires `gh auth login`
   ./upgrade.sh --bundle helpdesk-deploy-sha-<sha>.tar.gz sha-<sha>
   ```
 
@@ -73,7 +73,9 @@ own `upgrade.sh --migrate`, and rolls back. Until the first stable release exist
 
 - After the first `publish` run, make the GHCR package `supabase-helpdesk` public (the
   `surveyjs` organization → Packages → `supabase-helpdesk` → Package settings → Change visibility).
-  A new package is private, and operators pull without credentials.
+  A new package is private, and operators pull without credentials. **Do this BEFORE the first
+  stable release.** Otherwise the required CI job `bundle-e2e-upgrade` fails in every pull request
+  on an unauthenticated `docker pull` of the release image.
 - Check that the organization allows GitHub Actions to publish packages (Organization settings →
   Actions → General: workflow permissions; if the package restricts access, its "Manage Actions
   access" must list this repository with write access). `publish` and `release.yml` push with the

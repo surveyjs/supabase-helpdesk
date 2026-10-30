@@ -1,0 +1,23 @@
+# Same-domain routing: Supabase's API paths go to its gateway (bundled mode),
+# everything else to HelpDesk. With an external Supabase the browser talks to
+# SUPABASE_URL directly, so only the app routes are used. SITE_ADDRESS (from
+# init-env --edge): the APP_URL domain for automatic HTTPS (caddy), or ":80"
+# when your own proxy terminates TLS in front of this one (own).
+{
+	servers {
+		# Proxies whose X-Forwarded-* headers are kept (init-env --edge own:
+		# private_ranges): HelpDesk builds its redirects from X-Forwarded-Proto,
+		# so it must stay https. Empty (--edge caddy): no one is trusted.
+		trusted_proxies static {$TRUSTED_PROXIES}
+	}
+}
+
+{$SITE_ADDRESS::80} {
+	@supabase path /auth/v1/* /rest/v1/* /storage/v1/* /realtime/v1/* /functions/v1/* /graphql/v1 /graphql/v1/*
+	handle @supabase {
+		reverse_proxy api-gw:8000
+	}
+	handle {
+		reverse_proxy app:3001
+	}
+}

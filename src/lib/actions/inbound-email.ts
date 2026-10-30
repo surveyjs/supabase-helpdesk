@@ -9,6 +9,7 @@ import { sanitizeSvg } from '@/lib/utils/svg-sanitize';
 import { initializeSlaTimer, stopFirstResponseTimer, resumeSlaTimer } from '@/lib/utils/sla';
 import { cancelCsatSurvey } from '@/lib/utils/csat';
 import { stripEmailSignature, extractTicketIdFromSubject } from '@/lib/utils/email-parser';
+import { runtimeConfig } from '@/lib/runtime-config';
 
 // ============================================================
 // Types
@@ -319,7 +320,7 @@ export async function processInboundEmail(
 
     if (!senderProfile) {
       // Unknown sender
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+      const appUrl = runtimeConfig().appUrl;
       await sendAutoReply(
         senderEmail,
         'auto_reply_unknown_sender',

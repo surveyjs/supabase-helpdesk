@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect, Page } from './fixtures';
 import { createClient } from '@supabase/supabase-js';
 import { loginViaForm } from '../helpers/auth';
 

@@ -3,17 +3,22 @@ import dotenv from 'dotenv';
 
 dotenv.config({ path: '.env.test' });
 
+const isCI = !!process.env.CI;
+
 export default defineConfig({
   testDir: './tests/e2e',
   globalSetup: './tests/e2e/global-setup.ts',
   globalTeardown: './tests/e2e/global-teardown.ts',
   fullyParallel: true,
+  forbidOnly: isCI, // a stray test.only would silently shrink a CI shard
   workers: 4,
-  retries: process.env.CI ? 2 : 2,
-  reporter: 'html',
+  retries: 2,
+  // CI: blob reports are merged across shards by the e2e-report job.
+  reporter: isCI ? [['blob'], ['github'], ['list']] : 'html',
   use: {
     baseURL: 'http://localhost:3000',
     screenshot: 'only-on-failure',
+    trace: isCI ? 'on-first-retry' : 'off',
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
@@ -38,6 +43,9 @@ export default defineConfig({
     env: {
       NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL!,
       NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      SUPABASE_URL: process.env.SUPABASE_URL!,
+      SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY!,
+      APP_URL: process.env.APP_URL!,
       SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY!,
       // Required so the inbound-email route (which now fails closed without a
       // secret) can validate the bearer token the tests send.

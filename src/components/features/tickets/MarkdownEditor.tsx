@@ -108,6 +108,8 @@ export function MarkdownEditor({
   const baseMax = Math.max(baseMin, requestedMax);
 
   const [height, setHeight] = useState<number>(baseMin);
+  // Clamp while rendering so a changed min/max preference applies immediately.
+  const renderedHeight = Math.min(Math.max(height, baseMin), baseMax);
   const isMountedRef = useRef(true);
   const pendingFrameRef = useRef<number | null>(null);
 
@@ -122,25 +124,25 @@ export function MarkdownEditor({
     };
   }, []);
 
-  // Reset height when min/max change (e.g., user updated their preference).
-  useEffect(() => {
-    setHeight((current) => Math.min(Math.max(current, baseMin), baseMax));
-  }, [baseMin, baseMax]);
-
   // Sync with external defaultValue changes (e.g., canned response insertion,
-  // form reset after save). Re-measure so the editor grows/shrinks to fit
-  // the externally-injected content immediately, not only on the next keystroke.
-  useEffect(() => {
+  // form reset after save) while rendering, as React recommends for state that
+  // follows a prop: https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
+  // Injected text is re-measured (below) so the editor grows/shrinks to fit it
+  // immediately, not only on the next keystroke.
+  const [syncedDefaultValue, setSyncedDefaultValue] = useState(defaultValue);
+  // A fresh object per request, so re-injecting the same text re-measures too.
+  const [measureRequest, setMeasureRequest] = useState<{ text: string } | null>(null);
+  if (defaultValue !== syncedDefaultValue) {
+    setSyncedDefaultValue(defaultValue);
     if (defaultValue !== undefined && defaultValue !== value) {
       setValue(defaultValue);
       if (defaultValue === '') {
         setHeight(baseMin);
       } else {
-        scheduleMeasure(defaultValue);
+        setMeasureRequest({ text: defaultValue });
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [defaultValue]);
+  }
 
   const measureAndUpdateHeight = useCallback(
     (text: string) => {
@@ -191,6 +193,12 @@ export function MarkdownEditor({
     },
     [measureAndUpdateHeight],
   );
+
+  // Measuring needs the committed DOM, so it runs after render; the height
+  // itself is set in the next animation frame (see scheduleMeasure).
+  useEffect(() => {
+    if (measureRequest !== null) scheduleMeasure(measureRequest.text);
+  }, [measureRequest, scheduleMeasure]);
 
   // Tracks pending placeholder text that should be stripped from the editor
   // value the next time `handleChange` runs after a failed image upload. The
@@ -499,7 +507,7 @@ export function MarkdownEditor({
         renderHTML={(text: string) => renderMarkdown(text)}
         onImageUpload={onImageUpload ? handleEditorImageUpload : undefined}
         imageAccept="image/*"
-        style={{ height: `${height}px` }}
+        style={{ height: `${renderedHeight}px` }}
         placeholder={placeholder ?? 'Write using Markdown…'}
         view={viewConfig}
         canView={{ menu: true, md: true, html: true, both: true, fullScreen: false, hideMenu: false }}

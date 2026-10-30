@@ -2,6 +2,7 @@
 
 import { createServerClient, createServiceRoleClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import { runtimeConfig } from '@/lib/runtime-config';
 
 export type AuthState = {
   error?: string;
@@ -134,7 +135,7 @@ export async function forgotPassword(_prev: AuthState, formData: FormData): Prom
     return { error: 'Email is too long.' };
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://127.0.0.1:3000';
+  const appUrl = runtimeConfig().appUrl;
   const supabase = await createServerClient();
   await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${appUrl}/auth/callback?next=/reset-password`,

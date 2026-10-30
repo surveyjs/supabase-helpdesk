@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
+import Script from "next/script";
 import "./globals.css";
 import "survey-core/survey-core.css";
 import "@/styles/surveyjs-tailwind-adapter.css";
@@ -22,6 +23,7 @@ export default function RootLayout({
       className={`${GeistSans.variable} ${GeistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-gray-50 font-sans">
+        <Script src="/runtime-config.js" strategy="beforeInteractive" />
         <a
           href="#main"
           className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:bg-white focus:p-2 focus:rounded focus:ring-2 focus:ring-blue-500 focus:text-blue-700 focus:shadow-lg"

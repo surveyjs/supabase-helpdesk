@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { useEffect, useEffectEvent, useMemo, useRef, useState, useTransition } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { Model } from 'survey-core';
@@ -26,6 +26,13 @@ import {
 import type { SurveyJsonDefinition } from '@/lib/constants/survey-ui-config';
 
 const Survey = dynamic(() => import('survey-react-ui').then((mod) => mod.Survey), { ssr: false });
+
+function buildUrlForData(data: TicketFilterData, viewId: string | null): string {
+  if (viewId) return `/agent?view=${viewId}`;
+  const params = dataToUrlParams(data);
+  const qs = params.toString();
+  return qs ? `/agent?${qs}` : '/agent';
+}
 
 type ViewsAndFiltersPanelProps = {
   filterOptions: FilterOptions;
@@ -107,24 +114,6 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
     return () => { model.onValueChanged.remove(handler); };
   }, [model]);
 
-  useEffect(() => {
-    const handler = () => {
-      const data = normalizeFilterData(model.data ?? {});
-      const sql = generateSqlFromJson(data);
-      applyStandardFilters(data, sql);
-    };
-    model.onComplete.add(handler);
-    return () => { model.onComplete.remove(handler); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [model, activeViewId]);
-
-  function buildUrlForData(data: TicketFilterData, viewId: string | null): string {
-    if (viewId) return `/agent?view=${viewId}`;
-    const params = dataToUrlParams(data);
-    const qs = params.toString();
-    return qs ? `/agent?${qs}` : '/agent';
-  }
-
   function applyStandardFilters(data: TicketFilterData, sql: string) {
     if (activeViewId) {
       setBusy(true);
@@ -146,6 +135,20 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
         });
     }
   }
+
+  // "Apply Filters" in the survey. An effect event always sees the current
+  // activeViewId/router without re-subscribing to the model on every render.
+  const onSurveyComplete = useEffectEvent(() => {
+    const data = normalizeFilterData(model.data ?? {});
+    const sql = generateSqlFromJson(data);
+    applyStandardFilters(data, sql);
+  });
+
+  useEffect(() => {
+    const handler = () => onSurveyComplete();
+    model.onComplete.add(handler);
+    return () => { model.onComplete.remove(handler); };
+  }, [model]);
 
   function applyAiFilters() {
     const data = aiChips ?? {};

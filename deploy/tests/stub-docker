@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Test double for `docker` (deploy/tests/upgrade.test.sh): records each call in
+# $STUB_LOG and answers from STUB_* variables.
+echo "docker $*" >> "$STUB_LOG"
+case "$*" in
+  "pull -q alpine:"*|"image inspect alpine:"*)
+    exit "${STUB_HELPER_MISSING:-0}" ;;
+  "image inspect"*)
+    exit "${STUB_IMAGE_MISSING:-0}" ;;
+  "compose up -d --wait db")
+    exit "${STUB_DB_START_RC:-0}" ;;
+  "compose run --rm -T --no-deps migrate --dry-run")
+    if [[ -n "${STUB_DRY_RUN_SLEEP:-}" ]]; then sleep "$STUB_DRY_RUN_SLEEP"; fi
+    printf '%s\n' "${STUB_DRY_RUN:-[migrate] up to date}"; exit "${STUB_DRY_RUN_RC:-0}" ;;
+  "compose run --rm -T migrate --backup-confirmed")
+    echo "[migrate] restore point (UTC, for PITR): 2026-10-23T10:00:00Z"; exit "${STUB_MIGRATE_RC:-0}" ;;
+  "compose run --rm -T app status")
+    [[ "${STUB_OLD_SCHEMA_MATCHES:-0}" == 1 ]] && echo "[schema-check] Database schema matches this image."; exit 0 ;;
+  "compose exec -T app wget -qO- http://127.0.0.1:3001/api/health")
+    printf '{"status":"ok","version":"%s"}\n' "${STUB_HEALTH_VERSION:-$(sed -n 's/^HELPDESK_VERSION=//p' .env | tail -n 1)}"; exit 0 ;;
+  "compose exec -T db psql"*) echo "42 MB"; exit 0 ;;
+  "run --rm -v"*"tar -C /src -czf"*)
+    # The snapshot: creates the archive in the directory mounted at /dst, and
+    # renames it as the command does once it is verified (`mv /dst/x.part /dst/x`).
+    for a in "$@"; do [[ "$a" == *:/dst ]] && dst="${a%:/dst}"; done
+    name="$(sed -n 's|.*-czf /dst/\([^ ]*\) .*|\1|p' <<<"$*")"
+    # STUB_SNAPSHOT_KILL: upgrade.sh gets TERM (Ctrl-C) while the archive is half written.
+    if [[ -n "${STUB_SNAPSHOT_KILL:-}" ]]; then echo partial > "$dst/$name"; kill -TERM "$PPID"; exit 1; fi
+    [[ "${STUB_SNAPSHOT_RC:-0}" == 0 ]] || { echo partial > "$dst/$name"; exit "$STUB_SNAPSHOT_RC"; }
+    echo snapshot > "$dst/$name"
+    if [[ "$*" == *"mv /dst/$name /dst/"* ]]; then mv "$dst/$name" "$dst/${name%.part}"; fi
+    exit 0 ;;
+  "run --rm -v"*"data.restore"*)
+    exit "${STUB_RESTORE_RC:-0}" ;;
+  *) exit 0 ;;
+esac

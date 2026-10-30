@@ -28,5 +28,7 @@ migration/source-data
 
 # Deploy + docs (built/managed on the server, not inside the image)
 deploy
+!deploy/supabase/.env.example
 docs
 *.md
+**/*.test.ts

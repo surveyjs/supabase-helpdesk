@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createServerClient, createServiceRoleClient } from '@/lib/supabase/server';
+import { runtimeConfig } from '@/lib/runtime-config';
 import {
   EXTERNAL_PROVIDER_ID,
   buildCustomProviderParams,
@@ -644,6 +645,6 @@ export async function testAuthConnection(formData: FormData): Promise<{ success:
  * provider's redirect there and then forwards to the app's `/auth/callback`.
  */
 export async function getRedirectUri(): Promise<string> {
-  const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'http://127.0.0.1:54321').replace(/\/+$/, '');
+  const supabaseUrl = runtimeConfig().browserSupabaseUrl;
   return `${supabaseUrl}/auth/v1/callback`;
 }

@@ -144,12 +144,24 @@ Open [http://localhost:3001](http://localhost:3001) in your browser.
 Create a `.env.local` file:
 
 ```env
-NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-anon-key>
+SUPABASE_URL=http://127.0.0.1:54321
+SUPABASE_ANON_KEY=<your-anon-key>
 SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>
 ```
 
 The anon key and service role key are printed by `supabase start`.
+
+Upgrading: rename the same variables in your existing local `.env.local` files (`NEXT_PUBLIC_SUPABASE_URL` -> `SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` -> `SUPABASE_ANON_KEY`, `NEXT_PUBLIC_APP_URL`/`NEXT_PUBLIC_SITE_URL` -> `APP_URL`).
+
+### Upgrading an existing instance to the runtime-config image
+
+The app now reads `APP_URL`, `SUPABASE_URL` (or `SUPABASE_INTERNAL_URL` for the bundled stack), `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` at runtime and ignores `NEXT_PUBLIC_*`, so set these in the container environment.
+
+The image refuses to start until the database schema matches the migrations it ships. To upgrade:
+
+1. Take a backup: a snapshot of the Postgres data directory for a self-hosted stack, or confirm PITR / a recent backup for Supabase Cloud.
+2. Run the image's `migrate --backup-confirmed` command with `MIGRATION_DB_URL` set to a direct or session-pooler connection string (append `?sslmode=disable` for a local or self-hosted Postgres without TLS).
+3. Start the image with `serve`.
 
 ### Authentication
 
@@ -162,7 +174,7 @@ The external provider is registered with Supabase Auth as the custom provider `c
 #### SurveyJS SSO preset
 
 1. At [auth.surveyjs.io](https://auth.surveyjs.io), create an OAuth client with the redirect URI
-   `${NEXT_PUBLIC_SUPABASE_URL}/auth/v1/callback` (shown, with a Copy button, on `/admin/auth`).
+   `${SUPABASE_URL}/auth/v1/callback` (shown, with a Copy button, on `/admin/auth`).
 2. On `/admin/auth` (still in Built-in mode), keep the **SurveyJS** preset, paste the client ID and
    secret, and click **Save**. The status line changes to "Registered with Supabase Auth ✓".
 3. Switch the authentication mode to **External**. The login page now shows "Sign in with SurveyJS".

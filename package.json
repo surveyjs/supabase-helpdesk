@@ -8,10 +8,12 @@
     "dev:demo": "dotenv -e .env.demo.local -- next dev -p 3002",
     "dev:internal": "dotenv -e .env.internal.local -- next dev -p 3001",
     "build": "next build",
+    "build:e2e": "dotenv -e .env.test -- next build",
     "start": "next start",
+    "supabase": "npx -y supabase@2.121.0",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test:unit": "vitest run --config vitest.config.ts src",
+    "test:unit": "vitest run --config vitest.config.ts src tests/unit",
     "test:db": "vitest run --config vitest.config.ts tests/db",
     "test:e2e": "npx playwright test",
     "test": "npm run test:unit && npm run test:db && npm run test:e2e"

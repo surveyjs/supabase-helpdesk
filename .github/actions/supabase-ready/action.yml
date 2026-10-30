@@ -1,0 +1,28 @@
+name: Supabase ready
+description: >
+  Wait for the background `supabase start`, then smoke-test the Data API with
+  the committed .env.test keys so grant or key problems fail in seconds with a
+  clear message instead of as hundreds of test failures.
+runs:
+  using: composite
+  steps:
+    - name: Wait for supabase start
+      shell: bash
+      run: bash "$GITHUB_WORKSPACE/.github/scripts/bg.sh" wait supabase 420
+
+    - name: Smoke-test Data API grants and keys
+      shell: bash
+      run: |
+        set -a; source ./.env.test; set +a
+        probe() {  # <label> <key> <rest path>
+          local code
+          code=$(curl -sS -o "$RUNNER_TEMP/probe.json" -w '%{http_code}' \
+            "$NEXT_PUBLIC_SUPABASE_URL/rest/v1/$3" -H "apikey: $2" -H "Authorization: Bearer $2")
+          if [[ "$code" != 200 ]]; then
+            echo "::error title=Supabase smoke test::$1 GET /rest/v1/$3 -> HTTP $code $(cat "$RUNNER_TEMP/probe.json")"
+            return 1
+          fi
+          echo "$1 GET /rest/v1/$3 -> 200"
+        }
+        probe service_role "$SUPABASE_SERVICE_ROLE_KEY" 'app_settings?select=key&limit=1'
+        probe anon "$NEXT_PUBLIC_SUPABASE_ANON_KEY" 'ticket_types?select=id&limit=1'

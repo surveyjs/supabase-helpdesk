@@ -2,6 +2,7 @@ import { createServiceRoleClient } from '@/lib/supabase/server';
 import { createCsatToken } from '@/lib/utils/csat';
 import { renderTemplate } from '@/lib/email/templates';
 import { sendEmail } from '@/lib/email/send';
+import { runtimeConfig } from '@/lib/runtime-config';
 
 /**
  * Process all pending CSAT survey emails that are due.
@@ -83,7 +84,7 @@ export async function processPendingCsatSurveys(): Promise<void> {
       // Generate CSAT token
       const token = await createCsatToken(ticket.id);
 
-      const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/:\d+$/, ':3000') || 'http://localhost:3000';
+      const baseUrl = runtimeConfig().appUrl;
       const csatLink = `${baseUrl}/csat/${token}`;
 
       // Render and send email

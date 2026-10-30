@@ -166,6 +166,49 @@ jobs:
           name: diagnostics-bundle-e2e
           extra-path: ${{ runner.temp }}/bundle-e2e/out
 
+  # The upgrade an operator of the last release makes: installs the latest
+  # stable release (its bundle, ghcr.io image :X.Y.Z), signs in, upgrades with
+  # that installation's upgrade.sh to this image, then rolls back. Passes with a
+  # note in the Summary while there is no stable release.
+  # See FROM_RELEASE in .github/scripts/bundle-e2e.sh.
+  bundle-e2e-upgrade:
+    name: Bundle e2e (upgrade from the latest release)
+    needs: image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - id: setup
+        uses: ./.github/actions/setup          # node_modules for Playwright
+      - name: Install Chromium (background)
+        run: bash .github/scripts/bg.sh start playwright npx playwright install --with-deps --only-shell chromium
+      - uses: actions/download-artifact@v8
+        with:
+          name: image
+          path: ${{ runner.temp }}
+      - name: docker load
+        # The bundle's image tag is the version the image reports.
+        run: |
+          gunzip -c "$RUNNER_TEMP/image.tar.gz" | docker load
+          docker tag supabase-helpdesk:ci "supabase-helpdesk:sha-$GITHUB_SHA"
+      - name: Wait for Chromium
+        run: bash .github/scripts/bg.sh wait playwright 600
+      - name: Install the latest release, upgrade to this image and roll back
+        env:
+          IMAGE: supabase-helpdesk
+          VERSION: sha-${{ github.sha }}
+          FROM_RELEASE: '1'
+          GH_TOKEN: ${{ github.token }}    # the releases API call, not rate-limited per IP
+        run: bash .github/scripts/bundle-e2e.sh
+      - name: Upload diagnostics
+        if: failure()
+        uses: ./.github/actions/upload-diagnostics
+        with:
+          name: diagnostics-bundle-e2e-upgrade
+          extra-path: ${{ runner.temp }}/bundle-e2e-upgrade/out
+
   db:
     name: DB tests
     runs-on: ubuntu-24.04
@@ -341,7 +384,7 @@ jobs:
 
   ci-result:
     name: ci-result   # the single required status check
-    needs: [lint, db, e2e, cross-browser, migration-upgrade, image, image-smoke, bundle-e2e]
+    needs: [lint, db, e2e, cross-browser, migration-upgrade, image, image-smoke, bundle-e2e, bundle-e2e-upgrade]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5

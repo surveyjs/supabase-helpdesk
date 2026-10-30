@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect, Page } from './fixtures';
 
 // Inbucket API base (email capture for local Supabase)
 const INBUCKET_URL = 'http://127.0.0.1:54324';

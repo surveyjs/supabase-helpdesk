@@ -1,0 +1,138 @@
+name: Release
+
+# A version tag vX.Y.Z (or vX.Y.Z-pre) on a commit of main whose CI passed:
+# the image CI published as :sha-<sha> gets the release tags (a derived image,
+# same layers, HELPDESK_VERSION=X.Y.Z) and the deploy bundle goes to the GitHub
+# release vX.Y.Z, where deploy/upgrade.sh downloads it. No deployment.
+# Re-running a tag is safe: the image is rebuilt and the release assets replaced.
+on:
+  push:
+    tags: ['v*.*.*']
+
+# One release at a time: :latest and :X.Y are decided from the tags, and two
+# releases racing could move them in the wrong order.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write          # the release and its assets
+  packages: write          # push to ghcr.io
+  id-token: write          # Sigstore certificate for the attestation
+  attestations: write
+  actions: read            # gh run list: CI of the tagged commit
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  release:
+    name: Release ${{ github.ref_name }}
+    if: github.repository == 'surveyjs/supabase-helpdesk'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      IMAGE: ghcr.io/surveyjs/supabase-helpdesk
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0              # origin/main and every v* tag (:latest, :X.Y)
+          persist-credentials: false
+      - id: tag
+        name: The tag is vX.Y.Z or vX.Y.Z-pre
+        # The commit is resolved from the tag: for an annotated tag the pushed
+        # ref is the tag object, not the commit.
+        run: |
+          bash .github/scripts/release-version.sh parse "$TAG" >> "$GITHUB_OUTPUT"
+          sha="$(git rev-parse --verify "refs/tags/$TAG^{commit}")"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - name: The commit is on main
+        env:
+          SHA: ${{ steps.tag.outputs.sha }}
+        run: |
+          if ! git merge-base --is-ancestor "$SHA" origin/main; then
+            echo "::error::$TAG points to $SHA, which is not on main: releases are cut from main only"
+            exit 1
+          fi
+      - name: CI passed on main for the commit
+        env:
+          SHA: ${{ steps.tag.outputs.sha }}
+        run: |
+          runs="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --commit "$SHA" --branch main \
+            --event push --status success --limit 1 --json databaseId --jq length)"
+          if [[ "$runs" != 1 ]]; then
+            echo "::error::No successful CI run on a push to main for $SHA: tag a commit whose CI on main is green"
+            exit 1
+          fi
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: The image of the commit exists
+        env:
+          SHA: ${{ steps.tag.outputs.sha }}
+        run: |
+          if ! docker buildx imagetools inspect "$IMAGE:sha-$SHA" > /dev/null; then
+            echo "::error::$IMAGE:sha-$SHA does not exist: the publish job of CI on main pushes it"
+            exit 1
+          fi
+      - id: image
+        name: Release image (:X.Y.Z, :X.Y, :latest)
+        # Builds the derived image, checks its version and layers, then pushes.
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+          SHA: ${{ steps.tag.outputs.sha }}
+        run: bash .github/scripts/release-image.sh "$VERSION" "$SHA" >> "$GITHUB_OUTPUT"
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.image.outputs.digest }}
+          push-to-registry: true
+          # Would need artifact-metadata: write; the attestation is what we use.
+          create-storage-record: false
+      - name: Pack the deploy bundle
+        # Named as deploy/upgrade.sh downloads it:
+        # releases/download/vX.Y.Z/helpdesk-deploy-vX.Y.Z.tar.gz
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          bundle="helpdesk-deploy-v$VERSION.tar.gz"
+          bash deploy/scripts/pack-bundle.sh "$VERSION" "dist/$bundle"
+          (cd dist && sha256sum "$bundle" > "$bundle.sha256")
+      - name: GitHub release
+        # A re-run finds the release and replaces its assets.
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+          PRERELEASE: ${{ steps.tag.outputs.prerelease }}
+        run: |
+          assets=("dist/helpdesk-deploy-v$VERSION.tar.gz" "dist/helpdesk-deploy-v$VERSION.tar.gz.sha256")
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$TAG" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            flags=(--verify-tag --generate-notes --title "$TAG")
+            if [[ "$PRERELEASE" == true ]]; then flags+=(--prerelease); fi
+            gh release create "$TAG" "${assets[@]}" --repo "$GITHUB_REPOSITORY" "${flags[@]}"
+          fi
+      - name: Summary
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+          SHA: ${{ steps.tag.outputs.sha }}
+          DIGEST: ${{ steps.image.outputs.digest }}
+          TAGS: ${{ steps.image.outputs.tags }}
+        run: |
+          {
+            echo "### Released $TAG"
+            echo "- Image: \`$IMAGE:$VERSION\` (from \`$IMAGE:sha-$SHA\`)"
+            echo "- Digest: \`$IMAGE@$DIGEST\`"
+            echo "- Tags pushed: \`${TAGS// /\`, \`}\`"
+            echo "- Release: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$TAG"
+            echo
+            echo "Upgrade an installation (in its deploy directory):"
+            echo '```sh'
+            echo "./upgrade.sh $VERSION"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

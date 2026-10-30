@@ -49,6 +49,11 @@ jobs:
       - name: Deploy script tests
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: bash deploy/tests/upgrade.test.sh
+      # release.yml runs only on a tag: its scripts are tested here, the image
+      # part against a local registry:2 (about half a minute).
+      - name: Release script tests
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: bash .github/scripts/release.test.sh
       - name: Record resolved dependency versions
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: |

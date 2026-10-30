@@ -63,7 +63,7 @@ else
   fail "pack-bundle.sh packs the wrong files"; cat "$OUT/pack-bundle-test.log"
 fi
 bash "$ROOT/deploy/scripts/pack-bundle.sh" "$VERSION" "$WORK/bundle-$VERSION.tgz" >/dev/null
-tar -xzf "$WORK/bundle-$VERSION.tgz" -C "$DIR"
+tar --no-same-owner -xzf "$WORK/bundle-$VERSION.tgz" -C "$DIR"
 docker run --rm "$IMAGE:$VERSION" init-env --mode bundled --app-url "$APP_URL" --version "$VERSION" > "$DIR/.env"
 printf 'HELPDESK_IMAGE=%s\n' "$IMAGE" >> "$DIR/.env"
 sed -i 's/^ENABLE_EMAIL_AUTOCONFIRM=.*/ENABLE_EMAIL_AUTOCONFIRM=true/' "$DIR/.env"   # no SMTP in CI

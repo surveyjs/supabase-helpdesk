@@ -134,7 +134,7 @@ for `--rollback`.
 | Exit | Meaning |
 |------|---------|
 | 0 | Upgraded. |
-| 1 | Error before any change (bad arguments, wrong bundle, download failed, image missing, `migrate --dry-run` refused, e.g. a database newer than X.Y.Z). Nothing changed. |
+| 1 | Error before any change (bad arguments, wrong bundle, download failed, image missing, `migrate --dry-run` refused, e.g. a database newer than X.Y.Z, or failed because the stack is not running — bundled mode needs it up: `docker compose up -d`). Nothing changed. |
 | 2 | Migrations pending, or a Supabase upgrade, not confirmed (answered no, or no terminal and no `--migrate`). Nothing changed. |
 | 3 | Failed before the schema changed (snapshot, migration or start of X.Y.Z); the previous version was restarted. If the script also says it did not become healthy, check `docker compose ps` and `docker compose logs app`. |
 | 4 | Failed after the schema changed (or after a new Supabase version started); HelpDesk stays stopped and `.env` keeps the previous version. Fix the cause and run `./upgrade.sh` again (the run continues the upgrade and keeps the snapshot taken before it), or roll back. |

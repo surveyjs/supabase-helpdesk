@@ -13,7 +13,8 @@
 #  1. Unpack the bundle of VERSION (GitHub Release, or --bundle FILE) over this
 #     directory; .env, backups/ and data stay. The current files are saved
 #     first and put back if the upgrade stops (also on Ctrl-C) before step 4.
-#  2. Pull images; `migrate --dry-run` says what would change.
+#  2. Pull images; `migrate --dry-run` (against the running stack, which it
+#     neither starts nor recreates) says what would change.
 #  3. Pending migrations, and a new Supabase version in the bundle (it
 #     migrates its own schemas), need an explicit yes: the prompt, or --migrate
 #     when there is no terminal.
@@ -302,10 +303,17 @@ upgrade() { # upgrade <target> <bundle or ""> <confirmed 0|1>
       || nothing_changed 1 "the helper image $HELPER_IMAGE (database snapshots) is not available; nothing changed"
   fi
 
+  # --no-deps: `run` would otherwise recreate the database, Auth and Storage on
+  # the images of the new files (a new Supabase migrates its schemas when it
+  # starts) before the confirmation and the snapshot. They already run.
   local dry rc=0
-  dry="$(HELPDESK_VERSION="$target" compose run --rm -T migrate --dry-run 2>&1)" || rc=$?
+  dry="$(HELPDESK_VERSION="$target" compose run --rm -T --no-deps migrate --dry-run 2>&1)" || rc=$?
   printf '%s\n' "$dry" >&2
-  (( rc == 0 )) || nothing_changed 1 "migrate --dry-run failed (exit $rc); nothing changed"
+  if (( rc != 0 )); then
+    local hint=""
+    if bundled; then hint=" — it needs the running stack (db, auth, storage): start it with docker compose up -d, then run this again"; fi
+    nothing_changed 1 "migrate --dry-run failed (exit $rc); nothing changed$hint"
+  fi
   local pending; pending="$(sed -n 's/.*dry run: would apply //p' <<<"$dry" | tr -d '\r')"
   # What changes the schema needs the yes and (bundled) a snapshot first.
   local schema="$pending"
@@ -342,6 +350,9 @@ upgrade() { # upgrade <target> <bundle or ""> <confirmed 0|1>
   compose stop app scheduler || after_failure "cannot stop HelpDesk" "$changed"
 
   if [[ -n "$schema" ]]; then
+    # Recorded before the new Supabase can start: once it ran, a failure goes
+    # back only through the snapshot (exit 4), also in a continued run.
+    if (( SUPABASE_UPGRADE )); then state_set supabase_upgrade 1; fi
     # A continued upgrade keeps the snapshot taken before the schema changed.
     if bundled && [[ -z "$(state_get snapshot)" ]]; then
       local snapshot="backups/db-${CURRENT:-none}-$ts.tar.gz"
@@ -357,10 +368,10 @@ upgrade() { # upgrade <target> <bundle or ""> <confirmed 0|1>
       local protect=""   # the snapshot of the way back a failed run puts back
       if [[ -f "$STAGING/state" ]]; then protect="$(sed -n 's/^snapshot=//p' "$STAGING/state" | tail -n 1)"; fi
       rotate_snapshots "$protect"
-      compose up -d --wait db || after_failure "the database did not start after the snapshot" 0
+      # With a new Supabase the database starts on its new image.
+      compose up -d --wait db || after_failure "the database did not start after the snapshot" "$SUPABASE_UPGRADE"
     fi
     changed=1
-    if (( SUPABASE_UPGRADE )); then state_set supabase_upgrade 1; fi
   fi
   if [[ -n "$pending" ]]; then
     local out mrc=0
@@ -376,6 +387,7 @@ upgrade() { # upgrade <target> <bundle or ""> <confirmed 0|1>
   start_stack "$SUPABASE_CHANGED" || true
   wait_healthy "$target" || after_failure "HelpDesk $target did not report healthy within ${HEALTH_TIMEOUT}s" "$changed"
   state_del incomplete
+  state_del supabase_upgrade
   COMMITTED=0
   prune_saved_files
   log "upgraded ${CURRENT:-?} -> $target; to undo: ./upgrade.sh --rollback"

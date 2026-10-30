@@ -350,3 +350,107 @@ jobs:
             echo "::error::A required job failed, was cancelled or was skipped"
             exit 1
           fi
+
+  # main only, after every required job passed: the image CI tested goes to
+  # GHCR as :sha-<sha> with a provenance attestation, :edge follows the head of
+  # main, and the deploy bundle of that version is kept as an artifact (for a
+  # manual `./upgrade.sh --bundle FILE sha-<sha>` on demo). Releases (:X.Y.Z)
+  # are release.yml's.
+  publish:
+    name: Publish image (GHCR)
+    needs: ci-result
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write          # push to ghcr.io
+      id-token: write          # Sigstore certificate for the attestation
+      attestations: write
+    env:
+      IMAGE: ghcr.io/surveyjs/supabase-helpdesk
+      VERSION: sha-${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: image
+          path: ${{ runner.temp }}
+      - name: docker load
+        run: gunzip -c "$RUNNER_TEMP/image.tar.gz" | docker load
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: push
+        name: Push :sha-<sha>
+        # The digest is the one the registry stored for the pushed tag. RepoDigests
+        # lists one entry per repository the image is tagged in (the containerd
+        # image store keeps one for supabase-helpdesk too), so take $IMAGE's.
+        run: |
+          docker tag supabase-helpdesk:ci "$IMAGE:$VERSION"
+          docker push "$IMAGE:$VERSION"
+          ref="$(docker inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$IMAGE:$VERSION" \
+            | awk -v repo="$IMAGE@" '!found && index($0, repo) == 1 { print; found = 1 }')"
+          if [[ "$ref" != "$IMAGE@sha256:"* ]]; then
+            echo "::error::No digest of $IMAGE after the push (RepoDigests: $ref)"
+            exit 1
+          fi
+          echo "digest=${ref#*@}" >> "$GITHUB_OUTPUT"
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+          # Would need artifact-metadata: write; the attestation is what we use.
+          create-storage-record: false
+      - id: edge
+        name: Move :edge (only from the head of main)
+        # Runs of different commits do not cancel each other on main, so an
+        # older commit's run can finish after a newer one: it must not move
+        # :edge back. The repository is public: ls-remote needs no credentials.
+        run: |
+          head="$(git ls-remote origin refs/heads/main | cut -f1)"
+          if [[ "$head" != "$GITHUB_SHA" ]]; then
+            echo "::notice::main is at ${head:-?} now, not $GITHUB_SHA: :edge is left to that commit's run"
+            echo "moved=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          docker tag "$IMAGE:$VERSION" "$IMAGE:edge"
+          docker push "$IMAGE:edge"
+          echo "moved=true" >> "$GITHUB_OUTPUT"
+      - name: Pack the deploy bundle
+        run: bash deploy/scripts/pack-bundle.sh "$VERSION" "$RUNNER_TEMP/bundle/helpdesk-deploy-$VERSION.tar.gz"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: helpdesk-deploy-${{ env.VERSION }}
+          path: ${{ runner.temp }}/bundle/helpdesk-deploy-${{ env.VERSION }}.tar.gz
+          overwrite: true
+          compression-level: 0
+      - name: Summary
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+          EDGE_MOVED: ${{ steps.edge.outputs.moved }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          bundle="helpdesk-deploy-$VERSION"
+          {
+            echo "### Published $IMAGE:$VERSION"
+            echo "- Image: \`$IMAGE:$VERSION\`"
+            echo "- Digest: \`$IMAGE@$DIGEST\`"
+            if [[ "$EDGE_MOVED" == true ]]; then
+              echo "- \`:edge\` now points to this commit"
+            else
+              echo "- \`:edge\` unchanged: main has moved on since this commit"
+            fi
+            echo "- Bundle: artifact \`$bundle\`"
+            echo
+            echo "Upgrade demo to this commit (in its deploy directory):"
+            echo '```sh'
+            echo "gh run download $RUN_ID -R $GITHUB_REPOSITORY -n $bundle"
+            echo "./upgrade.sh --bundle $bundle.tar.gz $VERSION"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

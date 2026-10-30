@@ -13,13 +13,14 @@
 # and checks that N-1 runs again on the database it had. No stable release yet:
 # nothing to test, a skip note in the Summary, exit 0. Where N-1 comes from:
 #   FROM_RELEASE_VERSION   X.Y.Z; default: GitHub's latest release of
-#                          GITHUB_REPOSITORY (never a draft or a prerelease;
-#                          GH_TOKEN, if set, authenticates the API call)
+#                          GITHUB_REPOSITORY from GITHUB_API_URL (never a draft or
+#                          a prerelease; GH_TOKEN, if set, authenticates the call)
 #   FROM_RELEASE_IMAGE     repository of the N-1 image (tag X.Y.Z, pulled unless
 #                          present); default ghcr.io/<repository>. Tagged as
 #                          IMAGE:X.Y.Z, so one HELPDESK_IMAGE serves both versions.
 #   HELPDESK_RELEASES_URL  the bundle is <it>/vX.Y.Z/helpdesk-deploy-vX.Y.Z.tar.gz, as
 #                          upgrade.sh downloads it; default the repository's releases.
+#   FROM_RELEASE_DRY_RUN=1 prints version=, image= and bundle= of N-1 and exits.
 #
 # Locally (Linux, or Git Bash + Docker Desktop; needs port 80 and Supabase's
 # fixed container names supabase-*, so no other official-compose stack may run):
@@ -57,7 +58,7 @@ latest_release() { # the X.Y.Z of REPO's latest stable release; nothing if it ha
   local auth=() body="$OUT/latest-release.json" code tag
   if [[ -n "${GH_TOKEN:-}" ]]; then auth=(-H "Authorization: Bearer $GH_TOKEN"); fi
   code="$(curl -sS -o "$(native_path "$body")" -w '%{http_code}' "${auth[@]}" -H 'Accept: application/vnd.github+json' \
-            "https://api.github.com/repos/$REPO/releases/latest")" \
+            "${GITHUB_API_URL:-https://api.github.com}/repos/$REPO/releases/latest")" \
     || { echo "cannot reach the GitHub API for the latest release of $REPO" >&2; return 1; }
   case "$code" in
     404) return 0 ;;
@@ -81,6 +82,11 @@ if [[ "$FROM_RELEASE" == 1 ]]; then
   NEXT="$VERSION"
   FROM_IMAGE="${FROM_RELEASE_IMAGE:-ghcr.io/${REPO,,}}"
   RELEASES_URL="${HELPDESK_RELEASES_URL:-https://github.com/$REPO/releases/download}"
+  BUNDLE_URL="$RELEASES_URL/v$BASE/helpdesk-deploy-v$BASE.tar.gz"
+  if [[ "${FROM_RELEASE_DRY_RUN:-0}" == 1 ]]; then   # what would be installed; nothing runs
+    printf 'version=%s\nimage=%s:%s\nbundle=%s\n' "$BASE" "$FROM_IMAGE" "$BASE" "$BUNDLE_URL"
+    exit 0
+  fi
 else
   BASE="$VERSION" NEXT="$VERSION-next"
 fi
@@ -115,9 +121,8 @@ login() { # login <description>
 # --- install -------------------------------------------------------------------------
 if [[ "$FROM_RELEASE" == 1 ]]; then
   echo "## Bundle e2e: upgrade from release v$BASE ($FROM_IMAGE:$BASE) to $IMAGE:$VERSION" >> "$SUMMARY"
-  bundle_url="$RELEASES_URL/v$BASE/helpdesk-deploy-v$BASE.tar.gz"
-  if ! curl -fsSL "$bundle_url" -o "$(native_path "$WORK/bundle-$BASE.tgz")"; then
-    fail "cannot download the bundle of v$BASE from $bundle_url"; exit 1
+  if ! curl -fsSL "$BUNDLE_URL" -o "$(native_path "$WORK/bundle-$BASE.tgz")"; then
+    fail "cannot download the bundle of v$BASE from $BUNDLE_URL"; exit 1
   fi
   if ! docker image inspect "$FROM_IMAGE:$BASE" >/dev/null 2>&1 && ! docker pull -q "$FROM_IMAGE:$BASE"; then
     fail "cannot pull the image of v$BASE, $FROM_IMAGE:$BASE"; exit 1

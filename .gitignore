@@ -46,6 +46,7 @@ yarn-error.log*
 
 # testing
 playwright-report/
+blob-report/
 test-results/
 
 # vercel
@@ -62,3 +63,7 @@ playwright-results.json
 
 .claude/
 package-lock.json
+
+# deploy bundle runtime state
+/deploy/backups/
+/deploy/.upgrade-state

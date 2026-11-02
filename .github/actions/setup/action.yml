@@ -1,0 +1,50 @@
+name: Setup
+description: >
+  Node from .nvmrc and npm dependencies resolved as of the checked-out commit's
+  date (the repo has no lock file by design). Optionally starts the local
+  Supabase stack in the background with the CLI pinned in package.json
+  (wait for it with ./.github/actions/supabase-ready).
+inputs:
+  supabase:
+    description: "'true' = start the local Supabase stack in the background"
+    default: 'false'
+  supabase-workdir:
+    description: Directory containing the supabase/ folder to start
+    default: '.'
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v7
+      with:
+        node-version-file: .nvmrc
+        cache: npm
+        # No lock file: the ~/.npm cache only speeds up downloads, it never
+        # changes what gets resolved.
+        cache-dependency-path: package.json
+
+    - name: npm install (background)
+      shell: bash
+      run: |
+        # Same commit => same date => same dependency tree in every job of a run
+        # and on re-runs; versions still float forward with each new commit.
+        before="$(git log -1 --format=%cI)"
+        echo "Resolving dependencies with --before=$before"
+        bash "$GITHUB_WORKSPACE/.github/scripts/bg.sh" start npm-install \
+          npm install --before="$before" --no-audit --no-fund
+
+    - name: supabase start (background)
+      if: inputs.supabase == 'true'
+      shell: bash
+      env:
+        WORKDIR: ${{ inputs.supabase-workdir }}
+      run: |
+        # `npm run supabase` = the CLI version pinned in package.json (runs via
+        # npx, independent of node_modules, so it overlaps with npm install).
+        # Tests need db, auth, rest, realtime, storage, kong and mailpit only.
+        bash "$GITHUB_WORKSPACE/.github/scripts/bg.sh" start supabase \
+          npm run --silent supabase -- start --workdir "$WORKDIR" \
+          -x studio,postgres-meta,imgproxy,edge-runtime,logflare,vector,supavisor
+
+    - name: Wait for npm install
+      shell: bash
+      run: bash "$GITHUB_WORKSPACE/.github/scripts/bg.sh" wait npm-install 600

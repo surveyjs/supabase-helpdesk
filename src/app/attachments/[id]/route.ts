@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
+import { toBrowserUrl } from '@/lib/runtime-config';
 
 /**
  * Stable redirect endpoint for inline attachments embedded in post bodies.
@@ -48,5 +49,5 @@ export async function GET(
 
   // 302 so the browser keeps using /attachments/<id> (cacheable redirect would
   // pin the signed URL beyond its expiry).
-  return NextResponse.redirect(signed.signedUrl, { status: 302 });
+  return NextResponse.redirect(toBrowserUrl(signed.signedUrl), { status: 302 });
 }

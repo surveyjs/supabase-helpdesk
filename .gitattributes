@@ -1,0 +1,5 @@
+# Shell scripts run under bash (CI and Git Bash) and break on CRLF line endings.
+*.sh text eol=lf
+
+# The deploy bundle runs on Linux hosts; Envoy's entrypoint breaks on CRLF.
+deploy/** text=auto eol=lf

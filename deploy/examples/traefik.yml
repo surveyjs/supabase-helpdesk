@@ -1,0 +1,22 @@
+# Example: your own Traefik (docker provider) in front of HelpDesk instead of
+# the bundled Caddy taking ports 80/443. Use with `init-env --edge own`, then
+# add this file to COMPOSE_FILE in .env, e.g.
+#   COMPOSE_FILE=compose.yaml:compose.bundled.yaml:examples/traefik.yml
+# and set APP_HOST (help.example.com), TRAEFIK_NETWORK (the external network
+# Traefik watches) and TRAEFIK_CERT_RESOLVER. Traefik terminates TLS and sends
+# everything to proxy:80; Caddy keeps routing Supabase's paths on the same domain.
+services:
+  proxy:
+    networks: [default, traefik]
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: ${TRAEFIK_NETWORK:-traefik}
+      traefik.http.routers.helpdesk.rule: Host(`${APP_HOST:?set APP_HOST}`)
+      traefik.http.routers.helpdesk.entrypoints: ${TRAEFIK_ENTRYPOINT:-websecure}
+      traefik.http.routers.helpdesk.tls.certresolver: ${TRAEFIK_CERT_RESOLVER:-letsencrypt}
+      traefik.http.services.helpdesk.loadbalancer.server.port: "80"
+
+networks:
+  traefik:
+    external: true
+    name: ${TRAEFIK_NETWORK:-traefik}

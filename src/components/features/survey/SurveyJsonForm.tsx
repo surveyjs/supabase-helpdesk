@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useId, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { Model } from 'survey-core';
 
@@ -30,6 +30,7 @@ export function SurveyJsonForm({
   keepOpen = false,
   className,
 }: SurveyJsonFormProps) {
+  const idPrefix = useId();
   const model = useMemo(() => {
     // SurveyJS `new Model(schema)` mutates the schema object. The JSON
     // schemas are imported as modules and shared across renders/mounts,
@@ -38,6 +39,9 @@ export function SurveyJsonForm({
     // the matrixdynamic Add button on a second navigation).
     const clonedSchema = JSON.parse(JSON.stringify(schema));
     const next = new Model(clonedSchema);
+    // Every survey numbers its element ids from sq_0, so two forms on one page
+    // (e.g. /admin/email) share ids and aria-labelledby points into the wrong form.
+    next.elementIdPrefix = `${idPrefix}-`;
     next.showCompletedPage = false;
 
     if (typeof next.completeText !== 'string' || next.completeText.trim().length === 0) {
@@ -61,7 +65,7 @@ export function SurveyJsonForm({
     // each render) caused SurveyJS V3 matrixdynamic toolbars to lose their
     // Add button on subsequent navigations.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, schema]);
+  }, [idPrefix, mode, schema]);
 
   useEffect(() => {
     if (!onComplete) return;

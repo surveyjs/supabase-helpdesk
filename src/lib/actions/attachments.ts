@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createServerClient } from '@/lib/supabase/server';
+import { toBrowserUrl } from '@/lib/runtime-config';
 import { sanitizeSvg } from '@/lib/utils/svg-sanitize';
 
 // MIME type map for extension validation
@@ -336,7 +337,7 @@ export async function getAttachmentUrl(attachmentId: string): Promise<string | n
     .from('attachments')
     .createSignedUrl(storagePath, 3600);
 
-  return data?.signedUrl ?? null;
+  return data?.signedUrl ? toBrowserUrl(data.signedUrl) : null;
 }
 
 // ===========================================================================

@@ -1,0 +1,36 @@
+name: Upload diagnostics
+description: >
+  server.log, background-task logs, `supabase status`, `docker ps -a` and the
+  logs of every supabase_* container, uploaded as one artifact.
+inputs:
+  name:
+    description: Artifact name
+    required: true
+  extra-path:
+    description: Optional directory whose contents are added to the artifact
+    default: ''
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        EXTRA: ${{ inputs.extra-path }}
+      run: |
+        out="$RUNNER_TEMP/diagnostics"
+        mkdir -p "$out/containers"
+        cp -f server.log "$out/" 2>/dev/null || true
+        cp -f "$RUNNER_TEMP"/bg/*.log "$out/" 2>/dev/null || true
+        if [[ -n "$EXTRA" && -d "$EXTRA" ]]; then cp -r "$EXTRA"/. "$out/"; fi
+        docker ps -a > "$out/docker-ps.txt" 2>&1 || true
+        for c in $(docker ps -a --format '{{.Names}}' | grep '^supabase_' || true); do
+          docker logs --timestamps "$c" > "$out/containers/$c.log" 2>&1 || true
+        done
+        { timeout 60 npm run --silent supabase -- status 2>&1 || true; } > "$out/supabase-status.txt"
+
+    - uses: actions/upload-artifact@v7
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ runner.temp }}/diagnostics
+        retention-days: 7
+        overwrite: true
+        if-no-files-found: ignore

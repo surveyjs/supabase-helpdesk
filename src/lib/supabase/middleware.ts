@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { type NextRequest, NextResponse } from 'next/server';
+import { runtimeConfig } from '@/lib/runtime-config';
 
 const AUTH_ROUTES = ['/login', '/signup', '/forgot-password'];
 
@@ -10,10 +11,12 @@ const PROTECTED_PREFIXES = ['/admin', '/agent', '/tickets', '/notification-setti
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
+  const { serverSupabaseUrl, anonKey, authCookieName } = runtimeConfig();
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    serverSupabaseUrl,
+    anonKey,
     {
+      cookieOptions: { name: authCookieName },
       cookies: {
         getAll() {
           return request.cookies.getAll();

@@ -1,0 +1,13 @@
+# Our changes to the vendored Supabase stack (deploy/supabase/ stays pristine).
+services:
+  # The database is not published on the host: `migrate` reaches db over the
+  # compose network. (The gateway binds to 127.0.0.1 via API_GW_HTTP_PORT.)
+  supavisor:
+    ports: !reset []
+
+  # The first start runs initdb and Supabase's init scripts; upstream allows
+  # 10 x 5 s, and on a slow disk `docker compose run --rm migrate` on a new
+  # installation gave up with "container supabase-db is unhealthy" mid-initdb.
+  db:
+    healthcheck:
+      start_period: 180s

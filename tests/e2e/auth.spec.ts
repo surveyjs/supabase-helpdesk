@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect, Page } from './fixtures';
 
 // Inbucket API base (email capture for local Supabase)
 const INBUCKET_URL = 'http://127.0.0.1:54324';
@@ -97,10 +97,12 @@ test.describe('Authentication', () => {
   test('signup validation: password missing requirements → error', async ({ page }) => {
     await page.goto('/signup');
     await page.getByLabel('Email').fill('bad-pw@example.com');
-    await page.getByLabel('Password', { exact: true }).fill('short');
-    await page.getByLabel('Confirm password').fill('short');
+    // Long enough for the inputs' minLength (a shorter one never leaves the
+    // browser), but without an uppercase letter, so the server rejects it.
+    await page.getByLabel('Password', { exact: true }).fill('nouppercase1');
+    await page.getByLabel('Confirm password').fill('nouppercase1');
     await page.getByRole('button', { name: 'Sign up' }).click();
-    await expect(page.getByRole('alert').first()).toBeVisible();
+    await expect(page.getByRole('alert')).toContainText('uppercase');
   });
 
   test('login flow: correct credentials → redirects to /', async ({ page }) => {

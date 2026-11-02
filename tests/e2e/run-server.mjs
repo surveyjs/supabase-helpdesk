@@ -11,7 +11,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const logPath = path.resolve(__dirname, '..', '..', 'server.log');
+const repoRoot = path.resolve(__dirname, '..', '..');
+const logPath = path.join(repoRoot, 'server.log');
+// CI builds once up front (`npm run build:e2e`, overlapped with `supabase start`)
+// and sets E2E_SKIP_BUILD=1 so this wrapper only runs `next start`.
+const skipBuild = /^(1|true)$/i.test(process.env.E2E_SKIP_BUILD ?? '');
 // Append so consecutive runs don't lose the previous run's tail.
 const logStream = fs.createWriteStream(logPath, { flags: 'a' });
 function logLine(line) {
@@ -64,11 +68,19 @@ function run(cmd, args) {
 }
 
 (async () => {
-  try {
-    await run('npm', ['run', 'build']);
-  } catch (err) {
-    logLine(`build failed: ${err.message}\n`);
-    process.exit(1);
+  if (skipBuild) {
+    if (!fs.existsSync(path.join(repoRoot, '.next', 'BUILD_ID'))) {
+      logLine('E2E_SKIP_BUILD is set but .next/BUILD_ID is missing; run `npm run build:e2e` first\n');
+      process.exit(1);
+    }
+    logLine('=== E2E_SKIP_BUILD set: reusing the existing .next build ===\n');
+  } else {
+    try {
+      await run('npm', ['run', 'build']);
+    } catch (err) {
+      logLine(`build failed: ${err.message}\n`);
+      process.exit(1);
+    }
   }
 
   // Give next start more headroom; default ~1.5GB has been crashing under

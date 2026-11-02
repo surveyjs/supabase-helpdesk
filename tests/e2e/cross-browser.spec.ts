@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect, Page } from './fixtures';
 import { ensureBuiltInAuthMode, loginViaForm } from '../helpers/auth';
 
 const SEED_PASSWORD = 'Password123';

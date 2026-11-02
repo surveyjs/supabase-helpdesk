@@ -1,4 +1,5 @@
 import { createServerClient } from '@/lib/supabase/server';
+import { toBrowserUrl } from '@/lib/runtime-config';
 import { deleteAttachment } from '@/lib/actions/attachments';
 
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'];
@@ -51,7 +52,7 @@ export async function AttachmentList({
   if (signedUrlData) {
     for (const entry of signedUrlData) {
       if (entry.signedUrl && entry.path) {
-        signedUrlMap.set(entry.path, entry.signedUrl);
+        signedUrlMap.set(entry.path, toBrowserUrl(entry.signedUrl));
       }
     }
   }

@@ -1,57 +1,53 @@
 # syntax=docker/dockerfile:1
 
-# Multi-stage build for the Next.js 16 HelpDesk app.
-#
-# NOTE: NEXT_PUBLIC_* values are inlined into the client bundle at BUILD time,
-# so they are passed as build args here (not runtime env). Each self-hosted
-# instance (internal / showcase) therefore builds its OWN image with its own
-# Supabase URL + anon key. Runtime-only secrets (SERVICE_ROLE_KEY, CRON_SECRET,
-# SMTP, ...) are injected as container env at `docker compose up`, never baked in.
+# One image per release, shared by every instance and both Supabase modes:
+# nothing instance-specific is baked in (src/lib/deploy/env.mjs reads it at
+# runtime). Commands (docker/entrypoint.sh): serve (default) | status | migrate.
+ARG NODE_VERSION=24
 
-# ---- deps: install node_modules (cached on package*.json) -------------------
-FROM node:20-alpine AS deps
+# ---- deps ---------------------------------------------------------------------
+FROM node:${NODE_VERSION}-alpine AS deps
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm ci
+# package-lock.json is not committed: CI passes the tree .github/actions/setup
+# resolved for this commit; locally it is the one `npm install` wrote.
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
 
-# ---- builder: produce the standalone server --------------------------------
-FROM node:20-alpine AS builder
+# ---- builder ------------------------------------------------------------------
+FROM node:${NODE_VERSION}-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-
-# Public (client-inlined) build-time config — supplied per instance.
-ARG NEXT_PUBLIC_SUPABASE_URL
-ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
-ARG NEXT_PUBLIC_APP_URL
-ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
-ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
-ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
 ENV NEXT_TELEMETRY_DISABLED=1
-
 RUN npm run build
 
-# ---- runner: minimal runtime image -----------------------------------------
-FROM node:20-alpine AS runner
+# ---- runner -------------------------------------------------------------------
+FROM node:${NODE_VERSION}-alpine AS runner
+ARG SUPABASE_CLI_VERSION=2.121.0
+ARG HELPDESK_VERSION=dev
+# psql holds the migration lock for `migrate`; the CLI's npm package brings a
+# musl binary (@supabase/cli-linux-x64-musl) — no Docker needed.
+RUN apk add --no-cache postgresql17-client \
+ && npm install -g --no-audit --no-fund supabase@${SUPABASE_CLI_VERSION} \
+ && npm cache clean --force
 WORKDIR /app
-ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
-ENV PORT=3001
-ENV HOSTNAME=0.0.0.0
-
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    PORT=3001 \
+    HOSTNAME=0.0.0.0 \
+    HELPDESK_VERSION=${HELPDESK_VERSION}
 RUN addgroup --system --gid 1001 nodejs \
-  && adduser --system --uid 1001 nextjs
-
-# `output: "standalone"` emits a self-contained server in .next/standalone.
+ && adduser --system --uid 1001 -G nodejs nextjs
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-
+COPY supabase/migrations ./supabase/migrations
+COPY docker ./docker
+COPY src/lib/deploy ./docker/lib
+COPY deploy/supabase/.env.example ./docker/supabase.env.example
 USER nextjs
 EXPOSE 3001
-
-# Liveness probe consumed by docker + deploy/redeploy.sh.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD wget --quiet --tries=1 --spider http://127.0.0.1:3001/api/health || exit 1
-
-CMD ["node", "server.js"]
+ENTRYPOINT ["sh", "/app/docker/entrypoint.sh"]
+CMD ["serve"]

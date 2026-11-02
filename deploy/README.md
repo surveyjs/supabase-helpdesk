@@ -37,8 +37,8 @@ installation does not use (everything is in `.env` here), and **`reset.sh` delet
 
 ## 2. Install — bundled Supabase
 
-Unpack the bundle of the version (`helpdesk-deploy-vX.Y.Z.tar.gz` from the GitHub release) into an
-empty directory, e.g. `/opt/helpdesk`, and run everything below from there.
+Unpack the bundle of the version (`helpdesk-deploy-vX.Y.Z.tar.gz` from the GitHub release, see
+section 10) into an empty directory, e.g. `/opt/helpdesk`, and run everything below from there.
 
 1. Generate `.env` (fresh secrets for Supabase and HelpDesk):
 
@@ -115,7 +115,7 @@ exit 1 before changing anything.
 `backups/` and data stay, even if a bundle contains them; the replaced files are saved in
 `backups/files-<previous>-<UTC>.tgz`), pulls the images (bundled: also `alpine:3.22`, which takes
 the snapshot) and runs `migrate --dry-run`. With pending migrations — or a bundle with another
-Supabase version (`supabase/VENDORED`; Supabase migrates its own schemas when it starts) — it
+Supabase version (`supabase/VENDORED`, tag and commit; Supabase migrates its own schemas when it starts) — it
 prints them and the database size and asks `Apply …? [y/N]` (without a terminal `--migrate` is
 that yes). Up to here any stop — an error, `n`, Ctrl-C — puts the previous files back: nothing
 changed. Then:
@@ -134,7 +134,7 @@ for `--rollback`.
 | Exit | Meaning |
 |------|---------|
 | 0 | Upgraded. |
-| 1 | Error before any change (bad arguments, wrong bundle, download failed, image missing, `migrate --dry-run` refused, e.g. a database newer than X.Y.Z, or failed because the stack is not running — bundled mode needs it up: `docker compose up -d`, except after an interrupted Supabase upgrade, see below). Nothing changed. |
+| 1 | Error before any change (bad arguments, another `upgrade.sh` running — see below, wrong bundle, download failed, image missing, `migrate --dry-run` refused, e.g. a database newer than X.Y.Z, or failed because the stack is not running — bundled mode needs it up: `docker compose up -d`, except after an interrupted Supabase upgrade, see below). Nothing changed. |
 | 2 | Migrations pending, or a Supabase upgrade, not confirmed (answered no, or no terminal and no `--migrate`). Nothing changed. |
 | 3 | Failed before the schema changed (snapshot, migration or start of X.Y.Z); the previous version was restarted. If the script also says it did not become healthy, check `docker compose ps` and `docker compose logs app`. |
 | 4 | Failed after the schema changed (or after a new Supabase version started); HelpDesk stays stopped and `.env` keeps the previous version. Fix the cause and run `./upgrade.sh` again (the run continues the upgrade and keeps the snapshot taken before it; a Supabase upgrade whose snapshot was taken is not asked about again), or roll back. |
@@ -146,6 +146,19 @@ says so. Run `./upgrade.sh --rollback`: it puts back the previous files and star
 stack (there is no snapshot to restore). Do **not** start the stack with `docker compose up -d`:
 that starts the new Supabase without a snapshot. A run of `./upgrade.sh X.Y.Z` while the stack
 still runs continues the Supabase upgrade: it asks again and takes the snapshot first.
+
+**One run at a time.** `upgrade.sh` (upgrade and `--rollback`) holds the directory `.upgrade.lock`,
+with its PID inside, while it runs, and removes it when it exits — also on an error or Ctrl-C. A
+second run meanwhile stops with exit 1 and changes nothing:
+
+```text
+[upgrade] another upgrade.sh is running (PID 1234, .upgrade.lock); nothing changed — wait for it to finish.
+```
+
+A lock left by a run that could not clean up (`kill -9`, a reboot) is stale: when its PID no longer
+runs, the next run removes it, says so, and goes on. If the message appears while no `upgrade.sh`
+runs (`ps -p 1234` shows another program — the PID was reused — or the lock has no PID in it),
+remove the lock yourself: `rm -r .upgrade.lock`.
 
 ## 5. Rollback
 
@@ -162,7 +175,9 @@ It undoes the last upgrade — one step, to the version recorded in `.upgrade-st
   version go back. The previous files come from `backups/files-<previous>-<UTC>.tgz`; if that
   archive is gone after a Supabase upgrade, `--rollback` stops (exit 1, nothing changed) rather
   than start the new Supabase: unpack the bundle of the previous version into this directory
-  first, then run it again.
+  first, then run it again. The Supabase version is the whole `supabase/VENDORED` (tag and
+  commit). If the previous installation had no `supabase/VENDORED`, also remove the one here
+  (unpacking does not), as the message says.
 - **External:** Supabase has no in-place restore. `--rollback` prints the restore point and stops
   (exit 1); restore the project to it (Dashboard → Database → Backups → Point in time, or the
   Management API `restore-pitr`), then run `./upgrade.sh --rollback --restored` (`--yes` too
@@ -245,3 +260,47 @@ listens on `127.0.0.1:8080` and on `proxy:80` in the compose network, without TL
 - **The log says the database is newer than the image** — you started an older version on an
   upgraded database: `./upgrade.sh --rollback`, or start the newer version again.
 - `docker compose ps` shows health; `docker compose logs -f app proxy` shows what happens.
+
+## 10. Where the images and bundles come from
+
+Every version is published in two places: the image in GitHub Container Registry
+(`ghcr.io/surveyjs/supabase-helpdesk`, linux/amd64 only) and the deploy bundle (what `upgrade.sh`
+unpacks over your directory). Nothing is deployed for you: you run `upgrade.sh` yourself.
+
+| Image tag | What it is | Bundle |
+|-----------|------------|--------|
+| `X.Y.Z` (e.g. `1.2.3`) | A release. Not moved to other content (a re-run of the release re-pushes the same layers). Use this one in production. | `helpdesk-deploy-vX.Y.Z.tar.gz`, with `helpdesk-deploy-vX.Y.Z.tar.gz.sha256`, in the [GitHub release](https://github.com/surveyjs/supabase-helpdesk/releases) `vX.Y.Z` |
+| `X.Y` (e.g. `1.2`) | The newest release of that line. Moves with each patch release. | that release's |
+| `latest` | The newest stable release. | that release's |
+| `X.Y.Z-pre` (e.g. `1.3.0-rc.1`) | A prerelease: has no `X.Y` or `latest` tag, and GitHub does not show it as the latest release. | in its (pre)release |
+| `edge` | The newest commit of `main` that passed CI. For trying things out. | none; take `sha-<sha>` |
+| `sha-<sha>` (the full 40-character commit hash) | One commit of `main` that passed CI. Never moves. | artifact `helpdesk-deploy-sha-<sha>` of that commit's CI run (it expires after GitHub's artifact retention, 90 days by default) |
+
+`.env` holds the exact version (`HELPDESK_VERSION`), never `X.Y` or `latest`: `upgrade.sh` waits
+until `/api/health` reports the version you asked for, and a release image reports `X.Y.Z`, so
+upgrade with `./upgrade.sh X.Y.Z` (the version without the `v`).
+
+**Checking a download.** Each release has a SHA-256 file next to the bundle:
+
+```sh
+curl -fsSLO https://github.com/surveyjs/supabase-helpdesk/releases/download/vX.Y.Z/helpdesk-deploy-vX.Y.Z.tar.gz
+curl -fsSLO https://github.com/surveyjs/supabase-helpdesk/releases/download/vX.Y.Z/helpdesk-deploy-vX.Y.Z.tar.gz.sha256
+sha256sum -c helpdesk-deploy-vX.Y.Z.tar.gz.sha256
+./upgrade.sh --bundle helpdesk-deploy-vX.Y.Z.tar.gz X.Y.Z
+```
+
+Every image carries a signed build provenance attestation (what built it, from which commit).
+Verify it with the [GitHub CLI](https://cli.github.com/):
+
+```sh
+gh attestation verify oci://ghcr.io/surveyjs/supabase-helpdesk:X.Y.Z --repo surveyjs/supabase-helpdesk
+```
+
+**Upgrading to a commit of `main`** (our demo instance does this; not for production). In the
+deploy directory of the installation, with `RUN_ID` of the CI run of that commit on GitHub
+(the Summary of its `Publish image (GHCR)` job prints exactly these commands, with the values filled in):
+
+```sh
+gh run download RUN_ID -R surveyjs/supabase-helpdesk -n helpdesk-deploy-sha-<sha>   # requires `gh auth login`
+./upgrade.sh --bundle helpdesk-deploy-sha-<sha>.tar.gz sha-<sha>
+```

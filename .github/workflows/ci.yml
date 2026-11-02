@@ -49,6 +49,11 @@ jobs:
       - name: Deploy script tests
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: bash deploy/tests/upgrade.test.sh
+      # release.yml runs only on a tag: its scripts are tested here, the image
+      # part against a local registry:2 (about half a minute).
+      - name: Release script tests
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: bash .github/scripts/release.test.sh
       - name: Record resolved dependency versions
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: |
@@ -79,8 +84,11 @@ jobs:
       # which the Dockerfile installs with `npm ci`.
       - uses: ./.github/actions/setup
       - name: docker build
+        # The Dockerfile sets the source and licenses labels; the commit's are added here.
         run: |
-          docker build -t supabase-helpdesk:ci --build-arg "HELPDESK_VERSION=sha-$GITHUB_SHA" .
+          docker build -t supabase-helpdesk:ci --build-arg "HELPDESK_VERSION=sha-$GITHUB_SHA" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.version=sha-$GITHUB_SHA" .
           docker save supabase-helpdesk:ci | gzip -1 > "$RUNNER_TEMP/image.tar.gz"
       - uses: actions/upload-artifact@v7
         with:
@@ -157,6 +165,49 @@ jobs:
         with:
           name: diagnostics-bundle-e2e
           extra-path: ${{ runner.temp }}/bundle-e2e/out
+
+  # The upgrade an operator of the last release makes: installs the latest
+  # stable release (its bundle, ghcr.io image :X.Y.Z), signs in, upgrades with
+  # that installation's upgrade.sh to this image, then rolls back. Passes with a
+  # note in the Summary while there is no stable release.
+  # See FROM_RELEASE in .github/scripts/bundle-e2e.sh.
+  bundle-e2e-upgrade:
+    name: Bundle e2e (upgrade from the latest release)
+    needs: image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - id: setup
+        uses: ./.github/actions/setup          # node_modules for Playwright
+      - name: Install Chromium (background)
+        run: bash .github/scripts/bg.sh start playwright npx playwright install --with-deps --only-shell chromium
+      - uses: actions/download-artifact@v8
+        with:
+          name: image
+          path: ${{ runner.temp }}
+      - name: docker load
+        # The bundle's image tag is the version the image reports.
+        run: |
+          gunzip -c "$RUNNER_TEMP/image.tar.gz" | docker load
+          docker tag supabase-helpdesk:ci "supabase-helpdesk:sha-$GITHUB_SHA"
+      - name: Wait for Chromium
+        run: bash .github/scripts/bg.sh wait playwright 600
+      - name: Install the latest release, upgrade to this image and roll back
+        env:
+          IMAGE: supabase-helpdesk
+          VERSION: sha-${{ github.sha }}
+          FROM_RELEASE: '1'
+          GH_TOKEN: ${{ github.token }}    # the releases API call, not rate-limited per IP
+        run: bash .github/scripts/bundle-e2e.sh
+      - name: Upload diagnostics
+        if: failure()
+        uses: ./.github/actions/upload-diagnostics
+        with:
+          name: diagnostics-bundle-e2e-upgrade
+          extra-path: ${{ runner.temp }}/bundle-e2e-upgrade/out
 
   db:
     name: DB tests
@@ -333,7 +384,7 @@ jobs:
 
   ci-result:
     name: ci-result   # the single required status check
-    needs: [lint, db, e2e, cross-browser, migration-upgrade, image, image-smoke, bundle-e2e]
+    needs: [lint, db, e2e, cross-browser, migration-upgrade, image, image-smoke, bundle-e2e, bundle-e2e-upgrade]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -347,3 +398,107 @@ jobs:
             echo "::error::A required job failed, was cancelled or was skipped"
             exit 1
           fi
+
+  # main only, after every required job passed: the image CI tested goes to
+  # GHCR as :sha-<sha> with a provenance attestation, :edge follows the head of
+  # main, and the deploy bundle of that version is kept as an artifact (for a
+  # manual `./upgrade.sh --bundle FILE sha-<sha>` on demo). Releases (:X.Y.Z)
+  # are release.yml's.
+  publish:
+    name: Publish image (GHCR)
+    needs: ci-result
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'surveyjs/supabase-helpdesk'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write          # push to ghcr.io
+      id-token: write          # Sigstore certificate for the attestation
+      attestations: write
+    env:
+      IMAGE: ghcr.io/surveyjs/supabase-helpdesk
+      VERSION: sha-${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: image
+          path: ${{ runner.temp }}
+      - name: docker load
+        run: gunzip -c "$RUNNER_TEMP/image.tar.gz" | docker load
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: push
+        name: Push :sha-<sha>
+        # The digest is the one the registry stored for the pushed tag. RepoDigests
+        # lists one entry per repository the image is tagged in (the containerd
+        # image store keeps one for supabase-helpdesk too), so take $IMAGE's.
+        run: |
+          docker tag supabase-helpdesk:ci "$IMAGE:$VERSION"
+          docker push "$IMAGE:$VERSION"
+          ref="$(docker inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$IMAGE:$VERSION" \
+            | awk -v repo="$IMAGE@" '!found && index($0, repo) == 1 { print; found = 1 }')"
+          if [[ "$ref" != "$IMAGE@sha256:"* ]]; then
+            echo "::error::No digest of $IMAGE after the push (RepoDigests: $ref)"
+            exit 1
+          fi
+          echo "digest=${ref#*@}" >> "$GITHUB_OUTPUT"
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+          # Would need artifact-metadata: write; the attestation is what we use.
+          create-storage-record: false
+      - id: edge
+        name: Move :edge (only from the head of main)
+        # Runs of different commits do not cancel each other on main, so an
+        # older commit's run can finish after a newer one: it must not move
+        # :edge back. The repository is public: ls-remote needs no credentials.
+        run: |
+          head="$(git ls-remote origin refs/heads/main | cut -f1)"
+          if [[ "$head" != "$GITHUB_SHA" ]]; then
+            echo "::notice::main is at ${head:-?} now, not $GITHUB_SHA: :edge is left to that commit's run"
+            echo "moved=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          docker tag "$IMAGE:$VERSION" "$IMAGE:edge"
+          docker push "$IMAGE:edge"
+          echo "moved=true" >> "$GITHUB_OUTPUT"
+      - name: Pack the deploy bundle
+        run: bash deploy/scripts/pack-bundle.sh "$VERSION" "$RUNNER_TEMP/bundle/helpdesk-deploy-$VERSION.tar.gz"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: helpdesk-deploy-${{ env.VERSION }}
+          path: ${{ runner.temp }}/bundle/helpdesk-deploy-${{ env.VERSION }}.tar.gz
+          overwrite: true
+          compression-level: 0
+      - name: Summary
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+          EDGE_MOVED: ${{ steps.edge.outputs.moved }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          bundle="helpdesk-deploy-$VERSION"
+          {
+            echo "### Published $IMAGE:$VERSION"
+            echo "- Image: \`$IMAGE:$VERSION\`"
+            echo "- Digest: \`$IMAGE@$DIGEST\`"
+            if [[ "$EDGE_MOVED" == true ]]; then
+              echo "- \`:edge\` now points to this commit"
+            else
+              echo "- \`:edge\` unchanged: main has moved on since this commit"
+            fi
+            echo "- Bundle: artifact \`$bundle\`"
+            echo
+            echo "Upgrade demo to this commit (in its deploy directory):"
+            echo '```sh'
+            echo "gh run download $RUN_ID -R $GITHUB_REPOSITORY -n $bundle   # requires gh auth login"
+            echo "./upgrade.sh --bundle $bundle.tar.gz $VERSION"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

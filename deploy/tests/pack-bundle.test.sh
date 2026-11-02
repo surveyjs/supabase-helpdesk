@@ -43,6 +43,7 @@ put deploy/supabase/volumes/db/data/PG_VERSION
 put deploy/supabase/volumes/storage/stub/file
 put deploy/backups/db-1.0.0-20261023T000000Z.tar.gz
 put deploy/.upgrade-state
+put deploy/.upgrade.lock/pid 12345
 
 (cd "$R" && bash deploy/scripts/pack-bundle.sh 9.9.9 "$T/out/bundle.tgz") > "$T/pack.log" 2>&1 \
   || { cat "$T/pack.log"; echo "❌ pack-bundle.sh failed"; exit 1; }
@@ -56,7 +57,7 @@ check "VERSION holds the version" '[[ "$(tar -xzOf "$T/out/bundle.tgz" ./VERSION
 check "every entry is owned by 0/0, not by the packer's user" '[[ "$(awk "{print \$2}" "$T/listing" | sort -u)" == 0/0 ]]'
 check "executables stay executable" 'grep -E " \./supabase/run\.sh$" "$T/listing" | grep -q "^-rwx"'
 check "no .env, local, override, snippets, functions, data, storage, backups or state" \
-  '! grep -Eq "(^|/)\.env$|^local/|override|snippets|functions/mine|db/data|volumes/storage|^backups/|upgrade-state" <<<"$files"'
+  '! grep -Eq "(^|/)\.env$|^local/|override|snippets|functions/mine|db/data|volumes/storage|^backups/|upgrade-state|upgrade\.lock" <<<"$files"'
 check "no development files (scripts/, tests/)" '! grep -Eq "^(scripts|tests)/" <<<"$files"'
 check "a tracked file deleted locally is skipped" '! has gone.txt'
 check "nothing else is packed" '[[ "$files" == "$(printf "%s\n" VERSION compose.yaml examples/new.yml supabase/.gitignore supabase/docker-compose.yml supabase/run.sh supabase/volumes/functions/main/index.ts | sort)" ]]'

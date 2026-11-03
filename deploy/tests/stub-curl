@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Test double for `curl` (deploy/tests/upgrade.test.sh): records each call in
+# $STUB_LOG. <releases>/latest answers with GitHub's redirect: to the tag of
+# $STUB_LATEST, or to the list of releases when it is empty (no stable release).
+# A download (-o FILE URL) gets $STUB_BUNDLE. STUB_CURL_RC: every call fails.
+echo "curl $*" >> "$STUB_LOG"
+[[ "${STUB_CURL_RC:-0}" == 0 ]] || exit "$STUB_CURL_RC"
+out="" url=""
+while (($#)); do
+  case "$1" in
+    -o) out="$2"; shift 2 ;;
+    -w) shift 2 ;;
+    -*) shift ;;
+    *) url="$1"; shift ;;
+  esac
+done
+case "$url" in
+  */releases/latest)
+    if [[ -n "${STUB_LATEST:-}" ]]; then printf '%s' "${url%/latest}/tag/v$STUB_LATEST"; else printf '%s' "${url%/latest}"; fi ;;
+  *) cp "$STUB_BUNDLE" "$out" ;;
+esac

@@ -3,11 +3,18 @@
 # (CI publishes images and bundles; it never deploys).
 #
 #   ./upgrade.sh [--bundle FILE] [--migrate] VERSION   upgrade to VERSION
+#   ./upgrade.sh [--migrate] latest                    upgrade to the latest release
+#   ./upgrade.sh --check                               is there a newer release?
 #   ./upgrade.sh --rollback [--yes] [--restored]       undo the last upgrade
 #
 # The mode comes from COMPOSE_FILE (the shell's, else .env's, as for docker
 # compose; init-env writes it): bundled Supabase when it includes
 # compose.bundled.yaml, external otherwise.
+#
+# latest is the newest stable release on GitHub (never a prerelease), taken as
+# its X.Y.Z before anything changes: .env records that exact version. It never
+# goes down: an installation newer than it, or of a commit of main (sha-...),
+# stops with exit 1. Already at it: exit 0, nothing done.
 #
 # Upgrade:
 #  1. Unpack the bundle of VERSION (GitHub Release, or --bundle FILE) over this
@@ -38,6 +45,8 @@
 #       everything stays stopped: ship a fix and upgrade, or ./upgrade.sh
 #       --rollback; 130/143 interrupted (Ctrl-C/TERM): before step 4 nothing
 #       changed, from step 4 on HelpDesk may be stopped, as after exit 4.
+#       --check: 0 up to date (or not a release), 10 a newer release exists,
+#       1 cannot tell (no stable release yet, GitHub unreachable).
 #
 # One run at a time (.upgrade.lock): while another runs, exit 1, nothing changed.
 set -euo pipefail
@@ -48,7 +57,7 @@ LOCK=.upgrade.lock
 KEEP_SNAPSHOTS=3
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-180}"
 HELPER_IMAGE=alpine:3.22
-USAGE="usage: ./upgrade.sh [--bundle FILE] [--migrate] VERSION | ./upgrade.sh --rollback [--yes] [--restored]"
+USAGE="usage: ./upgrade.sh [--bundle FILE] [--migrate] VERSION|latest | ./upgrade.sh --check | ./upgrade.sh --rollback [--yes] [--restored]"
 # Never taken from a bundle, never saved with the files.
 PROTECTED=(.env backups "$STATE" "$LOCK" supabase/volumes/db/data supabase/volumes/storage supabase/volumes/snippets)
 
@@ -167,6 +176,56 @@ vendored_label() { vendored_show "$(vendored_id "$1")"; } # vendored_label <cont
 db_size() {
   compose exec -T db psql -U postgres -tAc "select pg_size_pretty(pg_database_size('postgres'))" 2>/dev/null \
     | tr -d '\r' || echo "size unknown"
+}
+
+# The newest stable release: GitHub redirects <releases>/latest to its tag, or
+# to the list of releases while there is none (no API, no token, no rate limit).
+VERSION_RE='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$'
+latest_version() {
+  local url v
+  url="$(curl -fsS -o /dev/null -w '%{redirect_url}' "${RELEASES_URL%/download}/latest")" \
+    || die "cannot reach ${RELEASES_URL%/download}/latest; nothing changed"
+  v="$(sed -n 's|.*/releases/tag/v\([^/?#]*\)$|\1|p' <<<"$url")"
+  [[ "$v" =~ $VERSION_RE && -z "${BASH_REMATCH[4]}" ]] \
+    || die "no stable release is published (${url:-no redirect}); name the version: ./upgrade.sh X.Y.Z"
+  echo "$v"
+}
+# The installed version against release <latest>: same, older, newer, or
+# unknown (sha-<sha> of a commit of main, or not a version). X.Y.Z-pre is older than X.Y.Z.
+compare_installed() { # compare_installed <latest>
+  local cur i; cur="$(env_get HELPDESK_VERSION)"
+  [[ "$cur" =~ $VERSION_RE ]] || { echo unknown; return; }
+  local a=("${BASH_REMATCH[@]:1:3}") pre="${BASH_REMATCH[4]}"
+  [[ "$1" =~ $VERSION_RE ]]
+  local b=("${BASH_REMATCH[@]:1:3}")
+  for i in 0 1 2; do
+    if (( a[i] < b[i] )); then echo older; return; fi
+    if (( a[i] > b[i] )); then echo newer; return; fi
+  done
+  if [[ -n "$pre" ]]; then echo older; else echo same; fi
+}
+# --check: reads only — no lock, no docker. Says it on stdout, for cron.
+check_latest() {
+  local latest current; latest="$(latest_version)" || exit 1
+  current="$(env_get HELPDESK_VERSION)"
+  echo "installed ${current:-?}, latest release $latest"
+  case "$(compare_installed "$latest")" in
+    older) echo "upgrade: ./upgrade.sh $latest"; exit 10 ;;
+    newer) echo "the installed version is newer than the latest release" ;;
+    unknown) echo "the installed version is not a release; to upgrade to one: ./upgrade.sh $latest" ;;
+  esac
+  exit 0
+}
+resolve_latest() { # sets main's target to the latest release, or exits
+  local latest current; latest="$(latest_version)" || exit 1
+  current="$(env_get HELPDESK_VERSION)"
+  log "latest release: $latest (installed: ${current:-?})"
+  case "$(compare_installed "$latest")" in
+    same) if [[ "$(state_get incomplete)" != 1 ]]; then log "already at $latest; nothing to do"; exit 0; fi ;;
+    newer) die "the installed $current is newer than the latest release $latest; nothing changed" ;;
+    unknown) die "the installed ${current:-version} is not a release; name the version: ./upgrade.sh $latest. Nothing changed" ;;
+  esac
+  target="$latest"
 }
 
 # State of one upgrade run: the version and files it replaced, whether it
@@ -582,13 +641,14 @@ rollback() { # rollback <yes 0|1> <restored 0|1>
 # Everything runs from main, parsed before any of it: upgrade() replaces this
 # file with the one of the new version while it runs.
 main() {
-  local bundle="" migrate=0 do_rollback=0 yes=0 restored=0 target=""
+  local bundle="" migrate=0 do_rollback=0 check=0 yes=0 restored=0 target=""
   while (($#)); do
     case "$1" in
       --bundle) [[ $# -ge 2 ]] || die "--bundle needs a file"
                 [[ -f "$2" ]] || die "no such bundle: $2"
                 bundle="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")"; shift 2 ;;
       --migrate) migrate=1; shift ;;
+      --check) check=1; shift ;;
       --rollback) do_rollback=1; shift ;;
       --yes) yes=1; shift ;;
       --restored) restored=1; shift ;;
@@ -597,15 +657,22 @@ main() {
       *) [[ -z "$target" ]] || die "one VERSION only, got: $target $1"; target="$1"; shift ;;
     esac
   done
-  if (( do_rollback )); then
+  if (( check )); then
+    [[ -z "$target$bundle" && "$migrate$do_rollback$yes$restored" == 0000 ]] \
+      || die "--check takes no VERSION or other options"$'\n'"$USAGE"
+  elif (( do_rollback )); then
     [[ -z "$target$bundle" && "$migrate" == 0 ]] || die "--rollback takes no VERSION, --bundle or --migrate"$'\n'"$USAGE"
   else
     [[ -n "$target" ]] || die "$USAGE"
     [[ "$yes$restored" == 00 ]] || die "--yes and --restored go with --rollback"$'\n'"$USAGE"
+    [[ "$target" != latest || -z "$bundle" ]] || die "--bundle is the bundle of one version: name it, not latest"$'\n'"$USAGE"
   fi
   cd "$(dirname "$0")"
   [[ -f .env ]] || die "no .env here — create it with init-env (see README.md)"
+  if (( check )); then check_latest; fi
   detect_mode
+  # Before the lock: nothing has changed, and "already at it" needs no lock.
+  if [[ "$target" == latest ]]; then resolve_latest; fi
   # One exit path for both modes: on_exit restores what an upgrade leaves
   # half done, then releases the lock. Set before the lock is taken: a run
   # that stops right after taking it still releases it.

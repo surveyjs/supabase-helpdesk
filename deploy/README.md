@@ -104,8 +104,19 @@ section 10) into an empty directory, e.g. `/opt/helpdesk`, and run everything be
 ./upgrade.sh X.Y.Z                 # asks before applying migrations
 ./upgrade.sh --migrate X.Y.Z       # no terminal (CI, cron): migrations are pre-approved
 ./upgrade.sh --bundle FILE X.Y.Z   # use a downloaded bundle instead of the GitHub release
+./upgrade.sh latest                # the latest stable release (--migrate works here too)
+./upgrade.sh --check               # is there a newer release? changes nothing
 ./upgrade.sh --help
 ```
+
+`latest` is the newest stable release on GitHub (the one marked Latest; never a prerelease, so a
+prerelease is upgraded to by its version). `upgrade.sh` turns it into that `X.Y.Z` before anything
+changes and records the exact version in `.env`. It never goes down: if the installed version is
+newer than the latest release, or is a commit of `main` (`sha-<sha>`), it stops with exit 1 and
+changes nothing; if it is already the latest release, it says so and exits 0. `--check` only prints
+the installed and the latest version: exit 0 up to date (or not a release), 10 a newer release
+exists (with the command to upgrade), 1 cannot tell (no stable release yet, GitHub unreachable) —
+for cron: `./upgrade.sh --check >/dev/null; [ $? -eq 10 ] && …`.
 
 The mode comes from `COMPOSE_FILE` in `.env` (or exported in the shell, which wins, as in
 `docker compose`): bundled when it includes `compose.bundled.yaml`. `SUPABASE_URL` must agree (empty for bundled, set for external), otherwise `upgrade.sh` stops with
@@ -278,7 +289,8 @@ unpacks over your directory). Nothing is deployed for you: you run `upgrade.sh` 
 
 `.env` holds the exact version (`HELPDESK_VERSION`), never `X.Y` or `latest`: `upgrade.sh` waits
 until `/api/health` reports the version you asked for, and a release image reports `X.Y.Z`, so
-upgrade with `./upgrade.sh X.Y.Z` (the version without the `v`).
+upgrade with `./upgrade.sh X.Y.Z` (the version without the `v`), or `./upgrade.sh latest`, which
+looks up that `X.Y.Z` first (section 4).
 
 **Checking a download.** Each release has a SHA-256 file next to the bundle:
 

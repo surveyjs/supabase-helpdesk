@@ -15,6 +15,7 @@ setup() { # setup bundled|external
   mkdir -p "$T/inst" "$T/bin" "$T/b"
   cp "$DEPLOY/upgrade.sh" "$T/inst/"
   cp "$HERE/stub-docker" "$T/bin/docker"; chmod +x "$T/bin/docker"
+  cp "$HERE/stub-curl" "$T/bin/curl"; chmod +x "$T/bin/curl"; export STUB_BUNDLE="$T/bundle.tgz"
   if [[ $1 == external ]]; then
     printf 'HELPDESK_VERSION=1.0.0\nCOMPOSE_FILE=compose.yaml\nSUPABASE_URL=https://x.supabase.co\n' > "$T/inst/.env"
   else
@@ -26,7 +27,8 @@ setup() { # setup bundled|external
   export STUB_LOG="$T/calls.log"; : > "$STUB_LOG"
   export STUB_LOCKS="$T/locks"; : > "$STUB_LOCKS"
   unset STUB_DRY_RUN STUB_DRY_RUN_RC STUB_DRY_RUN_SLEEP STUB_MIGRATE_RC STUB_SNAPSHOT_RC STUB_RESTORE_RC \
-    STUB_OLD_SCHEMA_MATCHES STUB_HEALTH_VERSION STUB_IMAGE_MISSING STUB_HELPER_MISSING STUB_DB_START_RC STUB_SNAPSHOT_KILL COMPOSE_FILE
+    STUB_OLD_SCHEMA_MATCHES STUB_HEALTH_VERSION STUB_IMAGE_MISSING STUB_HELPER_MISSING STUB_DB_START_RC STUB_SNAPSHOT_KILL COMPOSE_FILE \
+    STUB_LATEST STUB_CURL_RC
 }
 # setup's installation and bundle with different Supabase versions (supabase/VENDORED).
 revendor() { mkdir -p "$T/inst/supabase" "$T/b/supabase"; echo ref=v1 > "$T/inst/supabase/VENDORED"; echo ref=v2 > "$T/b/supabase/VENDORED"; pack; }
@@ -288,5 +290,43 @@ check "... nor brings in an .upgrade.lock" '[[ $rc == 0 && ! -e $T/inst/.upgrade
 
 setup bundled; upgrade --rollback 1.1.0; a=$rc; upgrade --yes 1.1.0; b=$rc; upgrade 1.1.0 1.2.0; c=$rc
 check "bad arguments: exit 1 before anything runs" '[[ $a == 1 && $b == 1 && $c == 1 && $(version) == 1.0.0 ]] && ! [[ -s "$STUB_LOG" ]]'
+
+# latest and --check: the newest stable release, from the redirect of <releases>/latest (stub-curl).
+installed() { sed -i "s/^HELPDESK_VERSION=.*/HELPDESK_VERSION=$1/" "$T/inst/.env"; }
+setup bundled; STUB_LATEST=1.1.0 upgrade latest
+check "latest: upgrades to the latest release, downloaded by its version" '[[ $rc == 0 && $(version) == 1.1.0 && $(files) == new ]] && called "releases/download/v1.1.0/helpdesk-deploy-v1.1.0.tar.gz"'
+check "... under .upgrade.lock, released at the end" 'locked_throughout'
+
+setup bundled; STUB_LATEST=1.0.0 upgrade latest
+check "latest, already at it: exit 0, nothing downloaded or run" '[[ $rc == 0 && $(version) == 1.0.0 && $(files) == old ]] && grep -q "nothing to do" "$T/out.log" && ! called "releases/download" && ! called docker'
+
+setup bundled; installed 1.9.0; echo 1.10.0 > "$T/b/VERSION"; pack; STUB_LATEST=1.10.0 upgrade latest
+check "latest: versions compare as numbers (1.9.0 < 1.10.0)" '[[ $rc == 0 && $(version) == 1.10.0 ]]'
+
+setup bundled; installed 1.1.0-rc.1; STUB_LATEST=1.1.0 upgrade latest
+check "latest: a prerelease is older than its release" '[[ $rc == 0 && $(version) == 1.1.0 ]]'
+
+setup bundled; installed 1.2.0; STUB_LATEST=1.1.0 upgrade latest; a=$rc
+installed 1.2.0-rc.1; STUB_LATEST=1.1.0 upgrade latest; b=$rc
+check "latest never goes down (installed 1.2.0, 1.2.0-rc.1 > 1.1.0): exit 1, nothing changed" '[[ $a == 1 && $b == 1 && $(version) == 1.2.0-rc.1 && $(files) == old ]] && grep -q "newer than the latest release" "$T/out.log" && ! called docker'
+
+setup bundled; installed sha-0123abc; STUB_LATEST=1.1.0 upgrade latest
+check "latest from a commit of main (sha-…): exit 1, names the version" '[[ $rc == 1 && $(version) == sha-0123abc ]] && grep -qF "./upgrade.sh 1.1.0" "$T/out.log" && ! called docker'
+
+setup bundled; upgrade latest; a=$rc; STUB_CURL_RC=6 upgrade latest; b=$rc
+check "latest without a stable release, or GitHub unreachable: exit 1, nothing changed" '[[ $a == 1 && $b == 1 && $(version) == 1.0.0 && $(files) == old ]] && ! called docker'
+
+setup bundled; STUB_LATEST=1.1.0 upgrade --bundle bundle.tgz latest
+check "latest with --bundle: exit 1 before anything runs" '[[ $rc == 1 && $(version) == 1.0.0 ]] && ! [[ -s "$STUB_LOG" ]]'
+
+setup bundled; STUB_LATEST=1.1.0 upgrade --check
+check "--check, a newer release: exit 10 with the command; nothing run, no lock" '[[ $rc == 10 && $(version) == 1.0.0 && $(files) == old ]] && grep -qF "upgrade: ./upgrade.sh 1.1.0" "$T/out.log" && ! called docker && ! [[ -s $T/locks ]]'
+
+setup bundled; STUB_LATEST=1.0.0 upgrade --check; a=$rc; installed sha-0123abc; STUB_LATEST=1.0.0 upgrade --check; b=$rc
+upgrade --check; c=$rc
+check "--check: up to date or not a release exit 0, without a stable release exit 1" '[[ $a == 0 && $b == 0 && $c == 1 ]] && ! called docker'
+
+setup bundled; upgrade --check 1.1.0; a=$rc; upgrade --check --rollback; b=$rc; upgrade --check --migrate; c=$rc
+check "--check takes no version or other options: exit 1 before anything runs" '[[ $a == 1 && $b == 1 && $c == 1 ]] && ! [[ -s "$STUB_LOG" ]]'
 
 exit $(( fails > 0 ))

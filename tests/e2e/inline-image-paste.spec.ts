@@ -154,10 +154,12 @@ test.describe('Inline image paste in post editor', () => {
       .is('post_id', null);
     expect(claimed?.length ?? 0).toBe(0);
 
-    // The attachment now belongs to the original post and renders inline.
-    await expect(page.locator('[data-testid="attachment-thumbnail"]').first()).toBeVisible({
+    // The attachment now belongs to the original post and renders inline in
+    // the body; it is not listed a second time in the attachment list.
+    await expect(page.locator('.prose img[src*="/attachments/"]').first()).toBeVisible({
       timeout: 10000,
     });
+    await expect(page.locator('[data-testid="attachment-thumbnail"]')).toHaveCount(0);
   });
 
   test('paste image into reply editor → claimed onto the new reply post', async ({

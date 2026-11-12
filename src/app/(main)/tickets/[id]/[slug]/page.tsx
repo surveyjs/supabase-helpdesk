@@ -387,6 +387,14 @@ export default async function TicketDetailPage({
     );
     const canTogglePrivacy = isAgent && !isOriginal && !isNote;
     const canReplyToPost = canReply && !isDraft && !isNote && context === 'thread';
+    const canClone = isAgent && !isOriginal && !isNote && !isDraft && !ticket!.merged_into_id;
+    const canPublishDraft = isDraft && isCurrentUser;
+    const hasActions = canDeletePost || canTogglePrivacy || canClone || canPublishDraft;
+    // Images embedded in the body are already visible there; don't list them again.
+    const inlineAttachmentIds = Array.from(
+      String(post.body).matchAll(/\/attachments\/([0-9a-f-]{36})/gi),
+      (m) => m[1].toLowerCase(),
+    );
 
     const bgClass = isNote
       ? 'bg-amber-50 border-amber-200'
@@ -451,46 +459,45 @@ export default async function TicketDetailPage({
           editorViewMode={ticketDetailEditorViewMode}
           editorMinHeightPx={editorMinHeightPx}
           editorMaxHeightPx={editorMaxHeightPx}
+          actions={hasActions ? (
+            <>
+              {canDeletePost && (
+                <form action={deletePost} className="inline">
+                  <input type="hidden" name="post_id" value={post.id} />
+                  <button
+                    type="submit"
+                    className="hover:text-red-600"
+                    data-testid="delete-post-btn"
+                  >
+                    Delete
+                  </button>
+                </form>
+              )}
+              {canTogglePrivacy && (
+                <PrivacyCheckbox postId={post.id} isPrivate={post.is_private} />
+              )}
+              {canClone && <CloneCommentButton postId={post.id} />}
+              {canPublishDraft && (
+                <form action={publishDraft} className="inline">
+                  <input type="hidden" name="post_id" value={post.id} />
+                  <button
+                    type="submit"
+                    className="text-green-600 hover:text-green-800 font-medium"
+                    data-testid="publish-draft-btn"
+                  >
+                    Publish
+                  </button>
+                </form>
+              )}
+            </>
+          ) : undefined}
         />
-
-        {/* Action buttons */}
-        <div className="flex items-center gap-3 mt-2">
-          {canDeletePost && (
-            <form action={deletePost} className="inline">
-              <input type="hidden" name="post_id" value={post.id} />
-              <button
-                type="submit"
-                className="text-xs text-red-600 hover:text-red-800"
-                data-testid="delete-post-btn"
-              >
-                Delete
-              </button>
-            </form>
-          )}
-          {canTogglePrivacy && (
-            <PrivacyCheckbox postId={post.id} isPrivate={post.is_private} />
-          )}
-          {isAgent && !isOriginal && !isNote && !isDraft && !ticket!.merged_into_id && (
-            <CloneCommentButton postId={post.id} />
-          )}
-          {isDraft && isCurrentUser && (
-            <form action={publishDraft} className="inline">
-              <input type="hidden" name="post_id" value={post.id} />
-              <button
-                type="submit"
-                className="text-xs text-green-600 hover:text-green-800 font-medium"
-                data-testid="publish-draft-btn"
-              >
-                Publish
-              </button>
-            </form>
-          )}
-        </div>
 
         {/* Attachments */}
         <AttachmentList
           postId={post.id}
           canDelete={isCurrentUser || isAgent}
+          hideIds={inlineAttachmentIds}
         />
       </article>
     );
@@ -537,7 +544,7 @@ export default async function TicketDetailPage({
 
             {(postComments.length > 0 || canReplyToPost) && (
               <div
-                className="mt-2 ml-5 pl-4 border-l-2 border-gray-100 space-y-2"
+                className="mt-2 ml-2 pl-3 sm:ml-5 sm:pl-4 border-l-2 border-gray-100 space-y-2"
                 data-comments-rail="true"
               >
                 {shouldCollapseComments && (
@@ -887,7 +894,7 @@ export default async function TicketDetailPage({
                   {renderTimelineItems(tailItems)}
                 </ul>
                 {canReply && !ticket.merged_into_id && (
-                  <div className="mt-4">
+                  <div className="mt-8 border-t border-gray-200 pt-6">
                     <MainReplyToggle
                       ticketId={ticket.id}
                       isAgent={isAgent}
@@ -895,6 +902,7 @@ export default async function TicketDetailPage({
                       editorMinHeightPx={editorMinHeightPx}
                       editorMaxHeightPx={editorMaxHeightPx}
                       aiSuggestedReplyEnabled={aiSuggestedReplyEnabled}
+                      willReopen={ticket.status === 'closed' && !isAgent}
                     />
                   </div>
                 )}

@@ -19,7 +19,7 @@ export function PrivacyCheckbox({ postId, isPrivate }: { postId: string; isPriva
       />
       <label
         htmlFor={`private-${postId}`}
-        className="text-xs text-gray-600 cursor-pointer select-none"
+        className="cursor-pointer select-none hover:text-gray-900"
       >
         Private
       </label>

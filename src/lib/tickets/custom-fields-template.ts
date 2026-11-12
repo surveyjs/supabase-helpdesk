@@ -75,6 +75,7 @@ function buildQuestion(def: CustomFieldDef): Record<string, unknown> {
       break;
     case 'checkbox':
       base.type = 'boolean';
+      base.renderAs = 'checkbox';
       if (dflt !== undefined) base.defaultValue = dflt;
       break;
     case 'date':

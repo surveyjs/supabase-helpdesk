@@ -50,6 +50,7 @@ describe('buildCustomFieldQuestions', () => {
     });
     expect(byName['custom_fields.urgent']).toMatchObject({
       type: 'boolean',
+      renderAs: 'checkbox',
       defaultValue: true,
     });
     expect(byName['custom_fields.due']).toMatchObject({

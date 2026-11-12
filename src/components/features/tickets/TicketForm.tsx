@@ -478,10 +478,12 @@ export function TicketForm({
           <h3 className="text-sm font-medium text-gray-700">Additional Fields</h3>
           {customFields.map((field) => (
             <div key={field.id}>
-              <label htmlFor={`cf-${field.name}`} className="block text-sm font-medium text-gray-700 mb-1">
-                {field.name}
-                {field.is_required && <span className="text-red-500"> *</span>}
-              </label>
+              {field.field_type !== 'checkbox' && (
+                <label htmlFor={`cf-${field.name}`} className="block text-sm font-medium text-gray-700 mb-1">
+                  {field.name}
+                  {field.is_required && <span className="text-red-500"> *</span>}
+                </label>
+              )}
               {field.field_type === 'text' && (
                 <input
                   id={`cf-${field.name}`}
@@ -518,17 +520,23 @@ export function TicketForm({
                 </select>
               )}
               {field.field_type === 'checkbox' && (
-                <input
-                  id={`cf-${field.name}`}
-                  type="checkbox"
-                  name={`cf_${field.name}`}
-                  defaultChecked={
-                    initialCustomFields?.[field.name] != null
-                      ? initialCustomFields[field.name] === true
-                      : field.default_value === 'true'
-                  }
-                  className="form-checkbox"
-                />
+                <label htmlFor={`cf-${field.name}`} className="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <input
+                    id={`cf-${field.name}`}
+                    type="checkbox"
+                    name={`cf_${field.name}`}
+                    defaultChecked={
+                      initialCustomFields?.[field.name] != null
+                        ? initialCustomFields[field.name] === true
+                        : field.default_value === 'true'
+                    }
+                    className="form-checkbox"
+                  />
+                  <span>
+                    {field.name}
+                    {field.is_required && <span className="text-red-500"> *</span>}
+                  </span>
+                </label>
               )}
               {field.field_type === 'date' && (
                 <input
@@ -563,11 +571,11 @@ export function TicketForm({
         </div>
       )}
 
-      <div className="flex gap-3">
+      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
         <Link
           href={cancelHref ?? '/tickets'}
           data-testid="cancel-ticket-btn"
-          className="flex-1 text-center bg-white text-gray-700 border border-gray-300 rounded py-2 px-4 text-sm font-medium hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
+          className="text-center bg-white text-gray-700 border border-gray-300 rounded py-2 px-4 text-sm font-medium hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
         >
           Cancel
         </Link>
@@ -575,7 +583,7 @@ export function TicketForm({
           type="submit"
           disabled={pending}
           data-testid="create-ticket-btn"
-          className="flex-1 bg-blue-600 text-white rounded py-2 px-4 text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
+          className="bg-blue-600 text-white rounded py-2 px-4 text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
         >
           {pending ? 'Creating…' : 'Create Ticket'}
         </button>

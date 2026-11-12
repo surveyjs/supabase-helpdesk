@@ -6,6 +6,7 @@
 #   scripts/answerdesk/import.sh upload    # blobs -> Storage attachments/migrated/<id>
 #   scripts/answerdesk/import.sh load      # $WORK/*.tsv -> database (one transaction)
 #   scripts/answerdesk/import.sh all       # prepare + upload + load
+#   scripts/answerdesk/import.sh relink    # rewrite cross-ticket references in imported posts
 #   scripts/answerdesk/import.sh status    # what is imported so far
 #   scripts/answerdesk/import.sh reset     # remove imported tickets and created users
 #
@@ -21,8 +22,10 @@ set -euo pipefail
 export MSYS_NO_PATHCONV=1 # Git Bash: don't rewrite /tmp/... args passed to docker
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && (pwd -W 2>/dev/null || pwd))" # pwd -W: Windows form for node under Git Bash
-PKG="${PKG:-}"
-WORK="${WORK:-${PKG:+$PKG/work}}"
+# Git Bash: /e/x -> E:/x, since MSYS_NO_PATHCONV stops the automatic conversion for node and docker.
+winpath() { if [ -n "$1" ] && command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s' "$1"; fi; }
+PKG="$(winpath "${PKG:-}")"
+WORK="$(winpath "${WORK:-${PKG:+$PKG/work}}")"
 DEPLOY="${DEPLOY:-}"
 FRACTION="${FRACTION:-0.1}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-}"
@@ -56,11 +59,34 @@ load() {
   echo "Copying staging files into $DB_CONTAINER:/tmp/adimport ..."
   docker exec "$DB_CONTAINER" rm -rf /tmp/adimport
   docker exec "$DB_CONTAINER" mkdir -p /tmp/adimport
-  for f in "$WORK"/*.tsv; do docker cp "$f" "$DB_CONTAINER:/tmp/adimport/" >/dev/null; done
+  for f in "$WORK"/*.tsv "$HERE/relink.sql"; do docker cp "$f" "$DB_CONTAINER:/tmp/adimport/" >/dev/null; done
   docker exec -u root "$DB_CONTAINER" chmod -R a+rX /tmp/adimport
   local rc=0
   psql_c -q < "$HERE/load.sql" || rc=$?
   # The staging files hold customer data: never leave them in the container.
+  docker exec "$DB_CONTAINER" rm -rf /tmp/adimport
+  return $rc
+}
+
+# Re-run only the cross-ticket reference rewrite (relink.sql) on an existing import.
+relink() {
+  need WORK
+  [ -f "$WORK/ticket_friendly.tsv" ] || { echo "No $WORK/ticket_friendly.tsv - run 'prepare' first." >&2; exit 1; }
+  docker exec "$DB_CONTAINER" rm -rf /tmp/adimport
+  docker exec "$DB_CONTAINER" mkdir -p /tmp/adimport
+  docker cp "$WORK/ticket_friendly.tsv" "$DB_CONTAINER:/tmp/adimport/" >/dev/null
+  docker cp "$HERE/relink.sql" "$DB_CONTAINER:/tmp/adimport/" >/dev/null
+  docker exec -u root "$DB_CONTAINER" chmod -R a+rX /tmp/adimport
+  local rc=0
+  psql_c -q -t -A <<'SQL' || rc=$?
+SET client_min_messages = notice;
+BEGIN;
+\i /tmp/adimport/relink.sql
+SELECT 'posts with FriendlyId before: ' || count(*) FROM public.posts WHERE body LIKE '%FriendlyId%';
+SELECT adimport.relink_ticket_refs() || ' posts changed';
+SELECT 'posts with FriendlyId after: ' || count(*) FROM public.posts WHERE body LIKE '%FriendlyId%';
+COMMIT;
+SQL
   docker exec "$DB_CONTAINER" rm -rf /tmp/adimport
   return $rc
 }
@@ -82,7 +108,8 @@ case "${1:-}" in
   upload) upload ;;
   load) load ;;
   all) prepare && upload && load ;;
+  relink) relink ;;
   status) status ;;
   reset) reset ;;
-  *) sed -n '2,19p' "$0"; exit 2 ;;
+  *) sed -n '2,20p' "$0"; exit 2 ;;
 esac

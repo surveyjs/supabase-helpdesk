@@ -16,6 +16,7 @@ deploy-bundle instance** (bundled Supabase, DB container `supabase-db`, API gate
 | prepare | `import.sh prepare` | Parses the `\|@\|` CSVs, samples tickets, transforms rows, and writes `$WORK/*.tsv` plus `report.txt`. Takes seconds. |
 | upload | `import.sh upload` | Uploads the blobs of the sampled attachments to Storage `attachments/migrated/<FileItems.Id>`. Resumable through `$WORK/uploaded.txt`. Runs at about 8 MB/s locally. |
 | load | `import.sh load` | Copies the TSVs into the DB container, then runs `load.sql` in one transaction. Removes the copies afterwards. |
+| relink | `import.sh relink` | Re-runs only the cross-ticket reference rewrite (`relink.sql`) on an already loaded instance. Needs `$WORK/ticket_friendly.tsv` from `prepare`. `load` runs it too. |
 | status | `import.sh status` | Prints the summary of the last load. |
 | reset | `import.sh reset` | Deletes the imported tickets and the accounts the import created. Dev only. |
 
@@ -34,6 +35,11 @@ cat "$WORK/report.txt"
 scripts/answerdesk/import.sh upload
 scripts/answerdesk/import.sh load
 ```
+
+`prepare` skips automated DMARC aggregate-report e-mails (subject `[Preview] Report Domain: …
+Submitter: … Report-ID: …`) that AnswerDesk turned into tickets. To import them anyway, run
+`prepare.mjs` with `--keep-automated`. `report.txt` also lists the value distributions of
+`TicketStatus`, `Severity`, `Urgent`, assignee present and `IsPrivate` for the sampled tickets.
 
 **Growing the sample.** A ticket is in the sample when `md5(ticket id) < FRACTION`, so the
 0.1 sample is contained in the 0.3 sample. Re-run all three steps with a larger `FRACTION`. Only the
@@ -73,6 +79,20 @@ idempotent.
   links are rewritten to `/attachments/<attachment id>`. That is the URL form the editor itself
   stores, and the app resolves it to a signed URL. References to files that weren't migrated
   become plain text marked *(attachment not migrated)*.
+- **Ticket references.** AnswerDesk links another ticket with a marker
+  `{'FriendlyId':'T4502','HashCode':'','CheckAnswerDesk':'<guid>'}`. The marker can be a link target,
+  link text, a reference definition, or bare text. Some posts link to
+  `https://<host>.answerdesk.io/ticket/details/t4502/<slug>` instead. The `CheckAnswerDesk` GUID
+  isn't the ticket id. `prepare` writes `ticket_friendly.tsv` (FriendlyId number → `Tickets.Id`, for
+  all source tickets), and `relink.sql` (run by `load` and `relink`) rewrites references in posts of
+  imported tickets:
+  - When the referenced ticket is imported, the reference becomes a link to `/tickets/<id>/<slug>`.
+  - When it isn't, the marker becomes plain text like `T4502 (legacy ticket)`, and an answerdesk.io
+    URL stays as it is. Other answerdesk.io URLs are never changed.
+
+  A second run changes nothing. **Caveat:** a reference that became "legacy ticket" text isn't
+  re-linked if a later, larger sample imports that ticket. For exact links, `reset` and reload with
+  the final `FRACTION`.
 - **Attachments.** Each target row keeps the source `Attachments.Id`, with
   `legacy_blob_id = FileItems.Id` and `storage_path = NULL`. The importer skips infected files
   (`ScanStatus = 1`), blobs missing on disk, and files over 50 MB (the Storage `FILE_SIZE_LIMIT`).
@@ -88,7 +108,7 @@ idempotent.
    be an agent.
 2. On the agent dashboard, open a few tickets. Check the threads (answers with comments under
    them), code blocks, inline images and the attachment lists. Check private comments as an agent.
-3. `import.sh status` shows the counts. `$WORK/report.txt` lists what `prepare` skipped and why.
+3. `import.sh status` shows the counts, including `ticket refs relinked` (posts changed). `$WORK/report.txt` lists what `prepare` skipped and why.
 
 Keep the instance's SMTP unconfigured (Admin → Email) while it holds real data. Otherwise,
 replying to an imported ticket emails real customers.

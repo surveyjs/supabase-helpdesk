@@ -73,20 +73,20 @@ export default async function NavBar() {
                   links={userMenuLinks}
                 />
               </div>
-
-              {/* Mobile menu (below md) */}
-              <MobileMenu
-                links={navLinks}
-                userLinks={userMenuLinks}
-                displayName={displayName}
-                role={profile?.role ?? null}
-              />
             </>
           ) : (
             <a href="/login" className="text-sm text-blue-600 hover:text-blue-800 min-h-[44px] flex items-center focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none rounded px-2">
               Log in
             </a>
           )}
+
+          {/* Mobile menu; logged-out visitors get nav links only */}
+          <MobileMenu
+            links={navLinks}
+            userLinks={user ? userMenuLinks : []}
+            displayName={displayName}
+            role={profile?.role ?? null}
+          />
         </div>
       </div>
     </nav>

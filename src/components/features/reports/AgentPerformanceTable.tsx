@@ -1,14 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { formatMinutes } from '@/lib/utils/format-minutes';
 import type { AgentPerformanceRow } from '@/lib/queries/reports';
-
-function formatMinutes(mins: number): string {
-  if (mins <= 0) return '0m';
-  const h = Math.floor(mins / 60);
-  const m = Math.round(mins % 60);
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
-}
 
 type SortKey = 'displayName' | 'assigned' | 'resolved' | 'avgResponseTime' | 'avgResolutionTime' | 'avgCsat';
 
@@ -35,7 +29,7 @@ export function AgentPerformanceTable({ data }: Props) {
     if (typeof av === 'string' && typeof bv === 'string') {
       return sortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
     }
-    const diff = (av as number) - (bv as number);
+    const diff = ((av as number | null) ?? -1) - ((bv as number | null) ?? -1);
     return sortAsc ? diff : -diff;
   });
 
@@ -81,7 +75,7 @@ export function AgentPerformanceTable({ data }: Props) {
                 <td className="py-2 px-2">{agent.resolved}</td>
                 <td className="py-2 px-2">{formatMinutes(agent.avgResponseTime)}</td>
                 <td className="py-2 px-2">{formatMinutes(agent.avgResolutionTime)}</td>
-                <td className="py-2 px-2">{agent.avgCsat ? agent.avgCsat.toFixed(1) : 'N/A'}</td>
+                <td className="py-2 px-2">{agent.avgCsat !== null ? agent.avgCsat.toFixed(1) : 'N/A'}</td>
               </tr>
             ))}
           </tbody>

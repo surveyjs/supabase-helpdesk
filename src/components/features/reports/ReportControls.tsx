@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useTransition } from 'react';
 import { exportReportCsv } from '@/lib/actions/reports';
 import { downloadCsv } from '@/lib/utils/csv';
+import { presetRange } from '@/lib/utils/date-range';
 
 type Props = {
   /** Effective range (URL params or the 30-day default), YYYY-MM-DD */
@@ -11,18 +12,21 @@ type Props = {
   rangeEnd: string;
   /** Date of the earliest ticket, used by the "All time" preset */
   earliestDate: string;
+  /** Effective granularity (the server may coarsen daily on long ranges) */
+  groupBy: string;
   isAdmin: boolean;
   types: { id: string; name: string }[];
   categories: { id: string; name: string }[];
   tiers?: { key: string; display_name: string }[];
 };
 
-const PRESETS: { key: string; label: string; days: number | null }[] = [
+// groupBy: granularity a long range switches to (the select can still change it)
+const PRESETS: { key: string; label: string; days: number | null; groupBy?: string }[] = [
   { key: '7d', label: 'Last 7 days', days: 7 },
   { key: '30d', label: 'Last 30 days', days: 30 },
   { key: '90d', label: 'Last 90 days', days: 90 },
-  { key: '12m', label: 'Last 12 months', days: 365 },
-  { key: 'all', label: 'All time', days: null },
+  { key: '12m', label: 'Last 12 months', days: 365, groupBy: 'week' },
+  { key: 'all', label: 'All time', days: null, groupBy: 'month' },
 ];
 
 const EXPORT_TYPES: Record<string, string> = {
@@ -34,24 +38,14 @@ const EXPORT_TYPES: Record<string, string> = {
   backlog: 'Backlog',
 };
 
-const dayStr = (d: Date) => d.toISOString().slice(0, 10);
-
-function presetRange(days: number | null, earliestDate: string) {
-  const end = new Date();
-  if (days === null) return { start: earliestDate, end: dayStr(end) };
-  const start = new Date();
-  start.setDate(start.getDate() - days);
-  return { start: dayStr(start), end: dayStr(end) };
-}
-
-export function ReportControls({ rangeStart, rangeEnd, earliestDate, isAdmin, types, categories, tiers }: Props) {
+export function ReportControls({ rangeStart, rangeEnd, earliestDate, groupBy, isAdmin, types, categories, tiers }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
 
   const currentStart = rangeStart;
   const currentEnd = rangeEnd;
-  const currentGroupBy = searchParams.get('groupBy') || 'day';
+  const currentGroupBy = groupBy;
   const currentStatus = searchParams.get('status') || '';
   const currentSeverity = searchParams.get('severity') || '';
   const currentType = searchParams.get('type') || '';
@@ -77,8 +71,8 @@ export function ReportControls({ rangeStart, rangeEnd, earliestDate, isAdmin, ty
     return r.start === currentStart && r.end === currentEnd;
   })?.key;
 
-  const applyPreset = (days: number | null) => {
-    updateParams(presetRange(days, earliestDate));
+  const applyPreset = (days: number | null, groupBy?: string) => {
+    updateParams({ ...presetRange(days, earliestDate), ...(groupBy ? { groupBy } : {}) });
   };
 
   const handleExport = async (reportType: string) => {
@@ -98,11 +92,11 @@ export function ReportControls({ rangeStart, rangeEnd, earliestDate, isAdmin, ty
       {/* Time range presets + export */}
       <div className="flex flex-wrap items-center gap-2 mb-3">
         <span className="text-sm font-medium text-gray-700">Period:</span>
-        {PRESETS.map(({ key, label, days }) => (
+        {PRESETS.map(({ key, label, days, groupBy }) => (
           <button
             key={key}
             type="button"
-            onClick={() => applyPreset(days)}
+            onClick={() => applyPreset(days, groupBy)}
             aria-pressed={activePreset === key}
             className={`px-3 py-1 text-sm rounded border ${
               activePreset === key

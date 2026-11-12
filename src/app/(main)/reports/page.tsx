@@ -10,6 +10,7 @@ import {
   type TimeRange,
   type ReportFilters,
 } from '@/lib/queries/reports';
+import { dayStr } from '@/lib/utils/date-range';
 import { ReportControls } from '@/components/features/reports/ReportControls';
 import { TicketVolumeChart } from '@/components/features/reports/TicketVolumeChart';
 import { ResolutionMetricsPanel } from '@/components/features/reports/ResolutionMetricsPanel';
@@ -45,13 +46,12 @@ export default async function ReportsPage({ searchParams }: Props) {
   const params = await searchParams;
   const startParam = typeof params.start === 'string' ? params.start : undefined;
   const endParam = typeof params.end === 'string' ? params.end : undefined;
-  const groupBy = (typeof params.groupBy === 'string' ? params.groupBy : 'day') as 'day' | 'week' | 'month';
+  const requestedGroupBy = (typeof params.groupBy === 'string' ? params.groupBy : 'day') as 'day' | 'week' | 'month';
 
   const now = new Date();
   const defaultStart = new Date(now);
   defaultStart.setDate(defaultStart.getDate() - 30);
 
-  const dayStr = (d: Date) => d.toISOString().slice(0, 10);
   const rangeStart = startParam || dayStr(defaultStart);
   const rangeEnd = endParam || dayStr(now);
   const { data: earliest } = await svc
@@ -66,6 +66,10 @@ export default async function ReportsPage({ searchParams }: Props) {
     start: startParam ? new Date(startParam) : defaultStart,
     end: endParam ? new Date(endParam + 'T23:59:59.999Z') : now,
   };
+
+  // Daily buckets over more than a year would produce thousands of chart points
+  const rangeDays = (timeRange.end.getTime() - timeRange.start.getTime()) / 86400000;
+  const groupBy = requestedGroupBy === 'day' && rangeDays > 366 ? 'week' : requestedGroupBy;
 
   const filters: ReportFilters = {
     status: typeof params.status === 'string' ? params.status : undefined,
@@ -109,7 +113,7 @@ export default async function ReportsPage({ searchParams }: Props) {
     <div>
       <h1 className="text-2xl font-semibold text-gray-900 mb-6">Reports</h1>
 
-      <ReportControls rangeStart={rangeStart} rangeEnd={rangeEnd} earliestDate={earliestDate} isAdmin={isAdmin} types={types} categories={categories} tiers={tiers} />
+      <ReportControls rangeStart={rangeStart} rangeEnd={rangeEnd} earliestDate={earliestDate} groupBy={groupBy} isAdmin={isAdmin} types={types} categories={categories} tiers={tiers} />
 
       <div className="space-y-8">
         <section className="bg-white border border-gray-200 rounded-lg p-6">

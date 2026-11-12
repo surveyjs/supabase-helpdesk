@@ -66,7 +66,7 @@ export async function exportReportCsv(
       const data = await getAgentPerformanceData(range, agentScope);
       const csv = generateCsv(
         ['Agent', 'Assigned', 'Resolved', 'Avg Response Time', 'Avg Resolution Time', 'Avg CSAT'],
-        data.map((a) => [a.displayName, a.assigned, a.resolved, mins(a.avgResponseTime), mins(a.avgResolutionTime), a.avgCsat ? a.avgCsat.toFixed(1) : 'N/A']),
+        data.map((a) => [a.displayName, a.assigned, a.resolved, mins(a.avgResponseTime), mins(a.avgResolutionTime), a.avgCsat !== null ? a.avgCsat.toFixed(1) : '']),
       );
       return { csv };
     }

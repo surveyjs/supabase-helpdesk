@@ -39,6 +39,7 @@ const userPages = [
   { name: 'My Tickets', path: '/tickets' },
   { name: 'Help Center', path: '/help' },
   { name: 'Profile', path: '/profile' },
+  { name: 'Notification Settings', path: '/notification-settings' },
 ];
 
 // Pages that require an agent/admin
@@ -52,6 +53,9 @@ const agentPages = [
 const adminPages = [
   { name: 'Admin Setup', path: '/admin/types' },
   { name: 'Reports', path: '/reports' },
+  { name: 'Admin User Settings', path: '/admin/user-settings' },
+  { name: 'Admin SLA', path: '/admin/sla' },
+  { name: 'Admin Auth', path: '/admin/auth' },
 ];
 
 test.describe('Accessibility', () => {

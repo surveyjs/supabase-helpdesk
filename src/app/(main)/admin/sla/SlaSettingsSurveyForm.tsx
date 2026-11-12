@@ -49,7 +49,7 @@ function PolicySection({ policies }: { policies: SlaPolicy[] }) {
       <h2 className="text-lg font-medium text-gray-900 mb-4">SLA Policies</h2>
 
       {policies.length > 0 && (
-        <div className="mb-4 bg-white border border-gray-200 rounded-lg overflow-hidden">
+        <div className="mb-4 bg-white border border-gray-200 rounded-lg overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
@@ -69,11 +69,11 @@ function PolicySection({ policies }: { policies: SlaPolicy[] }) {
                     <form action={updateSlaPolicy} className="inline">
                       <input type="hidden" name="policy_id" value={policy.id} />
                       <input type="text" name="name" defaultValue={policy.name} maxLength={100}
-                        className="w-24 rounded border border-gray-300 px-1 py-0.5 text-xs" placeholder="Name" />
+                        className="w-24 rounded border border-gray-300 px-1 py-0.5 text-xs" placeholder="Name" aria-label="Name" />
                       <input type="number" name="first_response_minutes" defaultValue={policy.first_response_minutes} min={1}
-                        className="w-16 rounded border border-gray-300 px-1 py-0.5 text-xs ml-1" placeholder="FR min" />
+                        className="w-16 rounded border border-gray-300 px-1 py-0.5 text-xs ml-1" placeholder="FR min" aria-label="First Response" />
                       <input type="number" name="resolution_minutes" defaultValue={policy.resolution_minutes} min={1}
-                        className="w-16 rounded border border-gray-300 px-1 py-0.5 text-xs ml-1" placeholder="Res min" />
+                        className="w-16 rounded border border-gray-300 px-1 py-0.5 text-xs ml-1" placeholder="Res min" aria-label="Resolution" />
                       <button type="submit" className="ml-1 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200">
                         Update
                       </button>
@@ -93,22 +93,22 @@ function PolicySection({ policies }: { policies: SlaPolicy[] }) {
         </div>
       )}
 
-      <form action={createSlaPolicy} className="flex gap-2 items-end" data-testid="create-policy-form">
+      <form action={createSlaPolicy} className="flex flex-wrap gap-2 items-end" data-testid="create-policy-form">
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Policy Name</label>
-          <input type="text" name="name" maxLength={100} required
+          <label htmlFor="new-sla-name" className="block text-xs font-medium text-gray-500 mb-1">Policy Name</label>
+          <input id="new-sla-name" type="text" name="name" maxLength={100} required
             className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
             placeholder="e.g. Standard SLA" />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">First Response (min)</label>
-          <input type="number" name="first_response_minutes" min={1} required
+          <label htmlFor="new-sla-first_response_minutes" className="block text-xs font-medium text-gray-500 mb-1">First Response (min)</label>
+          <input id="new-sla-first_response_minutes" type="number" name="first_response_minutes" min={1} required
             className="w-24 rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
             placeholder="240" />
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Resolution (min)</label>
-          <input type="number" name="resolution_minutes" min={1} required
+          <label htmlFor="new-sla-resolution_minutes" className="block text-xs font-medium text-gray-500 mb-1">Resolution (min)</label>
+          <input id="new-sla-resolution_minutes" type="number" name="resolution_minutes" min={1} required
             className="w-24 rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
             placeholder="1440" />
         </div>

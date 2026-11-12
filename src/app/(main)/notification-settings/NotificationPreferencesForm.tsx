@@ -58,6 +58,7 @@ export function NotificationPreferencesForm({
                   type="checkbox"
                   checked={prefs[et.key]?.email !== false}
                   onChange={() => toggle(et.key, 'email')}
+                  aria-label={`${et.label} — Email`}
                   className="form-checkbox"
                 />
               </td>
@@ -66,6 +67,7 @@ export function NotificationPreferencesForm({
                   type="checkbox"
                   checked={prefs[et.key]?.in_app !== false}
                   onChange={() => toggle(et.key, 'in_app')}
+                  aria-label={`${et.label} — In-app`}
                   className="form-checkbox"
                   title="In-app notifications coming soon"
                 />

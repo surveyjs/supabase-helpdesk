@@ -74,6 +74,7 @@ export default async function CannedResponsesPage({
         <input
           type="text"
           name="q"
+          aria-label="Search canned responses"
           defaultValue={q ?? ''}
           placeholder="Search by title or body…"
           className="flex-1 min-w-[200px] rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"

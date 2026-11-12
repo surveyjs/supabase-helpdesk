@@ -18,6 +18,8 @@ type SurveyJsonFormProps = {
    * can be submitted again — e.g. after a server-side error.
    */
   keepOpen?: boolean;
+  /** Overrides the schema's / SurveyJS's default Complete button label. */
+  completeText?: string;
   className?: string;
 };
 
@@ -28,6 +30,7 @@ export function SurveyJsonForm({
   onValueChanged,
   mode = 'complete',
   keepOpen = false,
+  completeText,
   className,
 }: SurveyJsonFormProps) {
   const idPrefix = useId();
@@ -44,7 +47,9 @@ export function SurveyJsonForm({
     next.elementIdPrefix = `${idPrefix}-`;
     next.showCompletedPage = false;
 
-    if (typeof next.completeText !== 'string' || next.completeText.trim().length === 0) {
+    if (completeText) {
+      next.completeText = completeText;
+    } else if (typeof next.completeText !== 'string' || next.completeText.trim().length === 0) {
       next.completeText = 'Apply';
     }
 
@@ -65,7 +70,7 @@ export function SurveyJsonForm({
     // each render) caused SurveyJS V3 matrixdynamic toolbars to lose their
     // Add button on subsequent navigations.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idPrefix, mode, schema]);
+  }, [idPrefix, mode, schema, completeText]);
 
   useEffect(() => {
     if (!onComplete) return;

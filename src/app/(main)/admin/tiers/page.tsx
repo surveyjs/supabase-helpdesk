@@ -39,7 +39,7 @@ export default async function TiersPage() {
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Subscription Tiers</h1>
       <p className="text-sm text-gray-600 mb-4">
         Edit tiers in the matrix below. <strong>Key</strong> is immutable once a tier is created.
-        Use the toggles to grant capabilities to each tier. Click <strong>Complete</strong> to save
+        Use the toggles to grant capabilities to each tier. Click <strong>Save changes</strong> to save
         all changes.
       </p>
 

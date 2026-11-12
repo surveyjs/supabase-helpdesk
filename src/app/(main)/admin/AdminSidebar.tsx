@@ -93,7 +93,7 @@ export function AdminSidebar() {
   return (
     <>
       {/* Mobile: dropdown select with optgroups */}
-      <div className="md:hidden mb-4 w-full">
+      <div className="md:hidden mb-4 w-full" role="group" aria-label="Admin navigation (mobile)">
         <label
           htmlFor="admin-mobile-nav"
           className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2"
@@ -107,7 +107,6 @@ export function AdminSidebar() {
           onChange={(e) => {
             window.location.href = e.target.value;
           }}
-          aria-label="Admin navigation"
         >
           {GROUPS.map((group) => (
             <optgroup key={group.heading} label={group.heading}>
@@ -123,7 +122,7 @@ export function AdminSidebar() {
 
       {/* Desktop: sidebar */}
       <nav
-        className="hidden md:block w-56 shrink-0 border-r border-gray-200 pr-4"
+        className="hidden md:block w-56 shrink-0 border-r border-gray-200 pr-4 md:self-start md:sticky md:top-4 md:max-h-[calc(100vh-2rem)] md:overflow-y-auto"
         aria-label="Admin navigation"
       >
         <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
@@ -167,6 +166,7 @@ export function AdminSidebar() {
                         <li key={link.href}>
                           <Link
                             href={link.href}
+                            prefetch={false}
                             className={`block px-3 py-2 rounded text-sm focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none ${
                               isActive
                                 ? 'bg-blue-50 text-blue-700 font-medium'

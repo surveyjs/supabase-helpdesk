@@ -21,7 +21,7 @@ export function TierApiSecretCard({ configured, masked, apiEndpoint, saveTierApi
   );
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-6" data-testid="tier-api-settings">
+    <div className="bg-white rounded-lg border border-gray-200 p-6 min-w-0 max-w-full" data-testid="tier-api-settings">
       <h2 className="text-lg font-semibold text-gray-900 mb-4">External API Settings</h2>
 
       {/* Current status */}
@@ -36,7 +36,7 @@ export function TierApiSecretCard({ configured, masked, apiEndpoint, saveTierApi
 
       {/* Set/Regenerate secret */}
       <form action={saveAction} className="mb-4">
-        <div className="flex items-end gap-2">
+        <div className="flex flex-wrap items-end gap-2">
           <div>
             <label htmlFor="tier-api-secret" className="block text-xs font-medium text-gray-500 mb-1">
               {configured ? 'New Secret (regenerate)' : 'Set Secret'}
@@ -48,7 +48,7 @@ export function TierApiSecretCard({ configured, masked, apiEndpoint, saveTierApi
               required
               minLength={16}
               placeholder="Min 16 characters…"
-              className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none w-64"
+              className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none w-full sm:w-64"
             />
           </div>
           <button
@@ -79,12 +79,12 @@ export function TierApiSecretCard({ configured, masked, apiEndpoint, saveTierApi
       {/* API endpoint info */}
       <div className="mt-4 border-t border-gray-200 pt-4">
         <h3 className="text-sm font-medium text-gray-700 mb-2">API Endpoint</h3>
-        <code className="block text-xs bg-gray-50 p-2 rounded text-gray-700 mb-3" data-testid="tier-api-endpoint">
+        <code className="block text-xs bg-gray-50 p-2 rounded text-gray-700 mb-3 overflow-x-auto" data-testid="tier-api-endpoint">
           POST {apiEndpoint}
         </code>
 
         <h3 className="text-sm font-medium text-gray-700 mb-2">Usage</h3>
-        <pre className="text-xs bg-gray-50 p-3 rounded text-gray-700 overflow-x-auto">{`curl -X POST ${apiEndpoint} \\
+        <pre className="text-xs bg-gray-50 p-3 rounded text-gray-700 overflow-x-auto max-w-full">{`curl -X POST ${apiEndpoint} \\
   -H "Content-Type: application/json" \\
   -H "X-API-Key: YOUR_SECRET" \\
   -d '{"email": "user@example.com", "tierKey": "licensed", "expiresAt": "2026-12-31T23:59:59Z"}'`}</pre>

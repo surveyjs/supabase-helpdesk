@@ -135,6 +135,7 @@ export function AdminSurveyForm({
         data={data}
         mode="complete"
         keepOpen={keepOpen}
+        completeText="Save changes"
         onComplete={saveNow}
         className={className}
       />

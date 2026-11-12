@@ -239,7 +239,7 @@ test.describe('Admin Types Management', () => {
       (resp) => resp.request().method() === 'POST' && resp.status() < 400,
       { timeout: 15000 },
     );
-    await page.getByRole('button', { name: 'Complete' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     await savePromise;
 
     await gotoAdmin(page, '/admin/types');
@@ -255,7 +255,7 @@ test.describe('Admin Types Management', () => {
       (resp) => resp.request().method() === 'POST' && resp.status() < 400,
       { timeout: 15000 },
     );
-    await page.getByRole('button', { name: 'Complete' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     await savePromise;
 
     await gotoAdmin(page, '/admin/types');
@@ -310,7 +310,7 @@ test.describe('Admin Categories Management', () => {
       (resp) => resp.request().method() === 'POST' && resp.status() < 400,
       { timeout: 15000 },
     );
-    await page.getByRole('button', { name: 'Complete' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     await savePromise;
 
     await gotoAdmin(page, '/admin/categories');
@@ -326,7 +326,7 @@ test.describe('Admin Categories Management', () => {
       (resp) => resp.request().method() === 'POST' && resp.status() < 400,
       { timeout: 15000 },
     );
-    await page.getByRole('button', { name: 'Complete' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     await savePromise;
 
     await gotoAdmin(page, '/admin/categories');
@@ -372,7 +372,7 @@ test.describe('Admin Tags Management', () => {
       (resp) => resp.request().method() === 'POST' && resp.status() < 400,
       { timeout: 15000 },
     );
-    await page.getByRole('button', { name: 'Complete' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     await savePromise;
 
     await gotoAdmin(page, '/admin/tags');
@@ -389,7 +389,7 @@ test.describe('Admin Tags Management', () => {
       (resp) => resp.request().method() === 'POST' && resp.status() < 400,
       { timeout: 15000 },
     );
-    await page.getByRole('button', { name: 'Complete' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     await savePromise;
 
     await gotoAdmin(page, '/admin/tags');
@@ -423,7 +423,7 @@ test.describe('Admin Teams Management', () => {
       (resp) => resp.request().method() === 'POST' && resp.status() < 400,
       { timeout: 15000 },
     );
-    await page.getByRole('button', { name: 'Complete' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     await responsePromise;
 
     await gotoAdmin(page, '/admin/teams');
@@ -461,7 +461,7 @@ test.describe('Admin Teams Management', () => {
       (resp) => resp.request().method() === 'POST',
       { timeout: 15000 },
     );
-    await page.getByRole('button', { name: 'Complete' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     await responsePromise;
 
     // Server action should refuse and the team should still be present after reload
@@ -494,7 +494,7 @@ test.describe('Admin Teams Management', () => {
       (resp) => resp.request().method() === 'POST' && resp.status() < 400,
       { timeout: 15000 },
     );
-    await page.getByRole('button', { name: 'Complete' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     await savePromise;
 
     await gotoAdmin(page, '/admin/teams');

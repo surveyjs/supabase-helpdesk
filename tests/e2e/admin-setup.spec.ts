@@ -49,8 +49,9 @@ test.describe('Admin Setup layout', () => {
     await expect(page.getByRole('link', { name: 'Setup' })).toBeVisible({ timeout: 10000 });
     await gotoAdmin(page, '/admin');
 
-    // Should redirect to /admin/types
-    await expect(page).toHaveURL(/\/admin\/types/, { timeout: 10000 });
+    // /admin is the setup overview, not a redirect
+    await expect(page).toHaveURL(/\/admin$/, { timeout: 10000 });
+    await expect(page.getByRole('heading', { level: 1, name: 'Setup' })).toBeVisible();
 
     // Sidebar should be visible with section links
     await expect(page.getByRole('link', { name: 'Ticket Types' })).toBeVisible();
@@ -61,6 +62,30 @@ test.describe('Admin Setup layout', () => {
     await expect(page.getByRole('link', { name: 'Custom Fields' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Survey Templates' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Audit Log' })).toBeVisible();
+  });
+
+  test('admin users page has no horizontal overflow at 390px', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 800 });
+    await loginAs(page, 'admin@example.com');
+    await gotoAdmin(page, '/admin/users');
+    await expect(page.getByRole('heading', { name: 'User Management' })).toBeVisible();
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+  });
+
+  test('admin overview and tiers page have no horizontal overflow at 390px', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 800 });
+    await loginAs(page, 'admin@example.com');
+    for (const path of ['/admin', '/admin/tiers']) {
+      await gotoAdmin(page, path);
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow, path).toBeLessThanOrEqual(0);
+    }
   });
 
   test('non-admin gets redirected from /admin', async ({ page }) => {
@@ -150,7 +175,7 @@ test.describe('Custom fields', () => {
       (resp) => resp.request().method() === 'POST' && resp.status() < 400,
       { timeout: 15000 },
     );
-    await page.getByRole('button', { name: 'Complete' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     await savePromise;
   }
 
@@ -393,7 +418,7 @@ test.describe('Templates', () => {
       (resp) => resp.request().method() === 'POST' && resp.status() < 400,
       { timeout: 15000 },
     );
-    await page.getByRole('button', { name: 'Complete' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     await savePromise;
     await page.waitForTimeout(500);
 

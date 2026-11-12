@@ -304,7 +304,7 @@ export function TicketForm({
           maxLength={300}
           defaultValue={initialTitle ?? ''}
           onChange={(e) => handleTitleChange(e.target.value)}
-          className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+          className="block w-full form-input"
         />
         {state.fieldErrors?.title && (
           <p className="mt-1 text-sm text-red-600">{state.fieldErrors.title}</p>
@@ -369,7 +369,7 @@ export function TicketForm({
             name="type_id"
             defaultValue={defaultType}
             onChange={() => markFieldModified('type_id')}
-            className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            className="block w-full form-select"
           >
             {ticketTypes.map((t) => (
               <option key={t.id} value={t.id}>
@@ -394,7 +394,7 @@ export function TicketForm({
             name="urgency"
             defaultValue={initialUrgency ?? 'medium'}
             onChange={() => markFieldModified('urgency')}
-            className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            className="block w-full form-select"
           >
             <option value="low">Low</option>
             <option value="medium">Medium</option>
@@ -420,7 +420,7 @@ export function TicketForm({
             name="category_id"
             defaultValue={initialCategory ?? ''}
             onChange={() => markFieldModified('category_id')}
-            className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            className="block w-full form-select"
           >
             <option value="">None</option>
             {categories.map((c) => (
@@ -490,7 +490,7 @@ export function TicketForm({
                   defaultValue={customFieldDefault(field)}
                   maxLength={1000}
                   required={field.is_required}
-                  className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  className="block w-full form-input"
                 />
               )}
               {field.field_type === 'number' && (
@@ -500,7 +500,7 @@ export function TicketForm({
                   name={`cf_${field.name}`}
                   defaultValue={customFieldDefault(field)}
                   required={field.is_required}
-                  className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  className="block w-full form-input"
                 />
               )}
               {field.field_type === 'dropdown' && (
@@ -509,7 +509,7 @@ export function TicketForm({
                   name={`cf_${field.name}`}
                   defaultValue={customFieldDefault(field)}
                   required={field.is_required}
-                  className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  className="block w-full form-select"
                 >
                   <option value="">Select…</option>
                   {field.options?.map((opt) => (
@@ -527,7 +527,7 @@ export function TicketForm({
                       ? initialCustomFields[field.name] === true
                       : field.default_value === 'true'
                   }
-                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  className="form-checkbox"
                 />
               )}
               {field.field_type === 'date' && (
@@ -537,7 +537,7 @@ export function TicketForm({
                   name={`cf_${field.name}`}
                   defaultValue={customFieldDefault(field)}
                   required={field.is_required}
-                  className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  className="block w-full form-input"
                 />
               )}
               {state.fieldErrors?.[`cf_${field.name}`] && (
@@ -555,7 +555,7 @@ export function TicketForm({
             name="is_private"
             type="checkbox"
             defaultChecked={initialPrivate ?? defaultPrivate}
-            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            className="form-checkbox"
           />
           <label htmlFor="is_private" className="text-sm text-gray-700">
             Private ticket (only visible to you, your teammates, and agents)

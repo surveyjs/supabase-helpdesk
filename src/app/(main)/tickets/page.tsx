@@ -149,7 +149,7 @@ export default async function MyTicketsPage({
             name="q"
             defaultValue={search}
             placeholder="Search tickets…"
-            className="flex-1 rounded border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            className="flex-1 form-input"
             aria-label="Search tickets"
           />
           <button

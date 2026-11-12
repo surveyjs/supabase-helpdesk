@@ -104,7 +104,7 @@ export default async function UsersPage({
               id="filter-role"
               name="role"
               defaultValue={roleFilter}
-              className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+              className="form-select"
             >
               <option value="all">All</option>
               <option value="user">User</option>
@@ -118,7 +118,7 @@ export default async function UsersPage({
               id="filter-status"
               name="status"
               defaultValue={statusFilter}
-              className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+              className="form-select"
             >
               <option value="all">All</option>
               <option value="active">Active</option>
@@ -134,7 +134,7 @@ export default async function UsersPage({
               type="text"
               defaultValue={searchQuery}
               placeholder="Email or display name…"
-              className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+              className="form-input"
             />
           </div>
           <button

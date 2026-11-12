@@ -92,7 +92,7 @@ export function ReportControls({ isAdmin, types, categories, tiers }: Props) {
           type="date"
           value={currentStart}
           onChange={(e) => updateParams({ start: e.target.value })}
-          className="px-2 py-1 text-sm border border-gray-300 rounded"
+          className="form-input"
           aria-label="Start date"
         />
         <span className="text-gray-500">–</span>
@@ -100,7 +100,7 @@ export function ReportControls({ isAdmin, types, categories, tiers }: Props) {
           type="date"
           value={currentEnd}
           onChange={(e) => updateParams({ end: e.target.value })}
-          className="px-2 py-1 text-sm border border-gray-300 rounded"
+          className="form-input"
           aria-label="End date"
         />
       </div>
@@ -110,7 +110,7 @@ export function ReportControls({ isAdmin, types, categories, tiers }: Props) {
         <select
           value={currentGroupBy}
           onChange={(e) => updateParams({ groupBy: e.target.value })}
-          className="px-2 py-1 text-sm border border-gray-300 rounded"
+          className="form-select"
           aria-label="Group by"
         >
           <option value="day">Daily</option>
@@ -123,7 +123,7 @@ export function ReportControls({ isAdmin, types, categories, tiers }: Props) {
             <select
               value={currentStatus}
               onChange={(e) => updateParams({ status: e.target.value })}
-              className="px-2 py-1 text-sm border border-gray-300 rounded"
+              className="form-select"
               aria-label="Status"
             >
               <option value="">All Statuses</option>
@@ -135,7 +135,7 @@ export function ReportControls({ isAdmin, types, categories, tiers }: Props) {
             <select
               value={currentSeverity}
               onChange={(e) => updateParams({ severity: e.target.value })}
-              className="px-2 py-1 text-sm border border-gray-300 rounded"
+              className="form-select"
               aria-label="Severity"
             >
               <option value="">All Severities</option>
@@ -148,7 +148,7 @@ export function ReportControls({ isAdmin, types, categories, tiers }: Props) {
             <select
               value={currentType}
               onChange={(e) => updateParams({ type: e.target.value })}
-              className="px-2 py-1 text-sm border border-gray-300 rounded"
+              className="form-select"
               aria-label="Type"
             >
               <option value="">All Types</option>
@@ -160,7 +160,7 @@ export function ReportControls({ isAdmin, types, categories, tiers }: Props) {
             <select
               value={currentCategory}
               onChange={(e) => updateParams({ category: e.target.value })}
-              className="px-2 py-1 text-sm border border-gray-300 rounded"
+              className="form-select"
               aria-label="Category"
             >
               <option value="">All Categories</option>
@@ -173,7 +173,7 @@ export function ReportControls({ isAdmin, types, categories, tiers }: Props) {
               <select
                 value={currentTier}
                 onChange={(e) => updateParams({ tier: e.target.value })}
-                className="px-2 py-1 text-sm border border-gray-300 rounded"
+                className="form-select"
                 aria-label="Tier"
               >
                 <option value="">All Tiers</option>

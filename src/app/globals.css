@@ -23,8 +23,26 @@
   --color-destructive: #dc2626;        /* red-600 */
 }
 
+html {
+  /* 17px root: text-sm ~ 14.9px, text-xs ~ 12.75px (#51 "font is too small") */
+  font-size: 106.25%;
+}
+
+/* Native form controls, matched to the SurveyJS controls (rounded-md, gray-300
+ * border, blue-600 focus ring). Width is left to the caller (w-full / block). */
+@layer components {
+  .form-input,
+  .form-select {
+    @apply rounded-md border border-input bg-white px-2.5 py-1.5 text-sm text-foreground outline-none;
+    @apply focus:border-blue-600 focus:ring-2 focus:ring-blue-600;
+  }
+  input[type='checkbox'].form-checkbox {
+    @apply h-4 w-4 accent-blue-600;
+  }
+}
+
 body {
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
   /*
    * Prevent stray horizontal scrolling caused by full-bleed sections that
    * use the `w-screen` (100vw) breakout pattern (e.g. the ticket detail

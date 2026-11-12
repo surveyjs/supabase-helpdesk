@@ -9,10 +9,9 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
   await loginViaForm(page, email, password);
 }
 
-// One worker for the whole file: the boolean describe creates an alice ticket
-// that getAliceTicketUrl() would otherwise pick up concurrently.
-test.describe.configure({ mode: 'serial' });
-
+const BOOL_SUFFIX = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
+const BOOL_TICKET_PREFIX = 'E2E Bool CF Ticket';
+const BOOL_TICKET_TITLE = `${BOOL_TICKET_PREFIX} ${BOOL_SUFFIX}`;
 const TEST_CF_TEXT = 'E2EAutoText';
 const TEST_CF_DROPDOWN = 'E2EAutoDrop';
 
@@ -79,6 +78,9 @@ async function getAliceTicketUrl(): Promise<{ url: string; id: number }> {
     .from('tickets')
     .select('id, slug')
     .eq('creator_id', alice!.id)
+    // Exclude the ticket created by the boolean-field describe below.
+    // (BOOL_SUFFIX differs per worker, so match on the shared prefix.)
+    .not('title', 'ilike', `${BOOL_TICKET_PREFIX}%`)
     .order('id', { ascending: false })
     .limit(1)
     .single();
@@ -226,11 +228,11 @@ test.describe('Ticket detail custom fields (SurveyJS)', () => {
   });
 });
 
-const CF_BOOL = 'E2EBoolCf';
+// Unique per run and not prefixed `E2E` (admin-setup.spec bulk-deletes `E2E%`).
+const CF_BOOL = `BoolCf${BOOL_SUFFIX}`;
 
 test.describe('Boolean custom field rendering', () => {
-  test.describe.configure({ mode: 'serial' });
-  let ticketId: number | null = null;
+  test.describe.configure({ mode: 'serial' }); // tests share the created ticket
 
   test.beforeAll(async () => {
     const svc = createServiceRoleClient();
@@ -247,8 +249,11 @@ test.describe('Boolean custom field rendering', () => {
 
   test.afterAll(async () => {
     const svc = createServiceRoleClient();
-    if (ticketId) await svc.from('tickets').delete().eq('id', ticketId);
-    await svc.from('custom_fields').delete().eq('name', CF_BOOL);
+    try {
+      await svc.from('tickets').delete().eq('title', BOOL_TICKET_TITLE);
+    } finally {
+      await svc.from('custom_fields').delete().eq('name', CF_BOOL);
+    }
   });
 
   test('create form: inline checkbox, toggles, stores true; no overflow at 390px', async ({ page }) => {
@@ -272,7 +277,7 @@ test.describe('Boolean custom field rendering', () => {
 
     const typeSelect = page.getByLabel('Type');
     await expect(typeSelect.locator('option').filter({ hasText: 'Issue' })).toBeAttached({ timeout: 10000 });
-    await page.getByLabel('Title').fill('E2E Bool CF Ticket');
+    await page.getByLabel('Title').fill(BOOL_TICKET_TITLE);
     await typeSelect.selectOption({ label: 'Issue' });
     const editor = page.getByTestId('markdown-editor').first();
     await editor.locator('textarea[name="textarea"]').fill('Body for boolean custom field test.');
@@ -283,8 +288,8 @@ test.describe('Boolean custom field rendering', () => {
     await box.check();
     await expect(box).toBeChecked();
     await page.getByRole('button', { name: 'Create Ticket' }).click();
-    await expect(page).toHaveURL(/\/tickets\/\d+\/e2e-bool-cf-ticket/, { timeout: 30000 });
-    ticketId = Number(page.url().match(/\/tickets\/(\d+)\//)![1]);
+    await expect(page).toHaveURL(/\/tickets\/\d+\//, { timeout: 30000 });
+    const ticketId = Number(page.url().match(/\/tickets\/(\d+)\//)![1]);
 
     const svc = createServiceRoleClient();
     const { data } = await svc.from('tickets').select('custom_fields').eq('id', ticketId).single();
@@ -293,9 +298,13 @@ test.describe('Boolean custom field rendering', () => {
 
   test('sidebar: checkbox (not switch), name once; read-only for non-owner', async ({ page }) => {
     const svc = createServiceRoleClient();
-    await svc.from('tickets').update({ is_private: false }).eq('id', ticketId!);
-    const { data: t } = await svc.from('tickets').select('slug').eq('id', ticketId!).single();
-    const url = `/tickets/${ticketId}/${t!.slug}`;
+    const { data: t } = await svc
+      .from('tickets')
+      .select('id, slug')
+      .eq('title', BOOL_TICKET_TITLE)
+      .single();
+    await svc.from('tickets').update({ is_private: false }).eq('id', t!.id);
+    const url = `/tickets/${t!.id}/${t!.slug}`;
     const sel = `.sd-question[data-name="custom_fields.${CF_BOOL}"]`;
 
     await loginAs(page, 'alice@example.com');

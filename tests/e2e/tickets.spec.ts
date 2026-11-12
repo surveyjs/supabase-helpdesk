@@ -19,7 +19,7 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
 
   // Retry once on transient auth failure (rate-limit / timing)
   try {
-    await expect(page).toHaveURL('/', { timeout: 10000 });
+    await expect(page).toHaveURL(/\/(agent)?$/, { timeout: 10000 });
   } catch {
     // Only retry if we're actually on the login page (not already logged in)
     if (page.url().includes('/login')) {
@@ -28,7 +28,7 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
       await page.getByLabel('Email').fill(email);
       await page.getByLabel('Password').fill(password);
       await page.getByRole('button', { name: 'Log in' }).click();
-      await expect(page).toHaveURL('/', { timeout: 15000 });
+      await expect(page).toHaveURL(/\/(agent)?$/, { timeout: 15000 });
     }
   }
 

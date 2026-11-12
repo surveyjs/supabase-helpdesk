@@ -141,25 +141,24 @@ test.describe('Reports Page - Agent View', () => {
 
 test.describe('NavBar Reports Link', () => {
   test('reports link visibility by role', async ({ page }) => {
-    // Agent sees the link in user menu dropdown
+    // Agent sees Reports as a top-nav link
     await loginAs(page, 'agent.smith@example.com');
-    await page.locator('details summary').click();
-    await expect(page.getByRole('menuitem', { name: 'Reports' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Reports' })).toBeVisible();
 
     // Sign out and log in as admin
+    await page.locator('details summary').click();
     await page.getByRole('menuitem', { name: 'Sign out' }).click();
     await expect(page).toHaveURL('/login', { timeout: 10000 });
 
     await loginAs(page, 'admin@example.com');
-    await page.locator('details summary').click();
-    await expect(page.getByRole('menuitem', { name: 'Reports' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Reports' })).toBeVisible();
 
     // Sign out and log in as regular user
+    await page.locator('details summary').click();
     await page.getByRole('menuitem', { name: 'Sign out' }).click();
     await expect(page).toHaveURL('/login', { timeout: 10000 });
 
     await loginAs(page, 'alice@example.com');
-    await page.locator('details summary').click();
-    await expect(page.getByRole('menuitem', { name: 'Reports' })).not.toBeVisible();
+    await expect(page.getByRole('link', { name: 'Reports' })).not.toBeVisible();
   });
 });

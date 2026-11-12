@@ -25,31 +25,24 @@ export default async function NavBar() {
   const isAgent = profile && ['agent', 'admin'].includes(profile.role);
   const isAdmin = profile && profile.role === 'admin';
 
-  // Build nav links for both desktop and mobile (top-level navigation bar)
+  // Top-level navigation (desktop bar and mobile menu)
   const navLinks: { href: string; label: string }[] = [];
   // Regular users see "My Tickets" in top nav; agents/admins get it in the user menu instead
   if (user && !isAgent) navLinks.push({ href: '/tickets', label: 'My Tickets' });
   if (isAgent) {
     navLinks.push({ href: '/agent', label: 'Agent Dashboard' });
-  }
-  if (kbVisible) navLinks.push({ href: '/help', label: 'Help Center' });
-  if (isAgent) {
+    navLinks.push({ href: '/reports', label: 'Reports' });
     navLinks.push({ href: '/kb/manage', label: 'Manage Articles' });
   }
+  if (kbVisible) navLinks.push({ href: '/help', label: 'Help Center' });
+  if (isAdmin) navLinks.push({ href: '/admin', label: 'Setup' });
 
-  // Build user menu links (inside the dropdown)
+  // Account links (user dropdown on desktop, bottom of the mobile menu)
   const userMenuLinks: { href: string; label: string }[] = [];
-  // Admin: Setup is first
-  if (isAdmin) {
-    userMenuLinks.push({ href: '/admin', label: 'Setup' });
-  }
-  // Agents/admins: My Tickets, Reports, Canned Responses
   if (isAgent) {
     userMenuLinks.push({ href: '/tickets', label: 'My Tickets' });
-    userMenuLinks.push({ href: '/reports', label: 'Reports' });
     userMenuLinks.push({ href: '/canned-responses', label: 'Canned Responses' });
   }
-  // All users: Profile, Notification Settings
   userMenuLinks.push({ href: '/profile', label: 'Profile' });
   userMenuLinks.push({ href: '/notification-settings', label: 'Notification Settings' });
 
@@ -61,8 +54,6 @@ export default async function NavBar() {
           <Link href="/" className="text-lg font-semibold text-gray-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none rounded">
             HelpDesk
           </Link>
-          {/* Mobile hamburger */}
-          <MobileMenu links={navLinks} />
           {/* Desktop links */}
           <TopNavLinks links={navLinks} />
         </div>
@@ -75,13 +66,21 @@ export default async function NavBar() {
               <NotificationBell initialUnreadCount={unreadCount} userId={user.id} />
 
               {/* User info with dropdown */}
-              <div className="hidden sm:flex items-center gap-2">
+              <div className="hidden md:flex items-center gap-2">
                 <UserMenu
                   displayName={displayName}
                   role={profile?.role ?? null}
                   links={userMenuLinks}
                 />
               </div>
+
+              {/* Mobile menu (below md) */}
+              <MobileMenu
+                links={navLinks}
+                userLinks={userMenuLinks}
+                displayName={displayName}
+                role={profile?.role ?? null}
+              />
             </>
           ) : (
             <a href="/login" className="text-sm text-blue-600 hover:text-blue-800 min-h-[44px] flex items-center focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none rounded px-2">

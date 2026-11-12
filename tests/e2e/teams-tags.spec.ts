@@ -491,21 +491,18 @@ test.describe('Admin Teams Management', () => {
 });
 
 test.describe('NavBar Setup Link', () => {
-  test('admin sees Setup link in user menu', async ({ page }) => {
+  test('admin sees Setup link in top nav', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.locator('details summary').click();
-    await expect(page.getByRole('menuitem', { name: 'Setup' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('link', { name: 'Setup' })).toBeVisible({ timeout: 10000 });
   });
 
   test('non-admin does not see Setup link', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
-    await page.locator('details summary').click();
-    await expect(page.getByRole('menuitem', { name: 'Setup' })).not.toBeVisible();
+    await expect(page.getByRole('link', { name: 'Setup' })).not.toBeVisible();
   });
 
   test('agent does not see Setup link', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
-    await page.locator('details summary').click();
-    await expect(page.getByRole('menuitem', { name: 'Setup' })).not.toBeVisible();
+    await expect(page.getByRole('link', { name: 'Setup' })).not.toBeVisible();
   });
 });

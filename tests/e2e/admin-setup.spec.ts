@@ -46,8 +46,7 @@ test.describe('Admin Setup layout', () => {
   test('admin can access Setup page and sees sidebar', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     // Wait for the nav to confirm admin role is recognised
-    await page.locator('details summary').click();
-    await expect(page.getByRole('menuitem', { name: 'Setup' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('link', { name: 'Setup' })).toBeVisible({ timeout: 10000 });
     await gotoAdmin(page, '/admin');
 
     // Should redirect to /admin/types
@@ -98,8 +97,7 @@ test.describe('Agent management', () => {
 
   test('admin can promote a user to agent', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.locator('details summary').click();
-    await expect(page.getByRole('menuitem', { name: 'Setup' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('link', { name: 'Setup' })).toBeVisible({ timeout: 10000 });
     await gotoAdmin(page, '/admin/agents');
 
     // Search for dave by email

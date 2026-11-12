@@ -26,8 +26,7 @@ test.describe('Admin AI Configuration', () => {
 
   test('admin can navigate to /admin/ai', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.locator('details summary').click();
-    await expect(page.getByRole('menuitem', { name: 'Setup' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('link', { name: 'Setup' })).toBeVisible({ timeout: 10000 });
     await gotoAdmin(page, '/admin/ai');
 
     await expect(page.getByRole('heading', { name: 'AI Configuration' })).toBeVisible({ timeout: 10000 });

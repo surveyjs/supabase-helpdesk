@@ -53,7 +53,24 @@ function trustedOrigins(): string[] {
   return origins;
 }
 
-const DUMMY_BASE = 'http://x.invalid';
+const PLACEHOLDER_BASE = 'https://x.invalid';
+const PLACEHOLDER_HOST = 'x.invalid';
+
+/**
+ * Allowlist: an image stays an <img> only if it is a root-relative or plain
+ * relative path (no scheme, no leading slashes/backslashes), or an absolute
+ * http(s) URL on a trusted origin. Everything else is treated as remote.
+ */
+function isKeptImageSrc(src: string, trusted: string[]): boolean {
+  if (/^\/(?![\/\\])/.test(src)) return true;
+  if (src && !/^[\\/]/.test(src) && !/^[a-z][a-z0-9+.-]*:/i.test(src)) return true;
+  try {
+    const u = new URL(src);
+    return (u.protocol === 'http:' || u.protocol === 'https:') && trusted.includes(u.origin);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Rehype plugin (runs after sanitize): replace <img> with an absolute remote
@@ -68,28 +85,28 @@ function rehypeBlockRemoteImages() {
       node.children = node.children.map((child) => {
         if (child.type === 'element' && child.tagName === 'img') {
           const src = String(child.properties?.src ?? '');
+          const trimmedSrc = src.trim();
+          if (isKeptImageSrc(trimmedSrc, trusted)) return child;
           let resolved: URL | null = null;
-          try { resolved = new URL(src, DUMMY_BASE); } catch { /* unparsable: blocked below */ }
-          // Unparsable src is treated as remote (blocked) to be safe.
-          const isRemote = !resolved
-            || (resolved.host !== new URL(DUMMY_BASE).host && !trusted.includes(resolved.origin));
-          if (isRemote) {
-            const href = src.startsWith('//') ? `https:${src}` : src;
-            let label = String(child.properties?.alt ?? '').trim();
-            if (!label) label = resolved ? resolved.hostname : src;
-            return {
-              type: 'element',
-              tagName: 'a',
-              properties: {
-                href,
-                target: '_blank',
-                rel: 'noopener noreferrer nofollow',
-                className: ['external-image'],
-                'data-external-image': '',
-              },
-              children: [{ type: 'text', value: `External image: ${label}` }],
-            } as unknown as HastNode;
-          }
+          try { resolved = new URL(trimmedSrc, PLACEHOLDER_BASE); } catch { /* unparsable */ }
+          const external = resolved && resolved.host !== PLACEHOLDER_HOST ? resolved : null;
+          const href = external
+            ? external.href
+            : trimmedSrc.startsWith('//') ? `https:${trimmedSrc}` : trimmedSrc;
+          let label = String(child.properties?.alt ?? '').trim();
+          if (!label) label = external ? external.hostname : trimmedSrc;
+          return {
+            type: 'element',
+            tagName: 'a',
+            properties: {
+              href,
+              target: '_blank',
+              rel: 'noopener noreferrer nofollow',
+              className: ['external-image'],
+              'data-external-image': '',
+            },
+            children: [{ type: 'text', value: `External image: ${label}` }],
+          } as unknown as HastNode;
         }
         walk(child);
         return child;

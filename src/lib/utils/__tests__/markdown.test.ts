@@ -81,6 +81,30 @@ describe('renderMarkdown', () => {
       expect(html).not.toContain('javascript:');
     });
 
+    it('blocks scheme-only http: host form', async () => {
+      const html = await renderMarkdown('![x](http:tracker.example/p.gif)', opts);
+      expect(html).not.toContain('<img');
+      expect(html).toContain('href="http://tracker.example/p.gif"');
+    });
+
+    // The Markdown parser percent-encodes backslashes, spaces and tabs in link
+    // destinations, so these can only become same-origin relative paths. Assert
+    // that nothing loadable from a third-party host is ever emitted as an <img>.
+    it.each([
+      '\\tracker.example/p.gif',
+      '/\tracker.example/p.gif',
+      ' //tracker.example/p.gif',
+    ])('never emits an <img> that targets a third-party host for %j', async (src) => {
+      const html = await renderMarkdown(`![x](<${src}>)`, opts);
+      const m = html.match(/<img src="([^"]*)"/);
+      if (m) expect(m[1]).toMatch(/^(?!\/\/|[a-z][a-z0-9+.-]*:)[^\\s]*$/i);
+    });
+
+    it('keeps plain relative images', async () => {
+      const html = await renderMarkdown('![x](attachments/x.png)', opts);
+      expect(html).toContain('<img src="attachments/x.png"');
+    });
+
     it('does not block by default', async () => {
       const html = await renderMarkdown('![logo](https://example.org/a.png)');
       expect(html).toContain('<img src="https://example.org/a.png"');

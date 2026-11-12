@@ -44,10 +44,16 @@ interface HastNode {
   children?: HastNode[];
 }
 
-function trustedImagePrefixes(): string[] {
-  return [process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_URL, process.env.APP_URL]
-    .filter((v): v is string => !!v);
+function trustedOrigins(): string[] {
+  const origins: string[] = [];
+  for (const v of [process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_URL, process.env.APP_URL]) {
+    if (!v) continue;
+    try { origins.push(new URL(v).origin); } catch { /* skip invalid */ }
+  }
+  return origins;
 }
+
+const DUMMY_BASE = 'http://x.invalid';
 
 /**
  * Rehype plugin (runs after sanitize): replace <img> with an absolute remote
@@ -56,22 +62,26 @@ function trustedImagePrefixes(): string[] {
  */
 function rehypeBlockRemoteImages() {
   return (tree: HastNode) => {
-    const trusted = trustedImagePrefixes();
+    const trusted = trustedOrigins();
     const walk = (node: HastNode) => {
       if (!node.children) return;
       node.children = node.children.map((child) => {
         if (child.type === 'element' && child.tagName === 'img') {
           const src = String(child.properties?.src ?? '');
-          if (/^https?:\/\//i.test(src) && !trusted.some((p) => src.startsWith(p))) {
+          let resolved: URL | null = null;
+          try { resolved = new URL(src, DUMMY_BASE); } catch { /* unparsable: blocked below */ }
+          // Unparsable src is treated as remote (blocked) to be safe.
+          const isRemote = !resolved
+            || (resolved.host !== new URL(DUMMY_BASE).host && !trusted.includes(resolved.origin));
+          if (isRemote) {
+            const href = src.startsWith('//') ? `https:${src}` : src;
             let label = String(child.properties?.alt ?? '').trim();
-            if (!label) {
-              try { label = new URL(src).hostname; } catch { label = src; }
-            }
+            if (!label) label = resolved ? resolved.hostname : src;
             return {
               type: 'element',
               tagName: 'a',
               properties: {
-                href: src,
+                href,
                 target: '_blank',
                 rel: 'noopener noreferrer nofollow',
                 className: ['external-image'],

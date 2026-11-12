@@ -37,6 +37,9 @@ describe('renderMarkdown', () => {
       const html = await renderMarkdown('![logo](https://example.org/a.png)', opts);
       expect(html).toContain('class="external-image"');
       expect(html).toContain('href="https://example.org/a.png"');
+      expect(html).toContain('target="_blank"');
+      expect(html).toContain('rel="noopener noreferrer nofollow"');
+      expect(html).toContain('data-external-image');
       expect(html).not.toContain('<img');
     });
 
@@ -57,6 +60,25 @@ describe('renderMarkdown', () => {
         if (prev === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_URL;
         else process.env.NEXT_PUBLIC_SUPABASE_URL = prev;
       }
+    });
+
+    it('blocks protocol-relative images', async () => {
+      const html = await renderMarkdown('![x](//tracker.example.net/p.gif)', opts);
+      expect(html).toContain('class="external-image"');
+      expect(html).toContain('href="https://tracker.example.net/p.gif"');
+      expect(html).not.toContain('<img');
+    });
+
+    it('blocks look-alike hosts of the trusted origin', async () => {
+      const base = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321';
+      const html = await renderMarkdown(`![x](${base}.evil.com/x.png)`, opts);
+      expect(html).toContain('external-image');
+      expect(html).not.toContain('<img');
+    });
+
+    it('never emits a javascript: image or link', async () => {
+      const html = await renderMarkdown('![x](javascript:alert(1))', opts);
+      expect(html).not.toContain('javascript:');
     });
 
     it('does not block by default', async () => {

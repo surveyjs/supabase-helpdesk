@@ -5,6 +5,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import MdEditorLib from 'react-markdown-editor-lite';
 import CannedResponsePlugin from './CannedResponsePlugin';
 import AttachFilePlugin from './AttachFilePlugin';
+import HeaderPlugin from './HeaderPlugin';
 import type { InlineAttachmentUploaded } from './inlineAttachmentUpload';
 import { renderMarkdown } from '@/lib/utils/markdown';
 
@@ -17,10 +18,18 @@ const COMPACT_MIN_HEIGHT_FLOOR_PX = 120;
 
 type MdEditorLibWithUse = {
   use: (plugin: unknown) => void;
+  unuse: (plugin: unknown) => void;
+  plugins: Array<[{ pluginName?: string }, unknown]>;
 };
 
 function registerEditorPlugins() {
-  const registerPluginFn = (MdEditorLib as unknown as MdEditorLibWithUse).use;
+  const lib = MdEditorLib as unknown as MdEditorLibWithUse;
+  const registerPluginFn = lib.use;
+  // Swap the built-in 'header' plugin (renders real <h1>-<h6>) for ours.
+  for (const [plugin] of [...lib.plugins]) {
+    if (plugin.pluginName === 'header') lib.unuse(plugin);
+  }
+  registerPluginFn(HeaderPlugin);
   registerPluginFn(CannedResponsePlugin);
   registerPluginFn(AttachFilePlugin);
 }
@@ -272,8 +281,10 @@ export function MarkdownEditor({
   // Derive view config from viewMode prop
   const viewConfig = {
     menu: true,
-    md: viewMode === 'both' || viewMode === 'editor',
-    html: viewMode === 'both' || viewMode === 'preview',
+    // Open in write mode: 'both' no longer starts split (the empty preview
+    // pane wasted half the width); the toolbar mode-toggle switches views.
+    md: viewMode !== 'preview',
+    html: viewMode === 'preview',
   };
 
   // ---------------------------------------------------------------------------

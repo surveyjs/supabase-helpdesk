@@ -178,3 +178,37 @@ test.describe('Ticket thread layout', () => {
     });
   });
 });
+
+test.describe('Markdown editor on /tickets/new', () => {
+  test('new ticket page has a single h1', async ({ page }) => {
+    await loginViaForm(page, 'alice@example.com');
+    await page.goto('/tickets/new');
+    await expect(page.getByTestId('markdown-editor')).toBeVisible();
+    await expect(page.locator('h1')).toHaveCount(1);
+  });
+
+  test('editor opens in write mode and the heading menu inserts # prefixes', async ({ page }) => {
+    await loginViaForm(page, 'alice@example.com');
+    await page.goto('/tickets/new');
+    const editor = page.getByTestId('markdown-editor');
+    await expect(editor.locator('.rc-md-editor textarea').first()).toBeVisible();
+    await expect(editor.locator('.sec-html')).toBeHidden();
+    await editor.locator('.button-type-header').hover();
+    await editor.getByTestId('editor-heading-2').click();
+    await expect(editor.locator('.rc-md-editor textarea').first()).toHaveValue(/## /);
+  });
+
+  test.describe('phone width', () => {
+    test.use({ viewport: { width: 390, height: 844 } });
+    test('new ticket page has no horizontal overflow at 390px', async ({ page }) => {
+      await loginViaForm(page, 'alice@example.com');
+      await page.goto('/tickets/new');
+      await expect(page.getByTestId('markdown-editor')).toBeVisible();
+      const { sw, cw } = await page.evaluate(() => ({
+        sw: document.documentElement.scrollWidth,
+        cw: document.documentElement.clientWidth,
+      }));
+      expect(sw).toBeLessThanOrEqual(cw);
+    });
+  });
+});

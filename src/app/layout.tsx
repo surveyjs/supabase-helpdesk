@@ -7,6 +7,7 @@ import "./globals.css";
 import "survey-core/survey-core.css";
 import "@/styles/surveyjs-tailwind-adapter.css";
 import "@/styles/surveyjs-bridge.css";
+import "@/styles/markdown-editor.css";
 
 export const metadata: Metadata = {
   title: "HelpDesk",

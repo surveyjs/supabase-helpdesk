@@ -187,15 +187,50 @@ test.describe('Markdown editor on /tickets/new', () => {
     await expect(page.locator('h1')).toHaveCount(1);
   });
 
-  test('editor opens in write mode and the heading menu inserts # prefixes', async ({ page }) => {
-    await loginViaForm(page, 'alice@example.com');
-    await page.goto('/tickets/new');
-    const editor = page.getByTestId('markdown-editor');
-    await expect(editor.locator('.rc-md-editor textarea').first()).toBeVisible();
-    await expect(editor.locator('.sec-html')).toBeHidden();
-    await editor.locator('.button-type-header').hover();
-    await editor.getByTestId('editor-heading-2').click();
-    await expect(editor.locator('.rc-md-editor textarea').first()).toHaveValue(/## /);
+  test.describe('preview pane (preference "both")', () => {
+    test.use({ viewport: { width: 1440, height: 900 } });
+    test('wide: hidden while empty, shown once there is content', async ({ page }) => {
+      await loginViaForm(page, 'alice@example.com');
+      await page.goto('/tickets/new');
+      const editor = page.getByTestId('markdown-editor');
+      const textarea = editor.locator('.rc-md-editor textarea').first();
+      await expect(textarea).toBeVisible();
+      await expect(editor.locator('.sec-html')).toBeHidden();
+      await textarea.fill('hello **world**');
+      await expect(editor.locator('.sec-html')).toBeVisible();
+    });
+  });
+
+  test.describe('heading menu keyboard access', () => {
+    test.use({ viewport: { width: 1440, height: 900 } });
+    test('Enter opens the menu, arrows move, Enter inserts "## "', async ({ page }) => {
+      await loginViaForm(page, 'alice@example.com');
+      await page.goto('/tickets/new');
+      const editor = page.getByTestId('markdown-editor');
+      const trigger = editor.locator('.button-type-header [role="button"]');
+      await expect(trigger).toBeVisible();
+      await trigger.focus();
+      await page.keyboard.press('Enter');
+      await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      await expect(editor.getByTestId('editor-heading-1')).toBeFocused();
+      await page.keyboard.press('ArrowDown');
+      await expect(editor.getByTestId('editor-heading-2')).toBeFocused();
+      await page.keyboard.press('Enter');
+      await expect(editor.locator('.rc-md-editor textarea').first()).toHaveValue(/## /);
+      await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    });
+    test('Escape closes the menu and returns focus to the trigger', async ({ page }) => {
+      await loginViaForm(page, 'alice@example.com');
+      await page.goto('/tickets/new');
+      const editor = page.getByTestId('markdown-editor');
+      const trigger = editor.locator('.button-type-header [role="button"]');
+      await trigger.focus();
+      await page.keyboard.press('Space');
+      await expect(editor.getByTestId('editor-heading-1')).toBeFocused();
+      await page.keyboard.press('Escape');
+      await expect(trigger).toBeFocused();
+      await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    });
   });
 
   test.describe('phone width', () => {
@@ -203,7 +238,10 @@ test.describe('Markdown editor on /tickets/new', () => {
     test('new ticket page has no horizontal overflow at 390px', async ({ page }) => {
       await loginViaForm(page, 'alice@example.com');
       await page.goto('/tickets/new');
-      await expect(page.getByTestId('markdown-editor')).toBeVisible();
+      const editor = page.getByTestId('markdown-editor');
+      await expect(editor).toBeVisible();
+      await editor.locator('.rc-md-editor textarea').first().fill('typed content');
+      await expect(editor.locator('.sec-html')).toBeHidden();
       const { sw, cw } = await page.evaluate(() => ({
         sw: document.documentElement.scrollWidth,
         cw: document.documentElement.clientWidth,

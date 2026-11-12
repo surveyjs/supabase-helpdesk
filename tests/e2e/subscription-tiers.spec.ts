@@ -222,10 +222,12 @@ test.describe('Subscription Tiers', () => {
   // ── Admin users page tier column ────────────────
 
   test('admin users page shows tier column when a user on the page has a tier', async ({ page }) => {
-    // Alice and Bob have seeded tiers.
+    // Alice has a seeded tier (Enterprise). Search for her so she is on the page regardless of how many users exist.
     await loginAs(page, 'admin@example.com');
-    await gotoAdmin(page, '/admin/users');
+    await gotoAdmin(page, '/admin/users?q=alice@example.com');
     await expect(page.getByRole('columnheader', { name: 'Tier' })).toBeVisible({ timeout: 10000 });
+    const aliceRow = page.getByRole('row').filter({ hasText: 'alice@example.com' });
+    await expect(aliceRow.getByTestId(/^user-tier-/).locator('span').first()).toHaveText('Enterprise');
   });
 
   test('admin users page hides the empty Tier column', async ({ page }) => {

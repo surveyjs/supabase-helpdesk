@@ -19,6 +19,7 @@ export default async function LoginPage({
     <LoginForm
       config={config}
       callbackError={first(params.error) ? { detail: first(params.error_detail).slice(0, 200) } : null}
+      adminPasswordFallback={params.no_redirect !== undefined}
     />
   );
 }

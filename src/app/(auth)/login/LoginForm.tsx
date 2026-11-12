@@ -81,78 +81,11 @@ function CallbackError({ providerName, detail }: { providerName: string; detail:
   );
 }
 
-export function LoginForm({
-  config,
-  callbackError,
-}: {
-  config: PublicAuthConfig;
-  /** Set when `/auth/callback` redirected here after a failed sign-in. */
-  callbackError: { detail: string } | null;
-}) {
+function PasswordForm() {
   const [state, formAction, pending] = useActionState(login, initialState);
-  const [externalError, setExternalError] = useState('');
 
-  const externalActive = config.authMode === 'external' && config.externalRegistered;
-  const externalLabel = config.externalProviderName || 'External Provider';
-
-  // Auto-redirect for external mode. Never from a page that is showing an
-  // error — a failed callback would otherwise restart the flow in a loop.
-  useEffect(() => {
-    if (!externalActive || !config.autoRedirect) return;
-    const params = new URLSearchParams(window.location.search);
-    if (params.has('no_redirect') || params.has('error')) return;
-    signInWithExternalProvider(createBrowserClient()).then(({ error }) => {
-      if (error) setExternalError(error);
-    });
-  }, [externalActive, config.autoRedirect]);
-
-  const callbackErrorBanner = callbackError && (
-    <CallbackError
-      providerName={config.authMode === 'external' ? externalLabel : 'the external provider'}
-      detail={callbackError.detail}
-    />
-  );
-
-  // External mode: show only the external provider button
-  if (config.authMode === 'external') {
-    if (!config.externalRegistered) {
-      return (
-        <>
-          <h1 className="text-2xl font-semibold text-gray-900 mb-6">Log in</h1>
-          {callbackErrorBanner}
-          <p className="text-sm text-gray-600" data-testid="external-not-configured">
-            External sign-in is not configured. Contact your administrator.
-          </p>
-        </>
-      );
-    }
-
-    return (
-      <>
-        <h1 className="text-2xl font-semibold text-gray-900 mb-6">Log in</h1>
-        {callbackErrorBanner}
-        <p className="text-sm text-gray-600 mb-4">
-          Sign in using your organization&apos;s identity provider.
-        </p>
-        {externalError && (
-          <div
-            role="alert"
-            className="mb-4 p-3 rounded bg-red-50 border border-red-200 text-red-700 text-sm"
-            data-testid="external-login-error"
-          >
-            {externalError}
-          </div>
-        )}
-        <ExternalButton providerName={config.externalProviderName} onError={setExternalError} />
-      </>
-    );
-  }
-
-  // Built-in mode: email/password + social buttons
   return (
     <>
-      <h1 className="text-2xl font-semibold text-gray-900 mb-6">Log in</h1>
-      {callbackErrorBanner}
       {state.error && (
         <div role="alert" className="mb-4 p-3 rounded bg-red-50 border border-red-200 text-red-700 text-sm">
           {state.error}
@@ -194,6 +127,109 @@ export function LoginForm({
           {pending ? 'Logging in…' : 'Log in'}
         </button>
       </form>
+    </>
+  );
+}
+
+/**
+ * External mode, `/login?no_redirect=true` only: password sign-in for admins
+ * when the identity provider is down or misconfigured. The `login` action
+ * refuses non-admins in external mode.
+ */
+function AdminPasswordFallback() {
+  return (
+    <div className="mt-6" data-testid="admin-password-fallback">
+      <div className="relative mb-4">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-gray-200" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-white px-2 text-gray-500">Administrator sign-in</span>
+        </div>
+      </div>
+      <PasswordForm />
+    </div>
+  );
+}
+
+export function LoginForm({
+  config,
+  callbackError,
+  adminPasswordFallback = false,
+}: {
+  config: PublicAuthConfig;
+  /** Set when `/auth/callback` redirected here after a failed sign-in. */
+  callbackError: { detail: string } | null;
+  /** `no_redirect` is in the URL: offer admins a password form in external mode. */
+  adminPasswordFallback?: boolean;
+}) {
+  const [externalError, setExternalError] = useState('');
+
+  const externalActive = config.authMode === 'external' && config.externalRegistered;
+  const externalLabel = config.externalProviderName || 'External Provider';
+
+  // Auto-redirect for external mode. Never from a page that is showing an
+  // error — a failed callback would otherwise restart the flow in a loop.
+  useEffect(() => {
+    if (!externalActive || !config.autoRedirect) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('no_redirect') || params.has('error')) return;
+    signInWithExternalProvider(createBrowserClient()).then(({ error }) => {
+      if (error) setExternalError(error);
+    });
+  }, [externalActive, config.autoRedirect]);
+
+  const callbackErrorBanner = callbackError && (
+    <CallbackError
+      providerName={config.authMode === 'external' ? externalLabel : 'the external provider'}
+      detail={callbackError.detail}
+    />
+  );
+
+  // External mode: the external provider button, plus the admin password
+  // form when `no_redirect` is present
+  if (config.authMode === 'external') {
+    if (!config.externalRegistered) {
+      return (
+        <>
+          <h1 className="text-2xl font-semibold text-gray-900 mb-6">Log in</h1>
+          {callbackErrorBanner}
+          <p className="text-sm text-gray-600" data-testid="external-not-configured">
+            External sign-in is not configured. Contact your administrator.
+          </p>
+          {adminPasswordFallback && <AdminPasswordFallback />}
+        </>
+      );
+    }
+
+    return (
+      <>
+        <h1 className="text-2xl font-semibold text-gray-900 mb-6">Log in</h1>
+        {callbackErrorBanner}
+        <p className="text-sm text-gray-600 mb-4">
+          Sign in using your organization&apos;s identity provider.
+        </p>
+        {externalError && (
+          <div
+            role="alert"
+            className="mb-4 p-3 rounded bg-red-50 border border-red-200 text-red-700 text-sm"
+            data-testid="external-login-error"
+          >
+            {externalError}
+          </div>
+        )}
+        <ExternalButton providerName={config.externalProviderName} onError={setExternalError} />
+        {adminPasswordFallback && <AdminPasswordFallback />}
+      </>
+    );
+  }
+
+  // Built-in mode: email/password + social buttons
+  return (
+    <>
+      <h1 className="text-2xl font-semibold text-gray-900 mb-6">Log in</h1>
+      {callbackErrorBanner}
+      <PasswordForm />
 
       {/* Social provider buttons */}
       {config.enabledSocialProviders.length > 0 && (

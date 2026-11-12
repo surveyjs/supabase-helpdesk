@@ -514,6 +514,55 @@ test.describe('Auth External', () => {
     });
   });
 
+  // ── Admin password fallback (/login?no_redirect=true) ──────────
+
+  test('no_redirect in external mode adds the admin password form below the SSO button', async ({ page }) => {
+    await registerProviderDirectly('Test SSO');
+    await gotoInExternalMode(page, '/login?no_redirect=true', page.getByTestId('admin-password-fallback'));
+
+    await expect(page.getByTestId('external-login-btn')).toHaveText('Sign in with Test SSO');
+    await expect(page.getByLabel('Email')).toBeVisible();
+    await expect(page.getByLabel('Password')).toBeVisible();
+    // Self-service links stay hidden: this is a break-glass path, not built-in auth.
+    await expect(page.getByRole('link', { name: /Sign up/ })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Forgot password?' })).toHaveCount(0);
+  });
+
+  test('no_redirect in external mode with an unregistered provider still offers the admin form', async ({ page }) => {
+    await gotoInExternalMode(page, '/login?no_redirect=true', page.getByTestId('admin-password-fallback'), {
+      auth_external_registered: 'false',
+    });
+    await expect(page.getByTestId('external-not-configured')).toBeVisible();
+    await expect(page.getByLabel('Email')).toBeVisible();
+  });
+
+  async function submitFallbackForm(page: Page, email: string) {
+    const svc = createServiceRoleClient();
+    await svc.from('login_attempts').delete().eq('email', email);
+    await page.context().clearCookies();
+    await registerProviderDirectly('Test SSO');
+    await gotoInExternalMode(page, '/login?no_redirect=true', page.getByTestId('admin-password-fallback'));
+    await page.getByLabel('Email').fill(email);
+    await page.getByLabel('Password').fill('Password123');
+    await page.getByRole('button', { name: 'Log in' }).click();
+  }
+
+  test('an admin can sign in with a password through the no_redirect fallback', async ({ page }) => {
+    await submitFallbackForm(page, 'admin@example.com');
+    await page.waitForURL((url) => url.pathname !== '/login', { timeout: 15000 });
+    expect(new URL(page.url()).pathname).not.toBe('/login');
+  });
+
+  test('a non-admin is refused password sign-in in external mode, even with the right password', async ({ page }) => {
+    await submitFallbackForm(page, 'alice@example.com');
+    await expect(page.getByText('Invalid email or password.')).toBeVisible({ timeout: 15000 });
+    expect(new URL(page.url()).pathname).toBe('/login');
+
+    // No session was left behind: a protected page bounces back to /login.
+    await page.goto('/tickets');
+    await page.waitForURL(/\/login/, { timeout: 10000 });
+  });
+
   test('external mode without a registered provider shows not-configured and never redirects', async ({ page }) => {
     const authorizeRequests: string[] = [];
     page.on('request', (req) => {

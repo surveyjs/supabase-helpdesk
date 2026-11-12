@@ -9,6 +9,15 @@ export type AuthState = {
   message?: string;
 };
 
+async function isExternalAuthMode(svc: ReturnType<typeof createServiceRoleClient>): Promise<boolean> {
+  const { data } = await svc
+    .from('app_settings')
+    .select('value')
+    .eq('key', 'auth_mode')
+    .maybeSingle();
+  return data?.value === 'external';
+}
+
 export async function login(_prev: AuthState, formData: FormData): Promise<AuthState> {
   const email = (formData.get('email') as string)?.trim();
   const password = formData.get('password') as string;
@@ -38,9 +47,26 @@ export async function login(_prev: AuthState, formData: FormData): Promise<AuthS
   }
 
   const supabase = await createServerClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
-  if (error) {
+  // In external mode, password sign-in is only the admins' break-glass path
+  // (/login?no_redirect=true) for when the identity provider is broken. A
+  // non-admin gets the same answer as a wrong password, so the response never
+  // reveals whether the password was right.
+  let refused = !!error;
+  if (!error && (await isExternalAuthMode(svc))) {
+    const { data: profile } = await svc
+      .from('profiles')
+      .select('role')
+      .eq('id', data.user.id)
+      .single();
+    if (profile?.role !== 'admin') {
+      await supabase.auth.signOut({ scope: 'local' });
+      refused = true;
+    }
+  }
+
+  if (refused) {
     // Increment login attempts
     if (attempt) {
       const newCount = attempt.attempt_count + 1;

@@ -181,7 +181,9 @@ The external provider is registered with Supabase Auth as the custom provider `c
 
 Switching to External is refused until the provider is registered, and a failed re-registration
 never replaces a working provider. If sign-in fails, `/login` shows the error and does not
-auto-redirect; `/login?no_redirect=true` also suppresses the auto-redirect.
+auto-redirect; `/login?no_redirect=true` also suppresses the auto-redirect and adds an
+administrator email/password form, so an admin can still get in if the provider is down (password
+sign-in is refused for non-admins in External mode).
 
 ## Scripts
 

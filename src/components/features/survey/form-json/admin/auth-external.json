@@ -89,7 +89,7 @@
               "name": "auto_redirect",
               "title": "Auto-redirect to external provider",
               "renderAs": "checkbox",
-              "description": "When enabled, unauthenticated users are automatically redirected to the external login page. Access /login?no_redirect=true to bypass."
+              "description": "When enabled, unauthenticated users are automatically redirected to the external login page. Admins can bypass it at /login?no_redirect=true, which also offers password sign-in for admins."
             }
           ]
         }

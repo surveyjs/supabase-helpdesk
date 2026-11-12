@@ -86,6 +86,17 @@ test.describe('Tag Display and Management', () => {
     await expect(tagSection.getByText('bug')).toBeVisible();
   });
 
+  test('agent sees tags once, in the sidebar Tags question', async ({ page }) => {
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto(ticketUrl);
+
+    const survey = page.getByTestId('ticket-sidebar').getByTestId('ticket-sidebar-survey');
+    await expect(survey).toBeVisible({ timeout: 10000 });
+    await expect(survey.getByText('urgent')).toBeVisible();
+    await expect(survey.getByText('bug')).toBeVisible();
+    await expect(page.getByTestId('ticket-tags')).toHaveCount(0);
+  });
+
   test('agent can add a tag to a ticket', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(ticketUrl);

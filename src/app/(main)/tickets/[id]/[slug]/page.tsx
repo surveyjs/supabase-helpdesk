@@ -816,6 +816,15 @@ export default async function TicketDetailPage({
     }
   }
 
+  // Closed tickets can't be deleted: hide the row instead of showing a disabled button.
+  const showDeleteRow =
+    profile?.role === 'admin' && !ticket.merged_into_id && ticket.status !== 'closed';
+  const showAdvancedRow = isAgent && !ticket.merged_into_id && !ticket.duplicate_of_id;
+  const GROUP_HEADING = 'col-span-2 text-xs font-semibold uppercase tracking-wide text-gray-500';
+  // Agents/admins edit tags in the sidebar Tags question;
+  // everyone else gets the read-only chip list.
+  const showTagChips = !(isAgent && detailFieldPolicy.tag_ids?.editable);
+
   const hasAnySidebarSurveyField = Object.values(detailFieldPolicy).some((p) => p.visible);
 
   return (
@@ -867,7 +876,9 @@ export default async function TicketDetailPage({
           {/* Subject */}
           <div className="mb-4">
             <EditableTitle ticketId={ticket.id} title={ticket.title} canEdit={canEditTitle} />
-            <div className="flex items-center gap-2 mt-1 text-sm text-gray-500">
+            <div className="flex flex-wrap items-center gap-x-2 mt-1 text-sm text-gray-500">
+              <span className="font-mono" data-testid="ticket-number">#{ticket.id}</span>
+              <span>·</span>
               <time title={new Date(ticket.created_at).toLocaleString()}>{formatRelativeTime(ticket.created_at)}</time>
               <span>·</span>
               <span>
@@ -933,11 +944,12 @@ export default async function TicketDetailPage({
         {/* RIGHT: Sidebar */}
         <aside className="w-full lg:w-[400px] lg:min-w-[400px] lg:max-w-[400px] flex-shrink-0 lg:sticky lg:top-4 lg:self-start" data-testid="ticket-sidebar">
           <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
-            {/* Ticket # + autosave status (issue #77) */}
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <span className="text-xs text-gray-500 font-mono">#{ticket.id}</span>
-              {hasAnySidebarSurveyField && <TicketSaveStatus ticketId={ticket.id} />}
-            </div>
+            {/* Autosave status (issue #77); the ticket number lives in the header meta line */}
+            {hasAnySidebarSurveyField && (
+              <div className="mb-3 flex items-center justify-end gap-2">
+                <TicketSaveStatus ticketId={ticket.id} />
+              </div>
+            )}
 
             {ticket.merged_into_id && (
               <p className="mb-3 text-xs text-gray-500 italic">Read-only (merged)</p>
@@ -956,47 +968,30 @@ export default async function TicketDetailPage({
 
             {/* Read-only / non-editable info rows (fields not represented in the survey template) */}
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-              <>
-                <dt className="text-gray-500">Created by</dt>
-                <dd className="text-gray-900">
-                  <DisplayName
-                    userId={ticket.creator_id}
-                    displayName={creatorName}
-                    isCurrentUserAgent={isAgent}
-                  />
-                  {teamName && (
-                    <span className="ml-1 text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">
-                      {teamName}
-                    </span>
-                  )}
-                </dd>
-              </>
+              <dt className={GROUP_HEADING}>People</dt>
+              <dt className="text-gray-500">Created by</dt>
+              <dd className="text-gray-900">
+                <DisplayName
+                  userId={ticket.creator_id}
+                  displayName={creatorName}
+                  isCurrentUserAgent={isAgent}
+                />
+                {teamName && (
+                  <span className="ml-1 text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">
+                    {teamName}
+                  </span>
+                )}
+              </dd>
 
-              {isAgent && !ticket.merged_into_id && !ticket.duplicate_of_id && (
-                <>
-                  <dt className="text-gray-500">Advanced</dt>
-                  <dd>
-                    <div className="flex flex-wrap gap-2">
-                      <MarkAsDuplicateForm ticketId={ticket.id} />
-                      <MergeTicketForm ticketId={ticket.id} />
-                      <CloneTicketButton ticketId={ticket.id} />
-                    </div>
-                  </dd>
-                </>
-              )}
-
-              <>
-                <dt className="text-gray-500">Created</dt>
-                <dd className="text-gray-900" title={new Date(ticket.created_at).toLocaleString()}>
-                  {formatDateTimeWithRelative(ticket.created_at)}
-                </dd>
-              </>
-              <>
-                <dt className="text-gray-500">Updated</dt>
-                <dd className="text-gray-900" title={new Date(ticket.updated_at).toLocaleString()}>
-                  {formatDateTimeWithRelative(ticket.updated_at)}
-                </dd>
-              </>
+              <dt className={`${GROUP_HEADING} mt-3`}>Dates</dt>
+              <dt className="text-gray-500">Created</dt>
+              <dd className="text-gray-900" title={new Date(ticket.created_at).toLocaleString()}>
+                {formatDateTimeWithRelative(ticket.created_at)}
+              </dd>
+              <dt className="text-gray-500">Updated</dt>
+              <dd className="text-gray-900" title={new Date(ticket.updated_at).toLocaleString()}>
+                {formatDateTimeWithRelative(ticket.updated_at)}
+              </dd>
 
               {sourceArticle && (
                 <>
@@ -1012,12 +1007,29 @@ export default async function TicketDetailPage({
                 </>
               )}
 
-              {profile?.role === 'admin' && !ticket.merged_into_id && (
+              {(showAdvancedRow || showDeleteRow) && (
                 <>
-                  <dt className="text-gray-500">Delete</dt>
-                  <dd>
-                    <DeleteTicketButton ticketId={ticket.id} isClosed={ticket.status === 'closed'} />
-                  </dd>
+                  <dt className={`${GROUP_HEADING} mt-3`}>Actions</dt>
+                  {showAdvancedRow && (
+                    <>
+                      <dt className="text-gray-500">Advanced</dt>
+                      <dd>
+                        <div className="flex flex-wrap gap-2">
+                          <MarkAsDuplicateForm ticketId={ticket.id} />
+                          <MergeTicketForm ticketId={ticket.id} />
+                          <CloneTicketButton ticketId={ticket.id} />
+                        </div>
+                      </dd>
+                    </>
+                  )}
+                  {showDeleteRow && (
+                    <>
+                      <dt className="text-gray-500">Delete</dt>
+                      <dd>
+                        <DeleteTicketButton ticketId={ticket.id} />
+                      </dd>
+                    </>
+                  )}
                 </>
               )}
 
@@ -1103,13 +1115,15 @@ export default async function TicketDetailPage({
             {/* Tags (chip list shown next to the SurveyJS tagbox so colors stay visible).
                 Lives as a client component so the chips update live when the tagbox
                 writes back via TicketSidebarSurvey. */}
-            <TicketTagChips
-              ticketId={ticket.id}
-              initialTagIds={ticketTags.map((t) => t.id)}
-              tagsById={Object.fromEntries(
-                [...ticketTags, ...allTags].map((t) => [t.id, t]),
-              )}
-            />
+            {showTagChips && (
+              <TicketTagChips
+                ticketId={ticket.id}
+                initialTagIds={ticketTags.map((t) => t.id)}
+                tagsById={Object.fromEntries(
+                  [...ticketTags, ...allTags].map((t) => [t.id, t]),
+                )}
+              />
+            )}
 
             {/* Follow status (owner / blocked / agent counter — toggle is in the SurveyJS form) */}
             {(isTicketOwner || (isAgent && followers.length > 0)) && (
@@ -1177,10 +1191,6 @@ export default async function TicketDetailPage({
           {isAgent && !ticket.merged_into_id && (
             <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4" data-testid="agent-info-under-ticket-info">
               <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-                <dt className="text-gray-500">Followers</dt>
-                <dd className="text-gray-900">
-                  {followers.length} follower{followers.length !== 1 ? 's' : ''}
-                </dd>
                 <dt className="text-gray-500">User notes</dt>
                 <dd className="text-gray-900">{creatorNoteCount}</dd>
                 <dt className="text-gray-500">AI summary</dt>

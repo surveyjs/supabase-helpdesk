@@ -6,10 +6,10 @@ declare global {
   }
 }
 
-// Settings come from /runtime-config.js (see src/app/runtime-config.js/route.ts).
+// Settings come from the inline config script in the root layout's <head>.
 export function createBrowserClient() {
   const config = window.__HELPDESK_CONFIG__;
-  if (!config) throw new Error('/runtime-config.js has not been loaded');
+  if (!config) throw new Error('HelpDesk runtime config (inline <head> script) is missing');
   return _createBrowserClient(config.supabaseUrl, config.supabaseAnonKey, {
     cookieOptions: { name: config.authCookieName },
   });

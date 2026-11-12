@@ -32,4 +32,8 @@ describe('fetchAllRows', () => {
     expect(await fetchAllRows(page)).toHaveLength(1000);
     expect(calls).toHaveLength(2);
   });
+
+  it('throws on a query error instead of returning a partial result', async () => {
+    await expect(fetchAllRows(async () => ({ data: null, error: { message: 'boom' } }))).rejects.toThrow('boom');
+  });
 });

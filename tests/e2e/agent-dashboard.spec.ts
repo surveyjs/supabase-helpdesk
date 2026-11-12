@@ -615,6 +615,25 @@ test.describe('Consolidated Views & Filters Panel', () => {
     await page.keyboard.press('Escape');
   });
 
+  test('Apply Filters is reachable in the sticky panel at 1440x900', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto('/agent');
+    await openViewsFilters(page);
+
+    const panel = page.getByTestId('views-filters-section');
+    await expect(panel).toBeVisible();
+    const box = (await panel.boundingBox())!;
+    // The panel never grows taller than the viewport, so it scrolls internally.
+    expect(box.height).toBeLessThanOrEqual(900);
+    const apply = panel.getByRole('button', { name: 'Apply Filters' });
+    await apply.scrollIntoViewIfNeeded();
+    await expect(apply).toBeVisible();
+    const applyBox = (await apply.boundingBox())!;
+    expect(applyBox.y).toBeGreaterThanOrEqual(0);
+    expect(applyBox.y + applyBox.height).toBeLessThanOrEqual(900);
+  });
+
   test('dashboard has no horizontal overflow at 820px and 390px', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     for (const width of [820, 390]) {

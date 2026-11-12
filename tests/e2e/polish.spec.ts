@@ -101,7 +101,7 @@ test.describe('Polish', () => {
       await page.goto('/agent');
       await page.waitForLoadState('networkidle');
       // The mobile card layout should be visible, desktop table hidden
-      const mobileCards = page.locator('.md\\:hidden');
+      const mobileCards = page.getByTestId('agent-ticket-cards');
       // At least the mobile layout container should exist
       await expect(mobileCards.first()).toBeVisible({ timeout: 5000 });
     });

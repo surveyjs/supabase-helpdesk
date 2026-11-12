@@ -56,6 +56,7 @@ upload() {
 load() {
   need WORK
   [ -f "$WORK/tickets.tsv" ] || { echo "No staging files in $WORK - run 'prepare' first." >&2; exit 1; }
+  [ -f "$WORK/ticket_friendly.tsv" ] || { echo "Staging predates relink support - re-run 'prepare' first." >&2; exit 1; }
   echo "Copying staging files into $DB_CONTAINER:/tmp/adimport ..."
   docker exec "$DB_CONTAINER" rm -rf /tmp/adimport
   docker exec "$DB_CONTAINER" mkdir -p /tmp/adimport

@@ -41,9 +41,9 @@ CREATE OR REPLACE FUNCTION adimport.relink_body(
 ) LANGUAGE plpgsql STABLE AS $fn$
 DECLARE
   -- marker; group = FriendlyId number
-  mk CONSTANT TEXT := '\{''FriendlyId'':''[tT]?([0-9]+)''[^{}\n]*\}';
+  mk CONSTANT TEXT := '\{''FriendlyId'':''[tT]?([0-9]{1,9})''[^{}\n]*\}';
   -- answerdesk.io ticket page; group = FriendlyId number (matched case-insensitively)
-  ad CONSTANT TEXT := 'https?://[a-z0-9.-]*answerdesk\.io/ticket/details/t([0-9]+)(?:/[a-z0-9_%~-]*)?';
+  ad CONSTANT TEXT := 'https?://[a-z0-9.-]*answerdesk\.io/ticket/details/t([0-9]{1,9})(?:/[a-z0-9_%~-]*)?';
   m TEXT[];
   url TEXT;
   label TEXT;

@@ -225,7 +225,7 @@ export default async function AgentDashboardPage({
       <div className="xl:flex xl:items-start xl:gap-6">
         {/* Consolidated Views & Filters Panel: on top below xl, left column from xl */}
         <ViewsFiltersCollapsible
-          className="xl:w-72 xl:shrink-0 xl:sticky xl:top-4"
+          className="xl:w-72 xl:shrink-0 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto"
           filterOptions={filterOptions}
           template={surveyFilterTemplate}
           savedViews={savedViews.map((v) => ({ id: v.id, name: v.name }))}

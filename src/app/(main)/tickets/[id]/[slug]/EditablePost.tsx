@@ -33,7 +33,7 @@ export function EditablePost({
     return (
       <div>
         <div
-          className="prose prose-sm max-w-none break-words [&_a]:break-all"
+          className="prose prose-sm max-w-none break-words [&_a]:wrap-anywhere"
           dangerouslySetInnerHTML={{ __html: htmlBody }}
         />
         {actions && <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-xs text-gray-500">{actions}</div>}
@@ -60,7 +60,7 @@ export function EditablePost({
   return (
     <div>
       <div
-        className="prose prose-sm max-w-none break-words [&_a]:break-all"
+        className="prose prose-sm max-w-none break-words [&_a]:wrap-anywhere"
         dangerouslySetInnerHTML={{ __html: htmlBody }}
       />
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-xs text-gray-500">

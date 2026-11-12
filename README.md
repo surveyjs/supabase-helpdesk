@@ -196,6 +196,24 @@ auto-redirect; `/login?no_redirect=true` also suppresses the auto-redirect.
 | `npm run test:e2e` | Run end-to-end tests (Playwright) |
 | `npm run test` | Run all tests (db + e2e) |
 
+### Importing AnswerDesk data
+
+[scripts/answerdesk/](scripts/answerdesk/README.md) imports the legacy AnswerDesk (SupportCenter)
+export into a HelpDesk instance: users with their SurveyJS SSO identities, tickets, posts,
+attachments, tags, followers and CSAT. It can import everything or a deterministic sample of
+tickets that grows on re-runs, and every step can be re-run safely. The export package holds
+customer data and is not part of this repository.
+
+```bash
+export PKG=/path/to/answerdesk-migration DEPLOY=/path/to/deploy-bundle FRACTION=0.1
+scripts/answerdesk/import.sh prepare                # export CSVs -> staging files
+scripts/answerdesk/import.sh upload                 # blobs -> Storage
+scripts/answerdesk/import.sh load                   # staging files -> database
+```
+
+See [scripts/answerdesk/README.md](scripts/answerdesk/README.md) for the settings, the mapping
+rules, verification and reset.
+
 ## Project Structure
 
 ```
@@ -225,6 +243,8 @@ src/
 │   ├── queries/            # Complex data queries
 │   ├── supabase/           # Supabase client helpers
 │   └── utils/              # Shared utilities
+scripts/
+└── answerdesk/             # Legacy AnswerDesk data import (see its README)
 supabase/
 ├── migrations/             # Initial database schema (001_initial_schema.sql)
 ├── seed.sql                # Development seed data
@@ -242,6 +262,7 @@ tests/
 - [docs/architecture.md](docs/architecture.md) — Architecture constraints
 - [docs/build-plan.md](docs/build-plan.md) — Phased build plan (22 phases)
 - [docs/seed-data.md](docs/seed-data.md) — Seed data specification
+- [scripts/answerdesk/README.md](scripts/answerdesk/README.md) — AnswerDesk data import
 
 ## License
 

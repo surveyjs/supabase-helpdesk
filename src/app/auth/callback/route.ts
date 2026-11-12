@@ -15,6 +15,19 @@ function sanitizeErrorDetail(value: string | null | undefined): string {
     .slice(0, 200);
 }
 
+/**
+ * Redirect with a relative Location. In the standalone image request.url is
+ * built from the listen address (http://0.0.0.0:3001), not from the Host the
+ * browser used, so an absolute URL derived from it is unreachable. Unlike the
+ * proxy, route handlers get no automatic relativization from Next.js.
+ */
+function redirectRelative(url: URL): NextResponse {
+  return new NextResponse(null, {
+    status: 307,
+    headers: { Location: `${url.pathname}${url.search}` },
+  });
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const code = searchParams.get('code');
@@ -71,7 +84,7 @@ export async function GET(request: NextRequest) {
       redirectUrl.pathname = next;
       redirectUrl.searchParams.delete('code');
       redirectUrl.searchParams.delete('next');
-      return NextResponse.redirect(redirectUrl);
+      return redirectRelative(redirectUrl);
     }
   }
 
@@ -84,5 +97,5 @@ export async function GET(request: NextRequest) {
   loginUrl.searchParams.set('error', 'auth_callback_error');
   loginUrl.searchParams.set('no_redirect', 'true');
   if (errorDetail) loginUrl.searchParams.set('error_detail', errorDetail);
-  return NextResponse.redirect(loginUrl);
+  return redirectRelative(loginUrl);
 }

@@ -204,6 +204,11 @@ test.describe('SLA Admin Settings', () => {
 
     // Should reload and show the new policy in the table
     await expect(page.getByRole('cell', { name: 'E2E Test Policy', exact: true })).toBeVisible({ timeout: 10000 });
+
+    // Per-row update inputs are reachable by a label unique to the policy
+    await expect(page.getByLabel('E2E Test Policy — Name', { exact: true })).toHaveValue('E2E Test Policy');
+    await expect(page.getByLabel('E2E Test Policy — First response (min)', { exact: true })).toHaveValue('30');
+    await expect(page.getByLabel('E2E Test Policy — Resolution (min)', { exact: true })).toHaveValue('120');
   });
 
   test('admin can delete the created policy', async ({ page }) => {

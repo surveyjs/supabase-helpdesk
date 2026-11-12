@@ -69,11 +69,11 @@ function PolicySection({ policies }: { policies: SlaPolicy[] }) {
                     <form action={updateSlaPolicy} className="inline">
                       <input type="hidden" name="policy_id" value={policy.id} />
                       <input type="text" name="name" defaultValue={policy.name} maxLength={100}
-                        className="w-24 rounded border border-gray-300 px-1 py-0.5 text-xs" placeholder="Name" aria-label="Name" />
+                        className="w-24 rounded border border-gray-300 px-1 py-0.5 text-xs" placeholder="Name" aria-label={`${policy.name} — Name`} />
                       <input type="number" name="first_response_minutes" defaultValue={policy.first_response_minutes} min={1}
-                        className="w-16 rounded border border-gray-300 px-1 py-0.5 text-xs ml-1" placeholder="FR min" aria-label="First Response" />
+                        className="w-16 rounded border border-gray-300 px-1 py-0.5 text-xs ml-1" placeholder="FR min" aria-label={`${policy.name} — First response (min)`} />
                       <input type="number" name="resolution_minutes" defaultValue={policy.resolution_minutes} min={1}
-                        className="w-16 rounded border border-gray-300 px-1 py-0.5 text-xs ml-1" placeholder="Res min" aria-label="Resolution" />
+                        className="w-16 rounded border border-gray-300 px-1 py-0.5 text-xs ml-1" placeholder="Res min" aria-label={`${policy.name} — Resolution (min)`} />
                       <button type="submit" className="ml-1 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200">
                         Update
                       </button>

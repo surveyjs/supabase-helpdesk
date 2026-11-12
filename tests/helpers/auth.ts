@@ -110,7 +110,16 @@ export async function loginViaForm(
         .then(() => 'alert' as const)
         .catch(() => 'no-alert' as const),
     ]);
-    return result === 'ok';
+    if (result !== 'ok') return false;
+    // Sign-in lands directly on the final page (/agent for agents/admins, /
+    // otherwise). Let that navigation finish and assert the URL is stable so
+    // callers never start a navigation mid-redirect.
+    await page.waitForLoadState('load');
+    const landed = new URL(page.url()).pathname;
+    await expect
+      .poll(() => new URL(page.url()).pathname, { timeout: 5000 })
+      .toBe(landed);
+    return true;
   };
 
   if (!(await submit())) {

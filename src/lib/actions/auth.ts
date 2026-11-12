@@ -2,6 +2,7 @@
 
 import { createServerClient, createServiceRoleClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import { homePathForRole } from '@/lib/supabase/auth';
 import { runtimeConfig } from '@/lib/runtime-config';
 
 export type AuthState = {
@@ -54,13 +55,17 @@ export async function login(_prev: AuthState, formData: FormData): Promise<AuthS
   // non-admin gets the same answer as a wrong password, so the response never
   // reveals whether the password was right.
   let refused = !!error;
-  if (!error && (await isExternalAuthMode(svc))) {
+  let role: string | null | undefined;
+  if (!error) {
     const { data: profile } = await svc
       .from('profiles')
       .select('role')
       .eq('id', data.user.id)
       .single();
-    if (profile?.role !== 'admin') {
+    role = profile?.role;
+  }
+  if (!error && (await isExternalAuthMode(svc))) {
+    if (role !== 'admin') {
       await supabase.auth.signOut({ scope: 'local' });
       refused = true;
     }
@@ -94,7 +99,7 @@ export async function login(_prev: AuthState, formData: FormData): Promise<AuthS
     }).eq('email', email.toLowerCase());
   }
 
-  redirect('/');
+  redirect(homePathForRole(role));
 }
 
 export async function signup(_prev: AuthState, formData: FormData): Promise<AuthState> {
@@ -145,6 +150,7 @@ export async function signup(_prev: AuthState, formData: FormData): Promise<Auth
 
   // Auto-confirmed (enable_confirmations = false) → redirect to home
   if (data.session) {
+    // New self-signups are always customers.
     redirect('/');
   }
 

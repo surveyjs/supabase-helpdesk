@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 import { createServiceRoleClient } from '@/lib/supabase/server';
+import { homePathForRole } from '@/lib/supabase/auth';
 
 // Allowlist of valid internal redirect paths for the auth callback
 const ALLOWED_NEXT_PATHS = ['/', '/reset-password', '/tickets'];
@@ -80,8 +81,18 @@ export async function GET(request: NextRequest) {
         }
       }
 
+      let target = next;
+      if (next === '/') {
+        const { data: roleRow } = await createServiceRoleClient()
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+        target = homePathForRole(roleRow?.role);
+      }
+
       const redirectUrl = request.nextUrl.clone();
-      redirectUrl.pathname = next;
+      redirectUrl.pathname = target;
       redirectUrl.searchParams.delete('code');
       redirectUrl.searchParams.delete('next');
       return redirectRelative(redirectUrl);

@@ -19,6 +19,17 @@ export function toBrowserUrl(url: string): string {
   return browserSupabaseUrl + url.slice(serverSupabaseUrl.length);
 }
 
+/**
+ * JavaScript that defines window.__HELPDESK_CONFIG__ for the browser bundle.
+ * Used both inline by the root layout and by GET /runtime-config.js.
+ */
+export function runtimeConfigScript(): string {
+  const { browserSupabaseUrl, anonKey, authCookieName } = runtimeConfig();
+  const json = JSON.stringify({ supabaseUrl: browserSupabaseUrl, supabaseAnonKey: anonKey, authCookieName })
+    .replace(/</g, '\\u003c');
+  return `window.__HELPDESK_CONFIG__=${json};`;
+}
+
 export function serviceRoleKey(): string {
   const key = runtimeConfig().serviceRoleKey;
   if (!key) throw new Error('Missing environment variable: SUPABASE_SERVICE_ROLE_KEY');

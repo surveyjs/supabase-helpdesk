@@ -1,21 +1,16 @@
 'use client';
 
+import { formatMinutes } from '@/lib/utils/format-minutes';
 import type { ResolutionMetrics } from '@/lib/queries/reports';
 
-function formatMinutes(mins: number): string {
-  if (mins <= 0) return '0m';
-  const h = Math.floor(mins / 60);
-  const m = Math.round(mins % 60);
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
-}
 
 type Props = {
   data: ResolutionMetrics;
   previousData?: ResolutionMetrics;
 };
 
-function ComparisonArrow({ current, previous }: { current: number; previous?: number }) {
-  if (previous === undefined || previous === 0) return null;
+function ComparisonArrow({ current, previous }: { current: number | null; previous?: number | null }) {
+  if (current === null || previous === undefined || previous === null || previous === 0) return null;
   const diff = ((current - previous) / previous) * 100;
   // For resolution times, lower is better, so negative diff = green
   const isGood = diff < 0;

@@ -110,9 +110,44 @@ test.describe('Reports Page - Admin View', () => {
     await expect(page).toHaveURL(/start=/, { timeout: 10000 });
 
     const downloadPromise = page.waitForEvent('download', { timeout: 10000 });
-    await page.getByRole('button', { name: 'ticket volume' }).click();
+    await page.getByText('Export CSV').click();
+    await page.getByRole('button', { name: 'Ticket volume' }).click();
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toBe('ticket_volume_report.csv');
+  });
+});
+
+test.describe('Reports Page - empty range', () => {
+  test('shows an em dash instead of 0% / 0m when there is no data', async ({ page }) => {
+    await loginAs(page, 'admin@example.com');
+    await page.goto('/reports?start=2001-01-01&end=2001-01-31');
+    await expect(page.getByRole('heading', { name: 'Reports' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('ticket-volume-chart')).toBeVisible();
+    await expect(page.getByTestId('ticket-volume-chart').getByRole('heading', { name: 'Ticket Volume' })).toBeVisible();
+    const sla = page.getByTestId('sla-compliance-panel');
+    await expect(sla.getByText('—')).toHaveCount(2);
+    await expect(sla.getByText('0%')).toHaveCount(0);
+    await expect(page.getByTestId('resolution-metrics').getByText('0m')).toHaveCount(0);
+  });
+
+  test('presets: 12 months and all time, active preset is marked', async ({ page }) => {
+    await loginAs(page, 'admin@example.com');
+    await page.goto('/reports');
+    await expect(page.getByRole('button', { name: 'Last 30 days' })).toHaveAttribute('aria-pressed', 'true');
+    await page.getByRole('button', { name: 'All time' }).click();
+    await expect(page).toHaveURL(/start=/, { timeout: 10000 });
+    await expect(page.getByRole('button', { name: 'All time' })).toHaveAttribute('aria-pressed', 'true');
+    await page.getByRole('button', { name: 'Last 12 months' }).click();
+    await expect(page.getByRole('button', { name: 'Last 12 months' })).toHaveAttribute('aria-pressed', 'true', { timeout: 10000 });
+  });
+
+  test('no horizontal overflow at 390px', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 800 });
+    await loginAs(page, 'admin@example.com');
+    await page.goto('/reports');
+    await expect(page.getByTestId('report-controls')).toBeVisible({ timeout: 10000 });
+    const ok = await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth);
+    expect(ok).toBe(true);
   });
 });
 

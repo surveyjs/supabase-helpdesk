@@ -51,6 +51,17 @@ export default async function ReportsPage({ searchParams }: Props) {
   const defaultStart = new Date(now);
   defaultStart.setDate(defaultStart.getDate() - 30);
 
+  const dayStr = (d: Date) => d.toISOString().slice(0, 10);
+  const rangeStart = startParam || dayStr(defaultStart);
+  const rangeEnd = endParam || dayStr(now);
+  const { data: earliest } = await svc
+    .from('tickets')
+    .select('created_at')
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  const earliestDate = earliest?.created_at ? dayStr(new Date(earliest.created_at)) : dayStr(now);
+
   const timeRange: TimeRange = {
     start: startParam ? new Date(startParam) : defaultStart,
     end: endParam ? new Date(endParam + 'T23:59:59.999Z') : now,
@@ -98,7 +109,7 @@ export default async function ReportsPage({ searchParams }: Props) {
     <div>
       <h1 className="text-2xl font-semibold text-gray-900 mb-6">Reports</h1>
 
-      <ReportControls isAdmin={isAdmin} types={types} categories={categories} tiers={tiers} />
+      <ReportControls rangeStart={rangeStart} rangeEnd={rangeEnd} earliestDate={earliestDate} isAdmin={isAdmin} types={types} categories={categories} tiers={tiers} />
 
       <div className="space-y-8">
         <section className="bg-white border border-gray-200 rounded-lg p-6">

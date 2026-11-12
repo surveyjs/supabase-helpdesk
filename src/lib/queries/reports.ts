@@ -13,10 +13,10 @@ export type ReportFilters = {
 
 export type TicketVolumeRow = { period: string; count: number; status?: string };
 export type ResolutionMetrics = {
-  avgFirstResponse: number;
-  avgResolution: number;
-  medianResolution: number;
-  bySeverity: Record<string, { avgFirstResponse: number; avgResolution: number; medianResolution: number }>;
+  avgFirstResponse: number | null;
+  avgResolution: number | null;
+  medianResolution: number | null;
+  bySeverity: Record<string, { avgFirstResponse: number | null; avgResolution: number | null; medianResolution: number | null }>;
 };
 export type AgentPerformanceRow = {
   agentId: string;
@@ -33,9 +33,9 @@ export type CsatSummaryData = {
   trend: Array<{ period: string; average: number }>;
 };
 export type SlaComplianceData = {
-  firstResponseCompliance: number;
-  resolutionCompliance: number;
-  bySeverity: Record<string, { firstResponseCompliance: number; resolutionCompliance: number }>;
+  firstResponseCompliance: number | null;
+  resolutionCompliance: number | null;
+  bySeverity: Record<string, { firstResponseCompliance: number | null; resolutionCompliance: number | null }>;
   breachedTickets: Array<{ ticketId: number; title: string; slaType: string; target: number; actual: number }>;
 };
 export type BacklogData = {
@@ -134,7 +134,7 @@ export async function getResolutionMetrics(
 
   // Get tickets with SLA timers joined
   const tierCreatorIds = await getTierCreatorIds(filters, supabase);
-  if (tierCreatorIds && tierCreatorIds.length === 0) return { avgFirstResponse: 0, avgResolution: 0, medianResolution: 0, bySeverity: {} };
+  if (tierCreatorIds && tierCreatorIds.length === 0) return { avgFirstResponse: null, avgResolution: null, medianResolution: null, bySeverity: {} };
   const q = applyFilters(
     supabase
       .from('tickets')
@@ -144,7 +144,7 @@ export async function getResolutionMetrics(
   );
   const { data: tickets } = await q;
 
-  const empty: ResolutionMetrics = { avgFirstResponse: 0, avgResolution: 0, medianResolution: 0, bySeverity: {} };
+  const empty: ResolutionMetrics = { avgFirstResponse: null, avgResolution: null, medianResolution: null, bySeverity: {} };
   if (!tickets || tickets.length === 0) return empty;
 
   const firstResponseTimes: number[] = [];
@@ -170,9 +170,9 @@ export async function getResolutionMetrics(
     }
   }
 
-  const avg = (arr: number[]) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
+  const avg = (arr: number[]) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null);
   const median = (arr: number[]) => {
-    if (arr.length === 0) return 0;
+    if (arr.length === 0) return null;
     const s = [...arr].sort((a, b) => a - b);
     const mid = Math.floor(s.length / 2);
     return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
@@ -363,7 +363,7 @@ export async function getSlaComplianceData(
 
   const { data: timers } = await q;
   if (!timers || timers.length === 0) {
-    return { firstResponseCompliance: 0, resolutionCompliance: 0, bySeverity: {}, breachedTickets: [] };
+    return { firstResponseCompliance: null, resolutionCompliance: null, bySeverity: {}, breachedTickets: [] };
   }
 
   let frMet = 0;
@@ -410,7 +410,7 @@ export async function getSlaComplianceData(
     }
   }
 
-  const pct = (met: number, total: number) => (total ? Math.round((met / total) * 100) : 0);
+  const pct = (met: number, total: number) => (total ? Math.round((met / total) * 100) : null);
   const bySeverity: SlaComplianceData['bySeverity'] = {};
   for (const [sev, d] of Object.entries(bySev)) {
     bySeverity[sev] = {

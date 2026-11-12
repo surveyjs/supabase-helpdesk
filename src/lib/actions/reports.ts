@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation';
 import { createServerClient, createServiceRoleClient } from '@/lib/supabase/server';
 import { generateCsv } from '@/lib/utils/csv';
+import { formatMinutes } from '@/lib/utils/format-minutes';
 import {
   getTicketVolumeData,
   getResolutionMetrics,
@@ -14,12 +15,9 @@ import {
   type ReportFilters,
 } from '@/lib/queries/reports';
 
-function formatMinutes(mins: number): string {
-  if (mins <= 0) return '0m';
-  const h = Math.floor(mins / 60);
-  const m = Math.round(mins % 60);
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
-}
+// CSV cells for missing data are empty, not "—" or "null".
+const mins = (v: number | null) => (v === null ? '' : formatMinutes(v));
+const pct = (v: number | null) => (v === null ? '' : `${v}%`);
 
 export async function exportReportCsv(
   reportType: string,
@@ -57,10 +55,10 @@ export async function exportReportCsv(
     case 'resolution_metrics': {
       const data = await getResolutionMetrics(range, filters, agentScope);
       const rows: (string | number)[][] = [
-        ['Overall', formatMinutes(data.avgFirstResponse), formatMinutes(data.avgResolution), formatMinutes(data.medianResolution)],
+        ['Overall', mins(data.avgFirstResponse), mins(data.avgResolution), mins(data.medianResolution)],
       ];
       for (const [sev, d] of Object.entries(data.bySeverity)) {
-        rows.push([sev, formatMinutes(d.avgFirstResponse), formatMinutes(d.avgResolution), formatMinutes(d.medianResolution)]);
+        rows.push([sev, mins(d.avgFirstResponse), mins(d.avgResolution), mins(d.medianResolution)]);
       }
       return { csv: generateCsv(['Severity', 'Avg First Response', 'Avg Resolution', 'Median Resolution'], rows) };
     }
@@ -68,7 +66,7 @@ export async function exportReportCsv(
       const data = await getAgentPerformanceData(range, agentScope);
       const csv = generateCsv(
         ['Agent', 'Assigned', 'Resolved', 'Avg Response Time', 'Avg Resolution Time', 'Avg CSAT'],
-        data.map((a) => [a.displayName, a.assigned, a.resolved, formatMinutes(a.avgResponseTime), formatMinutes(a.avgResolutionTime), a.avgCsat ? a.avgCsat.toFixed(1) : 'N/A']),
+        data.map((a) => [a.displayName, a.assigned, a.resolved, mins(a.avgResponseTime), mins(a.avgResolutionTime), a.avgCsat ? a.avgCsat.toFixed(1) : 'N/A']),
       );
       return { csv };
     }
@@ -88,15 +86,15 @@ export async function exportReportCsv(
     case 'sla_compliance': {
       const data = await getSlaComplianceData(range, agentScope);
       const rows: (string | number)[][] = [
-        ['Overall First Response', `${data.firstResponseCompliance}%`, '', '', ''],
-        ['Overall Resolution', `${data.resolutionCompliance}%`, '', '', ''],
+        ['Overall First Response', pct(data.firstResponseCompliance), '', '', ''],
+        ['Overall Resolution', pct(data.resolutionCompliance), '', '', ''],
       ];
       for (const [sev, d] of Object.entries(data.bySeverity)) {
-        rows.push([`${sev} - First Response`, `${d.firstResponseCompliance}%`, '', '', '']);
-        rows.push([`${sev} - Resolution`, `${d.resolutionCompliance}%`, '', '', '']);
+        rows.push([`${sev} - First Response`, pct(d.firstResponseCompliance), '', '', '']);
+        rows.push([`${sev} - Resolution`, pct(d.resolutionCompliance), '', '', '']);
       }
       for (const b of data.breachedTickets) {
-        rows.push([`Breached: ${b.slaType}`, b.ticketId, b.title, formatMinutes(b.target), formatMinutes(b.actual)]);
+        rows.push([`Breached: ${b.slaType}`, b.ticketId, b.title, mins(b.target), mins(b.actual)]);
       }
       return { csv: generateCsv(['Metric', 'Value', 'Detail', 'Target', 'Actual'], rows) };
     }

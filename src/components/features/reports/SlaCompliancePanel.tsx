@@ -2,16 +2,20 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { formatMinutes } from '@/lib/utils/format-minutes';
 import type { SlaComplianceData } from '@/lib/queries/reports';
 
-function formatMinutes(mins: number): string {
-  if (mins <= 0) return '0m';
-  const h = Math.floor(mins / 60);
-  const m = Math.round(mins % 60);
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
-}
 
-function GaugeMetric({ label, value }: { label: string; value: number }) {
+function GaugeMetric({ label, value }: { label: string; value: number | null }) {
+  if (value === null) {
+    return (
+      <div className="bg-white border border-gray-200 rounded-lg p-4 text-center">
+        <div className="text-sm text-gray-500 mb-1">{label}</div>
+        <div className="text-3xl font-bold text-gray-400">—</div>
+        <div className="text-xs text-gray-500 mt-1">No tickets in period</div>
+      </div>
+    );
+  }
   const color = value >= 90 ? 'text-green-600' : value >= 70 ? 'text-yellow-600' : 'text-red-600';
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4 text-center">
@@ -50,8 +54,8 @@ export function SlaCompliancePanel({ data }: Props) {
             {Object.entries(data.bySeverity).map(([sev, d]) => (
               <tr key={sev} className="border-b border-gray-100">
                 <td className="py-2 capitalize">{sev}</td>
-                <td className="py-2 text-right">{d.firstResponseCompliance}%</td>
-                <td className="py-2 text-right">{d.resolutionCompliance}%</td>
+                <td className="py-2 text-right">{d.firstResponseCompliance === null ? '—' : `${d.firstResponseCompliance}%`}</td>
+                <td className="py-2 text-right">{d.resolutionCompliance === null ? '—' : `${d.resolutionCompliance}%`}</td>
               </tr>
             ))}
           </tbody>

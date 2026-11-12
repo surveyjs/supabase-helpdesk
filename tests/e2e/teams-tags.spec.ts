@@ -2,6 +2,7 @@ import { test, expect, Page } from './fixtures';
 import { createServiceRoleClient } from '../helpers/supabase';
 import { gotoAuthed, loginViaForm } from '../helpers/auth';
 import { addSurveyTag, waitForSidebarSurveyAutosave } from '../helpers/surveyjs';
+import { openViewsFilters } from '../helpers/agent-dashboard';
 
 /**
  * Helper: log in via the login form (delegates to the shared, retry-hardened helper).
@@ -185,7 +186,7 @@ test.describe('Agent Dashboard Tag Filter', () => {
     await page.goto('/agent');
 
     // Expand the consolidated Views & Filters panel
-    await page.getByText(/Views & Filters:/).click();
+    await openViewsFilters(page);
 
     // The Tags filter is rendered as a SurveyJS tagbox question.
     const tagFilter = page.locator('.sd-question[data-name="tags"]').first();

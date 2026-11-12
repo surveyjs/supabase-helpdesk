@@ -93,6 +93,15 @@ export async function getAgentDashboardPageSize(): Promise<number> {
   return data ? parseInt(data.value, 10) || 20 : 20;
 }
 
+/** Whether any SLA policy exists; without one the dashboard hides its SLA column. */
+export async function hasSlaPolicies(): Promise<boolean> {
+  const supabase = await createServerClient();
+  const { count } = await supabase
+    .from('sla_policies')
+    .select('id', { count: 'exact', head: true });
+  return (count ?? 0) > 0;
+}
+
 export async function getAgentTickets(filters: AgentTicketFilters): Promise<{
   tickets: AgentTicketRow[];
   total: number;

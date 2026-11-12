@@ -24,7 +24,7 @@
           "colCount": 0,
           "minSelectedChoices": 1,
           "choices": [
-            { "value": "open", "text": "Active" },
+            { "value": "open", "text": "Open" },
             { "value": "pending", "text": "Pending" },
             { "value": "closed", "text": "Closed" }
           ],
@@ -34,10 +34,10 @@
           "type": "dropdown",
           "name": "sort",
           "title": "Sort By",
-          "defaultValue": "",
+          "defaultValue": "updated",
           "allowClear": false,
           "choices": [
-            { "value": "", "text": "Last Modified" },
+            { "value": "updated", "text": "Last Modified" },
             { "value": "created", "text": "Created Date" },
             { "value": "sla", "text": "SLA Risk" }
           ]

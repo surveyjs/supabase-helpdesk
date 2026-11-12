@@ -6,6 +6,7 @@ import {
   waitForSidebarSurveyAutosave,
 } from '../helpers/surveyjs';
 import { loginViaForm } from '../helpers/auth';
+import { openViewsFilters } from '../helpers/agent-dashboard';
 
 /**
  * Helper: log in via the login form (delegates to the shared, retry-hardened
@@ -60,14 +61,14 @@ test.describe('Agent Dashboard', () => {
     await page.goto('/agent');
 
     // Expand the consolidated Views & Filters panel
-    await page.getByText(/Views & Filters:/).click();
+    await openViewsFilters(page);
 
     // Search for a ticket from seed data
     await page.getByLabel('Search').fill('Password reset');
     await page.getByRole('button', { name: 'Apply Filters' }).click();
 
     await expect(page).toHaveURL(/q=Password/);
-    await expect(page.locator('.hidden.md\\:block').getByText('Password reset not working').first()).toBeVisible();
+    await expect(page.getByTestId('agent-ticket-table').getByText('Password reset not working').first()).toBeVisible();
   });
 
   test('filter by submitter email works', async ({ page }) => {
@@ -75,7 +76,7 @@ test.describe('Agent Dashboard', () => {
     await page.goto('/agent');
 
     // Expand the consolidated Views & Filters panel
-    await page.getByText(/Views & Filters:/).click();
+    await openViewsFilters(page);
 
     await page.getByLabel('Submitter Email').fill('alice@example.com');
     await page.getByRole('button', { name: 'Apply Filters' }).click();
@@ -98,6 +99,20 @@ test.describe('Agent Dashboard', () => {
     // Navigate to page and verify it loads
     await page.goto('/agent?page=1');
     await expect(page.getByTestId('result-count')).toBeVisible();
+
+    const total = Number((await page.getByTestId('result-count').textContent())!.match(/\d+/)![0]);
+    const rows = await page.getByTestId('agent-ticket-table').locator('tbody tr').count();
+    if (total > rows) {
+      // More than one page: full controls and the item range.
+      const nav = page.getByRole('navigation', { name: 'Pagination' });
+      await expect(nav.getByRole('link', { name: 'Next' })).toBeVisible();
+      await expect(nav.getByRole('link', { name: 'Last' })).toBeVisible();
+      await expect(nav).toContainText(`1–${rows} of ${total.toLocaleString('en-US')}`);
+      await nav.getByRole('link', { name: 'Last' }).click();
+      await expect(page).toHaveURL(/page=\d+/);
+      await expect(nav.getByRole('link', { name: 'First' })).toBeVisible();
+      await expect(nav.getByRole('link', { name: 'Previous' })).toBeVisible();
+    }
   });
 
   test('result count updates with filters', async ({ page }) => {
@@ -466,7 +481,8 @@ test.describe('Consolidated Views & Filters Panel', () => {
     await admin.from('profiles').update({ active_view_id: null }).eq('email', 'agent.smith@example.com');
   });
 
-  test('panel is collapsed by default', async ({ page }) => {
+  test('panel is collapsed by default below xl', async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 800 });
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
 
@@ -494,7 +510,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
     await page.goto(`/agent?status=closed&q=${encodeURIComponent(token)}`);
 
     // First, expand panel
-    await page.getByText(/Views & Filters:/).click();
+    await openViewsFilters(page);
     await expect(page.getByLabel('Search', { exact: true })).toBeVisible();
 
     // Use the new "Add new view" inline editor
@@ -509,7 +525,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
     // Cleanup: delete the view (need to expand first)
     const deleteBtn = page.getByLabel(`Delete saved view ${viewName}`);
     if (!(await deleteBtn.isVisible())) {
-      await page.getByText(/Views & Filters:/).first().click();
+      await openViewsFilters(page);
       await expect(deleteBtn).toBeVisible({ timeout: 5000 });
     }
     await deleteBtn.click();
@@ -517,22 +533,122 @@ test.describe('Consolidated Views & Filters Panel', () => {
   });
 
   test('can expand and collapse panel', async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 800 });
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
+    const toggle = page.getByRole('button', { name: /Views & Filters:/ });
 
     // Panel is collapsed initially
     const filterLabel = page.getByLabel('Search', { exact: true });
     await expect(filterLabel).not.toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
 
     // Click summary to expand
-    await page.getByText(/Views & Filters:/).click();
-    
+    await toggle.click();
+
     // Now filters should be visible
     await expect(filterLabel).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
 
     // Click again to collapse
-    await page.getByText(/Views & Filters:/).click();
+    await toggle.click();
     await expect(filterLabel).not.toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  test('panel is expanded by default at xl and can be collapsed', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto('/agent');
+    const toggle = page.getByRole('button', { name: /Views & Filters:/ });
+    const filterLabel = page.getByLabel('Search', { exact: true });
+
+    await expect(filterLabel).toBeVisible({ timeout: 10000 });
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+
+    await toggle.click();
+    await expect(filterLabel).not.toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  test('filters panel is left of the list at 1440px', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto('/agent');
+    await openViewsFilters(page);
+
+    const panel = page.getByTestId('views-filters-section');
+    const list = page.getByTestId('agent-ticket-table');
+    await expect(list).toBeVisible({ timeout: 10000 });
+    const panelBox = (await panel.boundingBox())!;
+    const listBox = (await list.boundingBox())!;
+
+    expect(panelBox.x).toBeLessThan(listBox.x);
+    expect(panelBox.x + panelBox.width).toBeLessThanOrEqual(listBox.x);
+    // The two columns share a row: their vertical ranges overlap.
+    expect(panelBox.y).toBeLessThan(listBox.y + listBox.height);
+    expect(listBox.y).toBeLessThan(panelBox.y + panelBox.height);
+    // The page is wider than the (main) 5xl container at xl.
+    expect(listBox.x + listBox.width - panelBox.x).toBeGreaterThan(1100);
+
+    // SurveyJS dropdown popups still open right under their input inside the
+    // wide (translated) container.
+    const sortQuestion = page.locator('.sd-question[data-name="sort"]');
+    // Sort By shows its real default instead of the "Select..." placeholder.
+    await expect(sortQuestion.locator('.sd-dropdown__input, .sd-dropdown__value').first()).toHaveText(
+      'Last Modified',
+    );
+    const sort = sortQuestion.locator('.sd-dropdown').first();
+    await sort.click();
+    const option = page
+      .locator('.sv-popup__container')
+      .filter({ visible: true })
+      .locator('.sv-list__item, .sd-selectlist__item')
+      .filter({ hasText: 'Created Date' })
+      .first();
+    await expect(option).toBeVisible();
+    const sortBox = (await sort.boundingBox())!;
+    const optionBox = (await option.boundingBox())!;
+    expect(Math.abs(optionBox.x - sortBox.x)).toBeLessThan(40);
+    expect(optionBox.y).toBeGreaterThan(sortBox.y);
+    expect(optionBox.y - (sortBox.y + sortBox.height)).toBeLessThan(80);
+    await page.keyboard.press('Escape');
+  });
+
+  test('dashboard has no horizontal overflow at 820px and 390px', async ({ page }) => {
+    await loginAs(page, 'agent.smith@example.com');
+    for (const width of [820, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto('/agent');
+      await expect(page.getByTestId('result-count')).toBeVisible({ timeout: 10000 });
+      await openViewsFilters(page);
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(0);
+    }
+  });
+
+  test('cards below lg, table from lg; labelled badges, no lock emoji', async ({ page }) => {
+    await loginAs(page, 'agent.smith@example.com');
+
+    await page.setViewportSize({ width: 820, height: 900 });
+    await page.goto('/agent');
+    await expect(page.getByTestId('result-count')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('agent-ticket-table')).toBeHidden();
+    const cards = page.getByTestId('agent-ticket-cards');
+    await expect(cards).toBeVisible();
+    // Medium is the default level: cards leave it out and label the others.
+    await expect(cards.getByText('Medium', { exact: true })).toHaveCount(0);
+    const levelBadges = cards.getByText(/^(Urgency|Severity): /);
+    for (const text of await levelBadges.allTextContents()) {
+      expect(text).toMatch(/^(Urgency|Severity): (Low|High|Critical)$/);
+    }
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await expect(page.getByTestId('agent-ticket-table')).toBeVisible();
+    await expect(cards).toBeHidden();
+    await expect(page.getByText('🔒')).toHaveCount(0);
   });
 
   test('saved views list shows Default as non-removable option', async ({ page }) => {
@@ -540,7 +656,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
     await page.goto('/agent');
 
     // Expand panel
-    await page.getByText(/Views & Filters:/).click();
+    await openViewsFilters(page);
 
     // Default should be visible and highlighted if current (scoped to panel to avoid matching the trigger)
     await expect(page.getByTestId('views-and-filters-panel').getByRole('button', { name: 'Default' })).toBeVisible();
@@ -553,7 +669,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
     await page.goto(`/agent?status=closed&q=${encodeURIComponent(token)}`);
 
     // Expand panel
-    await page.getByText(/Views & Filters:/).click();
+    await openViewsFilters(page);
 
     // Create saved view via the inline "Add new view" affordance
     await page.getByRole('button', { name: '+ Add new view' }).click();
@@ -568,7 +684,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
     {
       const btn = page.getByLabel(`Delete saved view ${viewName}`);
       if (!(await btn.isVisible())) {
-        await page.getByText(/Views & Filters:/).first().click();
+        await openViewsFilters(page);
         await expect(btn).toBeVisible({ timeout: 5000 });
       }
       await btn.click();
@@ -584,7 +700,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
     await page.goto('/agent?status=open');
 
     // Expand panel
-    await page.getByText(/Views & Filters:/).click();
+    await openViewsFilters(page);
 
     // Create a view with a unique name via the new inline flow
     await page.getByRole('button', { name: '+ Add new view' }).click();
@@ -598,7 +714,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
     {
       const btn = page.getByLabel(`Delete saved view ${viewName}`);
       if (!(await btn.isVisible())) {
-        await page.getByText(/Views & Filters:/).first().click();
+        await openViewsFilters(page);
         await expect(btn).toBeVisible({ timeout: 5000 });
       }
       await btn.click();
@@ -614,7 +730,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
     await page.goto('/agent');
 
     // Expand panel
-    await page.getByText(/Views & Filters:/).click();
+    await openViewsFilters(page);
 
     await expect(page.getByTestId('views-and-filters-panel').getByRole('button', { name: 'Default' })).toBeVisible();
 
@@ -639,7 +755,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
     await page.goto('/agent?status=closed');
 
     // Expand panel
-    await page.getByText(/Views & Filters:/).click();
+    await openViewsFilters(page);
 
     // Click the SurveyJS "Clear All" navigation button
     await page.getByRole('button', { name: 'Clear All' }).click();
@@ -696,7 +812,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
     await page.goto('/agent?status=closed');
 
     // Expand the consolidated panel
-    await page.getByText(/Views & Filters:/).click();
+    await openViewsFilters(page);
 
     // Create a saved view via the inline editor
     await page.getByRole('button', { name: '+ Add new view' }).click();
@@ -711,7 +827,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
     {
       const btn = page.getByLabel(`Delete saved view ${viewName}`);
       if (!(await btn.isVisible())) {
-        await page.getByText(/Views & Filters:/).first().click();
+        await openViewsFilters(page);
         await expect(btn).toBeVisible({ timeout: 5000 });
       }
       await btn.click();
@@ -833,6 +949,8 @@ test.describe('View Switcher Dropdown', () => {
     }).select('id').single();
     if (!view) throw new Error('Failed to seed view');
 
+    // Below xl the panel starts collapsed (from xl it starts expanded).
+    await page.setViewportSize({ width: 1024, height: 800 });
     await loginAs(page, VSD_EMAIL);
     // Hard reload: panel resets to closed state, seeded view appears in dropdown.
     await page.goto('/agent');
@@ -942,7 +1060,7 @@ test.describe('Active View Persistence', () => {
     await page.goto(`/agent?status=closed&q=${encodeURIComponent(token)}`);
 
     // Expand panel and create a named view.
-    await page.getByText(/Views & Filters:/).click();
+    await openViewsFilters(page);
     await page.getByRole('button', { name: '+ Add new view' }).click();
     await page.getByLabel('New saved view name').fill(viewName);
     await page.getByRole('button', { name: 'Confirm new view' }).click();
@@ -965,7 +1083,7 @@ test.describe('Active View Persistence', () => {
     // Clean up the test view.
     const deleteBtn = page.getByLabel(`Delete saved view ${viewName}`);
     if (!(await deleteBtn.isVisible())) {
-      await page.getByText(/Views & Filters:/).first().click();
+      await openViewsFilters(page);
       await expect(deleteBtn).toBeVisible({ timeout: 5000 });
     }
     await deleteBtn.click();
@@ -1002,7 +1120,7 @@ test.describe('Active View Persistence', () => {
       await page.waitForLoadState('networkidle');
 
       // Expand panel and click Default.
-      await page.getByText(/Views & Filters:/).click();
+      await openViewsFilters(page);
       await page.getByTestId('views-and-filters-panel').getByRole('button', { name: 'Default' }).click();
       await page.waitForLoadState('networkidle');
 
@@ -1024,7 +1142,7 @@ test.describe('Active View Persistence', () => {
 
     await loginAs(page, ACTIVE_VIEW_EMAIL);
     await page.goto(`/agent?status=open`);
-    await page.getByText(/Views & Filters:/).click();
+    await openViewsFilters(page);
     await page.getByRole('button', { name: '+ Add new view' }).click();
     await page.getByLabel('New saved view name').fill(viewName);
     await page.getByRole('button', { name: 'Confirm new view' }).click();
@@ -1036,7 +1154,7 @@ test.describe('Active View Persistence', () => {
     // Delete the view while it is the active one.
     const deleteBtn = page.getByLabel(`Delete saved view ${viewName}`);
     if (!(await deleteBtn.isVisible())) {
-      await page.getByText(/Views & Filters:/).first().click();
+      await openViewsFilters(page);
       await expect(deleteBtn).toBeVisible({ timeout: 5000 });
     }
     await deleteBtn.click();

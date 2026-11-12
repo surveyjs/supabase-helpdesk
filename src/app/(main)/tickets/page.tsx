@@ -104,6 +104,8 @@ export default async function MyTicketsPage({
 
   return (
     <div>
+      <h1 className="sr-only">My Tickets</h1>
+
       {/* Team toggle */}
       {hasTeam && (
         <div className="flex gap-2 mb-4" data-testid="team-toggle">

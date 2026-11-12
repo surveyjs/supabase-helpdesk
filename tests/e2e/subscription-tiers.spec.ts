@@ -1,6 +1,7 @@
 import { test, expect, Page } from './fixtures';
 import { createServiceRoleClient } from '../helpers/supabase';
 import { loginViaForm } from '../helpers/auth';
+import { openViewsFilters } from '../helpers/agent-dashboard';
 
 async function loginAs(page: Page, email: string, password = 'Password123') {
   await loginViaForm(page, email, password);
@@ -136,7 +137,7 @@ test.describe('Subscription Tiers', () => {
     await expect(page.getByRole('link', { name: 'Agent Dashboard' })).toHaveAttribute('aria-current', 'page');
 
     // Expand the consolidated Views & Filters panel
-    await page.getByText(/Views & Filters:/).click();
+    await openViewsFilters(page);
 
     // There should be a tier filter dropdown
     const tierFilter = page.getByLabel('Tier');

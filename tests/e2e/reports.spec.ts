@@ -225,7 +225,7 @@ test.describe('NavBar Reports Link', () => {
     await expect(page.getByRole('link', { name: 'Reports' })).toBeVisible();
 
     // Sign out and log in as admin
-    await page.locator('details summary').click();
+    await page.locator('summary[aria-haspopup="true"]').click();
     await page.getByRole('menuitem', { name: 'Sign out' }).click();
     await expect(page).toHaveURL('/login', { timeout: 10000 });
 
@@ -233,7 +233,7 @@ test.describe('NavBar Reports Link', () => {
     await expect(page.getByRole('link', { name: 'Reports' })).toBeVisible();
 
     // Sign out and log in as regular user
-    await page.locator('details summary').click();
+    await page.locator('summary[aria-haspopup="true"]').click();
     await page.getByRole('menuitem', { name: 'Sign out' }).click();
     await expect(page).toHaveURL('/login', { timeout: 10000 });
 

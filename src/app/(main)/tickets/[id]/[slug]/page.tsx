@@ -242,7 +242,7 @@ export default async function TicketDetailPage({
   const renderedPosts = await Promise.all(
     allPosts.map(async (post) => ({
       ...post,
-      htmlBody: await renderMarkdown(post.body),
+      htmlBody: await renderMarkdown(post.body, { blockRemoteImages: true }),
     })),
   );
 

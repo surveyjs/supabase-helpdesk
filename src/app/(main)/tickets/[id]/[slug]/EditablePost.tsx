@@ -29,7 +29,7 @@ export function EditablePost({
   if (!canEdit) {
     return (
       <div
-        className="prose prose-sm max-w-none"
+        className="prose prose-sm max-w-none break-words [&_a]:break-all"
         dangerouslySetInnerHTML={{ __html: htmlBody }}
       />
     );
@@ -54,7 +54,7 @@ export function EditablePost({
   return (
     <div>
       <div
-        className="prose prose-sm max-w-none"
+        className="prose prose-sm max-w-none break-words [&_a]:break-all"
         dangerouslySetInnerHTML={{ __html: htmlBody }}
       />
       <button

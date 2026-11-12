@@ -84,7 +84,7 @@ export default async function UserDetailPage({
   const renderedNotes = await Promise.all(
     (notes ?? []).map(async (note) => ({
       ...note,
-      htmlBody: await renderMarkdown(note.body),
+      htmlBody: await renderMarkdown(note.body, { blockRemoteImages: true }),
       author: Array.isArray(note.author) ? note.author[0] : note.author,
     })),
   );

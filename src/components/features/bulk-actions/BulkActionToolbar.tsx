@@ -88,7 +88,7 @@ export function BulkActionToolbar({
         >
           <select
             name="new_status"
-            className="rounded border border-gray-300 px-2 py-1 text-xs"
+            className="text-xs form-select"
             data-testid="bulk-status-select"
           >
             <option value="open">Open</option>
@@ -98,14 +98,14 @@ export function BulkActionToolbar({
           <button
             type="submit"
             disabled={isPending}
-            className="px-2 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+            className="px-2 h-[36px] text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
           >
             Apply
           </button>
           <button
             type="button"
             onClick={() => setActiveAction(null)}
-            className="text-xs text-gray-500"
+            className="h-[36px] text-xs text-gray-500"
           >
             ×
           </button>
@@ -132,7 +132,7 @@ export function BulkActionToolbar({
         >
           <select
             name="agent_id"
-            className="rounded border border-gray-300 px-2 py-1 text-xs"
+            className="text-xs form-select"
             data-testid="bulk-assign-select"
           >
             {agents.map((a) => (
@@ -144,14 +144,14 @@ export function BulkActionToolbar({
           <button
             type="submit"
             disabled={isPending}
-            className="px-2 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+            className="px-2 h-[36px] text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
           >
             Assign
           </button>
           <button
             type="button"
             onClick={() => setActiveAction(null)}
-            className="text-xs text-gray-500"
+            className="h-[36px] text-xs text-gray-500"
           >
             ×
           </button>
@@ -204,7 +204,7 @@ export function BulkActionToolbar({
                   type="checkbox"
                   value={tag.id}
                   data-testid="bulk-add-tag-checkbox"
-                  className="h-3 w-3"
+                  className="form-checkbox h-3 w-3"
                 />
                 {tag.name}
               </label>
@@ -212,14 +212,14 @@ export function BulkActionToolbar({
             <button
               type="submit"
               disabled={isPending}
-              className="px-2 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+              className="px-2 h-[36px] text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
             >
               Add
             </button>
             <button
               type="button"
               onClick={() => setActiveAction(null)}
-              className="text-xs text-gray-500"
+              className="h-[36px] text-xs text-gray-500"
             >
               ×
             </button>
@@ -256,7 +256,7 @@ export function BulkActionToolbar({
                   type="checkbox"
                   value={tag.id}
                   data-testid="bulk-remove-tag-checkbox"
-                  className="h-3 w-3"
+                  className="form-checkbox h-3 w-3"
                 />
                 {tag.name}
               </label>
@@ -264,14 +264,14 @@ export function BulkActionToolbar({
             <button
               type="submit"
               disabled={isPending}
-              className="px-2 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+              className="px-2 h-[36px] text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
             >
               Remove
             </button>
             <button
               type="button"
               onClick={() => setActiveAction(null)}
-              className="text-xs text-gray-500"
+              className="h-[36px] text-xs text-gray-500"
             >
               ×
             </button>
@@ -299,7 +299,7 @@ export function BulkActionToolbar({
         >
           <select
             name="new_severity"
-            className="rounded border border-gray-300 px-2 py-1 text-xs"
+            className="text-xs form-select"
             data-testid="bulk-severity-select"
           >
             <option value="low">Low</option>
@@ -310,14 +310,14 @@ export function BulkActionToolbar({
           <button
             type="submit"
             disabled={isPending}
-            className="px-2 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+            className="px-2 h-[36px] text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
           >
             Set
           </button>
           <button
             type="button"
             onClick={() => setActiveAction(null)}
-            className="text-xs text-gray-500"
+            className="h-[36px] text-xs text-gray-500"
           >
             ×
           </button>

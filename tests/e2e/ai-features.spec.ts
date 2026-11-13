@@ -17,6 +17,9 @@ async function gotoAdmin(page: Page, path: string) {
   }
 }
 
+/** First ticket link in the /tickets list (a plain <ul>; only /agent has `agent-ticket-table`). */
+const TICKET_ROW_LINK = (page: Page) => page.locator('main ul li a[href^="/tickets/"]').first();
+
 // ============================================================
 // ADMIN AI CONFIGURATION
 // ============================================================
@@ -188,7 +191,7 @@ test.describe('Ticket detail AI features', () => {
 
     // Find a ticket to view
     await page.goto('/tickets');
-    const firstTicket = page.getByTestId('agent-ticket-table').locator('a[href*="/tickets/"]').first();
+    const firstTicket = TICKET_ROW_LINK(page);
     if (await firstTicket.isVisible()) {
       await firstTicket.click();
       await page.waitForTimeout(2000);
@@ -281,7 +284,7 @@ test.describe('AI Summary panel', () => {
     await loginAs(page, 'alice@example.com');
     await page.goto('/tickets');
 
-    const firstTicket = page.getByTestId('agent-ticket-table').locator('a[href*="/tickets/"]').first();
+    const firstTicket = TICKET_ROW_LINK(page);
     if (await firstTicket.isVisible()) {
       await firstTicket.click();
       await page.waitForTimeout(2000);

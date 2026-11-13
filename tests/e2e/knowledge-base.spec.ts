@@ -9,6 +9,37 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
   await loginViaForm(page, email, password);
 }
 
+type GotoOptions = Parameters<Page['goto']>[1];
+
+/**
+ * page.goto for a Help Center page a non-agent must be able to see.
+ * kb_visible is global, and other tests switch it off for a few seconds
+ * ("help center hidden…" and "admin can toggle KB visibility" here, the
+ * phone-menu test in polish.spec.ts), so a page loaded then is a 404. On a
+ * 404, wait until kb_visible is back on (those tests restore it) and load the
+ * page again, at most 3 loads. This never writes the setting itself, so it
+ * cannot break those tests' own assertions.
+ */
+async function gotoHelpPage(page: Page, path: string, options?: GotoOptions) {
+  const svc = createServiceRoleClient();
+  const kbVisible = async () => {
+    const { data, error } = await svc.from('app_settings').select('value').eq('key', 'kb_visible').single();
+    if (error) throw new Error(`read kb_visible: ${error.message}`);
+    return data.value === 'true';
+  };
+  for (let attempt = 1; ; attempt++) {
+    await page.goto(path, options);
+    const notFound = await page.getByRole('heading', { name: /^404/ }).isVisible();
+    if (!notFound || attempt === 3) return;
+    await expect.poll(kbVisible, { timeout: 30000, message: 'kb_visible never came back on' }).toBe(true);
+  }
+}
+
+async function setKbVisible(value: 'true' | 'false') {
+  const { error } = await createServiceRoleClient().from('app_settings').update({ value }).eq('key', 'kb_visible');
+  if (error) throw new Error(`kb_visible: ${error.message}`);
+}
+
 /** Navigate to an admin page, retrying once if requireAdmin() redirect race occurs. */
 async function gotoAdmin(page: Page, path: string) {
   await page.goto(path);
@@ -31,27 +62,26 @@ test.describe('Help Center – Public', () => {
   });
 
   test('help center page loads with categories', async ({ page }) => {
-    await page.goto('/help');
+    await gotoHelpPage(page, '/help');
     await expect(page.getByRole('link', { name: 'Help Center' })).toHaveAttribute('aria-current', 'page');
     await expect(page.getByText('Getting Started')).toBeVisible();
     await expect(page.getByText('Troubleshooting')).toBeVisible();
   });
 
   test('help center hidden when KB visibility disabled', async ({ page }) => {
-    const svc = createServiceRoleClient();
-    await svc.from('app_settings').update({ value: 'false' }).eq('key', 'kb_visible');
-
-    await page.goto('/help', { waitUntil: 'networkidle' });
-    // Should 404
-    await expect(page.getByText('404')).toBeVisible({ timeout: 10000 });
-
-    // Restore
-    await svc.from('app_settings').update({ value: 'true' }).eq('key', 'kb_visible');
+    await setKbVisible('false');
+    try {
+      await page.goto('/help', { waitUntil: 'networkidle' });
+      // Should 404
+      await expect(page.getByText('404')).toBeVisible({ timeout: 10000 });
+    } finally {
+      await setKbVisible('true');
+    }
   });
 
   test('article detail page renders Markdown', async ({ page }) => {
     // Article 1: "How to create a ticket" – published, Getting Started
-    await page.goto('/help/1/getting-started/how-to-create-a-ticket');
+    await gotoHelpPage(page, '/help/1/getting-started/how-to-create-a-ticket');
     await expect(page.getByRole('heading', { name: 'How to create a ticket', exact: true })).toBeVisible({ timeout: 10000 });
     // Body should show rendered Markdown (an h1 inside the prose section)
     await expect(page.locator('.prose')).toBeVisible();
@@ -60,7 +90,7 @@ test.describe('Help Center – Public', () => {
 
   test('article URL redirect on slug mismatch (307)', async ({ page }) => {
     // Use wrong slug — should redirect to correct URL
-    await page.goto('/help/1/wrong-category/wrong-slug', { waitUntil: 'domcontentloaded' });
+    await gotoHelpPage(page, '/help/1/wrong-category/wrong-slug', { waitUntil: 'domcontentloaded' });
     // After redirect, we should land on the correct article page
     await expect(page).toHaveURL(/\/help\/1\/getting-started\/how-to-create-a-ticket/, { timeout: 10000 });
     await expect(page.getByRole('heading', { name: 'How to create a ticket', exact: true })).toBeVisible();
@@ -85,7 +115,7 @@ test.describe('Help Center – Public', () => {
     const svc = createServiceRoleClient();
     await svc.from('kb_articles').update({ status: 'archived' }).eq('id', 2);
 
-    await page.goto('/help/2/getting-started/understanding-ticket-statuses');
+    await gotoHelpPage(page, '/help/2/getting-started/understanding-ticket-statuses');
     await expect(page.getByRole('heading', { name: 'Understanding ticket statuses', exact: true })).toBeVisible({ timeout: 10000 });
     await expect(page.getByText('may be outdated')).toBeVisible();
 
@@ -94,7 +124,7 @@ test.describe('Help Center – Public', () => {
   });
 
   test('search articles returns matching results', async ({ page }) => {
-    await page.goto('/help');
+    await gotoHelpPage(page, '/help');
     await page.getByPlaceholder('Search articles...').fill('ticket');
     await page.getByRole('button', { name: 'Search' }).click();
 
@@ -121,14 +151,7 @@ test.describe('Article Feedback', () => {
   });
 
   test('unauthenticated visitors cannot vote', async ({ page }) => {
-    // Retry navigation in case parallel test momentarily disables kb_visible
-    await page.goto('/help/1/getting-started/how-to-create-a-ticket', { waitUntil: 'networkidle' });
-    if (!await page.getByText('Was this helpful?').isVisible({ timeout: 5000 }).catch(() => false)) {
-      // Parallel kb_visible toggle may have caused a 404 — retry
-      const svc = createServiceRoleClient();
-      await svc.from('app_settings').update({ value: 'true' }).eq('key', 'kb_visible');
-      await page.goto('/help/1/getting-started/how-to-create-a-ticket', { waitUntil: 'networkidle' });
-    }
+    await gotoHelpPage(page, '/help/1/getting-started/how-to-create-a-ticket', { waitUntil: 'networkidle' });
     // Wait for the article page to fully render before checking feedback section
     await expect(page.getByText('Was this helpful?')).toBeVisible({ timeout: 15000 });
     await expect(page.getByText('Log in to vote')).toBeVisible();
@@ -136,12 +159,12 @@ test.describe('Article Feedback', () => {
 
   test('authenticated user can vote thumbs up', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
-    await page.goto('/help/1/getting-started/how-to-create-a-ticket');
+    await gotoHelpPage(page, '/help/1/getting-started/how-to-create-a-ticket');
 
     // If session was lost during navigation, re-login and retry
     if (await page.getByText('Log in to vote').isVisible().catch(() => false)) {
       await loginAs(page, 'alice@example.com');
-      await page.goto('/help/1/getting-started/how-to-create-a-ticket');
+      await gotoHelpPage(page, '/help/1/getting-started/how-to-create-a-ticket');
     }
 
     await expect(page.getByText('Was this helpful?')).toBeVisible({ timeout: 10000 });
@@ -176,7 +199,7 @@ test.describe('Ticket creation from article', () => {
 
   test('"Create a ticket" link on article (authenticated only)', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
-    await page.goto('/help/1/getting-started/how-to-create-a-ticket');
+    await gotoHelpPage(page, '/help/1/getting-started/how-to-create-a-ticket');
 
     await expect(page.getByRole('heading', { name: 'How to create a ticket', exact: true })).toBeVisible({ timeout: 10000 });
     await expect(page.getByText('Still need help?')).toBeVisible({ timeout: 10000 });
@@ -293,11 +316,7 @@ test.describe('NavBar KB links', () => {
   });
 
   test('Help Center link visible when KB enabled', async ({ page }) => {
-    // Re-assert the DB state inside the test so a parallel worker race cannot flip it.
-    const svc = createServiceRoleClient();
-    await svc.from('app_settings').upsert({ key: 'kb_visible', value: 'true' });
-
-    await page.goto('/help');
+    await gotoHelpPage(page, '/help');
     await expect(page.getByRole('link', { name: 'Help Center' })).toBeVisible({ timeout: 10000 });
   });
 
@@ -500,12 +519,28 @@ test.describe('KB visibility toggle', () => {
 
     await expect(page.getByText('Knowledge base visible to public')).toBeVisible({ timeout: 10000 });
 
-    // Toggle visibility
-    const toggleBtn = page.getByRole('button', { name: /Enable|Disable/ });
+    // Toggle visibility, and switch it back on right here: left off until
+    // afterAll, it 404ed the Help Center for parallel tests for two tests.
+    const toggleBtn = page.getByRole('button', { name: /^(Enable|Disable)$/ });
     await expect(toggleBtn).toBeVisible();
-    await toggleBtn.click();
-
-    await page.waitForLoadState('networkidle');
+    const before = (await toggleBtn.textContent())!.trim();
+    const [after, stored] = before === 'Disable' ? ['Enable', 'false'] : ['Disable', 'true'];
+    const svc = createServiceRoleClient();
+    try {
+      await toggleBtn.click();
+      // Restore only after the toggle's server action has landed; otherwise
+      // the restore can run first and the late action leaves the KB hidden.
+      await expect(page.getByRole('button', { name: after, exact: true })).toBeVisible({ timeout: 15000 });
+      await expect
+        .poll(async () => {
+          const { data, error } = await svc.from('app_settings').select('value').eq('key', 'kb_visible').single();
+          if (error) throw new Error(`read kb_visible: ${error.message}`);
+          return data.value;
+        }, { timeout: 15000 })
+        .toBe(stored);
+    } finally {
+      await setKbVisible('true');
+    }
   });
 
   test('agent sees read-only KB visibility checkbox', async ({ page }) => {

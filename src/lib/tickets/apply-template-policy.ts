@@ -85,3 +85,21 @@ export function injectTemplateChoices(
   walk(template);
   return template;
 }
+
+/**
+ * True when `template` contains a question called `name` that is not hidden
+ * by `visible: false` on itself or on an enclosing panel/page. Conditional
+ * visibility (`visibleIf`) counts as visible.
+ */
+export function hasVisibleQuestion(template: unknown, name: string): boolean {
+  function walk(node: unknown): boolean {
+    if (!isRecord(node) || node.visible === false) return false;
+    if (node.name === name && typeof node.type === 'string') return true;
+    const children = [
+      ...(Array.isArray(node.pages) ? node.pages : []),
+      ...(Array.isArray(node.elements) ? node.elements : []),
+    ];
+    return children.some(walk);
+  }
+  return walk(template);
+}

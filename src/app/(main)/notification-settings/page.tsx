@@ -1,18 +1,8 @@
 import { createServerClient } from '@/lib/supabase/server';
 import { requireAuth } from '@/lib/supabase/auth';
+import { NOTIFICATION_EVENT_TYPES as EVENT_TYPES } from '@/lib/notifications/event-labels';
 import { NotificationPreferencesForm } from './NotificationPreferencesForm';
 
-const EVENT_TYPES = [
-  { key: 'new_post', label: 'New Reply' },
-  { key: 'status_changed', label: 'Status Changed' },
-  { key: 'agent_assigned', label: 'Agent Assigned' },
-  { key: 'agent_assigned_to_agent', label: 'Assigned to You (agent)' },
-  { key: 'user_reply_to_agent', label: 'User Reply (agent)' },
-  { key: 'auto_reopen', label: 'Auto Re-open' },
-  { key: 'urgency_changed', label: 'Urgency Changed' },
-  { key: 'severity_changed', label: 'Severity Changed' },
-  { key: 'privacy_changed', label: 'Privacy Changed' },
-];
 
 type Prefs = Record<string, { email?: boolean; in_app?: boolean }>;
 

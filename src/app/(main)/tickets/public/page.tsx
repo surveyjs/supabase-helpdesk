@@ -3,7 +3,7 @@ import { createServerClient } from '@/lib/supabase/server';
 import { requireAuth } from '@/lib/supabase/auth';
 import { TicketList } from '@/components/features/tickets/TicketList';
 import { StatusFilter } from '@/components/features/tickets/StatusFilter';
-import { Pagination } from '@/components/ui/Pagination';
+import { Pagination, clampPage } from '@/components/ui/Pagination';
 
 const PAGE_SIZE = 20;
 
@@ -18,7 +18,7 @@ export default async function PublicTicketsPage({
   const params = await searchParams;
   const statusFilter = (params.status as string) ?? 'all';
   const search = (params.q as string) ?? '';
-  const currentPage = Math.max(1, parseInt((params.page as string) ?? '1', 10) || 1);
+  const requestedPage = Math.max(1, parseInt((params.page as string) ?? '1', 10) || 1);
 
   // Build query — public tickets only
   let query = supabase
@@ -40,12 +40,20 @@ export default async function PublicTicketsPage({
     query = query.textSearch('search_vector', searchTerms, { type: 'plain', config: 'english' });
   }
 
-  // Pagination
-  const from = (currentPage - 1) * PAGE_SIZE;
-  query = query.range(from, from + PAGE_SIZE - 1);
+  // Pagination; a page past the end (e.g. ?page=999) re-queries the last page.
+  const fetchPage = (forPage: number) => {
+    const from = (forPage - 1) * PAGE_SIZE;
+    return query.range(from, from + PAGE_SIZE - 1);
+  };
 
-  const { data: tickets, count } = await query;
+  let { data: tickets, count } = await fetchPage(requestedPage);
+  if (requestedPage > 1 && (tickets ?? []).length === 0) {
+    const probe = await fetchPage(1);
+    const lastPage = clampPage(requestedPage, Math.ceil((probe.count ?? 0) / PAGE_SIZE));
+    ({ data: tickets, count } = lastPage === 1 ? probe : await fetchPage(lastPage));
+  }
   const totalPages = Math.ceil((count ?? 0) / PAGE_SIZE);
+  const currentPage = clampPage(requestedPage, totalPages);
 
   const linkParams: Record<string, string> = {};
   if (statusFilter !== 'all') linkParams.status = statusFilter;
@@ -79,12 +87,12 @@ export default async function PublicTicketsPage({
             name="q"
             defaultValue={search}
             placeholder="Search public tickets…"
-            className="flex-1 rounded border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            className="flex-1 form-input"
             aria-label="Search public tickets"
           />
           <button
             type="submit"
-            className="px-3 py-1.5 text-sm bg-gray-100 rounded hover:bg-gray-200 text-gray-700"
+            className="px-3 h-[36px] text-sm bg-gray-100 rounded hover:bg-gray-200 text-gray-700"
           >
             Search
           </button>

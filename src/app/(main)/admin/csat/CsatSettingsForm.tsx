@@ -34,7 +34,7 @@ export function CsatSettingsForm({ enabled, delay, emailVerified }: CsatSettings
             value="true"
             defaultChecked={enabled}
             disabled={!emailVerified}
-            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+            className="form-checkbox disabled:opacity-50"
             data-testid="csat-enabled-toggle"
           />
           <span className="text-sm font-medium text-gray-900">
@@ -69,7 +69,7 @@ export function CsatSettingsForm({ enabled, delay, emailVerified }: CsatSettings
                 name="csat_survey_delay"
                 value={option.value}
                 defaultChecked={delay === option.value}
-                className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
+                className="form-radio"
                 data-testid={`csat-delay-${option.value}`}
               />
               <span className="text-sm text-gray-700">{option.label}</span>

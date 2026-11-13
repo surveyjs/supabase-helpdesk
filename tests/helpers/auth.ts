@@ -71,6 +71,7 @@ export async function loginViaForm(
   page: Page,
   email: string,
   password = 'Password123',
+  { showDisplayNamePrompt = false }: { showDisplayNamePrompt?: boolean } = {},
 ): Promise<void> {
   const svc = createServiceRoleClient();
   await ensureBuiltInAuthMode();
@@ -115,10 +116,18 @@ export async function loginViaForm(
     // otherwise). Let that navigation finish and assert the URL is stable so
     // callers never start a navigation mid-redirect.
     await page.waitForLoadState('load');
-    const landed = new URL(page.url()).pathname;
-    await expect
-      .poll(() => new URL(page.url()).pathname, { timeout: 5000 })
-      .toBe(landed);
+    // Stable means the same URL on two checks 250 ms apart.
+    let previous = page.url();
+    const deadline = Date.now() + 5000;
+    for (;;) {
+      await page.waitForTimeout(250);
+      const current = page.url();
+      if (current === previous) break;
+      if (Date.now() > deadline) {
+        throw new Error(`URL still changing after sign-in: ${previous} -> ${current}`);
+      }
+      previous = current;
+    }
     return true;
   };
 
@@ -134,6 +143,13 @@ export async function loginViaForm(
   await expect(
     page.locator('summary[aria-haspopup="true"]:visible, button[aria-controls="mobile-nav-menu"]:visible').first(),
   ).toBeVisible({ timeout: 15000 });
+
+  // Seeded users ("Admin", "Alice") have a name equal to their e-mail local
+  // part, so the display-name banner would shift every page's layout. Dismiss
+  // it unless the spec is about the banner itself.
+  if (!showDisplayNamePrompt) {
+    await page.context().addCookies([{ name: 'hd_dn_prompt_dismissed', value: '1', url: page.url() }]);
+  }
 }
 
 /**

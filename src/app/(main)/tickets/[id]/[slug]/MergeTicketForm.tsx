@@ -37,20 +37,20 @@ export function MergeTicketForm({ ticketId }: { ticketId: number }) {
               placeholder="Target ticket ID"
               min={1}
               required
-              className="w-40 rounded border border-gray-300 px-2 py-1 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+              className="w-40 text-xs form-input"
               data-testid="target-ticket-id-input"
             />
             <button
               type="submit"
               disabled={isPending}
-              className="px-3 py-1 text-xs rounded bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50"
+              className="px-3 h-[36px] text-xs rounded bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50"
             >
               {isPending ? 'Merging…' : 'Merge'}
             </button>
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="px-3 py-1 text-xs text-gray-500 hover:text-gray-700"
+              className="px-3 h-[36px] text-xs text-gray-500 hover:text-gray-700"
             >
               Cancel
             </button>

@@ -38,7 +38,7 @@ export function EditorPreferenceForm({
           id="editor_view_mode"
           name="editor_view_mode"
           defaultValue={currentMode}
-          className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+          className="w-full form-select"
         >
           <option value="both">Editor + Preview</option>
           <option value="editor">Editor only</option>
@@ -60,7 +60,7 @@ export function EditorPreferenceForm({
             step={10}
             value={minHeight}
             onChange={(e) => setMinHeight(Number.parseInt(e.target.value, 10) || 0)}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            className="w-full form-input"
             data-testid="editor-min-height-input"
           />
         </div>
@@ -77,7 +77,7 @@ export function EditorPreferenceForm({
             step={10}
             value={maxHeight}
             onChange={(e) => setMaxHeight(Number.parseInt(e.target.value, 10) || 0)}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            className="w-full form-input"
             data-testid="editor-max-height-input"
           />
         </div>

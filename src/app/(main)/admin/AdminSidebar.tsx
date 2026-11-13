@@ -102,7 +102,8 @@ export function AdminSidebar() {
         </label>
         <select
           id="admin-mobile-nav"
-          className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none min-h-[44px]"
+          aria-label="Setup section"
+          className="w-full min-h-[44px] form-select"
           value={currentSection?.href ?? ALL_LINKS[0].href}
           onChange={(e) => {
             window.location.href = e.target.value;
@@ -140,7 +141,7 @@ export function AdminSidebar() {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Filter settings…"
             aria-controls={navId}
-            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            className="w-full form-input"
           />
         </div>
 

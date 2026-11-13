@@ -6,6 +6,7 @@ import {
   MarkdownActionForm,
   type EditorViewMode,
 } from './MarkdownActionForm';
+import { POST_ACTION_CLASS } from './post-action-class';
 
 export function EditablePost({
   postId,
@@ -67,7 +68,7 @@ export function EditablePost({
         <button
           type="button"
           onClick={() => setEditing(true)}
-          className="hover:text-gray-900"
+          className={`${POST_ACTION_CLASS} hover:text-gray-900`}
           data-testid="edit-post-btn"
         >
           Edit

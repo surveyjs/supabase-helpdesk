@@ -19,7 +19,8 @@ DROP TABLE IF EXISTS adimport.s_ticket_friendly;
 CREATE TABLE adimport.s_ticket_friendly (friendly_no INT, legacy_id UUID);
 COPY adimport.s_ticket_friendly FROM '/tmp/adimport/ticket_friendly.tsv';
 INSERT INTO adimport.ticket_friendly (friendly_no, legacy_id)
-SELECT DISTINCT ON (friendly_no) friendly_no, legacy_id FROM adimport.s_ticket_friendly
+-- A FriendlyId shared by several source tickets maps to the lowest legacy_id (deterministic).
+SELECT DISTINCT ON (friendly_no) friendly_no, legacy_id FROM adimport.s_ticket_friendly ORDER BY friendly_no, legacy_id
 ON CONFLICT (friendly_no) DO UPDATE SET legacy_id = EXCLUDED.legacy_id;
 DROP TABLE adimport.s_ticket_friendly;
 

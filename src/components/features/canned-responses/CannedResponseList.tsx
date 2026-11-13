@@ -51,7 +51,7 @@ function CannedResponseForm({
           required
           maxLength={200}
           defaultValue={response?.title ?? ''}
-          className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+          className="block w-full form-input"
         />
         {state.fieldErrors?.title && (
           <p className="mt-1 text-sm text-red-600">{state.fieldErrors.title}</p>
@@ -70,7 +70,7 @@ function CannedResponseForm({
           maxLength={50000}
           defaultValue={response?.body ?? ''}
           placeholder="Write the response body (Markdown supported)…"
-          className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-y"
+          className="block w-full resize-y form-input"
         />
         {state.fieldErrors?.body && (
           <p className="mt-1 text-sm text-red-600">{state.fieldErrors.body}</p>
@@ -85,7 +85,7 @@ function CannedResponseForm({
           id="cr-visibility"
           name="visibility"
           defaultValue={response?.visibility ?? 'private'}
-          className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+          className="block w-full form-select"
         >
           <option value="private">Private</option>
           <option value="public">Public</option>

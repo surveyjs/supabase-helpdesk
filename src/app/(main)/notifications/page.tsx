@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { createServerClient } from '@/lib/supabase/server';
 import { requireAuth } from '@/lib/supabase/auth';
 import { markAllNotificationsRead } from '@/lib/actions/notifications';
-import { Pagination } from '@/components/ui/Pagination';
+import { Pagination, clampPage } from '@/components/ui/Pagination';
 
 function eventIcon(eventType: string) {
   const cls = "h-4 w-4";
@@ -60,7 +60,7 @@ export default async function NotificationsPage({
   const supabase = await createServerClient();
 
   const params = await searchParams;
-  const currentPage = Math.max(1, parseInt((params.page as string) ?? '1', 10) || 1);
+  const requestedPage = Math.max(1, parseInt((params.page as string) ?? '1', 10) || 1);
 
   // Read page size from app_settings
   const { data: pageSizeSetting } = await supabase
@@ -70,18 +70,28 @@ export default async function NotificationsPage({
     .single();
 
   const pageSize = parseInt(pageSizeSetting?.value ?? '20', 10) || 20;
-  const offset = (currentPage - 1) * pageSize;
 
-  // Fetch notifications with count
-  const { data: notifications, count } = await supabase
-    .from('notifications')
-    .select('id, event_type, ticket_id, message, is_read, created_at', { count: 'exact' })
-    .eq('recipient_id', user.id)
-    .order('created_at', { ascending: false })
-    .range(offset, offset + pageSize - 1);
+  // Fetch notifications with count; a page past the end re-queries the last page.
+  const fetchPage = (forPage: number) => {
+    const offset = (forPage - 1) * pageSize;
+    return supabase
+      .from('notifications')
+      .select('id, event_type, ticket_id, message, is_read, created_at', { count: 'exact' })
+      .eq('recipient_id', user.id)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + pageSize - 1);
+  };
+
+  let { data: notifications, count } = await fetchPage(requestedPage);
+  if (requestedPage > 1 && (notifications ?? []).length === 0) {
+    const probe = await fetchPage(1);
+    const lastPage = clampPage(requestedPage, Math.ceil((probe.count ?? 0) / pageSize));
+    ({ data: notifications, count } = lastPage === 1 ? probe : await fetchPage(lastPage));
+  }
 
   const total = count ?? 0;
   const totalPages = Math.ceil(total / pageSize);
+  const currentPage = clampPage(requestedPage, totalPages);
 
   return (
     <div>

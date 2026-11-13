@@ -10,6 +10,7 @@ import {
   type TicketDetailSaveStatusTone,
 } from '@/lib/tickets/ticket-detail-events';
 import type { SurveyJsonDefinition } from '@/lib/constants/survey-ui-config';
+import { colorTagChips, uncheckEmptyBooleans } from '@/lib/tickets/sidebar-survey-model';
 
 const Survey = dynamic(() => import('survey-react-ui').then((m) => m.Survey), { ssr: false });
 
@@ -17,11 +18,13 @@ export type TicketSidebarSurveyProps = {
   ticketId: string;
   templateJson: SurveyJsonDefinition;
   initial: Record<string, unknown>;
+  /** Tag id → hex colour, used to colour the chips of the `tag_ids` tagbox. */
+  tagColors?: Record<string, string>;
 };
 
 type FieldStatus = 'idle' | 'saving' | 'saved' | 'error';
 
-export function TicketSidebarSurvey({ ticketId, templateJson, initial }: TicketSidebarSurveyProps) {
+export function TicketSidebarSurvey({ ticketId, templateJson, initial, tagColors }: TicketSidebarSurveyProps) {
   const previousRef = useRef<Record<string, unknown>>({ ...initial });
   // Names whose next onValueChanged is a programmatic revert and must not
   // re-trigger the dispatcher.
@@ -35,6 +38,13 @@ export function TicketSidebarSurvey({ ticketId, templateJson, initial }: TicketS
     m.showCompleteButton = false;
     // Goal #6: assign data after model construction.
     m.data = initial;
+    // Before the change handler below is attached, and without raising
+    // onValueChanged: nothing is saved for these.
+    uncheckEmptyBooleans(m);
+    // Registered on the model before it first renders, so the first
+    // after-render pass of the Tags question is never missed. Like `initial`,
+    // the colours are read when the model is (re)built from the template.
+    if (tagColors) colorTagChips(m, 'tag_ids', tagColors);
     return m;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateJson]);

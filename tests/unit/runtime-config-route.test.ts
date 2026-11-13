@@ -40,6 +40,8 @@ describe('GET /runtime-config.js', () => {
 });
 
 describe('runtimeConfigScript()', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
   it('matches the route body and cannot close a script element', async () => {
     vi.stubEnv('APP_URL', 'https://help.example.com');
     vi.stubEnv('SUPABASE_ANON_KEY', 'anon</script><script>alert(1)');
@@ -47,6 +49,5 @@ describe('runtimeConfigScript()', () => {
     const script = runtimeConfigScript();
     expect(script).toBe(await GET().text());
     expect(script).not.toContain('</script>');
-    vi.unstubAllEnvs();
   });
 });

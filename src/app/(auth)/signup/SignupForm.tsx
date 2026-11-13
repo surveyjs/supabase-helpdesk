@@ -135,7 +135,7 @@ export function SignupForm({ config }: { config: PublicAuthConfig }) {
             type="text"
             maxLength={100}
             autoComplete="name"
-            className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            className="block w-full form-input"
           />
         </div>
         <div>
@@ -149,7 +149,7 @@ export function SignupForm({ config }: { config: PublicAuthConfig }) {
             required
             maxLength={320}
             autoComplete="email"
-            className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            className="block w-full form-input"
           />
         </div>
         <div>
@@ -163,7 +163,7 @@ export function SignupForm({ config }: { config: PublicAuthConfig }) {
             required
             minLength={8}
             autoComplete="new-password"
-            className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            className="block w-full form-input"
           />
           <p className="mt-1 text-xs text-gray-500">
             At least 8 characters, 1 uppercase, 1 lowercase, and 1 digit.
@@ -180,7 +180,7 @@ export function SignupForm({ config }: { config: PublicAuthConfig }) {
             required
             minLength={8}
             autoComplete="new-password"
-            className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            className="block w-full form-input"
           />
         </div>
         <button

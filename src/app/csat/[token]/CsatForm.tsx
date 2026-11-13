@@ -117,7 +117,7 @@ export function CsatForm({ token, existingRating, existingComment }: CsatFormPro
           onChange={(e) => setComment(e.target.value)}
           maxLength={5000}
           rows={4}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-vertical"
+          className="w-full resize-vertical form-input"
           placeholder="Tell us about your experience..."
           data-testid="csat-comment"
         />

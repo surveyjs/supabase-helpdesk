@@ -27,6 +27,24 @@ test.describe('Notification Settings', () => {
     await expect(page.getByRole('heading', { name: 'Notification Settings' })).toBeVisible({ timeout: 10000 });
   });
 
+  test('user and admin default notification pages show identical event labels', async ({ page }) => {
+    const rowLabels = async () =>
+      (await page.locator('tbody tr td:first-child').allTextContents()).map((t) => t.trim());
+
+    await loginAs(page, 'admin@example.com');
+    await page.goto('/notification-settings');
+    await expect(page.getByRole('heading', { name: 'Notification Settings' })).toBeVisible({ timeout: 10000 });
+    const userLabels = await rowLabels();
+
+    await gotoAdmin(page, '/admin/user-settings');
+    await expect(page.getByRole('heading', { name: 'Default Notification Preferences' })).toBeVisible({ timeout: 10000 });
+    const adminLabels = await rowLabels();
+
+    expect(userLabels.length).toBeGreaterThan(0);
+    expect(adminLabels).toEqual(userLabels);
+    expect(userLabels).toContain('Assigned to You (agents)');
+  });
+
   test('notification settings page shows toggle table', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
     await page.goto('/notification-settings');

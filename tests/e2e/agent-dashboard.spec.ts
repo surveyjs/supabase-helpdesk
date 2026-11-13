@@ -6,7 +6,7 @@ import {
   waitForSidebarSurveyAutosave,
 } from '../helpers/surveyjs';
 import { loginViaForm } from '../helpers/auth';
-import { openViewsFilters } from '../helpers/agent-dashboard';
+import { applyFilters, openViewsFilters } from '../helpers/agent-dashboard';
 
 /**
  * Helper: log in via the login form (delegates to the shared, retry-hardened
@@ -65,9 +65,7 @@ test.describe('Agent Dashboard', () => {
 
     // Search for a ticket from seed data
     await page.getByLabel('Search').fill('Password reset');
-    await page.getByRole('button', { name: 'Apply Filters' }).click();
-
-    await expect(page).toHaveURL(/q=Password/);
+    await applyFilters(page, /q=Password/);
     await expect(page.getByTestId('agent-ticket-table').getByText('Password reset not working').first()).toBeVisible();
   });
 
@@ -79,9 +77,7 @@ test.describe('Agent Dashboard', () => {
     await openViewsFilters(page);
 
     await page.getByLabel('Submitter Email').fill('alice@example.com');
-    await page.getByRole('button', { name: 'Apply Filters' }).click();
-
-    await expect(page).toHaveURL(/email=alice/);
+    await applyFilters(page, /email=alice/);
     const resultText = await page.getByTestId('result-count').textContent();
     expect(resultText).toMatch(/\d+ tickets? found/);
   });
@@ -91,28 +87,6 @@ test.describe('Agent Dashboard', () => {
     await page.goto('/agent?sort=created');
 
     await expect(page).toHaveURL(/sort=created/);
-  });
-
-  test('pagination works', async ({ page }) => {
-    await loginAs(page, 'agent.smith@example.com');
-    // With default page size of 20 and seed data, there might be just 1 page.
-    // Navigate to page and verify it loads
-    await page.goto('/agent?page=1');
-    await expect(page.getByTestId('result-count')).toBeVisible();
-
-    const total = Number((await page.getByTestId('result-count').textContent())!.match(/\d+/)![0]);
-    const rows = await page.getByTestId('agent-ticket-table').locator('tbody tr').count();
-    if (total > rows) {
-      // More than one page: full controls and the item range.
-      const nav = page.getByRole('navigation', { name: 'Pagination' });
-      await expect(nav.getByRole('link', { name: 'Next' })).toBeVisible();
-      await expect(nav.getByRole('link', { name: 'Last' })).toBeVisible();
-      await expect(nav).toContainText(`1–${rows} of ${total.toLocaleString('en-US')}`);
-      await nav.getByRole('link', { name: 'Last' }).click();
-      await expect(page).toHaveURL(/page=\d+/);
-      await expect(nav.getByRole('link', { name: 'First' })).toBeVisible();
-      await expect(nav.getByRole('link', { name: 'Previous' })).toBeVisible();
-    }
   });
 
   test('result count updates with filters', async ({ page }) => {
@@ -128,6 +102,190 @@ test.describe('Agent Dashboard', () => {
     // Both should be valid count strings
     expect(allCount).toMatch(/\d+ tickets? found/);
     expect(closedCount).toMatch(/\d+ tickets? found/);
+  });
+});
+
+// Seeds more tickets than one page holds under a unique title prefix, narrows /agent to
+// them with the search param (`q`) and uses the real page size; nothing global changes.
+test.describe('Agent Dashboard pagination', () => {
+  test.describe.configure({ mode: 'serial' });
+
+  const prefix = `PG-${Math.random().toString(36).slice(2, 8)}`;
+  const SEEDED = 45;
+  const OLD_MS = 25 * 3600_000;
+  let pageSize = 20;
+
+  test.beforeAll(async () => {
+    const admin = createServiceRoleClient();
+    const { data: size } = await admin
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'agent_dashboard_page_size')
+      .maybeSingle();
+    pageSize = parseInt(size?.value ?? '20', 10) || 20;
+    const { data: alice } = await admin.from('profiles').select('id').eq('email', 'alice@example.com').single();
+    const { data: type } = await admin.from('ticket_types').select('id').limit(1).single();
+    const rows = Array.from({ length: Math.max(SEEDED, pageSize * 2 + 1) }, (_, i) => ({
+      title: `${prefix} ticket ${String(i).padStart(3, '0')}`,
+      slug: `${prefix.toLowerCase()}-ticket-${i}`,
+      creator_id: alice!.id,
+      type_id: type!.id,
+      // Distinct timestamps: one bulk insert would otherwise tie on the sort key and
+      // make the page boundaries unstable. Older than 24 h so these alice-created tickets
+      // do not count against her 24 h ticket rate limit (shared with parallel specs).
+      created_at: new Date(Date.now() - OLD_MS - i * 60_000).toISOString(),
+      updated_at: new Date(Date.now() - OLD_MS - i * 60_000).toISOString(),
+    }));
+    const { error } = await admin.from('tickets').insert(rows);
+    if (error) throw error;
+  });
+
+  test.afterAll(async () => {
+    await createServiceRoleClient().from('tickets').delete().like('title', `${prefix} %`);
+  });
+
+  const rowTitles = (page: Page) =>
+    page.getByTestId('agent-ticket-table').locator('tbody tr td:nth-child(2) a').allTextContents();
+
+  test('Next and Last change the rows; the range text follows', async ({ page }) => {
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto(`/agent?q=${prefix}`);
+    await expect(page.getByTestId('result-count')).toHaveText(/\d+ tickets found/);
+    const total = Number((await page.getByTestId('result-count').textContent())!.match(/\d+/)![0]);
+    expect(total).toBeGreaterThan(pageSize * 2);
+    const totalPages = Math.ceil(total / pageSize);
+
+    const nav = page.getByRole('navigation', { name: 'Pagination' });
+    await expect(nav).toContainText(`1–${pageSize} of ${total}`);
+    // Disabled controls are hidden from assistive tech, not exposed as fake links.
+    await expect(nav.getByRole('link', { name: 'First' })).toHaveCount(0);
+    const first = await rowTitles(page);
+    expect(first).toHaveLength(pageSize);
+
+    // Same CI rationale as applyFilters (tests/helpers/agent-dashboard.ts): RSC render under load plus prefetch contention.
+    await nav.getByRole('link', { name: 'Next' }).click();
+    await expect(page).toHaveURL(/page=2/, { timeout: 20_000 });
+    await expect(nav).toContainText(`${pageSize + 1}–${pageSize * 2} of ${total}`);
+    const second = await rowTitles(page);
+    expect(second).toHaveLength(pageSize);
+    expect(second.some((t) => first.includes(t))).toBe(false);
+
+    await nav.getByRole('link', { name: 'Last' }).click();
+    await expect(page).toHaveURL(new RegExp(`page=${totalPages}`), { timeout: 20_000 });
+    await expect(nav).toContainText(`${(totalPages - 1) * pageSize + 1}–${total} of ${total}`);
+    await expect(nav.getByRole('link', { name: 'Next' })).toHaveCount(0);
+    const last = await rowTitles(page);
+    expect(last).toHaveLength(total - (totalPages - 1) * pageSize);
+
+    await nav.getByRole('link', { name: 'First' }).click();
+    await expect(page).toHaveURL(/page=1(&|$)/, { timeout: 20_000 });
+    await expect(nav).toContainText(`1–${pageSize} of ${total}`);
+  });
+
+  test('?page=999 shows the last page with a range ending in the total', async ({ page }) => {
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto(`/agent?q=${prefix}&page=999`);
+    await expect(page.getByTestId('result-count')).toHaveText(/\d+ tickets found/);
+    const total = Number((await page.getByTestId('result-count').textContent())!.match(/\d+/)![0]);
+    const totalPages = Math.ceil(total / pageSize);
+    expect(await page.getByTestId('agent-ticket-table').locator('tbody tr').count()).toBeGreaterThan(0);
+    const nav = page.getByRole('navigation', { name: 'Pagination' });
+    await expect(nav).toContainText(`${(totalPages - 1) * pageSize + 1}–${total} of ${total}`);
+    await expect(nav.getByRole('link', { name: String(totalPages), exact: true })).toHaveAttribute('aria-current', 'page');
+  });
+
+  test('/tickets?page=999 shows the last page with rows', async ({ page }) => {
+    await loginAs(page, 'alice@example.com');
+    await page.goto('/tickets?page=999');
+    await expect(page.locator('main ul li a[href^="/tickets/"]').first()).toBeVisible();
+    // The seeded tickets span 3 pages; page 999 lands on the last one.
+    await expect(page.getByRole('navigation', { name: 'Pagination' }).locator('[aria-current="page"]')).toHaveText(
+      /^[2-9]\d*$/,
+    );
+  });
+
+  test('touch targets: card checkboxes and pagination links are at least 44px', async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
+    const page = await context.newPage();
+    try {
+      await loginAs(page, 'agent.smith@example.com');
+      await page.goto(`/agent?q=${prefix}`);
+      const hit = page.getByTestId('agent-ticket-cards').locator('label').first();
+      const box = (await hit.boundingBox())!;
+      expect(box.width).toBeGreaterThanOrEqual(44);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+      const next = page.getByRole('navigation', { name: 'Pagination' }).getByRole('link', { name: 'Next' });
+      const nbox = (await next.boundingBox())!;
+      expect(nbox.height).toBeGreaterThanOrEqual(44);
+      expect(nbox.width).toBeGreaterThanOrEqual(44);
+      // No horizontal overflow at phone width.
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    } finally {
+      await context.close();
+    }
+  });
+});
+
+test.describe('Agent Dashboard filters panel', () => {
+  test.describe('below xl', () => {
+    test.use({ viewport: { width: 820, height: 1000 } });
+
+    test('SurveyJS only mounts after the first expand, and Apply works', async ({ page }) => {
+      await loginAs(page, 'agent.smith@example.com');
+      await page.goto('/agent');
+      await expect(page.getByTestId('views-filters-section')).toBeVisible();
+      await expect(page.getByTestId('views-and-filters-panel')).toHaveCount(0);
+      await expect(page.locator('[class*="sd-root"], [class*="sd-body"], .sd-element')).toHaveCount(0);
+
+      await openViewsFilters(page);
+      await page.getByLabel('Search').fill('Password');
+      await applyFilters(page, /q=Password/);
+    });
+  });
+
+  test.describe('at xl', () => {
+    test.use({ viewport: { width: 1440, height: 900 } });
+
+    test('panel is open on load', async ({ page }) => {
+      await loginAs(page, 'agent.smith@example.com');
+      await page.goto('/agent');
+      await expect(page.getByTestId('views-and-filters-panel')).toBeVisible({ timeout: 10000 });
+      await expect(page.getByRole('button', { name: 'Collapse filters' })).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    test('server-rendered shell keeps the list where it ends up (no layout shift on mount)', async ({ page, browser }) => {
+      await loginAs(page, 'agent.smith@example.com');
+      await page.goto('/agent');
+      await expect(page.getByTestId('views-and-filters-panel')).toBeVisible({ timeout: 10000 });
+      // Let the SurveyJS form finish rendering before measuring.
+      await expect(page.getByRole('button', { name: 'Apply Filters' })).toBeVisible({ timeout: 10000 });
+      const list = page.getByTestId('agent-ticket-table');
+      await expect(list).toBeVisible();
+      const mounted = (await list.boundingBox())!;
+
+      // Same page with JS off = exactly what the server rendered before hydration.
+      const ssrContext = await browser.newContext({
+        storageState: await page.context().storageState(),
+        javaScriptEnabled: false,
+        viewport: { width: 1440, height: 900 },
+      });
+      try {
+        const ssrPage = await ssrContext.newPage();
+        await ssrPage.goto('/agent');
+        const ssrList = ssrPage.getByTestId('agent-ticket-table');
+        await expect(ssrList).toBeVisible();
+        const ssr = (await ssrList.boundingBox())!;
+        // The panel is a side column: the list must not move when the form mounts.
+        expect(Math.abs(ssr.x - mounted.x)).toBeLessThanOrEqual(2);
+        expect(Math.abs(ssr.y - mounted.y)).toBeLessThanOrEqual(2);
+        // The SSR shell shows a non-trivial placeholder instead of an empty box.
+        const skeleton = ssrPage.getByTestId('views-filters-skeleton');
+        await expect(skeleton).toBeVisible();
+        expect((await skeleton.boundingBox())!.height).toBeGreaterThan(200);
+      } finally {
+        await ssrContext.close();
+      }
+    });
   });
 });
 
@@ -471,19 +629,76 @@ test.describe('Agent Ticket Detail Controls', () => {
   });
 });
 
+/**
+ * A throwaway agent per parallel worker slot for "Consolidated Views & Filters
+ * Panel". Its tests create, apply and delete saved views, and applying a view
+ * stores it as the agent's active view. As agent.smith, that stored view
+ * leaked into parallel describes opening /agent as agent.smith: the page
+ * loaded the view, and their Apply updated it and went to ?view=<id>.
+ */
+function viewsAgent(): { id: string; email: string } {
+  const slot = String(test.info().parallelIndex).padStart(2, '0');
+  return { id: `00000000-0000-0000-0000-0009120000${slot}`, email: `views-panel-e2e-${slot}@test.local` };
+}
+
+async function deleteViewsAgent(): Promise<void> {
+  const { id } = viewsAgent();
+  const svc = createServiceRoleClient();
+  const { error: viewsErr } = await svc.from('saved_views').delete().eq('agent_id', id);
+  if (viewsErr) throw new Error(`delete saved views: ${viewsErr.message}`);
+  // profiles → auth.users has no cascade: drop the profile first.
+  const { error: profileErr } = await svc.from('profiles').delete().eq('id', id);
+  if (profileErr) throw new Error(`delete profile: ${profileErr.message}`);
+  const { error } = await svc.auth.admin.deleteUser(id);
+  if (error && error.status !== 404) throw new Error(`deleteUser: ${error.message}`);
+}
+
+async function createViewsAgent(): Promise<void> {
+  const { id, email } = viewsAgent();
+  // Start clean even if a previous run died before afterAll.
+  await deleteViewsAgent();
+  const svc = createServiceRoleClient();
+  const { error } = await svc.auth.admin.createUser({
+    id,
+    email,
+    password: 'Password123',
+    email_confirm: true,
+    user_metadata: { display_name: 'Views Panel E2E' },
+  });
+  if (error) throw new Error(`createUser(${email}): ${error.message}`);
+  const { error: roleErr } = await svc.from('profiles').update({ role: 'agent' }).eq('id', id);
+  if (roleErr) throw new Error(`set agent role: ${roleErr.message}`);
+}
+
 test.describe('Consolidated Views & Filters Panel', () => {
+  // Views these tests create through the UI; remove them even when a test fails midway,
+  // so a leaked row can't push later layout assertions around.
+  test.afterEach(async () => {
+    const { error } = await createServiceRoleClient().from('saved_views').delete().eq('agent_id', viewsAgent().id);
+    if (error) throw new Error(`delete saved views: ${error.message}`);
+  });
+
   test.describe.configure({ mode: 'serial' });
 
+  test.beforeAll(async () => {
+    await createViewsAgent();
+  });
+
+  test.afterAll(async () => {
+    await deleteViewsAgent();
+  });
+
   test.beforeEach(async () => {
-    // Reset active_view_id before every test so parallel describe blocks
-    // (View Switcher Dropdown) cannot pollute this block's state.
-    const admin = createServiceRoleClient();
-    await admin.from('profiles').update({ active_view_id: null }).eq('email', 'agent.smith@example.com');
+    const { error } = await createServiceRoleClient()
+      .from('profiles')
+      .update({ active_view_id: null })
+      .eq('id', viewsAgent().id);
+    if (error) throw new Error(`reset active view: ${error.message}`);
   });
 
   test('panel is collapsed by default below xl', async ({ page }) => {
     await page.setViewportSize({ width: 1024, height: 800 });
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
     await page.goto('/agent');
 
     // The consolidated panel summary should be visible
@@ -496,7 +711,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
   });
 
   test('panel summary shows "Views & Filters: Default" when no view selected', async ({ page }) => {
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
     await page.goto('/agent');
 
     // Trigger should show "Default"
@@ -506,7 +721,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
   test('panel summary shows current view name when view is applied', async ({ page }) => {
     const token = `view-${Date.now()}`;
     const viewName = `My Test ${token}`;
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
     await page.goto(`/agent?status=closed&q=${encodeURIComponent(token)}`);
 
     // First, expand panel
@@ -534,7 +749,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
 
   test('can expand and collapse panel', async ({ page }) => {
     await page.setViewportSize({ width: 1024, height: 800 });
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
     await page.goto('/agent');
     const toggle = page.getByRole('button', { name: /Views & Filters:/ });
 
@@ -558,7 +773,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
 
   test('panel is expanded by default at xl and can be collapsed', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
     await page.goto('/agent');
     const toggle = page.getByRole('button', { name: /Views & Filters:/ });
     const filterLabel = page.getByLabel('Search', { exact: true });
@@ -573,7 +788,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
 
   test('filters panel is left of the list at 1440px', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
     await page.goto('/agent');
     await openViewsFilters(page);
 
@@ -617,7 +832,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
 
   test('Apply Filters is reachable in the sticky panel at 1440x900', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
     await page.goto('/agent');
     await openViewsFilters(page);
 
@@ -635,7 +850,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
   });
 
   test('dashboard has no horizontal overflow at 820px and 390px', async ({ page }) => {
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
     for (const width of [820, 390]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto('/agent');
@@ -649,7 +864,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
   });
 
   test('cards below lg, table from lg; labelled badges, no lock emoji', async ({ page }) => {
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
 
     await page.setViewportSize({ width: 820, height: 900 });
     await page.goto('/agent');
@@ -671,7 +886,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
   });
 
   test('saved views list shows Default as non-removable option', async ({ page }) => {
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
     await page.goto('/agent');
 
     // Expand panel
@@ -684,7 +899,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
   test('create and apply saved view', async ({ page }) => {
     const token = `closed-only-${Date.now()}`;
     const viewName = `Closed Only ${token}`;
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
     await page.goto(`/agent?status=closed&q=${encodeURIComponent(token)}`);
 
     // Expand panel
@@ -715,7 +930,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
     const token = Date.now();
     const viewName = `To Delete ${token}`;
 
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
     await page.goto('/agent?status=open');
 
     // Expand panel
@@ -745,7 +960,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
   });
 
   test('cannot delete Default view (no delete button for Default)', async ({ page }) => {
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
     await page.goto('/agent');
 
     // Expand panel
@@ -758,7 +973,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
   });
 
   test('applying custom filters updates URL and collapsed summary', async ({ page }) => {
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
     await page.goto('/agent?status=closed');
 
     // URL should have the filter
@@ -769,7 +984,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
   });
 
   test('clearing filters reverts to Default in collapsed summary', async ({ page }) => {
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
     // Start with a filtered URL
     await page.goto('/agent?status=closed');
 
@@ -790,7 +1005,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
   });
 
   test('browser back/forward preserves view and filter state', async ({ page }) => {
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
 
     // Start at /agent
     await page.goto('/agent');
@@ -826,7 +1041,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
     const token = Date.now();
     const viewName = `E2E View ${token}`;
 
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
     // Start with non-empty filters so the saved view stores a non-empty filter set
     await page.goto('/agent?status=closed');
 

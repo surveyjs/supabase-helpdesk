@@ -84,13 +84,13 @@ export default async function AdminTeamsPage() {
                     type="email"
                     name="email"
                     required
-                    className="rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                    className="form-input"
                     placeholder="user@example.com"
                   />
                 </div>
                 <button
                   type="submit"
-                  className="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                  className="px-3 h-[36px] text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
                 >
                   Add
                 </button>

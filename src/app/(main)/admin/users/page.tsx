@@ -4,7 +4,7 @@ import { requireAdmin } from '@/lib/supabase/auth';
 import { blockUser, unblockUser, adminDeleteUser } from '@/lib/actions/admin';
 import { assignTier } from '@/lib/actions/tiers';
 import { RoleBadge } from '@/components/ui/RoleBadge';
-import { Pagination } from '@/components/ui/Pagination';
+import { Pagination, clampPage } from '@/components/ui/Pagination';
 
 export default async function UsersPage({
   searchParams,
@@ -20,41 +20,53 @@ export default async function UsersPage({
   const supabase = await createServerClient();
   const params = await searchParams;
 
-  const page = Math.max(1, parseInt(params.page ?? '1', 10) || 1);
+  const requestedPage = Math.max(1, parseInt(params.page ?? '1', 10) || 1);
   const pageSize = 20;
-  const offset = (page - 1) * pageSize;
   const roleFilter = params.role ?? 'all';
   const statusFilter = params.status ?? 'all';
   const searchQuery = params.q?.trim() ?? '';
 
-  // Build query
-  let query = supabase
-    .from('profiles')
-    .select('id, display_name, email, role, team_id, is_blocked, created_at, tier_id, tier_expires_at, team:teams(name), tier:subscription_tiers(key, display_name)', { count: 'exact' })
-    .order('created_at', { ascending: false })
-    .range(offset, offset + pageSize - 1);
+  // Build query for a given page
+  const buildQuery = (forPage: number) => {
+    const offset = (forPage - 1) * pageSize;
+    let query = supabase
+      .from('profiles')
+      .select('id, display_name, email, role, team_id, is_blocked, created_at, tier_id, tier_expires_at, team:teams(name), tier:subscription_tiers(key, display_name)', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + pageSize - 1);
 
-  if (roleFilter !== 'all') {
-    query = query.eq('role', roleFilter);
-  }
-
-  if (statusFilter === 'blocked') {
-    query = query.eq('is_blocked', true);
-  } else if (statusFilter === 'deleted') {
-    query = query.like('display_name', 'Deleted User #%');
-  } else if (statusFilter === 'active') {
-    query = query.eq('is_blocked', false).not('display_name', 'like', 'Deleted User #%');
-  }
-
-  if (searchQuery) {
-    const sanitized = searchQuery.replace(/[,()]/g, '');
-    if (sanitized) {
-      query = query.or(`display_name.ilike.%${sanitized}%,email.ilike.%${sanitized}%`);
+    if (roleFilter !== 'all') {
+      query = query.eq('role', roleFilter);
     }
-  }
 
-  const { data: users, count } = await query;
+    if (statusFilter === 'blocked') {
+      query = query.eq('is_blocked', true);
+    } else if (statusFilter === 'deleted') {
+      query = query.like('display_name', 'Deleted User #%');
+    } else if (statusFilter === 'active') {
+      query = query.eq('is_blocked', false).not('display_name', 'like', 'Deleted User #%');
+    }
+
+    if (searchQuery) {
+      const sanitized = searchQuery.replace(/[,()]/g, '');
+      if (sanitized) {
+        query = query.or(`display_name.ilike.%${sanitized}%,email.ilike.%${sanitized}%`);
+      }
+    }
+
+    return query;
+  };
+
+  let { data: users, count } = await buildQuery(requestedPage);
+  if (requestedPage > 1 && (users ?? []).length === 0) {
+    // Past the last page (e.g. ?page=999): PostgREST answers 416 and reports no count, so
+    // probe page 1 for the total, then show the last page.
+    const probe = await buildQuery(1);
+    const lastPage = clampPage(requestedPage, Math.ceil((probe.count ?? 0) / pageSize));
+    ({ data: users, count } = lastPage === 1 ? probe : await buildQuery(lastPage));
+  }
   const totalPages = Math.ceil((count ?? 0) / pageSize);
+  const page = clampPage(requestedPage, totalPages);
 
   // Fetch available tiers for assignment
   const { data: allTiers } = await supabase
@@ -124,7 +136,7 @@ export default async function UsersPage({
           <select
             name="tier_id"
             defaultValue={user.tier_id ?? 'none'}
-            className="rounded border border-gray-300 px-1 py-0.5 text-xs"
+            className="text-xs form-select"
             aria-label={`Tier for ${user.display_name ?? user.email}${idSuffix}`}
           >
             <option value="none">None</option>
@@ -136,10 +148,10 @@ export default async function UsersPage({
             name="expires_at"
             type="datetime-local"
             defaultValue={user.tier_expires_at ? new Date(user.tier_expires_at).toISOString().slice(0, 16) : ''}
-            className="rounded border border-gray-300 px-1 py-0.5 text-xs"
+            className="text-xs form-input"
             aria-label={`Tier expiration${idSuffix}`}
           />
-          <button type="submit" className="px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200">Save</button>
+          <button type="submit" className="px-2 h-[36px] text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200">Save</button>
         </form>
       </details>
     ) : null;
@@ -220,14 +232,14 @@ export default async function UsersPage({
           <div className="flex gap-2">
             <button
               type="submit"
-              className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+              className="px-4 h-[36px] bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
             >
               Filter
             </button>
             <Link
               href="/admin/users"
               prefetch={false}
-              className="px-4 py-1.5 bg-gray-100 text-gray-700 text-sm rounded hover:bg-gray-200"
+              className="px-4 h-[36px] inline-flex items-center bg-gray-100 text-gray-700 text-sm rounded hover:bg-gray-200"
             >
               Reset
             </Link>

@@ -63,7 +63,7 @@ export function MarkdownPreview({
           maxLength={maxLength}
           rows={rows ?? 6}
           placeholder={placeholder}
-          className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-y"
+          className="block w-full resize-y form-input"
         />
       ) : (
         <div className="min-h-[150px] rounded border border-gray-300 px-3 py-2 prose prose-sm max-w-none">

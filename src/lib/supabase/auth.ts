@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { redirect } from 'next/navigation';
 import { createServerClient } from './server';
 
@@ -6,23 +7,25 @@ export function homePathForRole(role: string | null | undefined): string {
   return role === 'agent' || role === 'admin' ? '/agent' : '/';
 }
 
-export async function getUser() {
+// React cache() memoises per server request only (never across requests or users), so the
+// layout, NavBar and page share one auth round trip and one profile select.
+export const getUser = cache(async () => {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   return user;
-}
+});
 
-export async function getProfile() {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
+export const getProfile = cache(async () => {
+  const user = await getUser();
   if (!user) return null;
+  const supabase = await createServerClient();
   const { data } = await supabase
     .from('profiles')
     .select('*')
     .eq('id', user.id)
     .single();
   return data;
-}
+});
 
 export async function requireAuth() {
   const user = await getUser();
@@ -31,27 +34,17 @@ export async function requireAuth() {
 }
 
 export async function requireAgent() {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getUser();
   if (!user) redirect('/login');
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single();
+  const profile = await getProfile();
   if (!profile || !['agent', 'admin'].includes(profile.role)) redirect('/');
   return user;
 }
 
 export async function requireAdmin() {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getUser();
   if (!user) redirect('/login');
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single();
+  const profile = await getProfile();
   if (!profile || profile.role !== 'admin') redirect('/');
   return user;
 }

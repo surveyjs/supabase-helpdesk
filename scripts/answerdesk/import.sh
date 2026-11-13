@@ -7,6 +7,7 @@
 #   scripts/answerdesk/import.sh load      # $WORK/*.tsv -> database (one transaction)
 #   scripts/answerdesk/import.sh all       # prepare + upload + load
 #   scripts/answerdesk/import.sh relink    # rewrite cross-ticket references in imported posts
+#   scripts/answerdesk/import.sh test-relink  # self-test of relink.sql on synthetic data (rolled back)
 #   scripts/answerdesk/import.sh status    # what is imported so far
 #   scripts/answerdesk/import.sh reset     # remove imported tickets and created users
 #
@@ -17,7 +18,8 @@
 #   FRACTION=0.1                       share of tickets to import (deterministic sample)
 #   ADMIN_EMAIL=                       source user who becomes admin (others in UserInRole -> agent)
 #   API_URL=http://127.0.0.1:8000      Supabase API gateway, for Storage uploads
-#   DB_CONTAINER=supabase-db
+#   KEEP_AUTOMATED=                    set to 1 to also import automated DMARC report tickets (prepare)
+#   DB_CONTAINER=supabase-db           (test-relink defaults to supabase_db_helpdesk and refuses supabase-* deploy containers)
 set -euo pipefail
 export MSYS_NO_PATHCONV=1 # Git Bash: don't rewrite /tmp/... args passed to docker
 
@@ -30,6 +32,7 @@ DEPLOY="${DEPLOY:-}"
 FRACTION="${FRACTION:-0.1}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-}"
 API_URL="${API_URL:-http://127.0.0.1:8000}"
+DB_CONTAINER_USER="${DB_CONTAINER:-}" # test-relink must not inherit the real-deploy default below
 DB_CONTAINER="${DB_CONTAINER:-supabase-db}"
 
 psql_c() { docker exec -i "$DB_CONTAINER" psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1 "$@"; }
@@ -45,7 +48,7 @@ need() {
 prepare() {
   need PKG WORK
   node --max-old-space-size=4096 "$HERE/prepare.mjs" --pkg "$PKG" --out "$WORK" \
-    --fraction "$FRACTION" --admin-email "$ADMIN_EMAIL"
+    --fraction "$FRACTION" --admin-email "$ADMIN_EMAIL" ${KEEP_AUTOMATED:+--keep-automated}
 }
 
 upload() {
@@ -80,14 +83,41 @@ relink() {
   docker exec -u root "$DB_CONTAINER" chmod -R a+rX /tmp/adimport
   local rc=0
   psql_c -q -t -A <<'SQL' || rc=$?
-SET client_min_messages = notice;
+SET client_min_messages = warning; -- no NOTICE noise; the counts are one SELECT row below
 BEGIN;
 \i /tmp/adimport/relink.sql
-SELECT 'posts with FriendlyId before: ' || count(*) FROM public.posts WHERE body LIKE '%FriendlyId%';
-SELECT adimport.relink_ticket_refs() || ' posts changed';
-SELECT 'posts with FriendlyId after: ' || count(*) FROM public.posts WHERE body LIKE '%FriendlyId%';
+CREATE TEMP TABLE relink_before ON COMMIT DROP AS SELECT count(*) AS n FROM public.posts WHERE body LIKE '%FriendlyId%';
+CREATE TEMP TABLE relink_changed ON COMMIT DROP AS SELECT adimport.relink_ticket_refs() AS n;
+SELECT 'posts with FriendlyId before: ' || (SELECT n FROM relink_before)
+  || ', posts changed: ' || (SELECT n FROM relink_changed)
+  || ', posts with FriendlyId after: ' || (SELECT count(*) FROM public.posts WHERE body LIKE '%FriendlyId%');
 COMMIT;
 SQL
+  docker exec "$DB_CONTAINER" rm -rf /tmp/adimport
+  return $rc
+}
+
+# Self-test of relink.sql on synthetic data only (relink.test.sql); rolled back, DB unchanged.
+test_relink() {
+  # Local test stack only: refuse a real deploy container BEFORE any docker command runs.
+  DB_CONTAINER="${DB_CONTAINER_USER:-supabase_db_helpdesk}"
+  case "$DB_CONTAINER" in
+    supabase-*) echo "test-relink refuses to run against $DB_CONTAINER (a real deployment). Use the local test stack: DB_CONTAINER=supabase_db_helpdesk." >&2; exit 2 ;;
+  esac
+  docker exec "$DB_CONTAINER" rm -rf /tmp/adimport
+  docker exec "$DB_CONTAINER" mkdir -p /tmp/adimport
+  # Synthetic ticket_friendly.tsv: 4504 appears twice (high legacy_id first) to test the duplicate rule.
+  docker exec "$DB_CONTAINER" sh -c "printf '4502	00000000-0000-4000-8000-000000000001
+4503	00000000-0000-4000-8000-000000000002
+4504	00000000-0000-4000-8000-000000000005
+4504	00000000-0000-4000-8000-000000000004
+' > /tmp/adimport/ticket_friendly.tsv"
+  docker cp "$HERE/relink.sql" "$DB_CONTAINER:/tmp/adimport/" >/dev/null
+  docker cp "$HERE/relink.test.sql" "$DB_CONTAINER:/tmp/adimport/" >/dev/null
+  docker exec -u root "$DB_CONTAINER" chmod -R a+rX /tmp/adimport
+  local rc=0
+  psql_c -q -t -A -f /tmp/adimport/relink.test.sql || rc=$?
+  [ $rc -eq 0 ] && echo "relink tests passed"
   docker exec "$DB_CONTAINER" rm -rf /tmp/adimport
   return $rc
 }
@@ -110,6 +140,7 @@ case "${1:-}" in
   load) load ;;
   all) prepare && upload && load ;;
   relink) relink ;;
+  test-relink) test_relink ;;
   status) status ;;
   reset) reset ;;
   *) sed -n '2,20p' "$0"; exit 2 ;;

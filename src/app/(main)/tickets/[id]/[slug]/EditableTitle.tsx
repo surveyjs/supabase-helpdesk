@@ -25,7 +25,7 @@ export function EditableTitle({
           <button
             type="button"
             onClick={() => setEditing(true)}
-            className="inline-flex h-8 w-8 items-center justify-center rounded text-base text-gray-400 hover:text-gray-700 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
+            className="inline-flex h-8 w-8 items-center justify-center rounded text-base text-gray-400 hover:text-gray-700 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-blue-500 [@media(hover:none)]:opacity-100"
             data-testid="edit-title-btn"
             aria-label="Edit title"
           >
@@ -50,7 +50,7 @@ export function EditableTitle({
         defaultValue={title}
         required
         maxLength={300}
-        className="block w-full rounded border border-gray-300 px-3 py-2 text-lg font-semibold focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+        className="block w-full text-lg font-semibold form-input"
         autoFocus
       />
       <div className="flex gap-2">

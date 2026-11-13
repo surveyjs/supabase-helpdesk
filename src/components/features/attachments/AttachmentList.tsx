@@ -18,12 +18,15 @@ function getExtension(filename: string): string {
 export async function AttachmentList({
   postId,
   canDelete,
-  hideIds = [],
+  inlineIds = [],
 }: {
   postId: string;
   canDelete: boolean;
-  /** Attachment ids to leave out (e.g. images already shown inline in the post body). */
-  hideIds?: string[];
+  /**
+   * Attachment ids the post body already shows inline. They get no full row,
+   * only a name in one muted "Shown inline" line (with Delete when allowed).
+   */
+  inlineIds?: string[];
 }) {
   const supabase = await createServerClient();
 
@@ -33,8 +36,10 @@ export async function AttachmentList({
     .eq('post_id', postId)
     .order('created_at', { ascending: true });
 
-  const visible = (attachments ?? []).filter((att) => !hideIds.includes(att.id));
-  if (visible.length === 0) return null;
+  const all = attachments ?? [];
+  const inline = all.filter((att) => inlineIds.includes(att.id));
+  const visible = all.filter((att) => !inlineIds.includes(att.id));
+  if (visible.length === 0 && inline.length === 0) return null;
 
   // Resolve the effective Storage path for each attachment.
   // Migrated attachments have legacy_blob_id set and storage_path null;
@@ -48,9 +53,9 @@ export async function AttachmentList({
 
   // Generate signed URLs in a single batch call
   const paths = withPaths.map((att) => att.effectivePath).filter(Boolean) as string[];
-  const { data: signedUrlData } = await supabase.storage
-    .from('attachments')
-    .createSignedUrls(paths, 3600);
+  const { data: signedUrlData } = paths.length > 0
+    ? await supabase.storage.from('attachments').createSignedUrls(paths, 3600)
+    : { data: null };
 
   const signedUrlMap = new Map<string, string>();
   if (signedUrlData) {
@@ -126,6 +131,39 @@ export async function AttachmentList({
           </div>
         );
       })}
+
+      {inline.length > 0 && (
+        // A <div>, not a <p>: a <form> inside a <p> is invalid HTML and breaks hydration.
+        <div
+          className="flex flex-wrap items-center gap-x-1.5 text-xs text-gray-500"
+          data-testid="attachment-inline-list"
+        >
+          <span>Shown inline:</span>
+          {inline.map((att, i) => (
+            <span
+              key={att.id}
+              className="inline-flex min-w-0 items-center gap-1"
+              data-testid={`attachment-${att.id}`}
+            >
+              {i > 0 && <span aria-hidden="true">·</span>}
+              <span className="wrap-anywhere">{att.original_filename}</span>
+              {canDelete && (
+                <form action={deleteAttachment} className="inline-flex">
+                  <input type="hidden" name="attachment_id" value={att.id} />
+                  <button
+                    type="submit"
+                    className="inline-flex items-center text-red-600 hover:text-red-800 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:px-2"
+                    data-testid="delete-attachment-btn"
+                    aria-label={`Delete ${att.original_filename}`}
+                  >
+                    Delete
+                  </button>
+                </form>
+              )}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

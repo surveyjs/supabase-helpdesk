@@ -14,7 +14,7 @@ import {
 import { Badge } from '@/components/ui/Badge';
 import { TierBadge } from '@/components/ui/TierBadge';
 import { DisplayName } from '@/components/features/users/DisplayName';
-import { Pagination } from '@/components/ui/Pagination';
+import { Pagination, clampPage } from '@/components/ui/Pagination';
 import { PrivateIcon } from '@/components/ui/PrivateIcon';
 import { RealtimeDashboard } from '@/components/features/agent/RealtimeDashboard';
 import { BulkSelectProvider } from '@/components/features/bulk-actions/BulkSelectProvider';
@@ -139,18 +139,30 @@ export default async function AgentDashboardPage({
     effectiveData.sort = templateDefaultSort;
   }
 
-  const queryFilters = filterDataToQueryFilters(effectiveData, pageParam);
+  const requestedPage = Math.max(1, parseInt(pageParam, 10) || 1);
 
-  const [{ tickets, total, pageSize }, filterOptions, stats, showSla] =
+  const [firstResult, filterOptions, stats, showSla] =
     await Promise.all([
-      getAgentTickets(queryFilters),
+      getAgentTickets(filterDataToQueryFilters(effectiveData, pageParam)),
       getFilterOptions(),
       getAgentStats(user.id),
       hasSlaPolicies(),
     ]);
 
-  const currentPage = Math.max(1, parseInt(pageParam, 10) || 1);
+  // A page past the end (e.g. ?page=999) reports no total, so learn it from page 1 and
+  // show the last page instead of an empty list.
+  let result = firstResult;
+  if (requestedPage > 1 && result.tickets.length === 0) {
+    const probe = await getAgentTickets(filterDataToQueryFilters(effectiveData, '1'));
+    const lastPage = clampPage(requestedPage, Math.ceil(probe.total / probe.pageSize));
+    result =
+      lastPage === 1
+        ? probe
+        : await getAgentTickets(filterDataToQueryFilters(effectiveData, String(lastPage)));
+  }
+  const { tickets, total, pageSize } = result;
   const totalPages = Math.ceil(total / pageSize);
+  const currentPage = clampPage(requestedPage, totalPages);
 
   // Build URL search params for pagination links (preserve view OR active filters)
   const linkParams: Record<string, string> = {};
@@ -260,7 +272,7 @@ export default async function AgentDashboardPage({
                   const sla = slaLabel(ticket.sla_status);
                   return (
                     <li key={ticket.id} className="bg-white rounded-lg border border-gray-200 py-3 pr-3 flex items-start">
-                      <div className="w-8 shrink-0 flex justify-center pt-0.5">
+                      <div className="w-8 pointer-coarse:w-11 shrink-0 flex justify-center pt-0.5 pointer-coarse:pt-0">
                         <TicketCheckbox ticketId={ticket.id} />
                       </div>
                       <div className="flex-1 min-w-0">

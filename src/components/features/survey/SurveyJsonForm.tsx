@@ -65,7 +65,8 @@ export function SurveyJsonForm({
       next.data = data;
     }
     return next;
-    // Only rebuild the model when the schema or mode changes. Rebuilding on
+    // Rebuild the model only when idPrefix, mode, schema or completeText change.
+    // `data` is deliberately omitted from the deps: rebuilding on
     // every `data` reference change (the parent passes a fresh object literal
     // each render) caused SurveyJS V3 matrixdynamic toolbars to lose their
     // Add button on subsequent navigations.

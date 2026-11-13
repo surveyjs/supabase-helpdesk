@@ -27,7 +27,7 @@ export default async function HomePage() {
           href="/tickets"
           className="inline-flex items-center min-h-[44px] px-2 text-sm text-blue-600 hover:text-blue-800 rounded focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
         >
-          My tickets
+          View my tickets
         </Link>
       </div>
     </div>

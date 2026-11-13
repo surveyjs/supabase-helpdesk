@@ -3,85 +3,95 @@ import { createServiceRoleClient } from '../helpers/supabase';
 import { loginViaForm, gotoAuthed } from '../helpers/auth';
 
 const SEED_PASSWORD = 'Password123';
-// Dedicated test user so concurrent specs (which mutate the seeded users'
-// editor preferences) cannot race with the assertions in this file.
-const TEST_USER_ID = '00000000-0000-0000-0000-000000000911';
-const TEST_EMAIL = 'editor-heights-e2e@test.local';
+
+/**
+ * A throwaway user per parallel worker slot. The file runs fully parallel, so
+ * its two tests (and every --repeat-each copy) run in different workers, each
+ * with its own beforeAll/afterAll. With one shared user, one worker's hooks
+ * deleted or re-created the user while another worker was signed in as it
+ * (500 on save, bounced to /login, "Database error creating new user").
+ * parallelIndex is unique among workers running at the same time.
+ */
+function testUser(): { id: string; email: string } {
+  const slot = String(test.info().parallelIndex).padStart(2, '0');
+  return {
+    id: `00000000-0000-0000-0000-0009110000${slot}`,
+    email: `editor-heights-e2e-${slot}@test.local`,
+  };
+}
+
+async function deleteTestUser(): Promise<void> {
+  const { id } = testUser();
+  const svc = createServiceRoleClient();
+  // profiles → auth.users has no cascade: drop the profile first.
+  const { error } = await svc.from('profiles').delete().eq('id', id);
+  if (error) throw new Error(`delete profile: ${error.message}`);
+  const { error: authErr } = await svc.auth.admin.deleteUser(id);
+  if (authErr && authErr.status !== 404) throw new Error(`deleteUser: ${authErr.message}`);
+}
 
 async function ensureTestUser(): Promise<void> {
+  const { id, email } = testUser();
   const svc = createServiceRoleClient();
-  const { data: users } = await svc.auth.admin.listUsers({ page: 1, perPage: 500 });
-  const existing = (users?.users ?? []).find((user) => user.id === TEST_USER_ID || user.email === TEST_EMAIL);
-
-  if (existing && existing.id !== TEST_USER_ID) {
-    await svc.from('profiles').delete().eq('id', existing.id).then(() => undefined, () => undefined);
-    await svc.auth.admin.deleteUser(existing.id).catch(() => undefined);
-  }
-
-  if (existing?.id === TEST_USER_ID) {
-    await svc.auth.admin.updateUserById(TEST_USER_ID, {
-      email: TEST_EMAIL,
+  const { data: existing } = await svc.auth.admin.getUserById(id);
+  if (existing?.user) {
+    const { error } = await svc.auth.admin.updateUserById(id, {
+      email,
       password: SEED_PASSWORD,
       email_confirm: true,
       user_metadata: { display_name: 'Editor Heights E2E' },
     });
+    if (error) throw new Error(`updateUserById(${email}): ${error.message}`);
   } else {
     const { error } = await svc.auth.admin.createUser({
-      id: TEST_USER_ID,
-      email: TEST_EMAIL,
+      id,
+      email,
       password: SEED_PASSWORD,
       email_confirm: true,
       user_metadata: { display_name: 'Editor Heights E2E' },
     });
-    if (error) {
-      throw new Error(`createUser(${TEST_EMAIL}): ${error.message}`);
-    }
+    if (error) throw new Error(`createUser(${email}): ${error.message}`);
   }
 
-  await svc.from('profiles').upsert({
-    id: TEST_USER_ID,
-    email: TEST_EMAIL,
+  const { error } = await svc.from('profiles').upsert({
+    id,
+    email,
     display_name: 'Editor Heights E2E',
     role: 'user',
     editor_view_mode: 'both',
     editor_min_height_px: 300,
     editor_max_height_px: 540,
   });
+  if (error) throw new Error(`upsert profile: ${error.message}`);
 }
 
 async function resetHeights(): Promise<void> {
   const svc = createServiceRoleClient();
-  await svc
+  const { error } = await svc
     .from('profiles')
     .update({
       editor_view_mode: 'both',
       editor_min_height_px: 300,
       editor_max_height_px: 540,
     })
-    .eq('id', TEST_USER_ID);
+    .eq('id', testUser().id);
+  if (error) throw new Error(`reset heights: ${error.message}`);
 }
 
 async function loginAs(page: Page): Promise<void> {
   await ensureTestUser();
   await resetHeights();
-  await loginViaForm(page, TEST_EMAIL, SEED_PASSWORD);
+  await loginViaForm(page, testUser().email, SEED_PASSWORD);
 }
 
 test.beforeAll(async () => {
-  const svc = createServiceRoleClient();
-  // Idempotent create — survives partial cleanup from previous failed runs.
-  // The auth.users → profiles FK isn't always cascading on local dev, so
-  // drop the profile row first to avoid a 500 from auth.admin.deleteUser.
-  await svc.from('profiles').delete().eq('id', TEST_USER_ID).then(() => undefined, () => undefined);
-  await svc.auth.admin.deleteUser(TEST_USER_ID).catch(() => undefined);
+  // Start from a clean user even if a previous run died before afterAll.
+  await deleteTestUser();
   await ensureTestUser();
-  await resetHeights();
 });
 
 test.afterAll(async () => {
-  const svc = createServiceRoleClient();
-  await svc.from('profiles').delete().eq('id', TEST_USER_ID).then(() => undefined, () => undefined);
-  await svc.auth.admin.deleteUser(TEST_USER_ID).catch(() => undefined);
+  await deleteTestUser();
 });
 
 test.describe('Editor height preferences', () => {

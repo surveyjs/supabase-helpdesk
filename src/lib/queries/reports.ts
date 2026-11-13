@@ -1,6 +1,7 @@
 import { createServiceRoleClient } from '@/lib/supabase/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+/** `end` is exclusive: pass the UTC midnight after the last included day. */
 export type TimeRange = { start: Date; end: Date };
 export type ReportFilters = {
   status?: string;
@@ -75,7 +76,7 @@ function chunk<T>(arr: T[], size: number): T[][] {
 function applyFilters(q: any, timeRange: TimeRange, filters?: ReportFilters, agentScope?: string, tierCreatorIds?: string[]) {
   let result = q
     .gte('created_at', timeRange.start.toISOString())
-    .lte('created_at', timeRange.end.toISOString());
+    .lt('created_at', timeRange.end.toISOString());
   if (filters?.status) result = result.eq('status', filters.status);
   if (filters?.severity) result = result.eq('severity', filters.severity);
   if (filters?.type) result = result.eq('type_id', filters.type);
@@ -88,15 +89,37 @@ function applyFilters(q: any, timeRange: TimeRange, filters?: ReportFilters, age
 async function getTierCreatorIds(filters?: ReportFilters, client?: SupabaseClient): Promise<string[] | undefined> {
   if (!filters?.tier) return undefined;
   const supabase = client ?? createServiceRoleClient();
-  if (filters.tier === 'none') {
-    const { data } = await supabase.from('profiles').select('id').is('tier_id', null);
-    return (data ?? []).map((p) => p.id);
+  let tierId: string | null = null;
+  if (filters.tier !== 'none') {
+    const { data: tier } = await supabase.from('subscription_tiers').select('id').eq('key', filters.tier).single();
+    if (!tier) return [];
+    tierId = tier.id;
   }
-  // Find tier by key then find users with that tier
-  const { data: tier } = await supabase.from('subscription_tiers').select('id').eq('key', filters.tier).single();
-  if (!tier) return [];
-  const { data } = await supabase.from('profiles').select('id').eq('tier_id', tier.id);
-  return (data ?? []).map((p) => p.id);
+  const q = tierId === null
+    ? supabase.from('profiles').select('id').is('tier_id', null).order('id')
+    : supabase.from('profiles').select('id').eq('tier_id', tierId).order('id');
+  return (await fetchAllRows<{ id: string }>((from, to) => q.range(from, to))).map((p) => p.id);
+}
+
+/**
+ * Runs a ticket query to completion. With a tier filter the creator ids are applied in chunks of 200
+ * so the `.in()` URL stays short and each chunk is paged past the 1000-row cap.
+ */
+async function fetchTicketRows<T>(
+  tierCreatorIds: string[] | undefined,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  build: (creatorIds?: string[]) => any,
+): Promise<T[]> {
+  if (!tierCreatorIds) {
+    const q = build();
+    return fetchAllRows<T>((from, to) => q.range(from, to));
+  }
+  const all: T[] = [];
+  for (const ids of chunk(tierCreatorIds, 200)) {
+    const q = build(ids);
+    all.push(...(await fetchAllRows<T>((from, to) => q.range(from, to))));
+  }
+  return all;
 }
 
 // ---- Ticket Volume ----
@@ -111,8 +134,9 @@ export async function getTicketVolumeData(
   const supabase = client ?? createServiceRoleClient();
   const tierCreatorIds = await getTierCreatorIds(filters, supabase);
   if (tierCreatorIds && tierCreatorIds.length === 0) return [];
-  const q = applyFilters(supabase.from('tickets').select('created_at, status'), timeRange, filters, agentScope, tierCreatorIds).order('id');
-  const tickets = await fetchAllRows<{ created_at: string; status: string | null }>((from, to) => q.range(from, to));
+  const tickets = await fetchTicketRows<{ created_at: string; status: string | null }>(tierCreatorIds, (ids) =>
+    applyFilters(supabase.from('tickets').select('created_at, status'), timeRange, filters, agentScope, ids).order('id'),
+  );
   if (tickets.length === 0) return [];
 
   const grouped: Record<string, Record<string, number>> = {};
@@ -160,15 +184,16 @@ export async function getResolutionMetrics(
   // Get tickets with SLA timers joined
   const tierCreatorIds = await getTierCreatorIds(filters, supabase);
   if (tierCreatorIds && tierCreatorIds.length === 0) return { avgFirstResponse: null, avgResolution: null, medianResolution: null, bySeverity: {} };
-  const q = applyFilters(
-    supabase
-      .from('tickets')
-      .select('id, severity, created_at, sla_timers(first_response_at, resolved_at)')
-      .not('sla_timers', 'is', null),
-    timeRange, filters, agentScope, tierCreatorIds,
-  ).order('id');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const tickets = await fetchAllRows<any>((from, to) => q.range(from, to));
+  const tickets = await fetchTicketRows<any>(tierCreatorIds, (ids) =>
+    applyFilters(
+      supabase
+        .from('tickets')
+        .select('id, severity, created_at, sla_timers(first_response_at, resolved_at)')
+        .not('sla_timers', 'is', null),
+      timeRange, filters, agentScope, ids,
+    ).order('id'),
+  );
 
   const empty: ResolutionMetrics = { avgFirstResponse: null, avgResolution: null, medianResolution: null, bySeverity: {} };
   if (tickets.length === 0) return empty;
@@ -236,7 +261,7 @@ export async function getAgentPerformanceData(
     .select('id, assigned_agent_id, status, created_at, sla_timers(first_response_at, resolved_at)')
     .not('assigned_agent_id', 'is', null)
     .gte('created_at', timeRange.start.toISOString())
-    .lte('created_at', timeRange.end.toISOString());
+    .lt('created_at', timeRange.end.toISOString());
   if (agentId) q = q.eq('assigned_agent_id', agentId);
   q = q.order('id');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -344,7 +369,7 @@ export async function getCsatSummaryData(
       .select('rating, submitted_at, ticket_id')
       .not('rating', 'is', null)
       .gte('submitted_at', timeRange.start.toISOString())
-      .lte('submitted_at', timeRange.end.toISOString())
+      .lt('submitted_at', timeRange.end.toISOString())
       .order('id');
 
   const ratings: RatingRow[] = [];
@@ -395,7 +420,7 @@ export async function getSlaComplianceData(
     .from('sla_timers')
     .select('ticket_id, first_response_met, resolution_met, first_response_elapsed_minutes, resolution_elapsed_minutes, sla_policies(first_response_minutes, resolution_minutes), tickets!inner(id, title, severity, created_at, assigned_agent_id)')
     .gte('created_at', timeRange.start.toISOString())
-    .lte('created_at', timeRange.end.toISOString());
+    .lt('created_at', timeRange.end.toISOString());
 
   if (agentScope) {
     q = q.eq('tickets.assigned_agent_id', agentScope);

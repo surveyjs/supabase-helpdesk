@@ -21,10 +21,12 @@ export async function openViewsFilters(page: Page) {
 }
 
 /**
- * Click "Apply Filters" and wait until the URL carries the filters. Apply first
- * awaits the setAgentActiveView server action, which revalidates and re-renders
- * /agent, and only then navigates. With four e2e workers on one server that
- * round-trip took up to 14 s, past the 5 s default of toHaveURL.
+ * Click "Apply Filters" and wait until the URL carries the filters. Apply runs
+ * the setAgentActiveView server action (one profiles update, ~40-175 ms), then
+ * router.push, and the URL changes once the RSC render of /agent?<filters> has
+ * streamed in. That render is ~0.4 s with one worker and ~0.65-1.3 s with four
+ * workers sharing the server, with one 14 s outlier seen under load: test-env
+ * contention, so allow well past toHaveURL's 5 s default.
  */
 export async function applyFilters(page: Page, url: RegExp) {
   await page.getByRole('button', { name: 'Apply Filters' }).click();

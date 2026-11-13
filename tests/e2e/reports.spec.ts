@@ -1,3 +1,4 @@
+import { readFileSync } from 'fs';
 import { test, expect, Page } from './fixtures';
 import { loginViaForm } from '../helpers/auth';
 import { createServiceRoleClient } from '../helpers/supabase';
@@ -192,6 +193,84 @@ test.describe('Reports Page - empty range', () => {
     await expect(page.getByTestId('report-controls')).toBeVisible({ timeout: 10000 });
     const ok = await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth);
     expect(ok).toBe(true);
+  });
+});
+
+// ============================================================
+// Reports - inclusive end date, CSV, export menu, daily option
+// Report ranges are UTC calendar days; the ticket is created at noon UTC on day D.
+// ============================================================
+
+test.describe('Reports - range, CSV and export menu', () => {
+  const DAY = '2098-03-10';
+
+  test('a ticket at noon on the end day is counted and exported', async ({ page }) => {
+    const svc = createServiceRoleClient();
+    const { data: alice } = await svc.from('profiles').select('id').eq('email', 'alice@example.com').single();
+    const { data: typeData } = await svc.from('ticket_types').select('id').limit(1).single();
+    const { data: ticket } = await svc
+      .from('tickets')
+      .insert({
+        title: 'E2E Reports inclusive end ticket',
+        slug: 'e2e-reports-inclusive-end-ticket',
+        creator_id: alice!.id,
+        type_id: typeData!.id,
+        created_at: `${DAY}T12:00:00Z`,
+      })
+      .select('id')
+      .single();
+    const ticketId = ticket!.id;
+    try {
+      await loginAs(page, 'admin@example.com');
+      await page.goto(`/reports?start=${DAY}&end=${DAY}`);
+      await expect(page.getByTestId('ticket-volume-chart')).toBeVisible({ timeout: 10000 });
+      await expect(page.getByText('No data for this period')).toHaveCount(0);
+
+      const downloadPromise = page.waitForEvent('download', { timeout: 10000 });
+      await page.getByText('Export CSV').click();
+      await page.getByRole('button', { name: 'Ticket volume' }).click();
+      const download = await downloadPromise;
+      const csv = readFileSync((await download.path())!, 'utf8');
+      expect(csv.split('\n').map((l) => l.trim())).toContain(`${DAY},1`);
+    } finally {
+      await svc.from('activity_log').delete().eq('ticket_id', ticketId);
+      await svc.from('tickets').delete().eq('id', ticketId);
+    }
+  });
+
+  test('a rejected export shows an alert', async ({ page }) => {
+    await loginAs(page, 'admin@example.com');
+    await page.goto('/reports?start=2098-03-10&end=2098-03-01');
+    await expect(page.getByTestId('report-controls')).toBeVisible({ timeout: 10000 });
+    await page.getByText('Export CSV').click();
+    await page.getByRole('button', { name: 'Ticket volume' }).click();
+    await expect(page.getByRole('alert')).toContainText('start date', { timeout: 10000 });
+  });
+
+  test('Escape and outside click close the export menu', async ({ page }) => {
+    await loginAs(page, 'admin@example.com');
+    await page.goto('/reports');
+    const details = page.locator('details').filter({ hasText: 'Export CSV' });
+    const summary = details.locator('summary');
+    await summary.click();
+    await expect(details).toHaveAttribute('open', '');
+    await page.keyboard.press('Escape');
+    await expect(details).not.toHaveAttribute('open', '');
+    await expect(summary).toBeFocused();
+    await summary.click();
+    await expect(details).toHaveAttribute('open', '');
+    await page.getByRole('heading', { name: 'Reports' }).click();
+    await expect(details).not.toHaveAttribute('open', '');
+  });
+
+  test('Daily is disabled for ranges over 366 days', async ({ page }) => {
+    await loginAs(page, 'admin@example.com');
+    await page.goto('/reports?start=2020-01-01&end=2026-01-01');
+    const daily = page.getByLabel('Group by').locator('option[value="day"]');
+    await expect(daily).toBeDisabled({ timeout: 10000 });
+    await expect(daily).toHaveText('Daily (up to 1 year)');
+    await page.goto('/reports?start=2026-01-01&end=2026-12-31');
+    await expect(page.getByLabel('Group by').locator('option[value="day"]')).toBeEnabled();
   });
 });
 

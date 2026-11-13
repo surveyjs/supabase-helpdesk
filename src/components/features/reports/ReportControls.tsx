@@ -1,10 +1,10 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { exportReportCsv } from '@/lib/actions/reports';
 import { downloadCsv } from '@/lib/utils/csv';
-import { presetRange } from '@/lib/utils/date-range';
+import { effectiveGroupBy, presetRange } from '@/lib/utils/date-range';
 
 type Props = {
   /** Effective range (URL params or the 30-day default), YYYY-MM-DD */
@@ -42,6 +42,29 @@ export function ReportControls({ rangeStart, rangeEnd, earliestDate, groupBy, is
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
+  const [exportError, setExportError] = useState<string | null>(null);
+  const exportRef = useRef<HTMLDetailsElement>(null);
+
+  // Close the export menu on outside pointerdown or Escape (focus returns to its summary)
+  useEffect(() => {
+    const onPointerDown = (e: PointerEvent) => {
+      const el = exportRef.current;
+      if (el?.open && !el.contains(e.target as Node)) el.removeAttribute('open');
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      const el = exportRef.current;
+      if (e.key === 'Escape' && el?.open) {
+        el.removeAttribute('open');
+        el.querySelector('summary')?.focus();
+      }
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, []);
 
   const currentStart = rangeStart;
   const currentEnd = rangeEnd;
@@ -76,16 +99,25 @@ export function ReportControls({ rangeStart, rangeEnd, earliestDate, groupBy, is
   };
 
   const handleExport = async (reportType: string) => {
-    const result = await exportReportCsv(reportType, { start: currentStart, end: currentEnd }, {
-      status: currentStatus || undefined,
-      severity: currentSeverity || undefined,
-      type: currentType || undefined,
-      category: currentCategory || undefined,
-    });
-    if (result.csv) {
+    setExportError(null);
+    try {
+      const result = await exportReportCsv(reportType, { start: currentStart, end: currentEnd }, {
+        status: currentStatus || undefined,
+        severity: currentSeverity || undefined,
+        type: currentType || undefined,
+        category: currentCategory || undefined,
+      });
+      if (result.error || !result.csv) {
+        setExportError(result.error || 'Export failed. Please try again.');
+        return;
+      }
       downloadCsv(`${reportType}_report.csv`, result.csv);
+    } catch {
+      setExportError('Export failed. Please try again.');
     }
   };
+
+  const dailyDisabled = effectiveGroupBy(currentStart, currentEnd, 'day') !== 'day';
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4 mb-6" data-testid="report-controls">
@@ -122,7 +154,7 @@ export function ReportControls({ rangeStart, rangeEnd, earliestDate, groupBy, is
           className="form-input"
           aria-label="End date"
         />
-        <details className="relative ml-auto">
+        <details ref={exportRef} className="relative ml-auto">
           <summary className="px-3 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 cursor-pointer list-none select-none">
             Export CSV ▾
           </summary>
@@ -142,6 +174,11 @@ export function ReportControls({ rangeStart, rangeEnd, earliestDate, groupBy, is
             ))}
           </div>
         </details>
+        {exportError && (
+          <div role="alert" data-testid="export-error" className="basis-full text-sm text-red-700">
+            {exportError}
+          </div>
+        )}
       </div>
 
       {/* Filters */}
@@ -152,7 +189,9 @@ export function ReportControls({ rangeStart, rangeEnd, earliestDate, groupBy, is
           className="form-select"
           aria-label="Group by"
         >
-          <option value="day">Daily</option>
+          <option value="day" disabled={dailyDisabled}>
+            Daily{dailyDisabled ? ' (up to 1 year)' : ''}
+          </option>
           <option value="week">Weekly</option>
           <option value="month">Monthly</option>
         </select>

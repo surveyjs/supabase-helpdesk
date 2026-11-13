@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation';
 import { createServerClient, createServiceRoleClient } from '@/lib/supabase/server';
 import { generateCsv } from '@/lib/utils/csv';
+import { effectiveGroupBy, endExclusive, isValidDay } from '@/lib/utils/date-range';
 import { formatMinutes } from '@/lib/utils/format-minutes';
 import {
   getTicketVolumeData,
@@ -39,12 +40,23 @@ export async function exportReportCsv(
     return { error: 'Access denied.' };
   }
 
+  if (!isValidDay(timeRange.start) || !isValidDay(timeRange.end)) {
+    return { error: 'Dates must be valid (YYYY-MM-DD).' };
+  }
+  if (timeRange.start > timeRange.end) {
+    return { error: 'The start date must be on or before the end date.' };
+  }
+
   const agentScope = profile.role === 'agent' ? profile.id : undefined;
-  const range: TimeRange = { start: new Date(timeRange.start), end: new Date(timeRange.end) };
+  // Calendar days in UTC; the end day is inclusive (queries use an exclusive upper bound).
+  const range: TimeRange = {
+    start: new Date(`${timeRange.start}T00:00:00Z`),
+    end: new Date(`${endExclusive(timeRange.end)}T00:00:00Z`),
+  };
 
   switch (reportType) {
     case 'ticket_volume': {
-      const data = await getTicketVolumeData(range, 'day', filters, agentScope);
+      const data = await getTicketVolumeData(range, effectiveGroupBy(timeRange.start, timeRange.end, 'day'), filters, agentScope);
       const totalRows = data.filter((r) => !r.status);
       const csv = generateCsv(
         ['Period', 'Count'],

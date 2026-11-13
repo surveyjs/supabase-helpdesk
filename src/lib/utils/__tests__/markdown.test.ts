@@ -109,7 +109,8 @@ describe('renderMarkdown', () => {
 
     it.each([
       '\\tracker.example/p.gif',
-      '/\tracker.example/p.gif',
+      '/\tracker.example/p.gif', // slash + TAB
+      '/\\tracker.example/p.gif', // slash + backslash: browsers read it as `//`
       ' //tracker.example/p.gif',
     ])('never emits an <img> that targets a third-party host for %j', async (src) => {
       const html = await renderMarkdown(`![x](<${src}>)`, opts);

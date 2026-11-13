@@ -104,3 +104,23 @@
 [data-testid="ticket-sidebar-survey"] .sd-boolean-fieldset .sd-checkbox {
   padding-block: 2px;
 }
+
+/* Tagbox: chips must never be cut off and the filter input must stay usable.
+ * SurveyJS ellipsizes a chip's label and lets the filter input shrink to 0 when
+ * the chips fill the row (long tag names in the 400px ticket sidebar). The value
+ * container already wraps; let long labels wrap inside their chip and give the
+ * filter input a minimum width so it drops to its own line instead of collapsing. */
+.sd-tagbox-item {
+  max-width: 100%;
+}
+
+.sd-tagbox-item__text span {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
+
+.sd-tagbox__hint {
+  min-width: 6rem;
+}

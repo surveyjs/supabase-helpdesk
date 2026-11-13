@@ -250,3 +250,79 @@ test.describe('Markdown editor on /tickets/new', () => {
     });
   });
 });
+
+test.describe('Sidebar Tags tagbox', () => {
+  test.use({ viewport: { width: 1280, height: 720 } });
+  const TAG_SLUG = 'e2e-ticket-layout-tags';
+  // 50 chars (the tags.name limit): wider than the sidebar's tagbox minus the other chips.
+  const LONG_TAG = `E2E long tag name ${randomUUID().slice(0, 8)} `.padEnd(50, 'x');
+  let tagUrl: string;
+  let tagId: string;
+
+  test.beforeAll(async () => {
+    const admin = createServiceRoleClient();
+    const { data: stale } = await admin.from('tickets').select('id').eq('slug', TAG_SLUG);
+    if (stale?.length) {
+      const ids = stale.map((t: { id: number }) => t.id);
+      await admin.from('activity_log').delete().in('ticket_id', ids);
+      await admin.from('posts').delete().in('ticket_id', ids);
+      await admin.from('tickets').delete().in('id', ids);
+    }
+    const { data: alice } = await admin.from('profiles').select('id').eq('email', 'alice@example.com').single();
+    const { data: type } = await admin.from('ticket_types').select('id').limit(1).single();
+    const { data: ticket } = await admin
+      .from('tickets')
+      .insert({ title: 'E2E Ticket Layout Tags', slug: TAG_SLUG, creator_id: alice!.id, type_id: type!.id })
+      .select('id, slug')
+      .single();
+    await admin.from('posts').insert({
+      ticket_id: ticket!.id, author_id: alice!.id, body: 'Original post.', is_original: true, post_type: 'post',
+    });
+    const { data: tag, error } = await admin.from('tags').insert({ name: LONG_TAG }).select('id').single();
+    if (error) throw new Error(error.message);
+    tagId = tag!.id;
+    const { data: seedTags } = await admin.from('tags').select('id').in('name', ['urgent', 'bug']);
+    await admin.from('ticket_tags').insert(
+      [tagId, ...(seedTags ?? []).map((t: { id: string }) => t.id)].map((id) => ({ ticket_id: ticket!.id, tag_id: id })),
+    );
+    tagUrl = `/tickets/${ticket!.id}/${ticket!.slug}`;
+  });
+
+  test.afterAll(async () => {
+    const admin = createServiceRoleClient();
+    const { data: t } = await admin.from('tickets').select('id').eq('slug', TAG_SLUG);
+    const ids = (t ?? []).map((r: { id: number }) => r.id);
+    if (ids.length) {
+      await admin.from('ticket_tags').delete().in('ticket_id', ids);
+      await admin.from('activity_log').delete().in('ticket_id', ids);
+      await admin.from('posts').delete().in('ticket_id', ids);
+      await admin.from('tickets').delete().in('id', ids);
+    }
+    await admin.from('tags').delete().eq('id', tagId);
+  });
+
+  test('chips wrap instead of truncating and the filter input stays usable', async ({ page }) => {
+    await loginViaForm(page, 'agent.smith@example.com');
+    await page.goto(tagUrl);
+    const q = page.getByTestId('ticket-sidebar-survey').locator('.sd-question', { hasText: 'Tags' }).first();
+    await expect(q.getByText(LONG_TAG)).toBeVisible();
+
+    const m = await q.evaluate((root) => {
+      const labels = Array.from(root.querySelectorAll('.sd-tagbox-item')).map((chip) => {
+        const el = (chip.querySelector('.sd-tagbox-item__text span') ?? chip) as HTMLElement;
+        return { text: el.textContent, truncated: el.scrollWidth > el.clientWidth || chip.scrollWidth > chip.clientWidth };
+      });
+      const input = root.querySelector('.sd-tagbox__filter-string-input') as HTMLElement | null;
+      const box = root.querySelector('.sd-tagbox') as HTMLElement;
+      return {
+        labels,
+        inputWidth: input ? input.getBoundingClientRect().width : -1,
+        boxOverflow: box.scrollWidth - box.clientWidth,
+      };
+    });
+    expect(m.labels.length).toBe(3);
+    for (const l of m.labels) expect(l.truncated, `chip "${l.text}" is truncated`).toBe(false);
+    expect(m.inputWidth, 'tagbox filter input width').toBeGreaterThan(20);
+    expect(m.boxOverflow, 'tagbox horizontal overflow').toBeLessThanOrEqual(1);
+  });
+});

@@ -75,6 +75,22 @@ test.describe('Admin Setup layout', () => {
     expect(overflow).toBeLessThanOrEqual(0);
   });
 
+  test('/admin/users?page=999 shows the last page with rows and a pager', async ({ page }) => {
+    await loginAs(page, 'admin@example.com');
+    await gotoAdmin(page, '/admin/users?page=999');
+    await expect(page.getByRole('heading', { name: 'User Management' })).toBeVisible();
+    const nav = page.getByRole('navigation', { name: 'Pagination' });
+    await expect(nav).toBeVisible();
+    const m = (await nav.textContent())!.match(/(\d+)–(\d+) of (\d+)/);
+    expect(m).not.toBeNull();
+    const total = Number(m![3]);
+    expect(Number(m![2])).toBe(total);
+    const totalPages = Math.ceil(total / 20);
+    expect(totalPages).toBeGreaterThan(1);
+    await expect(nav.locator('[aria-current="page"]')).toHaveText(String(totalPages));
+    expect(await page.locator('[data-testid^="user-row-"]').count()).toBeGreaterThan(0);
+  });
+
   test('admin overview and tiers page have no horizontal overflow at 390px', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 800 });
     await loginAs(page, 'admin@example.com');

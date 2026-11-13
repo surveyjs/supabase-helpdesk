@@ -298,6 +298,18 @@ test.describe('Reports - range, CSV and export menu', () => {
         );
         ids.push(t.id);
       }
+      // One CSAT rating per ticket (rows cascade from tickets); only the tier member's must count
+      for (const [tid, rating] of [[ids[0], 5], [ids[1], 1]] as const) {
+        const { error: csatErr } = await svc.from('csat_ratings').insert({
+          ticket_id: tid,
+          token: `rpt-tier-csat-${tid}-${Date.now()}`,
+          token_expires_at: `${TIER_DAY}T23:59:59Z`,
+          is_used: true,
+          rating,
+          submitted_at: `${TIER_DAY}T13:00:00Z`,
+        });
+        if (csatErr) throw new Error(`tier CSV test setup: csat insert failed: ${csatErr.message}`);
+      }
       await loginAs(page, 'admin@example.com');
       await page.goto(`/reports?start=${TIER_DAY}&end=${TIER_DAY}&tier=${tierKey}`);
       await expect(page.getByLabel('Tier')).toHaveValue(tierKey, { timeout: 10000 });
@@ -306,6 +318,17 @@ test.describe('Reports - range, CSV and export menu', () => {
       await page.getByRole('button', { name: 'Ticket volume' }).click();
       const csv = readFileSync((await (await downloadPromise).path())!, 'utf8');
       expect(csv.split('\n').map((l) => l.trim())).toContain(`${TIER_DAY},1`);
+
+      // The CSAT export must apply the same tier filter: only the tier member's 5-star rating
+      const csatDownload = page.waitForEvent('download', { timeout: 10000 });
+      await page.getByText('Export CSV').click();
+      await page.getByRole('button', { name: 'CSAT summary' }).click();
+      const csatLines = readFileSync((await (await csatDownload).path())!, 'utf8')
+        .split('\n')
+        .map((l) => l.trim());
+      expect(csatLines).toContain('Average,5.00,,');
+      expect(csatLines).toContain('5 Star,1,,');
+      expect(csatLines).toContain('1 Star,0,,');
     } finally {
       // No triggers on tickets/profiles create other rows; activity_log, notifications etc. cascade from tickets
       for (const id of ids) {

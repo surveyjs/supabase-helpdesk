@@ -58,12 +58,15 @@ export default async function UsersPage({
   };
 
   let { data: users, count } = await buildQuery(requestedPage);
+  if (requestedPage > 1 && (users ?? []).length === 0) {
+    // Past the last page (e.g. ?page=999): PostgREST answers 416 and reports no count, so
+    // probe page 1 for the total, then show the last page.
+    const probe = await buildQuery(1);
+    const lastPage = clampPage(requestedPage, Math.ceil((probe.count ?? 0) / pageSize));
+    ({ data: users, count } = lastPage === 1 ? probe : await buildQuery(lastPage));
+  }
   const totalPages = Math.ceil((count ?? 0) / pageSize);
   const page = clampPage(requestedPage, totalPages);
-  if (page !== requestedPage) {
-    // Past the last page (e.g. ?page=999): show the last page instead of an empty list.
-    ({ data: users, count } = await buildQuery(page));
-  }
 
   // Fetch available tiers for assignment
   const { data: allTiers } = await supabase

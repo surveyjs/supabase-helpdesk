@@ -83,7 +83,7 @@ export async function exportReportCsv(
       return { csv };
     }
     case 'csat_summary': {
-      const data = await getCsatSummaryData(range, agentScope);
+      const data = await getCsatSummaryData(range, agentScope, undefined, filters);
       const hasRatings = Object.values(data.distribution).some((n) => n > 0);
       const rows: (string | number)[][] = [
         ['Average', hasRatings ? data.average.toFixed(2) : '', '', ''],

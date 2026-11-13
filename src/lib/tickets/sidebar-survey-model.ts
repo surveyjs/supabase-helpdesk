@@ -18,6 +18,50 @@ export function uncheckEmptyBooleans(model: SurveyModel): void {
   if (Object.keys(unset).length > 0) model.mergeData(unset);
 }
 
+function deepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const ka = Object.keys(a);
+  const kb = Object.keys(b);
+  if (ka.length !== kb.length) return false;
+  return ka.every((k) =>
+    Object.prototype.hasOwnProperty.call(b, k) &&
+    deepEqual((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]),
+  );
+}
+
+/**
+ * Fold a fresh server snapshot into a live model without losing in-progress
+ * edits. For every key whose `incoming` value differs from the `previous`
+ * baseline: a `dirty` key (focused or with a save pending) is skipped and keeps
+ * its old baseline, so it is applied once it stops being dirty; any other key
+ * is applied to the model through `mergeData` (no onValueChanged, so nothing
+ * is saved) and taken into the baseline. Returns the new baseline.
+ */
+export function mergeServerValues(
+  model: SurveyModel,
+  incoming: Record<string, unknown>,
+  previous: Record<string, unknown>,
+  dirty: ReadonlySet<string>,
+): Record<string, unknown> {
+  const baseline: Record<string, unknown> = { ...previous };
+  const toApply: Record<string, unknown> = {};
+  const keys = new Set([...Object.keys(incoming), ...Object.keys(previous)]);
+  for (const key of keys) {
+    if (deepEqual(incoming[key], previous[key])) continue;
+    if (dirty.has(key)) continue;
+    toApply[key] = incoming[key];
+    if (key in incoming) baseline[key] = incoming[key];
+    else delete baseline[key];
+  }
+  if (Object.keys(toApply).length > 0) {
+    model.mergeData(toApply);
+    uncheckEmptyBooleans(model);
+  }
+  return baseline;
+}
+
 const HEX_COLOR_RE = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 // Chip colour tokens: border in the tag colour, background a 10 % tint.
 const CHIP_TOKENS = {

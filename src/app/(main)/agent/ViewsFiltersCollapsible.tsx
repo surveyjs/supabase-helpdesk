@@ -39,8 +39,10 @@ export function ViewsFiltersCollapsible({
   aiFilterEnabled,
   className = '',
 }: Props) {
-  // null = not toggled yet: CSS decides (expanded at xl, collapsed below), so
-  // the server render already matches the viewport and nothing jumps on hydration.
+  // null = not toggled yet: CSS decides (shell shown at xl, hidden below). The
+  // SurveyJS form is mounted lazily, only while open, so at xl the server render
+  // holds a skeleton that reserves the panel's height and the form replaces it
+  // after hydration without shifting the layout.
   const [toggled, setToggled] = useState<boolean | null>(null);
   const isXl = useSyncExternalStore(
     subscribeXl,
@@ -100,6 +102,13 @@ export function ViewsFiltersCollapsible({
           className={`px-4 pt-4 pb-4 border-t border-gray-200 ${toggled === null ? 'hidden xl:block' : ''}`}
         >
           {/* Mounted only while open, so SurveyJS never loads for a collapsed panel below xl. */}
+          {!open && toggled === null && (
+            <div
+              aria-hidden="true"
+              data-testid="views-filters-skeleton"
+              className="min-h-[52rem] rounded bg-gray-50 motion-safe:animate-pulse"
+            />
+          )}
           {open && (
             <ViewsAndFiltersPanel
               filterOptions={filterOptions}

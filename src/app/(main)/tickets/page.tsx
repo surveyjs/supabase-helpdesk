@@ -3,7 +3,7 @@ import { createServerClient } from '@/lib/supabase/server';
 import { requireAuth } from '@/lib/supabase/auth';
 import { TicketList } from '@/components/features/tickets/TicketList';
 import { StatusFilter } from '@/components/features/tickets/StatusFilter';
-import { Pagination } from '@/components/ui/Pagination';
+import { Pagination, clampPage } from '@/components/ui/Pagination';
 
 const PAGE_SIZE = 20;
 
@@ -18,7 +18,7 @@ export default async function MyTicketsPage({
   const params = await searchParams;
   const statusFilter = (params.status as string) ?? 'all';
   const search = (params.q as string) ?? '';
-  const currentPage = Math.max(1, parseInt((params.page as string) ?? '1', 10) || 1);
+  const requestedPage = Math.max(1, parseInt((params.page as string) ?? '1', 10) || 1);
   const view = (params.view as string) ?? 'my';
 
   // Check if user belongs to a team
@@ -43,58 +43,71 @@ export default async function MyTicketsPage({
 
   // Shared filter values
   const searchTerms = search.trim() ? search.trim().split(/\s+/).join(' & ') : '';
-  const from = (currentPage - 1) * PAGE_SIZE;
+  type ListedTicket = { id: number; title: string; slug: string; status: string; updated_at: string; creator_name?: string };
 
-  let ticketsForList: { id: number; title: string; slug: string; status: string; updated_at: string; creator_name?: string }[];
-  let count: number | null;
+  async function fetchPage(forPage: number): Promise<{ ticketsForList: ListedTicket[]; count: number | null }> {
+    const from = (forPage - 1) * PAGE_SIZE;
+    let ticketsForList: ListedTicket[];
+    let count: number | null;
 
-  if (isTeamView) {
-    let query = supabase
-      .from('tickets')
-      .select('id, title, slug, status, updated_at, creator:profiles!tickets_creator_id_fkey(display_name)', { count: 'exact' })
-      .order('updated_at', { ascending: false })
-      .in('creator_id', teamMemberIds);
-    if (statusFilter === 'active') query = query.in('status', ['open', 'pending']);
-    else if (statusFilter === 'closed') query = query.eq('status', 'closed');
-    if (searchTerms) query = query.textSearch('search_vector', searchTerms, { type: 'plain', config: 'english' });
-    query = query.range(from, from + PAGE_SIZE - 1);
+    if (isTeamView) {
+      let query = supabase
+        .from('tickets')
+        .select('id, title, slug, status, updated_at, creator:profiles!tickets_creator_id_fkey(display_name)', { count: 'exact' })
+        .order('updated_at', { ascending: false })
+        .in('creator_id', teamMemberIds);
+      if (statusFilter === 'active') query = query.in('status', ['open', 'pending']);
+      else if (statusFilter === 'closed') query = query.eq('status', 'closed');
+      if (searchTerms) query = query.textSearch('search_vector', searchTerms, { type: 'plain', config: 'english' });
+      query = query.range(from, from + PAGE_SIZE - 1);
 
-    const { data: tickets, count: c } = await query;
-    count = c;
-    ticketsForList = (tickets ?? []).map((t) => {
-      const creator = Array.isArray(t.creator) ? t.creator[0] : t.creator;
-      return {
+      const { data: tickets, count: c } = await query;
+      count = c;
+      ticketsForList = (tickets ?? []).map((t) => {
+        const creator = Array.isArray(t.creator) ? t.creator[0] : t.creator;
+        return {
+          id: t.id,
+          title: t.title,
+          slug: t.slug,
+          status: t.status,
+          updated_at: t.updated_at,
+          creator_name: creator?.display_name ?? 'Unknown',
+        };
+      });
+    } else {
+      let query = supabase
+        .from('tickets')
+        .select('id, title, slug, status, updated_at', { count: 'exact' })
+        .order('updated_at', { ascending: false })
+        .eq('creator_id', user.id);
+      if (statusFilter === 'active') query = query.in('status', ['open', 'pending']);
+      else if (statusFilter === 'closed') query = query.eq('status', 'closed');
+      if (searchTerms) query = query.textSearch('search_vector', searchTerms, { type: 'plain', config: 'english' });
+      query = query.range(from, from + PAGE_SIZE - 1);
+
+      const { data: tickets, count: c } = await query;
+      count = c;
+      ticketsForList = (tickets ?? []).map((t) => ({
         id: t.id,
         title: t.title,
         slug: t.slug,
         status: t.status,
         updated_at: t.updated_at,
-        creator_name: creator?.display_name ?? 'Unknown',
-      };
-    });
-  } else {
-    let query = supabase
-      .from('tickets')
-      .select('id, title, slug, status, updated_at', { count: 'exact' })
-      .order('updated_at', { ascending: false })
-      .eq('creator_id', user.id);
-    if (statusFilter === 'active') query = query.in('status', ['open', 'pending']);
-    else if (statusFilter === 'closed') query = query.eq('status', 'closed');
-    if (searchTerms) query = query.textSearch('search_vector', searchTerms, { type: 'plain', config: 'english' });
-    query = query.range(from, from + PAGE_SIZE - 1);
+      }));
+    }
 
-    const { data: tickets, count: c } = await query;
-    count = c;
-    ticketsForList = (tickets ?? []).map((t) => ({
-      id: t.id,
-      title: t.title,
-      slug: t.slug,
-      status: t.status,
-      updated_at: t.updated_at,
-    }));
+    return { ticketsForList, count };
   }
 
+  let { ticketsForList, count } = await fetchPage(requestedPage);
+  if (requestedPage > 1 && ticketsForList.length === 0) {
+    // Past the last page (e.g. ?page=999): probe page 1 for the total, then show the last page.
+    const probe = await fetchPage(1);
+    const lastPage = clampPage(requestedPage, Math.ceil((probe.count ?? 0) / PAGE_SIZE));
+    ({ ticketsForList, count } = lastPage === 1 ? probe : await fetchPage(lastPage));
+  }
   const totalPages = Math.ceil((count ?? 0) / PAGE_SIZE);
+  const currentPage = clampPage(requestedPage, totalPages);
 
   // Build params for links
   const linkParams: Record<string, string> = {};

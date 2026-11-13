@@ -1,7 +1,7 @@
 import { createServerClient } from '@/lib/supabase/server';
 import { requireAgent } from '@/lib/supabase/auth';
 import { CannedResponseList } from '@/components/features/canned-responses/CannedResponseList';
-import { Pagination } from '@/components/ui/Pagination';
+import { Pagination, clampPage } from '@/components/ui/Pagination';
 
 const PAGE_SIZE = 20;
 
@@ -14,8 +14,7 @@ export default async function CannedResponsesPage({
   const { page, q, visibility } = await searchParams;
   const supabase = await createServerClient();
 
-  const currentPage = Math.max(1, parseInt(page ?? '1', 10) || 1);
-  const offset = (currentPage - 1) * PAGE_SIZE;
+  const requestedPage = Math.max(1, parseInt(page ?? '1', 10) || 1);
 
   // Get current user profile
   const { data: profile } = await supabase
@@ -33,8 +32,7 @@ export default async function CannedResponsesPage({
       'id, title, body, visibility, author_id, created_at, updated_at, author:profiles!canned_responses_author_id_fkey(display_name)',
       { count: 'exact' },
     )
-    .order('updated_at', { ascending: false })
-    .range(offset, offset + PAGE_SIZE - 1);
+    .order('updated_at', { ascending: false });
 
   // Search filter
   if (q && q.trim()) {
@@ -52,9 +50,21 @@ export default async function CannedResponsesPage({
     query = query.eq('visibility', 'private');
   }
 
-  const { data: responses, count } = await query;
+  // A page past the end (e.g. ?page=999) re-queries the last page.
+  const fetchPage = (forPage: number) => {
+    const offset = (forPage - 1) * PAGE_SIZE;
+    return query.range(offset, offset + PAGE_SIZE - 1);
+  };
+
+  let { data: responses, count } = await fetchPage(requestedPage);
+  if (requestedPage > 1 && (responses ?? []).length === 0) {
+    const probe = await fetchPage(1);
+    const lastPage = clampPage(requestedPage, Math.ceil((probe.count ?? 0) / PAGE_SIZE));
+    ({ data: responses, count } = lastPage === 1 ? probe : await fetchPage(lastPage));
+  }
 
   const totalPages = Math.ceil((count ?? 0) / PAGE_SIZE);
+  const currentPage = clampPage(requestedPage, totalPages);
 
   const mappedResponses = (responses ?? []).map((r) => ({
     ...r,

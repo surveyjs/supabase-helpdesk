@@ -109,77 +109,100 @@ test.describe('Agent Dashboard', () => {
   });
 });
 
-// The dashboard page size is an app setting (no URL param), so these tests shrink it
-// to 2 for a deterministic multi-page list and restore it afterwards.
+// Seeds more tickets than one page holds under a unique title prefix, narrows /agent to
+// them with the search param (`q`) and uses the real page size; nothing global changes.
 test.describe('Agent Dashboard pagination', () => {
   test.describe.configure({ mode: 'serial' });
 
-  let originalPageSize: string | undefined;
+  const prefix = `PG-${Math.random().toString(36).slice(2, 8)}`;
+  const SEEDED = 45;
+  let pageSize = 20;
 
   test.beforeAll(async () => {
     const admin = createServiceRoleClient();
-    const { data } = await admin
+    const { data: size } = await admin
       .from('app_settings')
       .select('value')
       .eq('key', 'agent_dashboard_page_size')
       .maybeSingle();
-    originalPageSize = data?.value as string | undefined;
-    await admin.from('app_settings').upsert({ key: 'agent_dashboard_page_size', value: '2' });
+    pageSize = parseInt(size?.value ?? '20', 10) || 20;
+    const { data: alice } = await admin.from('profiles').select('id').eq('email', 'alice@example.com').single();
+    const { data: type } = await admin.from('ticket_types').select('id').limit(1).single();
+    const rows = Array.from({ length: Math.max(SEEDED, pageSize * 2 + 1) }, (_, i) => ({
+      title: `${prefix} ticket ${String(i).padStart(3, '0')}`,
+      slug: `${prefix.toLowerCase()}-ticket-${i}`,
+      creator_id: alice!.id,
+      type_id: type!.id,
+      // Distinct timestamps: one bulk insert would otherwise tie on the sort key and
+      // make the page boundaries unstable.
+      created_at: new Date(Date.now() - i * 60_000).toISOString(),
+      updated_at: new Date(Date.now() - i * 60_000).toISOString(),
+    }));
+    const { error } = await admin.from('tickets').insert(rows);
+    if (error) throw error;
   });
 
   test.afterAll(async () => {
-    const admin = createServiceRoleClient();
-    if (originalPageSize === undefined) {
-      await admin.from('app_settings').delete().eq('key', 'agent_dashboard_page_size');
-    } else {
-      await admin.from('app_settings').update({ value: originalPageSize }).eq('key', 'agent_dashboard_page_size');
-    }
+    await createServiceRoleClient().from('tickets').delete().like('title', `${prefix} %`);
   });
 
   const rowTitles = (page: Page) =>
     page.getByTestId('agent-ticket-table').locator('tbody tr td:nth-child(2) a').allTextContents();
 
-  test('Next and Last change the rows; First and Previous come back', async ({ page }) => {
+  test('Next and Last change the rows; the range text follows', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
-    await page.goto('/agent');
+    await page.goto(`/agent?q=${prefix}`);
+    await expect(page.getByTestId('result-count')).toHaveText(/\d+ tickets found/);
     const total = Number((await page.getByTestId('result-count').textContent())!.match(/\d+/)![0]);
-    expect(total).toBeGreaterThan(2);
-    const totalPages = Math.ceil(total / 2);
+    expect(total).toBeGreaterThan(pageSize * 2);
+    const totalPages = Math.ceil(total / pageSize);
 
     const nav = page.getByRole('navigation', { name: 'Pagination' });
-    await expect(nav).toContainText(`1–2 of ${total}`);
+    await expect(nav).toContainText(`1–${pageSize} of ${total}`);
     // Disabled controls are hidden from assistive tech, not exposed as fake links.
     await expect(nav.getByRole('link', { name: 'First' })).toHaveCount(0);
     const first = await rowTitles(page);
+    expect(first).toHaveLength(pageSize);
 
     await nav.getByRole('link', { name: 'Next' }).click();
     await expect(page).toHaveURL(/page=2/);
+    await expect(nav).toContainText(`${pageSize + 1}–${pageSize * 2} of ${total}`);
     const second = await rowTitles(page);
-    expect(second).not.toEqual(first);
-    await expect(nav).toContainText(`3–${Math.min(4, total)} of ${total}`);
+    expect(second).toHaveLength(pageSize);
+    expect(second.some((t) => first.includes(t))).toBe(false);
 
     await nav.getByRole('link', { name: 'Last' }).click();
     await expect(page).toHaveURL(new RegExp(`page=${totalPages}`));
+    await expect(nav).toContainText(`${(totalPages - 1) * pageSize + 1}–${total} of ${total}`);
     await expect(nav.getByRole('link', { name: 'Next' })).toHaveCount(0);
-    expect(await rowTitles(page)).not.toEqual(second);
+    const last = await rowTitles(page);
+    expect(last).toHaveLength(total - (totalPages - 1) * pageSize);
 
     await nav.getByRole('link', { name: 'First' }).click();
     await expect(page).toHaveURL(/page=1(&|$)/);
-    // Other specs touch tickets concurrently (the list is ordered by updated_at), so
-    // assert the range rather than that page 1 holds exactly the same rows as before.
-    await expect(nav).toContainText(`1–2 of`);
-    await expect(nav.getByRole('link', { name: 'First' })).toHaveCount(0);
+    await expect(nav).toContainText(`1–${pageSize} of ${total}`);
   });
 
   test('?page=999 shows the last page with a range ending in the total', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
-    await page.goto('/agent?page=999');
+    await page.goto(`/agent?q=${prefix}&page=999`);
+    await expect(page.getByTestId('result-count')).toHaveText(/\d+ tickets found/);
     const total = Number((await page.getByTestId('result-count').textContent())!.match(/\d+/)![0]);
-    const totalPages = Math.ceil(total / 2);
+    const totalPages = Math.ceil(total / pageSize);
     expect(await page.getByTestId('agent-ticket-table').locator('tbody tr').count()).toBeGreaterThan(0);
     const nav = page.getByRole('navigation', { name: 'Pagination' });
-    await expect(nav).toContainText(new RegExp(`${(totalPages - 1) * 2 + 1}–${total} of ${total}`));
-    await expect(nav.getByRole('link', { name: String(totalPages) })).toHaveAttribute('aria-current', 'page');
+    await expect(nav).toContainText(`${(totalPages - 1) * pageSize + 1}–${total} of ${total}`);
+    await expect(nav.getByRole('link', { name: String(totalPages), exact: true })).toHaveAttribute('aria-current', 'page');
+  });
+
+  test('/tickets?page=999 shows the last page with rows', async ({ page }) => {
+    await loginAs(page, 'alice@example.com');
+    await page.goto('/tickets?page=999');
+    await expect(page.locator('main ul li a[href^="/tickets/"]').first()).toBeVisible();
+    // The seeded tickets span 3 pages; page 999 lands on the last one.
+    await expect(page.getByRole('navigation', { name: 'Pagination' }).locator('[aria-current="page"]')).toHaveText(
+      /^[2-9]\d*$/,
+    );
   });
 
   test('touch targets: card checkboxes and pagination links are at least 44px', async ({ browser }) => {
@@ -187,7 +210,7 @@ test.describe('Agent Dashboard pagination', () => {
     const page = await context.newPage();
     try {
       await loginAs(page, 'agent.smith@example.com');
-      await page.goto('/agent');
+      await page.goto(`/agent?q=${prefix}`);
       const hit = page.getByTestId('agent-ticket-cards').locator('label').first();
       const box = (await hit.boundingBox())!;
       expect(box.width).toBeGreaterThanOrEqual(44);
@@ -230,6 +253,34 @@ test.describe('Agent Dashboard filters panel', () => {
       await page.goto('/agent');
       await expect(page.getByTestId('views-and-filters-panel')).toBeVisible({ timeout: 10000 });
       await expect(page.getByRole('button', { name: 'Collapse filters' })).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    test('server-rendered shell reserves the panel height (no layout shift on mount)', async ({ page, browser }) => {
+      await loginAs(page, 'agent.smith@example.com');
+      await page.goto('/agent');
+      const section = page.getByTestId('views-filters-section');
+      await expect(page.getByTestId('views-and-filters-panel')).toBeVisible({ timeout: 10000 });
+      // Let the SurveyJS form finish rendering before measuring the final height.
+      await expect(page.getByRole('button', { name: 'Apply Filters' })).toBeVisible({ timeout: 10000 });
+      const mountedHeight = (await section.boundingBox())!.height;
+
+      // Same page with JS off = exactly what the server rendered before hydration.
+      const ssrContext = await browser.newContext({
+        storageState: await page.context().storageState(),
+        javaScriptEnabled: false,
+        viewport: { width: 1440, height: 900 },
+      });
+      try {
+        const ssrPage = await ssrContext.newPage();
+        await ssrPage.goto('/agent');
+        const ssrSection = ssrPage.getByTestId('views-filters-section');
+        await expect(ssrSection).toBeVisible();
+        const ssrHeight = (await ssrSection.boundingBox())!.height;
+        expect(ssrHeight).toBeGreaterThanOrEqual(mountedHeight - 24);
+        expect(ssrHeight).toBeLessThanOrEqual(mountedHeight + 24);
+      } finally {
+        await ssrContext.close();
+      }
     });
   });
 });

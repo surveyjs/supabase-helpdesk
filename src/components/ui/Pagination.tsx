@@ -31,7 +31,7 @@ const touchClass = 'items-center justify-center pointer-coarse:min-h-[44px] poin
 
 const linkClass =
   `inline-flex ${touchClass} px-3 py-1.5 text-sm rounded border border-gray-300 text-gray-600 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500`;
-const disabledClass = 'inline-flex items-center px-3 py-1.5 text-sm rounded border border-gray-200 text-gray-300';
+const disabledClass = 'inline-flex items-center px-3 py-1.5 text-sm rounded border border-gray-200 bg-gray-50 text-gray-500 cursor-default';
 
 export function Pagination({
   currentPage: requestedPage,

@@ -87,6 +87,11 @@ async function getAliceTicketUrl(): Promise<{ url: string; id: number }> {
   return { url: `/tickets/${ticket!.id}/${ticket!.slug}`, id: ticket!.id as number };
 }
 
+// Both describes mutate the global survey_ticket_detail_user_template settings, so
+// they must not run in parallel workers; 'default' keeps file order in one worker
+// without skipping the rest after a failure (unlike 'serial').
+test.describe.configure({ mode: 'default' });
+
 test.describe('Ticket detail custom fields (SurveyJS)', () => {
   test.describe.configure({ mode: 'serial' });
 

@@ -75,22 +75,6 @@ test.describe('Admin Setup layout', () => {
     expect(overflow).toBeLessThanOrEqual(0);
   });
 
-  test('/admin/users?page=999 shows the last page with rows and a pager', async ({ page }) => {
-    await loginAs(page, 'admin@example.com');
-    await gotoAdmin(page, '/admin/users?page=999');
-    await expect(page.getByRole('heading', { name: 'User Management' })).toBeVisible();
-    const nav = page.getByRole('navigation', { name: 'Pagination' });
-    await expect(nav).toBeVisible();
-    const m = (await nav.textContent())!.match(/(\d+)–(\d+) of (\d+)/);
-    expect(m).not.toBeNull();
-    const total = Number(m![3]);
-    expect(Number(m![2])).toBe(total);
-    const totalPages = Math.ceil(total / 20);
-    expect(totalPages).toBeGreaterThan(1);
-    await expect(nav.locator('[aria-current="page"]')).toHaveText(String(totalPages));
-    expect(await page.locator('[data-testid^="user-row-"]').count()).toBeGreaterThan(0);
-  });
-
   test('admin overview and tiers page have no horizontal overflow at 390px', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 800 });
     await loginAs(page, 'admin@example.com');
@@ -123,6 +107,56 @@ test.describe('Admin Setup layout', () => {
 // ============================================================
 // SETUP OVERVIEW ACCURACY (B29, B31)
 // ============================================================
+
+test.describe('Admin users pagination', () => {
+  // Scoped with ?q= to this run's own users so the test never depends on (or races with)
+  // the global profile count. 22 users = 2 pages at 20 per page.
+  const tag = `pg-users-${Math.random().toString(36).slice(2, 10)}`;
+  const userIds: string[] = [];
+
+  test.beforeAll(async () => {
+    const svc = createServiceRoleClient();
+    const results = await Promise.all(
+      Array.from({ length: 22 }, (_, n) =>
+        svc.auth.admin.createUser({
+          email: `${tag}-${n}@example.com`,
+          password: 'Password123',
+          email_confirm: true,
+        }),
+      ),
+    );
+    for (const { data, error } of results) {
+      if (data?.user) userIds.push(data.user.id);
+      if (error) throw error;
+    }
+  });
+
+  test.afterAll(async () => {
+    if (userIds.length === 0) return;
+    const svc = createServiceRoleClient();
+    const { error: pErr } = await svc.from('profiles').delete().in('id', userIds);
+    if (pErr) throw pErr;
+    const results = await Promise.all(userIds.map((id) => svc.auth.admin.deleteUser(id)));
+    for (const { error } of results) if (error) throw error;
+  });
+
+  test('/admin/users?page=999 shows the last page with rows and a pager', async ({ page }) => {
+    await loginAs(page, 'admin@example.com');
+    await gotoAdmin(page, `/admin/users?q=${tag}&page=999`);
+    await expect(page.getByRole('heading', { name: 'User Management' })).toBeVisible();
+    const nav = page.getByRole('navigation', { name: 'Pagination' });
+    await expect(nav).toBeVisible();
+    const m = (await nav.textContent())!.match(/(\d+)–(\d+) of (\d+)/);
+    expect(m).not.toBeNull();
+    const total = Number(m![3]);
+    expect(total).toBe(22);
+    expect(Number(m![2])).toBe(total);
+    const totalPages = Math.ceil(total / 20);
+    expect(totalPages).toBeGreaterThan(1);
+    await expect(nav.locator('[aria-current="page"]')).toHaveText(String(totalPages));
+    expect(await page.locator('[data-testid^="user-row-"]').count()).toBeGreaterThan(0);
+  });
+});
 
 test.describe('Setup overview accuracy', () => {
   test('tier-secret warning shows when tiers exist and no secret is set', async ({ page }) => {

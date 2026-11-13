@@ -162,22 +162,23 @@ test.describe('Agent Dashboard pagination', () => {
     const first = await rowTitles(page);
     expect(first).toHaveLength(pageSize);
 
+    // Same CI rationale as applyFilters (tests/helpers/agent-dashboard.ts): RSC render under load plus prefetch contention.
     await nav.getByRole('link', { name: 'Next' }).click();
-    await expect(page).toHaveURL(/page=2/);
+    await expect(page).toHaveURL(/page=2/, { timeout: 20_000 });
     await expect(nav).toContainText(`${pageSize + 1}–${pageSize * 2} of ${total}`);
     const second = await rowTitles(page);
     expect(second).toHaveLength(pageSize);
     expect(second.some((t) => first.includes(t))).toBe(false);
 
     await nav.getByRole('link', { name: 'Last' }).click();
-    await expect(page).toHaveURL(new RegExp(`page=${totalPages}`));
+    await expect(page).toHaveURL(new RegExp(`page=${totalPages}`), { timeout: 20_000 });
     await expect(nav).toContainText(`${(totalPages - 1) * pageSize + 1}–${total} of ${total}`);
     await expect(nav.getByRole('link', { name: 'Next' })).toHaveCount(0);
     const last = await rowTitles(page);
     expect(last).toHaveLength(total - (totalPages - 1) * pageSize);
 
     await nav.getByRole('link', { name: 'First' }).click();
-    await expect(page).toHaveURL(/page=1(&|$)/);
+    await expect(page).toHaveURL(/page=1(&|$)/, { timeout: 20_000 });
     await expect(nav).toContainText(`1–${pageSize} of ${total}`);
   });
 

@@ -26,7 +26,8 @@ export async function openViewsFilters(page: Page) {
  * router.push, and the URL changes once the RSC render of /agent?<filters> has
  * streamed in. That render is ~0.4 s with one worker and ~0.65-1.3 s with four
  * workers sharing the server, with one 14 s outlier seen under load: test-env
- * contention, so allow well past toHaveURL's 5 s default.
+ * contention (on the 2-vCPU CI runner also viewport prefetches competing for the
+ * same server), so allow well past toHaveURL's 5 s default.
  */
 export async function applyFilters(page: Page, url: RegExp) {
   await page.getByRole('button', { name: 'Apply Filters' }).click();

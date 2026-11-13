@@ -94,7 +94,7 @@ export default async function KbManagePage({
               type="checkbox"
               defaultChecked={kbVisible}
               disabled={!isAdmin}
-              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 pointer-events-none"
+              className="form-checkbox pointer-events-none"
             />
             Knowledge base visible to public
           </label>
@@ -121,7 +121,7 @@ export default async function KbManagePage({
               id="filter-status"
               name="status"
               defaultValue={status ?? ''}
-              className="rounded border border-gray-300 px-2 py-1 text-sm"
+              className="form-select"
             >
               <option value="">All</option>
               <option value="draft">Draft</option>
@@ -135,7 +135,7 @@ export default async function KbManagePage({
               id="filter-category"
               name="category"
               defaultValue={category ?? ''}
-              className="rounded border border-gray-300 px-2 py-1 text-sm"
+              className="form-select"
             >
               <option value="">All</option>
               {(categories ?? []).map((c) => (
@@ -151,18 +151,18 @@ export default async function KbManagePage({
               type="text"
               defaultValue={q ?? ''}
               placeholder="Title…"
-              className="rounded border border-gray-300 px-2 py-1 text-sm"
+              className="form-input"
             />
           </div>
           <button
             type="submit"
-            className="px-3 py-1 text-sm bg-gray-100 rounded hover:bg-gray-200 text-gray-700"
+            className="px-3 h-[36px] text-sm bg-gray-100 rounded hover:bg-gray-200 text-gray-700"
           >
             Filter
           </button>
           <Link
             href="/kb/manage/new"
-            className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+            className="px-3 h-[36px] inline-flex items-center text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
           >
             New Article
           </Link>

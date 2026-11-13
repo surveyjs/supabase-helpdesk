@@ -69,11 +69,11 @@ function PolicySection({ policies }: { policies: SlaPolicy[] }) {
                     <form action={updateSlaPolicy} className="inline">
                       <input type="hidden" name="policy_id" value={policy.id} />
                       <input type="text" name="name" defaultValue={policy.name} maxLength={100}
-                        className="w-24 rounded border border-gray-300 px-1 py-0.5 text-xs" placeholder="Name" aria-label={`${policy.name} — Name`} />
+                        className="w-24 text-xs form-input" placeholder="Name" aria-label={`${policy.name} — Name`} />
                       <input type="number" name="first_response_minutes" defaultValue={policy.first_response_minutes} min={1}
-                        className="w-16 rounded border border-gray-300 px-1 py-0.5 text-xs ml-1" placeholder="FR min" aria-label={`${policy.name} — First response (min)`} />
+                        className="w-16 text-xs ml-1 form-input" placeholder="FR min" aria-label={`${policy.name} — First response (min)`} />
                       <input type="number" name="resolution_minutes" defaultValue={policy.resolution_minutes} min={1}
-                        className="w-16 rounded border border-gray-300 px-1 py-0.5 text-xs ml-1" placeholder="Res min" aria-label={`${policy.name} — Resolution (min)`} />
+                        className="w-16 text-xs ml-1 form-input" placeholder="Res min" aria-label={`${policy.name} — Resolution (min)`} />
                       <button type="submit" className="ml-1 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200">
                         Update
                       </button>
@@ -97,22 +97,22 @@ function PolicySection({ policies }: { policies: SlaPolicy[] }) {
         <div>
           <label htmlFor="new-sla-name" className="block text-xs font-medium text-gray-500 mb-1">Policy Name</label>
           <input id="new-sla-name" type="text" name="name" maxLength={100} required
-            className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            className="form-input"
             placeholder="e.g. Standard SLA" />
         </div>
         <div>
           <label htmlFor="new-sla-first_response_minutes" className="block text-xs font-medium text-gray-500 mb-1">First Response (min)</label>
           <input id="new-sla-first_response_minutes" type="number" name="first_response_minutes" min={1} required
-            className="w-24 rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            className="w-24 form-input"
             placeholder="240" />
         </div>
         <div>
           <label htmlFor="new-sla-resolution_minutes" className="block text-xs font-medium text-gray-500 mb-1">Resolution (min)</label>
           <input id="new-sla-resolution_minutes" type="number" name="resolution_minutes" min={1} required
-            className="w-24 rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            className="w-24 form-input"
             placeholder="1440" />
         </div>
-        <button type="submit" className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
+        <button type="submit" className="px-4 h-[36px] text-sm bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
           data-testid="create-policy-btn">
           Create Policy
         </button>

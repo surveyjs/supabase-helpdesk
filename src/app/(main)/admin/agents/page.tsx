@@ -104,13 +104,13 @@ export default async function AdminAgentsPage({
               name="email"
               defaultValue={searchEmail ?? ''}
               required
-              className="rounded border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+              className="form-input"
               placeholder="user@example.com"
             />
           </div>
           <button
             type="submit"
-            className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
+            className="px-4 h-[36px] text-sm bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
           >
             Search
           </button>

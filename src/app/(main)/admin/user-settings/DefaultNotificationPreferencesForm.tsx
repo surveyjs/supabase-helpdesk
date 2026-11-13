@@ -77,7 +77,7 @@ export function DefaultNotificationPreferencesForm({
                   checked={prefs[et.key]?.email !== false}
                   onChange={() => toggle(et.key, 'email')}
                   aria-label={`${et.label} — Email`}
-                  className="h-4 w-4 rounded border-gray-300 text-blue-600"
+                  className="form-checkbox"
                 />
               </td>
               <td className="py-2 text-center">
@@ -86,7 +86,7 @@ export function DefaultNotificationPreferencesForm({
                   checked={prefs[et.key]?.in_app !== false}
                   onChange={() => toggle(et.key, 'in_app')}
                   aria-label={`${et.label} — In-app`}
-                  className="h-4 w-4 rounded border-gray-300 text-blue-600"
+                  className="form-checkbox"
                 />
               </td>
             </tr>

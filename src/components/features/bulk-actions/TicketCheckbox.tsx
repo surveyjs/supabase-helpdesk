@@ -10,7 +10,7 @@ export function TicketCheckbox({ ticketId }: { ticketId: number }) {
       type="checkbox"
       checked={isSelected(ticketId)}
       onChange={() => toggleId(ticketId)}
-      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+      className="form-checkbox"
       aria-label={`Select ticket #${ticketId}`}
       data-testid={`ticket-checkbox-${ticketId}`}
     />
@@ -27,7 +27,7 @@ export function SelectAllCheckbox({ ticketIds }: { ticketIds: number[] }) {
       type="checkbox"
       checked={allSelected}
       onChange={() => selectAll(ticketIds)}
-      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+      className="form-checkbox"
       aria-label="Select all tickets on this page"
       data-testid="select-all-checkbox"
     />

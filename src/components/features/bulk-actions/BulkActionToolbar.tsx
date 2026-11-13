@@ -88,7 +88,7 @@ export function BulkActionToolbar({
         >
           <select
             name="new_status"
-            className="rounded border border-gray-300 px-2 py-1 text-xs"
+            className="text-xs form-select"
             data-testid="bulk-status-select"
           >
             <option value="open">Open</option>
@@ -132,7 +132,7 @@ export function BulkActionToolbar({
         >
           <select
             name="agent_id"
-            className="rounded border border-gray-300 px-2 py-1 text-xs"
+            className="text-xs form-select"
             data-testid="bulk-assign-select"
           >
             {agents.map((a) => (
@@ -204,7 +204,7 @@ export function BulkActionToolbar({
                   type="checkbox"
                   value={tag.id}
                   data-testid="bulk-add-tag-checkbox"
-                  className="h-3 w-3"
+                  className="form-checkbox h-3 w-3"
                 />
                 {tag.name}
               </label>
@@ -256,7 +256,7 @@ export function BulkActionToolbar({
                   type="checkbox"
                   value={tag.id}
                   data-testid="bulk-remove-tag-checkbox"
-                  className="h-3 w-3"
+                  className="form-checkbox h-3 w-3"
                 />
                 {tag.name}
               </label>
@@ -299,7 +299,7 @@ export function BulkActionToolbar({
         >
           <select
             name="new_severity"
-            className="rounded border border-gray-300 px-2 py-1 text-xs"
+            className="text-xs form-select"
             data-testid="bulk-severity-select"
           >
             <option value="low">Low</option>

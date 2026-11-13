@@ -124,7 +124,7 @@ export default async function UsersPage({
           <select
             name="tier_id"
             defaultValue={user.tier_id ?? 'none'}
-            className="rounded border border-gray-300 px-1 py-0.5 text-xs"
+            className="text-xs form-select"
             aria-label={`Tier for ${user.display_name ?? user.email}${idSuffix}`}
           >
             <option value="none">None</option>
@@ -136,7 +136,7 @@ export default async function UsersPage({
             name="expires_at"
             type="datetime-local"
             defaultValue={user.tier_expires_at ? new Date(user.tier_expires_at).toISOString().slice(0, 16) : ''}
-            className="rounded border border-gray-300 px-1 py-0.5 text-xs"
+            className="text-xs form-input"
             aria-label={`Tier expiration${idSuffix}`}
           />
           <button type="submit" className="px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200">Save</button>
@@ -220,14 +220,14 @@ export default async function UsersPage({
           <div className="flex gap-2">
             <button
               type="submit"
-              className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+              className="px-4 h-[36px] bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
             >
               Filter
             </button>
             <Link
               href="/admin/users"
               prefetch={false}
-              className="px-4 py-1.5 bg-gray-100 text-gray-700 text-sm rounded hover:bg-gray-200"
+              className="px-4 h-[36px] inline-flex items-center bg-gray-100 text-gray-700 text-sm rounded hover:bg-gray-200"
             >
               Reset
             </Link>

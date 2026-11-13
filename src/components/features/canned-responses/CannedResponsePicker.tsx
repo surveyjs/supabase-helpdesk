@@ -85,7 +85,7 @@ export function CannedResponsePicker({
               value={query}
               onChange={(e) => handleQueryChange(e.target.value)}
               placeholder="Search responses…"
-              className="block w-full rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+              className="block w-full form-input"
               autoFocus
             />
           </div>

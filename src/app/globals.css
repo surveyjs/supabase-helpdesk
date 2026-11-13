@@ -33,11 +33,20 @@ html {
 @layer components {
   .form-input,
   .form-select {
-    @apply rounded-md border border-input bg-white px-2.5 py-1.5 text-sm text-foreground outline-none;
+    @apply rounded-md border border-gray-300 bg-white px-2.5 text-sm text-foreground outline-none;
     @apply focus:border-blue-600 focus:ring-2 focus:ring-blue-600;
+  }
+  /* Fixed 36px (matches SurveyJS controls): the root font is 17px, so h-9 (2.25rem) would be 38px. */
+  input.form-input,
+  select.form-select {
+    @apply h-[36px];
+  }
+  textarea.form-input {
+    @apply py-1.5;
   }
   input[type='checkbox'].form-checkbox {
     @apply h-4 w-4 accent-blue-600;
+    @apply focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-1 focus-visible:outline-none;
   }
 }
 

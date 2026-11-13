@@ -103,7 +103,7 @@ function PasswordForm() {
             required
             maxLength={320}
             autoComplete="email"
-            className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            className="block w-full form-input"
           />
         </div>
         <div>
@@ -116,7 +116,7 @@ function PasswordForm() {
             type="password"
             required
             autoComplete="current-password"
-            className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            className="block w-full form-input"
           />
         </div>
         <button

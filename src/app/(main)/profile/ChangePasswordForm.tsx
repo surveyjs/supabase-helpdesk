@@ -19,7 +19,7 @@ export function ChangePasswordForm() {
             id="current_password"
             name="current_password"
             type="password"
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            className="w-full form-input"
             required
           />
         </div>
@@ -32,7 +32,7 @@ export function ChangePasswordForm() {
             name="new_password"
             type="password"
             minLength={8}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            className="w-full form-input"
             required
           />
           <p className="text-xs text-gray-500 mt-1">
@@ -48,7 +48,7 @@ export function ChangePasswordForm() {
             name="confirm_password"
             type="password"
             minLength={8}
-            className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            className="w-full form-input"
             required
           />
         </div>

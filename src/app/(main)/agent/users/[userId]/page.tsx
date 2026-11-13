@@ -188,7 +188,7 @@ export default async function UserDetailPage({
                 <input type="hidden" name="user_id" value={targetUser.id} />
                 <div>
                   <label className="block text-xs text-gray-500 mb-0.5">Tier</label>
-                  <select name="tier_id" defaultValue={targetUser.tier_id ?? 'none'} className="rounded border border-gray-300 px-2 py-1.5 text-sm">
+                  <select name="tier_id" defaultValue={targetUser.tier_id ?? 'none'} className="form-select">
                     <option value="none">None</option>
                     {allTiers.map((t) => (
                       <option key={t.id} value={t.id}>{t.display_name}</option>
@@ -201,7 +201,7 @@ export default async function UserDetailPage({
                     name="expires_at"
                     type="datetime-local"
                     defaultValue={targetUser.tier_expires_at ? new Date(targetUser.tier_expires_at).toISOString().slice(0, 16) : ''}
-                    className="rounded border border-gray-300 px-2 py-1.5 text-sm"
+                    className="form-input"
                   />
                 </div>
                 <button type="submit" className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700">

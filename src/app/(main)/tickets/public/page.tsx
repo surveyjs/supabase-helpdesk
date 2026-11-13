@@ -79,12 +79,12 @@ export default async function PublicTicketsPage({
             name="q"
             defaultValue={search}
             placeholder="Search public tickets…"
-            className="flex-1 rounded border border-gray-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            className="flex-1 form-input"
             aria-label="Search public tickets"
           />
           <button
             type="submit"
-            className="px-3 py-1.5 text-sm bg-gray-100 rounded hover:bg-gray-200 text-gray-700"
+            className="px-3 h-[36px] text-sm bg-gray-100 rounded hover:bg-gray-200 text-gray-700"
           >
             Search
           </button>

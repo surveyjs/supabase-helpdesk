@@ -38,13 +38,13 @@ export function MarkAsDuplicateForm({ ticketId }: { ticketId: number }) {
             placeholder="Original ticket ID"
             min={1}
             required
-            className="w-40 rounded border border-gray-300 px-2 py-1 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            className="w-40 text-xs form-input"
             data-testid="original-ticket-id-input"
           />
           <button
             type="submit"
             disabled={isPending}
-            className="px-3 py-1 text-xs rounded bg-yellow-600 text-white hover:bg-yellow-700 disabled:opacity-50"
+            className="px-3 h-[36px] text-xs rounded bg-yellow-600 text-white hover:bg-yellow-700 disabled:opacity-50"
           >
             {isPending ? 'Marking…' : 'Confirm'}
           </button>

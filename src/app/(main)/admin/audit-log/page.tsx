@@ -126,7 +126,7 @@ export default async function AdminAuditLogPage({
               id="filter-action"
               name="action"
               defaultValue={params.action ?? ''}
-              className="rounded border border-gray-300 px-2 py-1.5 text-sm"
+              className="form-select"
             >
               <option value="">All</option>
               {actionTypes.map((a) => (
@@ -140,7 +140,7 @@ export default async function AdminAuditLogPage({
               id="filter-admin"
               name="admin"
               defaultValue={params.admin ?? ''}
-              className="rounded border border-gray-300 px-2 py-1.5 text-sm"
+              className="form-select"
             >
               <option value="">All</option>
               {(admins ?? []).map((a) => (
@@ -155,7 +155,7 @@ export default async function AdminAuditLogPage({
               type="date"
               name="from"
               defaultValue={params.from ?? ''}
-              className="rounded border border-gray-300 px-2 py-1.5 text-sm"
+              className="form-input"
             />
           </div>
           <div>
@@ -165,12 +165,12 @@ export default async function AdminAuditLogPage({
               type="date"
               name="to"
               defaultValue={params.to ?? ''}
-              className="rounded border border-gray-300 px-2 py-1.5 text-sm"
+              className="form-input"
             />
           </div>
           <button
             type="submit"
-            className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
+            className="px-4 h-[36px] text-sm bg-blue-600 text-white rounded hover:bg-blue-700 font-medium"
           >
             Filter
           </button>

@@ -77,13 +77,13 @@ export default async function CannedResponsesPage({
           aria-label="Search canned responses"
           defaultValue={q ?? ''}
           placeholder="Search by title or body…"
-          className="flex-1 min-w-[200px] rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+          className="flex-1 min-w-[200px] form-input"
         />
         <select
           name="visibility"
           aria-label="Filter by visibility"
           defaultValue={visibility ?? ''}
-          className="rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+          className="form-select"
         >
           <option value="">All</option>
           <option value="public">Public</option>
@@ -91,7 +91,7 @@ export default async function CannedResponsesPage({
         </select>
         <button
           type="submit"
-          className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 border border-gray-300"
+          className="px-4 h-[36px] text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 border border-gray-300"
         >
           Search
         </button>

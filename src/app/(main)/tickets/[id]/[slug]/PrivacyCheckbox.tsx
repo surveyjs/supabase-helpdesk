@@ -15,7 +15,7 @@ export function PrivacyCheckbox({ postId, isPrivate }: { postId: string; isPriva
         id={`private-${postId}`}
         checked={checked}
         onChange={() => { setChecked((v) => !v); formRef.current?.requestSubmit(); }}
-        className="h-3.5 w-3.5 rounded border-gray-300 text-gray-600 accent-gray-600 cursor-pointer"
+        className="form-checkbox h-3.5 w-3.5 accent-gray-600 cursor-pointer"
       />
       <label
         htmlFor={`private-${postId}`}

@@ -37,11 +37,11 @@ export default async function HelpCenterPage({
               name="q"
               defaultValue={q}
               placeholder="Search articles..."
-              className="flex-1 rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+              className="flex-1 form-input"
             />
             <button
               type="submit"
-              className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+              className="px-4 h-[36px] bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
             >
               Search
             </button>
@@ -131,11 +131,11 @@ export default async function HelpCenterPage({
               type="text"
               name="q"
               placeholder="Search articles..."
-              className="flex-1 rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+              className="flex-1 form-input"
             />
             <button
               type="submit"
-              className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+              className="px-4 h-[36px] bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
             >
               Search
             </button>
@@ -195,11 +195,11 @@ export default async function HelpCenterPage({
             type="text"
             name="q"
             placeholder="Search articles..."
-            className="flex-1 rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            className="flex-1 form-input"
           />
           <button
             type="submit"
-            className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+            className="px-4 h-[36px] bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
           >
             Search
           </button>

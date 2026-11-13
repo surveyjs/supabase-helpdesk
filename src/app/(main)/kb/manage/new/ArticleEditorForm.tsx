@@ -82,7 +82,7 @@ export function ArticleEditorForm({
           required
           maxLength={300}
           defaultValue={article?.title ?? ''}
-          className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+          className="block w-full form-input"
         />
         {state.fieldErrors?.title && (
           <p className="mt-1 text-sm text-red-600">{state.fieldErrors.title}</p>
@@ -97,7 +97,7 @@ export function ArticleEditorForm({
           id="category_id"
           name="category_id"
           defaultValue={article?.category_id ?? ''}
-          className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+          className="block w-full form-select"
         >
           <option value="">None</option>
           {categories.map((c) => (
@@ -142,7 +142,7 @@ export function ArticleEditorForm({
             maxLength={100000}
             value={bodyText}
             onChange={(e) => setBodyText(e.target.value)}
-            className="block w-full rounded border border-gray-300 px-3 py-2 text-sm font-mono focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-y"
+            className="block w-full font-mono resize-y form-input"
             placeholder="Write article content in Markdown..."
           />
         ) : (

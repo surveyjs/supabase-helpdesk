@@ -50,7 +50,7 @@ export function EditableTitle({
         defaultValue={title}
         required
         maxLength={300}
-        className="block w-full rounded border border-gray-300 px-3 py-2 text-lg font-semibold focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+        className="block w-full text-lg font-semibold form-input"
         autoFocus
       />
       <div className="flex gap-2">

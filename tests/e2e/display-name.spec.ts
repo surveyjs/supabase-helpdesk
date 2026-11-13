@@ -15,15 +15,24 @@ async function createUser(localPart: string, displayName: string) {
   });
   if (error) throw new Error(`createUser: ${error.message}`);
   const id = data.user.id;
-  await svc
+  const { error: profileErr } = await svc
     .from('profiles')
     .upsert({ id, email, display_name: displayName, role: 'user' });
+  if (profileErr) {
+    // Don't leak the auth user when the profile can't be written (profile first: no cascade)
+    await removeUser(id);
+    throw new Error(`createUser profile upsert: ${profileErr.message}`);
+  }
   return { id, email };
 }
 
 async function removeUser(id: string) {
   const svc = createServiceRoleClient();
-  await svc.auth.admin.deleteUser(id);
+  // profiles.id has no ON DELETE CASCADE from auth.users: delete the profile first
+  const { error: profileErr } = await svc.from('profiles').delete().eq('id', id);
+  if (profileErr) throw new Error(`removeUser profile delete: ${profileErr.message}`);
+  const { error } = await svc.auth.admin.deleteUser(id);
+  if (error) throw new Error(`removeUser auth delete: ${error.message}`);
 }
 
 const banner = (page: import('@playwright/test').Page) => page.getByTestId('display-name-prompt');

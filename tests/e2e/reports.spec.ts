@@ -241,7 +241,6 @@ test.describe('Reports - range, CSV and export menu', () => {
 
   test('CSV export honours the tier filter', async ({ page }) => {
     const svc = createServiceRoleClient();
-    const { data: alice } = await svc.from('profiles').select('id, tier_id').eq('email', 'alice@example.com').single();
     const { data: bob } = await svc.from('profiles').select('id').eq('email', 'bob@example.com').single();
     const { data: typeData } = await svc.from('ticket_types').select('id').limit(1).single();
     const tierKey = `rpt-tier-${Date.now()}`;
@@ -251,9 +250,17 @@ test.describe('Reports - range, CSV and export menu', () => {
       .select('id')
       .single();
     const ids: number[] = [];
+    // Throwaway tier member: seeded users' tiers are asserted by other specs
+    const { data: created, error: userErr } = await svc.auth.admin.createUser({
+      email: `rpt-tier-${Date.now()}@example.com`,
+      password: 'Password123',
+      email_confirm: true,
+    });
+    if (userErr) throw userErr;
+    const memberId = created.user.id;
     try {
-      await svc.from('profiles').update({ tier_id: tier!.id }).eq('id', alice!.id);
-      for (const [n, creator] of [['tier', alice!.id], ['other', bob!.id]] as const) {
+      await svc.from('profiles').update({ tier_id: tier!.id }).eq('id', memberId);
+      for (const [n, creator] of [['tier', memberId], ['other', bob!.id]] as const) {
         const { data: t } = await svc
           .from('tickets')
           .insert({
@@ -280,7 +287,7 @@ test.describe('Reports - range, CSV and export menu', () => {
         await svc.from('activity_log').delete().eq('ticket_id', id);
         await svc.from('tickets').delete().eq('id', id);
       }
-      await svc.from('profiles').update({ tier_id: alice!.tier_id }).eq('id', alice!.id);
+      await svc.auth.admin.deleteUser(memberId).catch(() => {});
       await svc.from('subscription_tiers').delete().eq('id', tier!.id);
     }
   });

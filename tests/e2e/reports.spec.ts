@@ -241,39 +241,62 @@ test.describe('Reports - range, CSV and export menu', () => {
 
   test('CSV export honours the tier filter', async ({ page }) => {
     const svc = createServiceRoleClient();
-    const { data: bob } = await svc.from('profiles').select('id').eq('email', 'bob@example.com').single();
-    const { data: typeData } = await svc.from('ticket_types').select('id').limit(1).single();
+    // supabase-js resolves with { error } instead of rejecting: check each one
+    const must = <T>(res: { data: T; error: { message: string } | null }, what: string): NonNullable<T> => {
+      if (res.error || res.data == null) {
+        throw new Error(`tier CSV test setup: ${what} failed: ${res.error?.message ?? 'no row returned'}`);
+      }
+      return res.data as NonNullable<T>;
+    };
+    const warnIf = (error: { message: string } | null, table: string, id: string | number) => {
+      if (error) console.warn(`tier CSV test cleanup: delete from ${table} id=${id} failed: ${error.message}`);
+    };
     const tierKey = `rpt-tier-${Date.now()}`;
-    const { data: tier } = await svc
-      .from('subscription_tiers')
-      .insert({ key: tierKey, display_name: 'Rpt tier', sort_order: 999 })
-      .select('id')
-      .single();
     const ids: number[] = [];
+    let tierId: number | undefined;
     let memberId: string | undefined;
     try {
+      const bob = must(
+        await svc.from('profiles').select('id').eq('email', 'bob@example.com').single(),
+        'bob profile lookup',
+      );
+      const typeData = must(await svc.from('ticket_types').select('id').limit(1).single(), 'ticket type lookup');
+      tierId = must(
+        await svc
+          .from('subscription_tiers')
+          .insert({ key: tierKey, display_name: 'Rpt tier', sort_order: 999 })
+          .select('id')
+          .single(),
+        'tier insert',
+      ).id;
       // Throwaway tier member: seeded users' tiers are asserted by other specs
       const { data: created, error: userErr } = await svc.auth.admin.createUser({
         email: `rpt-tier-${Date.now()}@example.com`,
         password: 'Password123',
         email_confirm: true,
       });
-      if (userErr) throw userErr;
+      if (userErr) throw new Error(`tier CSV test setup: createUser failed: ${userErr.message}`);
       memberId = created.user.id;
-      await svc.from('profiles').update({ tier_id: tier!.id }).eq('id', memberId);
-      for (const [n, creator] of [['tier', memberId!], ['other', bob!.id]] as const) {
-        const { data: t } = await svc
-          .from('tickets')
-          .insert({
-            title: `E2E Reports tier csv ${n}`,
-            slug: `e2e-reports-tier-csv-${n}-${Date.now()}`,
-            creator_id: creator,
-            type_id: typeData!.id,
-            created_at: `${TIER_DAY}T12:00:00Z`,
-          })
-          .select('id')
-          .single();
-        ids.push(t!.id);
+      must(
+        await svc.from('profiles').update({ tier_id: tierId }).eq('id', memberId).select('id').single(),
+        `profiles.update tier_id for ${memberId}`,
+      );
+      for (const [n, creator] of [['tier', memberId], ['other', bob.id]] as const) {
+        const t = must(
+          await svc
+            .from('tickets')
+            .insert({
+              title: `E2E Reports tier csv ${n}`,
+              slug: `e2e-reports-tier-csv-${n}-${Date.now()}`,
+              creator_id: creator,
+              type_id: typeData.id,
+              created_at: `${TIER_DAY}T12:00:00Z`,
+            })
+            .select('id')
+            .single(),
+          `ticket insert (${n})`,
+        );
+        ids.push(t.id);
       }
       await loginAs(page, 'admin@example.com');
       await page.goto(`/reports?start=${TIER_DAY}&end=${TIER_DAY}&tier=${tierKey}`);
@@ -284,19 +307,19 @@ test.describe('Reports - range, CSV and export menu', () => {
       const csv = readFileSync((await (await downloadPromise).path())!, 'utf8');
       expect(csv.split('\n').map((l) => l.trim())).toContain(`${TIER_DAY},1`);
     } finally {
+      // No triggers on tickets/profiles create other rows; activity_log, notifications etc. cascade from tickets
       for (const id of ids) {
-        await svc.from('activity_log').delete().eq('ticket_id', id);
-        await svc.from('tickets').delete().eq('id', id);
+        warnIf((await svc.from('activity_log').delete().eq('ticket_id', id)).error, 'activity_log (ticket_id)', id);
+        warnIf((await svc.from('tickets').delete().eq('id', id)).error, 'tickets', id);
       }
       // profiles.id has no ON DELETE CASCADE from auth.users: delete the profile first
       if (memberId) {
-        const { error: profErr } = await svc.from('profiles').delete().eq('id', memberId);
-        if (profErr) console.warn('tier CSV test: profile cleanup failed', profErr.message);
-        const { error: delErr } = await svc.auth.admin.deleteUser(memberId);
-        if (delErr) console.warn('tier CSV test: user cleanup failed', delErr.message);
+        warnIf((await svc.from('profiles').delete().eq('id', memberId)).error, 'profiles', memberId);
+        warnIf((await svc.auth.admin.deleteUser(memberId)).error, 'auth.users', memberId);
       }
-      const { error: tierErr } = await svc.from('subscription_tiers').delete().eq('id', tier!.id);
-      if (tierErr) console.warn('tier CSV test: tier cleanup failed', tierErr.message);
+      if (tierId !== undefined) {
+        warnIf((await svc.from('subscription_tiers').delete().eq('id', tierId)).error, 'subscription_tiers', tierId);
+      }
     }
   });
 

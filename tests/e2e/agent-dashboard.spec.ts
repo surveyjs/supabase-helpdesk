@@ -626,30 +626,76 @@ test.describe('Agent Ticket Detail Controls', () => {
   });
 });
 
+/**
+ * A throwaway agent per parallel worker slot for "Consolidated Views & Filters
+ * Panel". Its tests create, apply and delete saved views, and applying a view
+ * stores it as the agent's active view. As agent.smith, that stored view
+ * leaked into parallel describes opening /agent as agent.smith: the page
+ * loaded the view, and their Apply updated it and went to ?view=<id>.
+ */
+function viewsAgent(): { id: string; email: string } {
+  const slot = String(test.info().parallelIndex).padStart(2, '0');
+  return { id: `00000000-0000-0000-0000-0009120000${slot}`, email: `views-panel-e2e-${slot}@test.local` };
+}
+
+async function deleteViewsAgent(): Promise<void> {
+  const { id } = viewsAgent();
+  const svc = createServiceRoleClient();
+  const { error: viewsErr } = await svc.from('saved_views').delete().eq('agent_id', id);
+  if (viewsErr) throw new Error(`delete saved views: ${viewsErr.message}`);
+  // profiles → auth.users has no cascade: drop the profile first.
+  const { error: profileErr } = await svc.from('profiles').delete().eq('id', id);
+  if (profileErr) throw new Error(`delete profile: ${profileErr.message}`);
+  const { error } = await svc.auth.admin.deleteUser(id);
+  if (error && error.status !== 404) throw new Error(`deleteUser: ${error.message}`);
+}
+
+async function createViewsAgent(): Promise<void> {
+  const { id, email } = viewsAgent();
+  // Start clean even if a previous run died before afterAll.
+  await deleteViewsAgent();
+  const svc = createServiceRoleClient();
+  const { error } = await svc.auth.admin.createUser({
+    id,
+    email,
+    password: 'Password123',
+    email_confirm: true,
+    user_metadata: { display_name: 'Views Panel E2E' },
+  });
+  if (error) throw new Error(`createUser(${email}): ${error.message}`);
+  const { error: roleErr } = await svc.from('profiles').update({ role: 'agent' }).eq('id', id);
+  if (roleErr) throw new Error(`set agent role: ${roleErr.message}`);
+}
+
 test.describe('Consolidated Views & Filters Panel', () => {
   // Views these tests create through the UI; remove them even when a test fails midway,
   // so a leaked row can't push later layout assertions around.
   test.afterEach(async () => {
-    const admin = createServiceRoleClient();
-    const { data: agent } = await admin.from('profiles').select('id').eq('email', 'agent.smith@example.com').single();
-    if (!agent) return;
-    for (const prefix of ['My Test ', 'Closed Only ', 'To Delete ', 'E2E View ']) {
-      await admin.from('saved_views').delete().eq('agent_id', agent.id).like('name', `${prefix}%`);
-    }
+    const { error } = await createServiceRoleClient().from('saved_views').delete().eq('agent_id', viewsAgent().id);
+    if (error) throw new Error(`delete saved views: ${error.message}`);
   });
 
   test.describe.configure({ mode: 'serial' });
 
+  test.beforeAll(async () => {
+    await createViewsAgent();
+  });
+
+  test.afterAll(async () => {
+    await deleteViewsAgent();
+  });
+
   test.beforeEach(async () => {
-    // Reset active_view_id before every test so parallel describe blocks
-    // (View Switcher Dropdown) cannot pollute this block's state.
-    const admin = createServiceRoleClient();
-    await admin.from('profiles').update({ active_view_id: null }).eq('email', 'agent.smith@example.com');
+    const { error } = await createServiceRoleClient()
+      .from('profiles')
+      .update({ active_view_id: null })
+      .eq('id', viewsAgent().id);
+    if (error) throw new Error(`reset active view: ${error.message}`);
   });
 
   test('panel is collapsed by default below xl', async ({ page }) => {
     await page.setViewportSize({ width: 1024, height: 800 });
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
     await page.goto('/agent');
 
     // The consolidated panel summary should be visible
@@ -662,7 +708,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
   });
 
   test('panel summary shows "Views & Filters: Default" when no view selected', async ({ page }) => {
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
     await page.goto('/agent');
 
     // Trigger should show "Default"
@@ -672,7 +718,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
   test('panel summary shows current view name when view is applied', async ({ page }) => {
     const token = `view-${Date.now()}`;
     const viewName = `My Test ${token}`;
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
     await page.goto(`/agent?status=closed&q=${encodeURIComponent(token)}`);
 
     // First, expand panel
@@ -700,7 +746,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
 
   test('can expand and collapse panel', async ({ page }) => {
     await page.setViewportSize({ width: 1024, height: 800 });
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
     await page.goto('/agent');
     const toggle = page.getByRole('button', { name: /Views & Filters:/ });
 
@@ -724,7 +770,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
 
   test('panel is expanded by default at xl and can be collapsed', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
     await page.goto('/agent');
     const toggle = page.getByRole('button', { name: /Views & Filters:/ });
     const filterLabel = page.getByLabel('Search', { exact: true });
@@ -739,7 +785,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
 
   test('filters panel is left of the list at 1440px', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
     await page.goto('/agent');
     await openViewsFilters(page);
 
@@ -783,7 +829,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
 
   test('Apply Filters is reachable in the sticky panel at 1440x900', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
     await page.goto('/agent');
     await openViewsFilters(page);
 
@@ -801,7 +847,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
   });
 
   test('dashboard has no horizontal overflow at 820px and 390px', async ({ page }) => {
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
     for (const width of [820, 390]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto('/agent');
@@ -815,7 +861,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
   });
 
   test('cards below lg, table from lg; labelled badges, no lock emoji', async ({ page }) => {
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
 
     await page.setViewportSize({ width: 820, height: 900 });
     await page.goto('/agent');
@@ -837,7 +883,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
   });
 
   test('saved views list shows Default as non-removable option', async ({ page }) => {
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
     await page.goto('/agent');
 
     // Expand panel
@@ -850,7 +896,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
   test('create and apply saved view', async ({ page }) => {
     const token = `closed-only-${Date.now()}`;
     const viewName = `Closed Only ${token}`;
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
     await page.goto(`/agent?status=closed&q=${encodeURIComponent(token)}`);
 
     // Expand panel
@@ -881,7 +927,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
     const token = Date.now();
     const viewName = `To Delete ${token}`;
 
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
     await page.goto('/agent?status=open');
 
     // Expand panel
@@ -911,7 +957,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
   });
 
   test('cannot delete Default view (no delete button for Default)', async ({ page }) => {
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
     await page.goto('/agent');
 
     // Expand panel
@@ -924,7 +970,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
   });
 
   test('applying custom filters updates URL and collapsed summary', async ({ page }) => {
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
     await page.goto('/agent?status=closed');
 
     // URL should have the filter
@@ -935,7 +981,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
   });
 
   test('clearing filters reverts to Default in collapsed summary', async ({ page }) => {
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
     // Start with a filtered URL
     await page.goto('/agent?status=closed');
 
@@ -956,7 +1002,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
   });
 
   test('browser back/forward preserves view and filter state', async ({ page }) => {
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
 
     // Start at /agent
     await page.goto('/agent');
@@ -992,7 +1038,7 @@ test.describe('Consolidated Views & Filters Panel', () => {
     const token = Date.now();
     const viewName = `E2E View ${token}`;
 
-    await loginAs(page, 'agent.smith@example.com');
+    await loginAs(page, viewsAgent().email);
     // Start with non-empty filters so the saved view stores a non-empty filter set
     await page.goto('/agent?status=closed');
 

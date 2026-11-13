@@ -134,20 +134,26 @@ function PasswordForm() {
 /**
  * External mode, `/login?no_redirect=true` only: password sign-in for admins
  * when the identity provider is down or misconfigured. The `login` action
- * refuses non-admins in external mode.
+ * refuses non-admins in external mode. Collapsed behind a toggle unless the
+ * provider is unregistered or the page is showing a sign-in error.
  */
-function AdminPasswordFallback() {
+function AdminPasswordFallback({ initiallyExpanded }: { initiallyExpanded: boolean }) {
+  const [expanded, setExpanded] = useState(initiallyExpanded);
+
   return (
     <div className="mt-6" data-testid="admin-password-fallback">
-      <div className="relative mb-4">
-        <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-gray-200" />
-        </div>
-        <div className="relative flex justify-center text-sm">
-          <span className="bg-white px-2 text-sm font-medium text-gray-600 normal-case">Administrator sign-in</span>
-        </div>
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        aria-controls="admin-password-form"
+        className="w-full text-sm text-blue-600 hover:text-blue-800 underline min-h-[44px] rounded focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none"
+      >
+        Sign in with password (administrators)
+      </button>
+      <div id="admin-password-form" hidden={!expanded} className="mt-4">
+        {expanded && <PasswordForm />}
       </div>
-      <PasswordForm />
     </div>
   );
 }
@@ -197,7 +203,7 @@ export function LoginForm({
           <p className="text-sm text-gray-600" data-testid="external-not-configured">
             External sign-in is not configured. Contact your administrator.
           </p>
-          {adminPasswordFallback && <AdminPasswordFallback />}
+          {adminPasswordFallback && <AdminPasswordFallback initiallyExpanded />}
         </>
       );
     }
@@ -219,7 +225,7 @@ export function LoginForm({
           </div>
         )}
         <ExternalButton providerName={config.externalProviderName} onError={setExternalError} />
-        {adminPasswordFallback && <AdminPasswordFallback />}
+        {adminPasswordFallback && <AdminPasswordFallback initiallyExpanded={callbackError !== null} />}
       </>
     );
   }

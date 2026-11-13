@@ -32,6 +32,9 @@ async function loginAs(page: Page, email: string) {
   await loginViaForm(page, email);
 }
 
+// The phone-menu test toggles the global kb_visible setting.
+test.describe.configure({ mode: 'default' });
+
 test.describe('Polish', () => {
   test.describe('Mobile Responsive', () => {
     test.use({ viewport: { width: 375, height: 812 } });
@@ -83,6 +86,45 @@ test.describe('Polish', () => {
       await expect(signOut).toBeVisible();
       const box = await signOut.boundingBox();
       expect(box!.y + box!.height).toBeLessThanOrEqual(375);
+    });
+
+    test('logged-out phone menu shows Help Center only when KB is visible and no Sign out', async ({ browser }) => {
+      const { createServiceRoleClient } = await import('../helpers/supabase');
+      const svc = createServiceRoleClient();
+      const { data: prev } = await svc.from('app_settings').select('value').eq('key', 'kb_visible').single();
+      const setKb = (value: string) => svc.from('app_settings').upsert({ key: 'kb_visible', value });
+      const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+      const anon = await ctx.newPage();
+      try {
+        await setKb('true');
+        await anon.goto('/help');
+        await anon.locator('button[aria-controls="mobile-nav-menu"]').click();
+        const menu = anon.locator('#mobile-nav-menu');
+        await expect(menu.getByRole('link', { name: 'Help Center' })).toBeVisible();
+        await expect(menu.getByRole('button', { name: 'Sign out' })).toHaveCount(0);
+
+        await setKb('false');
+        await anon.goto('/login');
+        const toggle = anon.locator('button[aria-controls="mobile-nav-menu"]');
+        if (await toggle.count()) {
+          await toggle.click();
+          await expect(anon.locator('#mobile-nav-menu').getByRole('link', { name: 'Help Center' })).toHaveCount(0);
+          await expect(anon.locator('#mobile-nav-menu').getByRole('button', { name: 'Sign out' })).toHaveCount(0);
+        }
+      } finally {
+        await setKb(prev?.value ?? 'true');
+        await ctx.close();
+      }
+    });
+
+    test('regular user home shows New ticket and View my tickets', async ({ page }) => {
+      await loginAs(page, 'alice@example.com');
+      await page.goto('/');
+      await page.getByRole('link', { name: 'New ticket' }).click();
+      await expect(page).toHaveURL(/\/tickets\/new$/);
+      await page.goto('/');
+      await page.getByRole('link', { name: 'View my tickets' }).click();
+      await expect(page).toHaveURL(/\/tickets$/);
     });
 
     test('mobile menu for regular user has Sign out but no Setup', async ({ page }) => {

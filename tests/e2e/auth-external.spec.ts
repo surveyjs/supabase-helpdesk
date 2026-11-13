@@ -516,11 +516,22 @@ test.describe('Auth External', () => {
 
   // ── Admin password fallback (/login?no_redirect=true) ──────────
 
-  test('no_redirect in external mode adds the admin password form below the SSO button', async ({ page }) => {
+  const fallbackToggle = (page: Page) =>
+    page.getByRole('button', { name: 'Sign in with password (administrators)' });
+
+  test('no_redirect in external mode adds a collapsed admin password form below the SSO button', async ({ page }) => {
     await registerProviderDirectly('Test SSO');
     await gotoInExternalMode(page, '/login?no_redirect=true', page.getByTestId('admin-password-fallback'));
 
     await expect(page.getByTestId('external-login-btn')).toHaveText('Sign in with Test SSO');
+    // Collapsed by default: the toggle is there, the form is not.
+    await expect(fallbackToggle(page)).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.getByLabel('Email')).toHaveCount(0);
+
+    // Keyboard: Enter on the toggle expands it.
+    await fallbackToggle(page).focus();
+    await page.keyboard.press('Enter');
+    await expect(fallbackToggle(page)).toHaveAttribute('aria-expanded', 'true');
     await expect(page.getByLabel('Email')).toBeVisible();
     await expect(page.getByLabel('Password')).toBeVisible();
     // Self-service links stay hidden: this is a break-glass path, not built-in auth.
@@ -528,12 +539,27 @@ test.describe('Auth External', () => {
     await expect(page.getByRole('link', { name: 'Forgot password?' })).toHaveCount(0);
   });
 
-  test('no_redirect in external mode with an unregistered provider still offers the admin form', async ({ page }) => {
+  test('no_redirect in external mode with an unregistered provider offers the admin form expanded', async ({ page }) => {
     await gotoInExternalMode(page, '/login?no_redirect=true', page.getByTestId('admin-password-fallback'), {
       auth_external_registered: 'false',
     });
     await expect(page.getByTestId('external-not-configured')).toBeVisible();
+    await expect(fallbackToggle(page)).toHaveAttribute('aria-expanded', 'true');
     await expect(page.getByLabel('Email')).toBeVisible();
+  });
+
+  test('a wrong password leaves the admin form expanded with the error', async ({ page }) => {
+    await registerProviderDirectly('Test SSO');
+    await page.context().clearCookies();
+    await gotoInExternalMode(page, '/login?no_redirect=true', page.getByTestId('admin-password-fallback'));
+    await fallbackToggle(page).click();
+    await page.getByLabel('Email').fill('admin@example.com');
+    await page.getByLabel('Password').fill('WrongPassword999');
+    await page.getByRole('button', { name: 'Log in' }).click();
+    await expect(page.getByText('Invalid email or password.')).toBeVisible({ timeout: 15000 });
+    await expect(fallbackToggle(page)).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.getByLabel('Email')).toBeVisible();
+    await createServiceRoleClient().from('login_attempts').delete().eq('email', 'admin@example.com');
   });
 
   async function submitFallbackForm(page: Page, email: string) {
@@ -542,6 +568,7 @@ test.describe('Auth External', () => {
     await page.context().clearCookies();
     await registerProviderDirectly('Test SSO');
     await gotoInExternalMode(page, '/login?no_redirect=true', page.getByTestId('admin-password-fallback'));
+    await fallbackToggle(page).click();
     await page.getByLabel('Email').fill(email);
     await page.getByLabel('Password').fill('Password123');
     await page.getByRole('button', { name: 'Log in' }).click();

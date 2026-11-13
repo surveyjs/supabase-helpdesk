@@ -50,8 +50,9 @@ export function NotificationBell({ initialUnreadCount, userId }: NotificationBel
     let supabase: ReturnType<typeof createBrowserClient>;
     try {
       supabase = createBrowserClient();
-    } catch {
+    } catch (err) {
       // Missing runtime config: render the bell without realtime updates.
+      console.warn('HelpDesk: realtime notifications disabled —', err);
       return;
     }
     const channel = supabase

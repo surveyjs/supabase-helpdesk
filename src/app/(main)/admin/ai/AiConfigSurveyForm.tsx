@@ -41,6 +41,8 @@ const NUMBER_KEYS = [
   'ai_ticket_summary_min_posts',
 ] as const;
 
+const CLEAR_ON_SAVE = ['ai_api_key'];
+
 const DEFAULTS: Record<string, string | number | boolean> = {
   ai_provider: '',
   ai_model: '',
@@ -78,15 +80,11 @@ export function AiConfigSurveyForm({ settings, usage }: Props) {
   const data = useMemo(() => buildData(settings), [settings]);
   // Last successfully saved values; only fields differing from it are sent.
   const baselineRef = useRef<Record<string, unknown>>(data);
-  // The write-only API key field stays filled after a save; never resend the same key.
-  const sentKeyRef = useRef('');
-  const pendingRef = useRef<{ current: Record<string, unknown>; key: string } | null>(null);
+  const pendingRef = useRef<Record<string, unknown> | null>(null);
 
   const toFormData = useCallback((current: Record<string, unknown>) => {
-    const key = String(current.ai_api_key ?? '').trim();
-    const effective = key && key === sentKeyRef.current ? { ...current, ai_api_key: '' } : current;
-    pendingRef.current = { current, key };
-    return buildAiSettingsDiff(effective, baselineRef.current);
+    pendingRef.current = current;
+    return buildAiSettingsDiff(current, baselineRef.current);
   }, []);
   const keySource = settings.ai_api_key_source ?? 'none';
 
@@ -117,12 +115,12 @@ export function AiConfigSurveyForm({ settings, usage }: Props) {
             const res = await saveAiSettings(fd);
             if (res?.error) return { error: res.error };
             if (pendingRef.current) {
-              baselineRef.current = { ...pendingRef.current.current, ai_api_key: '' };
-              if (pendingRef.current.key) sentKeyRef.current = pendingRef.current.key;
+              baselineRef.current = { ...pendingRef.current, ai_api_key: '' };
             }
             return { message: 'AI settings saved.' };
           }}
           toFormData={toFormData}
+          clearOnSave={CLEAR_ON_SAVE}
           successMessage="AI settings saved."
         />
         {keySource === 'vault' && (

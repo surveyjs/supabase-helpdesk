@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import type { Model } from 'survey-core';
 import { SurveyJsonForm } from '@/components/features/survey/SurveyJsonForm';
 
 type SaveResponse = { message?: string; error?: string } | void;
@@ -16,6 +17,8 @@ type AdminSurveyFormProps = {
   toFormData?: (data: Record<string, unknown>) => FormData;
   successMessage?: string;
   className?: string;
+  /** Fields (e.g. write-only secrets) to reset to '' after a save that sent a non-blank value. */
+  clearOnSave?: string[];
 };
 
 function defaultToFormData(data: Record<string, unknown>): FormData {
@@ -53,6 +56,7 @@ export function AdminSurveyForm({
   toFormData,
   successMessage = 'Settings saved.',
   className,
+  clearOnSave,
 }: AdminSurveyFormProps) {
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState('');
@@ -61,6 +65,8 @@ export function AdminSurveyForm({
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingDataRef = useRef<Record<string, unknown> | null>(null);
   const lastSavedSnapshotRef = useRef(JSON.stringify(data));
+  const modelRef = useRef<Model | null>(null);
+  const suppressChangeRef = useRef(false);
 
   useEffect(() => {
     lastSavedSnapshotRef.current = JSON.stringify(data);
@@ -97,12 +103,30 @@ export function AdminSurveyForm({
         return;
       }
       lastSavedSnapshotRef.current = snapshot;
+      const toClear = (clearOnSave ?? []).filter((k) => String(nextData[k] ?? '').trim() !== '');
+      if (toClear.length > 0 && modelRef.current) {
+        // Clearing must neither autosave nor look like an unsaved change.
+        const cleared = { ...nextData };
+        suppressChangeRef.current = true;
+        try {
+          for (const k of toClear) {
+            modelRef.current.setValue(k, '');
+            cleared[k] = '';
+          }
+        } finally {
+          suppressChangeRef.current = false;
+        }
+        if (pendingDataRef.current) pendingDataRef.current = null;
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        lastSavedSnapshotRef.current = JSON.stringify(cleared);
+      }
       setIsError(false);
       setMessage(result?.message ?? successMessage);
     });
-  }, [mode, saveAction, successMessage, toFormData]);
+  }, [mode, saveAction, successMessage, toFormData, clearOnSave]);
 
   const queueSave = useCallback((nextData: Record<string, unknown>) => {
+    if (suppressChangeRef.current) return;
     pendingDataRef.current = nextData;
 
     if (saveTimerRef.current) {
@@ -124,6 +148,7 @@ export function AdminSurveyForm({
           data={data}
           mode="autosave"
           onValueChanged={queueSave}
+          modelRef={modelRef}
           className={className}
         />
       );

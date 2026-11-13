@@ -255,14 +255,15 @@ test.describe('Agent Dashboard filters panel', () => {
       await expect(page.getByRole('button', { name: 'Collapse filters' })).toHaveAttribute('aria-expanded', 'true');
     });
 
-    test('server-rendered shell reserves the panel height (no layout shift on mount)', async ({ page, browser }) => {
+    test('server-rendered shell keeps the list where it ends up (no layout shift on mount)', async ({ page, browser }) => {
       await loginAs(page, 'agent.smith@example.com');
       await page.goto('/agent');
-      const section = page.getByTestId('views-filters-section');
       await expect(page.getByTestId('views-and-filters-panel')).toBeVisible({ timeout: 10000 });
-      // Let the SurveyJS form finish rendering before measuring the final height.
+      // Let the SurveyJS form finish rendering before measuring.
       await expect(page.getByRole('button', { name: 'Apply Filters' })).toBeVisible({ timeout: 10000 });
-      const mountedHeight = (await section.boundingBox())!.height;
+      const list = page.getByTestId('agent-ticket-table');
+      await expect(list).toBeVisible();
+      const mounted = (await list.boundingBox())!;
 
       // Same page with JS off = exactly what the server rendered before hydration.
       const ssrContext = await browser.newContext({
@@ -273,11 +274,16 @@ test.describe('Agent Dashboard filters panel', () => {
       try {
         const ssrPage = await ssrContext.newPage();
         await ssrPage.goto('/agent');
-        const ssrSection = ssrPage.getByTestId('views-filters-section');
-        await expect(ssrSection).toBeVisible();
-        const ssrHeight = (await ssrSection.boundingBox())!.height;
-        expect(ssrHeight).toBeGreaterThanOrEqual(mountedHeight - 24);
-        expect(ssrHeight).toBeLessThanOrEqual(mountedHeight + 24);
+        const ssrList = ssrPage.getByTestId('agent-ticket-table');
+        await expect(ssrList).toBeVisible();
+        const ssr = (await ssrList.boundingBox())!;
+        // The panel is a side column: the list must not move when the form mounts.
+        expect(Math.abs(ssr.x - mounted.x)).toBeLessThanOrEqual(2);
+        expect(Math.abs(ssr.y - mounted.y)).toBeLessThanOrEqual(2);
+        // The SSR shell shows a non-trivial placeholder instead of an empty box.
+        const skeleton = ssrPage.getByTestId('views-filters-skeleton');
+        await expect(skeleton).toBeVisible();
+        expect((await skeleton.boundingBox())!.height).toBeGreaterThan(200);
       } finally {
         await ssrContext.close();
       }
@@ -626,6 +632,17 @@ test.describe('Agent Ticket Detail Controls', () => {
 });
 
 test.describe('Consolidated Views & Filters Panel', () => {
+  // Views these tests create through the UI; remove them even when a test fails midway,
+  // so a leaked row can't push later layout assertions around.
+  test.afterEach(async () => {
+    const admin = createServiceRoleClient();
+    const { data: agent } = await admin.from('profiles').select('id').eq('email', 'agent.smith@example.com').single();
+    if (!agent) return;
+    for (const prefix of ['My Test ', 'Closed Only ', 'To Delete ', 'E2E View ']) {
+      await admin.from('saved_views').delete().eq('agent_id', agent.id).like('name', `${prefix}%`);
+    }
+  });
+
   test.describe.configure({ mode: 'serial' });
 
   test.beforeEach(async () => {

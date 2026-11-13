@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useCallback, useMemo, useRef, useState, useTransition } from 'react';
 import { saveAiSettings, testAiConnection } from '@/lib/actions/ai';
 import { AdminSurveyForm } from '@/components/features/survey/AdminSurveyForm';
+import { buildAiSettingsDiff } from '@/lib/ai/settings-diff';
 import aiSchema from '@/components/features/survey/form-json/admin/ai.json';
 
 type Props = {
@@ -73,7 +74,20 @@ function buildData(settings: Record<string, string>): Record<string, unknown> {
 }
 
 export function AiConfigSurveyForm({ settings, usage }: Props) {
-  const data = buildData(settings);
+  // Memoised: AdminSurveyForm resets its saved snapshot whenever `data` changes identity.
+  const data = useMemo(() => buildData(settings), [settings]);
+  // Last successfully saved values; only fields differing from it are sent.
+  const baselineRef = useRef<Record<string, unknown>>(data);
+  // The write-only API key field stays filled after a save; never resend the same key.
+  const sentKeyRef = useRef('');
+  const pendingRef = useRef<{ current: Record<string, unknown>; key: string } | null>(null);
+
+  const toFormData = useCallback((current: Record<string, unknown>) => {
+    const key = String(current.ai_api_key ?? '').trim();
+    const effective = key && key === sentKeyRef.current ? { ...current, ai_api_key: '' } : current;
+    pendingRef.current = { current, key };
+    return buildAiSettingsDiff(effective, baselineRef.current);
+  }, []);
   const keySource = settings.ai_api_key_source ?? 'none';
 
   const [testResult, setTestResult] = useState<{ success?: boolean; error?: string; model?: string } | null>(null);
@@ -101,8 +115,14 @@ export function AiConfigSurveyForm({ settings, usage }: Props) {
           debounceMs={700}
           saveAction={async (fd) => {
             const res = await saveAiSettings(fd);
-            return res?.error ? { message: res.error } : { message: 'AI settings saved.' };
+            if (res?.error) return { error: res.error };
+            if (pendingRef.current) {
+              baselineRef.current = { ...pendingRef.current.current, ai_api_key: '' };
+              if (pendingRef.current.key) sentKeyRef.current = pendingRef.current.key;
+            }
+            return { message: 'AI settings saved.' };
           }}
+          toFormData={toFormData}
           successMessage="AI settings saved."
         />
         {keySource === 'vault' && (

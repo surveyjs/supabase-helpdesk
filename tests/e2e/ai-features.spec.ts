@@ -116,6 +116,44 @@ test.describe('Admin AI Configuration', () => {
     await svc.from('app_settings').update({ value: 'false' }).eq('key', 'ai_auto_categorize_enabled');
   });
 
+  test('changing one field on /admin/ai does not overwrite other AI settings', async ({ page }) => {
+    await loginAs(page, 'admin@example.com');
+    await gotoAdmin(page, '/admin/ai');
+
+    const svc = createServiceRoleClient();
+    const key = 'ai_suggested_reply_enabled';
+    const { data: before, error: readErr } = await svc.from('app_settings').select('value').eq('key', key).single();
+    expect(readErr).toBeNull();
+    const original = before?.value ?? 'false';
+    const opposite = original === 'true' ? 'false' : 'true';
+
+    try {
+      // Changed behind the page's back: the page still shows `original`.
+      const { error: setErr } = await svc.from('app_settings').update({ value: opposite }).eq('key', key);
+      expect(setErr).toBeNull();
+
+      await page.getByLabel('Model').fill('gpt-4o-partial');
+      const savePromise = page.waitForResponse(
+        (resp) => resp.request().method() === 'POST' && resp.status() < 400,
+        { timeout: 15000 },
+      );
+      await page.getByLabel('Model').blur();
+      await savePromise;
+      await expect(page.getByText('AI settings saved.')).toBeVisible({ timeout: 10000 });
+
+      const { data: after, error: afterErr } = await svc.from('app_settings').select('value').eq('key', key).single();
+      expect(afterErr).toBeNull();
+      expect(after?.value).toBe(opposite);
+      const { data: model } = await svc.from('app_settings').select('value').eq('key', 'ai_model').single();
+      expect(model?.value).toBe('gpt-4o-partial');
+    } finally {
+      const r1 = await svc.from('app_settings').update({ value: original }).eq('key', key);
+      const r2 = await svc.from('app_settings').update({ value: '' }).eq('key', 'ai_model');
+      expect(r1.error).toBeNull();
+      expect(r2.error).toBeNull();
+    }
+  });
+
   test('usage counter section shows data', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/ai');

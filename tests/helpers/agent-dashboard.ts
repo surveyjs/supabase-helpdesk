@@ -19,3 +19,14 @@ export async function openViewsFilters(page: Page) {
   }
   await expect(panel).toBeVisible({ timeout: 10000 });
 }
+
+/**
+ * Click "Apply Filters" and wait until the URL carries the filters. Apply first
+ * awaits the setAgentActiveView server action, which revalidates and re-renders
+ * /agent, and only then navigates. With four e2e workers on one server that
+ * round-trip took up to 14 s, past the 5 s default of toHaveURL.
+ */
+export async function applyFilters(page: Page, url: RegExp) {
+  await page.getByRole('button', { name: 'Apply Filters' }).click();
+  await expect(page).toHaveURL(url, { timeout: 20000 });
+}

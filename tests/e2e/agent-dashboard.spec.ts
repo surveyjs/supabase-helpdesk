@@ -6,7 +6,7 @@ import {
   waitForSidebarSurveyAutosave,
 } from '../helpers/surveyjs';
 import { loginViaForm } from '../helpers/auth';
-import { openViewsFilters } from '../helpers/agent-dashboard';
+import { applyFilters, openViewsFilters } from '../helpers/agent-dashboard';
 
 /**
  * Helper: log in via the login form (delegates to the shared, retry-hardened
@@ -65,9 +65,7 @@ test.describe('Agent Dashboard', () => {
 
     // Search for a ticket from seed data
     await page.getByLabel('Search').fill('Password reset');
-    await page.getByRole('button', { name: 'Apply Filters' }).click();
-
-    await expect(page).toHaveURL(/q=Password/);
+    await applyFilters(page, /q=Password/);
     await expect(page.getByTestId('agent-ticket-table').getByText('Password reset not working').first()).toBeVisible();
   });
 
@@ -79,9 +77,7 @@ test.describe('Agent Dashboard', () => {
     await openViewsFilters(page);
 
     await page.getByLabel('Submitter Email').fill('alice@example.com');
-    await page.getByRole('button', { name: 'Apply Filters' }).click();
-
-    await expect(page).toHaveURL(/email=alice/);
+    await applyFilters(page, /email=alice/);
     const resultText = await page.getByTestId('result-count').textContent();
     expect(resultText).toMatch(/\d+ tickets? found/);
   });
@@ -240,8 +236,7 @@ test.describe('Agent Dashboard filters panel', () => {
 
       await openViewsFilters(page);
       await page.getByLabel('Search').fill('Password');
-      await page.getByRole('button', { name: 'Apply Filters' }).click();
-      await expect(page).toHaveURL(/q=Password/);
+      await applyFilters(page, /q=Password/);
     });
   });
 

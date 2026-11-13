@@ -16,6 +16,7 @@ deploy-bundle instance** (bundled Supabase, DB container `supabase-db`, API gate
 | prepare | `import.sh prepare` | Parses the `\|@\|` CSVs, samples tickets, transforms rows, and writes `$WORK/*.tsv` plus `report.txt`. Takes seconds. |
 | upload | `import.sh upload` | Uploads the blobs of the sampled attachments to Storage `attachments/migrated/<FileItems.Id>`. Resumable through `$WORK/uploaded.txt`. Runs at about 8 MB/s locally. |
 | load | `import.sh load` | Copies the TSVs into the DB container, then runs `load.sql` in one transaction. Removes the copies afterwards. |
+| test-relink | `import.sh test-relink` | Self-test of `relink.sql` (`relink.test.sql`) on synthetic data in a transaction that is rolled back. Needs `DB_CONTAINER`; use a throwaway DB, and it refuses to run if an `adimport` schema already exists. |
 | relink | `import.sh relink` | Re-runs only the cross-ticket reference rewrite (`relink.sql`) on an already loaded instance. Needs `$WORK/ticket_friendly.tsv` from `prepare`. `load` runs it too. |
 | status | `import.sh status` | Prints the summary of the last load. |
 | reset | `import.sh reset` | Deletes the imported tickets and the accounts the import created. Dev only. |
@@ -38,7 +39,7 @@ scripts/answerdesk/import.sh load
 
 `prepare` skips automated DMARC aggregate-report e-mails (subject `[Preview] Report Domain: …
 Submitter: … Report-ID: …`) that AnswerDesk turned into tickets. To import them anyway, run
-`prepare.mjs` with `--keep-automated`. `report.txt` also lists the value distributions of
+`prepare.mjs` with `--keep-automated`, or set `KEEP_AUTOMATED=1` for `import.sh prepare`/`all`. `report.txt` also lists the value distributions of
 `TicketStatus`, `Severity`, `Urgent`, assignee present and `IsPrivate` for the sampled tickets.
 
 **Growing the sample.** A ticket is in the sample when `md5(ticket id) < FRACTION`, so the
@@ -93,6 +94,12 @@ idempotent.
   A second run changes nothing. **Caveat:** a reference that became "legacy ticket" text isn't
   re-linked if a later, larger sample imports that ticket. For exact links, `reset` and reload with
   the final `FRACTION`.
+
+  A FriendlyId shared by several source tickets maps to the one with the lowest `Tickets.Id`;
+  `report.txt` counts such duplicates. **Rare shapes:** rules e and h turn a bare marker or URL
+  into a markdown link wherever it stands, so one inside link text (`[see https://…/t4502](/x)`)
+  becomes a nested link, and one inside an HTML attribute (`<a href="https://…/t4502">`) puts
+  markdown into the `href` and breaks it. Check `relink` output on such posts by hand.
 - **Attachments.** Each target row keeps the source `Attachments.Id`, with
   `legacy_blob_id = FileItems.Id` and `storage_path = NULL`. The importer skips infected files
   (`ScanStatus = 1`), blobs missing on disk, and files over 50 MB (the Storage `FILE_SIZE_LIMIT`).

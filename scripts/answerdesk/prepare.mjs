@@ -157,10 +157,16 @@ const allTickets = readAll(PKG, schema, 'Tickets');
 // FriendlyId -> Id for every source ticket (not only the sample): load.sql
 // uses it to relink `{'FriendlyId':'T123',...}` references between tickets.
 const wFriendly = writer('ticket_friendly');
+const seenFriendly = new Set();
 for (const t of allTickets) {
   const n = friendlyNo(t.FriendlyId);
   if (n === null) note('ticket FriendlyId not of the form T<number>');
-  else wFriendly(n, t.Id);
+  else {
+    // relink.sql maps a shared number to the lowest Tickets.Id; just report it here.
+    if (seenFriendly.has(n)) note('duplicate FriendlyId number (relink uses the lowest Tickets.Id)');
+    seenFriendly.add(n);
+    wFriendly(n, t.Id);
+  }
 }
 const tickets = allTickets.filter((t) => {
   if (!inSample(t.Id)) return false;

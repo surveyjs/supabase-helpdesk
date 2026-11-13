@@ -102,6 +102,7 @@ export function AdminSidebar() {
         </label>
         <select
           id="admin-mobile-nav"
+          aria-label="Setup section"
           className="w-full min-h-[44px] form-select"
           value={currentSection?.href ?? ALL_LINKS[0].href}
           onChange={(e) => {

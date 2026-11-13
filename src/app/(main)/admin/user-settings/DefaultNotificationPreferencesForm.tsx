@@ -1,21 +1,11 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { NOTIFICATION_EVENT_TYPES as EVENT_TYPES } from '@/lib/notifications/event-labels';
 import { updateDefaultNotificationPreferences } from '@/lib/actions/admin';
 
 type Prefs = Record<string, { email?: boolean; in_app?: boolean }>;
 
-const EVENT_TYPES = [
-  { key: 'new_post', label: 'New Reply' },
-  { key: 'status_changed', label: 'Status Changed' },
-  { key: 'agent_assigned', label: 'Agent Assigned' },
-  { key: 'agent_assigned_to_agent', label: 'Assigned to Agent' },
-  { key: 'user_reply_to_agent', label: 'User Reply (agent)' },
-  { key: 'auto_reopen', label: 'Auto Re-open' },
-  { key: 'urgency_changed', label: 'Urgency Changed' },
-  { key: 'severity_changed', label: 'Severity Changed' },
-  { key: 'privacy_changed', label: 'Privacy Changed' },
-];
 
 export function DefaultNotificationPreferencesForm({
   preferences,

@@ -2,8 +2,9 @@ import Link from 'next/link';
 import { createServerClient } from '@/lib/supabase/server';
 import { requireAdmin } from '@/lib/supabase/auth';
 import { getTierApiSecretStatus } from '@/lib/actions/tiers';
+import { emailStatus, shouldWarnTierSecret, formatCount } from '@/lib/admin/overview';
 
-type Stat = { label: string; value: number | string };
+type Stat = { label: string; value: string; failed?: boolean };
 
 function StatCard({
   title,
@@ -24,6 +25,7 @@ function StatCard({
           <div key={s.label}>
             <dt className="text-xs text-gray-500">{s.label}</dt>
             <dd className="text-lg font-semibold text-gray-900">{s.value}</dd>
+            {s.failed && <dd className="text-xs text-gray-500">Couldn&apos;t load</dd>}
           </div>
         ))}
       </dl>
@@ -39,8 +41,8 @@ export default async function AdminPage() {
   const count = async (table: 'profiles' | 'tickets', column?: string, value?: string | boolean) => {
     let q = supabase.from(table).select('*', { count: 'exact', head: true });
     if (column) q = q.eq(column, value as string);
-    const { count: n } = await q;
-    return n ?? 0;
+    const { count: n, error } = await q;
+    return error ? null : (n ?? null);
   };
 
   const [
@@ -54,6 +56,7 @@ export default async function AdminPage() {
     authSettings,
     emailConfig,
     tierApi,
+    tierCount,
   ] = await Promise.all([
     count('profiles'),
     count('profiles', 'role', 'agent'),
@@ -68,19 +71,22 @@ export default async function AdminPage() {
       .in('key', ['auth_mode', 'auth_external_provider_name']),
     supabase.from('email_config').select('smtp_host, is_verified').limit(1).maybeSingle(),
     getTierApiSecretStatus(),
+    supabase.from('subscription_tiers').select('*', { count: 'exact', head: true }),
   ]);
 
   const settings: Record<string, string> = {};
   for (const row of authSettings.data ?? []) settings[row.key] = row.value;
   const authMode = settings.auth_mode || 'built-in';
   const providerName = settings.auth_external_provider_name || '';
-  const emailConfigured = !!emailConfig.data?.smtp_host;
+  const emailState = emailStatus(emailConfig.data);
 
   const attention: { text: string; href: string }[] = [];
-  if (!emailConfigured) {
+  if (emailState === 'not-configured') {
     attention.push({ text: 'Outbound e-mail is not configured, so notifications are not sent.', href: '/admin/email' });
+  } else if (emailState === 'not-verified') {
+    attention.push({ text: 'Outbound e-mail is not verified, so notifications may not be sent.', href: '/admin/email' });
   }
-  if (!tierApi.configured) {
+  if (shouldWarnTierSecret(tierCount.error ? null : (tierCount.count ?? null), tierApi.configured)) {
     attention.push({ text: 'Tier API secret is not set, so external tier assignment is unavailable.', href: '/admin/tiers' });
   }
 
@@ -117,19 +123,19 @@ export default async function AdminPage() {
           testId="admin-card-users"
           title="Users"
           stats={[
-            { label: 'Total', value: totalUsers.toLocaleString('en-US') },
-            { label: 'Agents', value: agents.toLocaleString('en-US') },
-            { label: 'Admins', value: admins.toLocaleString('en-US') },
-            { label: 'Blocked', value: blocked.toLocaleString('en-US') },
+            { label: 'Total', value: formatCount(totalUsers), failed: totalUsers === null },
+            { label: 'Agents', value: formatCount(agents), failed: agents === null },
+            { label: 'Admins', value: formatCount(admins), failed: admins === null },
+            { label: 'Blocked', value: formatCount(blocked), failed: blocked === null },
           ]}
         />
         <StatCard
           testId="admin-card-tickets"
           title="Tickets"
           stats={[
-            { label: 'Open', value: open.toLocaleString('en-US') },
-            { label: 'Pending', value: pending.toLocaleString('en-US') },
-            { label: 'Closed', value: closed.toLocaleString('en-US') },
+            { label: 'Open', value: formatCount(open), failed: open === null },
+            { label: 'Pending', value: formatCount(pending), failed: pending === null },
+            { label: 'Closed', value: formatCount(closed), failed: closed === null },
           ]}
         />
         <StatCard
@@ -143,7 +149,7 @@ export default async function AdminPage() {
         <StatCard
           testId="admin-card-email"
           title="Outbound e-mail"
-          stats={[{ label: 'Configured', value: emailConfigured ? 'Yes' : 'No' }]}
+          stats={[{ label: 'Configured', value: emailState === 'configured' ? 'Yes' : emailState === 'not-verified' ? 'Not verified' : 'No' }]}
         />
       </div>
     </div>

@@ -105,6 +105,33 @@ test.describe('Admin Setup layout', () => {
 });
 
 // ============================================================
+// SETUP OVERVIEW ACCURACY (B29, B31)
+// ============================================================
+
+test.describe('Setup overview accuracy', () => {
+  test('tier-secret warning shows when tiers exist and no secret is set', async ({ page }) => {
+    const svc = createServiceRoleClient();
+    const { count, error } = await svc.from('subscription_tiers').select('*', { count: 'exact', head: true });
+    expect(error).toBeNull();
+    expect(count ?? 0).toBeGreaterThan(0);
+    const { data: secret, error: secretError } = await svc.rpc('get_tier_api_secret');
+    expect(secretError).toBeNull();
+    test.skip(!!secret, 'a tier API secret is set locally; the warning is not expected');
+
+    await loginAs(page, 'admin@example.com');
+    await gotoAdmin(page, '/admin');
+    await expect(page.getByTestId('admin-needs-attention')).toContainText('Tier API secret is not set');
+  });
+
+  test('mobile admin nav select has an unambiguous accessible name', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 800 });
+    await loginAs(page, 'admin@example.com');
+    await gotoAdmin(page, '/admin');
+    await expect(page.getByRole('combobox', { name: 'Setup section' })).toBeVisible();
+  });
+});
+
+// ============================================================
 // AGENT MANAGEMENT
 // ============================================================
 

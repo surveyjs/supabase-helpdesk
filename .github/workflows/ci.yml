@@ -254,7 +254,7 @@ jobs:
         run: bash .github/scripts/bg.sh wait playwright 600
       - uses: ./.github/actions/supabase-ready
       - name: Playwright chromium shard ${{ matrix.shard }}/${{ strategy.job-total }}
-        run: npx playwright test --project=chromium --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+        run: npx playwright test --project=global-settings --project=chromium --shard=${{ matrix.shard }}/${{ strategy.job-total }}
       - name: Upload blob report
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7

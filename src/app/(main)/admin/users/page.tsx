@@ -4,7 +4,7 @@ import { requireAdmin } from '@/lib/supabase/auth';
 import { blockUser, unblockUser, adminDeleteUser } from '@/lib/actions/admin';
 import { assignTier } from '@/lib/actions/tiers';
 import { RoleBadge } from '@/components/ui/RoleBadge';
-import { Pagination } from '@/components/ui/Pagination';
+import { Pagination, clampPage } from '@/components/ui/Pagination';
 
 export default async function UsersPage({
   searchParams,
@@ -20,41 +20,50 @@ export default async function UsersPage({
   const supabase = await createServerClient();
   const params = await searchParams;
 
-  const page = Math.max(1, parseInt(params.page ?? '1', 10) || 1);
+  const requestedPage = Math.max(1, parseInt(params.page ?? '1', 10) || 1);
   const pageSize = 20;
-  const offset = (page - 1) * pageSize;
   const roleFilter = params.role ?? 'all';
   const statusFilter = params.status ?? 'all';
   const searchQuery = params.q?.trim() ?? '';
 
-  // Build query
-  let query = supabase
-    .from('profiles')
-    .select('id, display_name, email, role, team_id, is_blocked, created_at, tier_id, tier_expires_at, team:teams(name), tier:subscription_tiers(key, display_name)', { count: 'exact' })
-    .order('created_at', { ascending: false })
-    .range(offset, offset + pageSize - 1);
+  // Build query for a given page
+  const buildQuery = (forPage: number) => {
+    const offset = (forPage - 1) * pageSize;
+    let query = supabase
+      .from('profiles')
+      .select('id, display_name, email, role, team_id, is_blocked, created_at, tier_id, tier_expires_at, team:teams(name), tier:subscription_tiers(key, display_name)', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + pageSize - 1);
 
-  if (roleFilter !== 'all') {
-    query = query.eq('role', roleFilter);
-  }
-
-  if (statusFilter === 'blocked') {
-    query = query.eq('is_blocked', true);
-  } else if (statusFilter === 'deleted') {
-    query = query.like('display_name', 'Deleted User #%');
-  } else if (statusFilter === 'active') {
-    query = query.eq('is_blocked', false).not('display_name', 'like', 'Deleted User #%');
-  }
-
-  if (searchQuery) {
-    const sanitized = searchQuery.replace(/[,()]/g, '');
-    if (sanitized) {
-      query = query.or(`display_name.ilike.%${sanitized}%,email.ilike.%${sanitized}%`);
+    if (roleFilter !== 'all') {
+      query = query.eq('role', roleFilter);
     }
-  }
 
-  const { data: users, count } = await query;
+    if (statusFilter === 'blocked') {
+      query = query.eq('is_blocked', true);
+    } else if (statusFilter === 'deleted') {
+      query = query.like('display_name', 'Deleted User #%');
+    } else if (statusFilter === 'active') {
+      query = query.eq('is_blocked', false).not('display_name', 'like', 'Deleted User #%');
+    }
+
+    if (searchQuery) {
+      const sanitized = searchQuery.replace(/[,()]/g, '');
+      if (sanitized) {
+        query = query.or(`display_name.ilike.%${sanitized}%,email.ilike.%${sanitized}%`);
+      }
+    }
+
+    return query;
+  };
+
+  let { data: users, count } = await buildQuery(requestedPage);
   const totalPages = Math.ceil((count ?? 0) / pageSize);
+  const page = clampPage(requestedPage, totalPages);
+  if (page !== requestedPage) {
+    // Past the last page (e.g. ?page=999): show the last page instead of an empty list.
+    ({ data: users, count } = await buildQuery(page));
+  }
 
   // Fetch available tiers for assignment
   const { data: allTiers } = await supabase

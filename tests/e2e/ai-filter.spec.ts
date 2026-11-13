@@ -1,6 +1,7 @@
 import { test, expect, Page } from './fixtures';
 import { loginViaForm } from '../helpers/auth';
 import { createServiceRoleClient } from '../helpers/supabase';
+import { openViewsFilters } from '../helpers/agent-dashboard';
 
 async function loginAsAgent(page: Page) {
   await loginViaForm(page, 'agent.smith@example.com');
@@ -66,11 +67,8 @@ async function mockAiFilterAction(
 }
 
 async function openViewsFiltersPanel(page: Page) {
-  const panel = page.getByTestId('views-and-filters-panel');
-  if (!(await panel.isVisible().catch(() => false))) {
-    await page.getByRole('button', { name: /Views & Filters:/ }).click();
-  }
-  await expect(panel).toBeVisible({ timeout: 10000 });
+  // Shared helper waits for the post-hydration mount at xl instead of collapsing the panel.
+  await openViewsFilters(page);
 }
 
 // ─────────────────────────────────────────────────────────────

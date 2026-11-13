@@ -93,28 +93,6 @@ test.describe('Agent Dashboard', () => {
     await expect(page).toHaveURL(/sort=created/);
   });
 
-  test('pagination works', async ({ page }) => {
-    await loginAs(page, 'agent.smith@example.com');
-    // With default page size of 20 and seed data, there might be just 1 page.
-    // Navigate to page and verify it loads
-    await page.goto('/agent?page=1');
-    await expect(page.getByTestId('result-count')).toBeVisible();
-
-    const total = Number((await page.getByTestId('result-count').textContent())!.match(/\d+/)![0]);
-    const rows = await page.getByTestId('agent-ticket-table').locator('tbody tr').count();
-    if (total > rows) {
-      // More than one page: full controls and the item range.
-      const nav = page.getByRole('navigation', { name: 'Pagination' });
-      await expect(nav.getByRole('link', { name: 'Next' })).toBeVisible();
-      await expect(nav.getByRole('link', { name: 'Last' })).toBeVisible();
-      await expect(nav).toContainText(`1–${rows} of ${total.toLocaleString('en-US')}`);
-      await nav.getByRole('link', { name: 'Last' }).click();
-      await expect(page).toHaveURL(/page=\d+/);
-      await expect(nav.getByRole('link', { name: 'First' })).toBeVisible();
-      await expect(nav.getByRole('link', { name: 'Previous' })).toBeVisible();
-    }
-  });
-
   test('result count updates with filters', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
@@ -128,6 +106,131 @@ test.describe('Agent Dashboard', () => {
     // Both should be valid count strings
     expect(allCount).toMatch(/\d+ tickets? found/);
     expect(closedCount).toMatch(/\d+ tickets? found/);
+  });
+});
+
+// The dashboard page size is an app setting (no URL param), so these tests shrink it
+// to 2 for a deterministic multi-page list and restore it afterwards.
+test.describe('Agent Dashboard pagination', () => {
+  test.describe.configure({ mode: 'serial' });
+
+  let originalPageSize: string | undefined;
+
+  test.beforeAll(async () => {
+    const admin = createServiceRoleClient();
+    const { data } = await admin
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'agent_dashboard_page_size')
+      .maybeSingle();
+    originalPageSize = data?.value as string | undefined;
+    await admin.from('app_settings').upsert({ key: 'agent_dashboard_page_size', value: '2' });
+  });
+
+  test.afterAll(async () => {
+    const admin = createServiceRoleClient();
+    if (originalPageSize === undefined) {
+      await admin.from('app_settings').delete().eq('key', 'agent_dashboard_page_size');
+    } else {
+      await admin.from('app_settings').update({ value: originalPageSize }).eq('key', 'agent_dashboard_page_size');
+    }
+  });
+
+  const rowTitles = (page: Page) =>
+    page.getByTestId('agent-ticket-table').locator('tbody tr td:nth-child(2) a').allTextContents();
+
+  test('Next and Last change the rows; First and Previous come back', async ({ page }) => {
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto('/agent');
+    const total = Number((await page.getByTestId('result-count').textContent())!.match(/\d+/)![0]);
+    expect(total).toBeGreaterThan(2);
+    const totalPages = Math.ceil(total / 2);
+
+    const nav = page.getByRole('navigation', { name: 'Pagination' });
+    await expect(nav).toContainText(`1–2 of ${total}`);
+    // Disabled controls are hidden from assistive tech, not exposed as fake links.
+    await expect(nav.getByRole('link', { name: 'First' })).toHaveCount(0);
+    const first = await rowTitles(page);
+
+    await nav.getByRole('link', { name: 'Next' }).click();
+    await expect(page).toHaveURL(/page=2/);
+    const second = await rowTitles(page);
+    expect(second).not.toEqual(first);
+    await expect(nav).toContainText(`3–${Math.min(4, total)} of ${total}`);
+
+    await nav.getByRole('link', { name: 'Last' }).click();
+    await expect(page).toHaveURL(new RegExp(`page=${totalPages}`));
+    await expect(nav.getByRole('link', { name: 'Next' })).toHaveCount(0);
+    expect(await rowTitles(page)).not.toEqual(second);
+
+    await nav.getByRole('link', { name: 'First' }).click();
+    await expect(page).toHaveURL(/page=1(&|$)/);
+    // Other specs touch tickets concurrently (the list is ordered by updated_at), so
+    // assert the range rather than that page 1 holds exactly the same rows as before.
+    await expect(nav).toContainText(`1–2 of`);
+    await expect(nav.getByRole('link', { name: 'First' })).toHaveCount(0);
+  });
+
+  test('?page=999 shows the last page with a range ending in the total', async ({ page }) => {
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto('/agent?page=999');
+    const total = Number((await page.getByTestId('result-count').textContent())!.match(/\d+/)![0]);
+    const totalPages = Math.ceil(total / 2);
+    expect(await page.getByTestId('agent-ticket-table').locator('tbody tr').count()).toBeGreaterThan(0);
+    const nav = page.getByRole('navigation', { name: 'Pagination' });
+    await expect(nav).toContainText(new RegExp(`${(totalPages - 1) * 2 + 1}–${total} of ${total}`));
+    await expect(nav.getByRole('link', { name: String(totalPages) })).toHaveAttribute('aria-current', 'page');
+  });
+
+  test('touch targets: card checkboxes and pagination links are at least 44px', async ({ browser }) => {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
+    const page = await context.newPage();
+    try {
+      await loginAs(page, 'agent.smith@example.com');
+      await page.goto('/agent');
+      const hit = page.getByTestId('agent-ticket-cards').locator('label').first();
+      const box = (await hit.boundingBox())!;
+      expect(box.width).toBeGreaterThanOrEqual(44);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+      const next = page.getByRole('navigation', { name: 'Pagination' }).getByRole('link', { name: 'Next' });
+      const nbox = (await next.boundingBox())!;
+      expect(nbox.height).toBeGreaterThanOrEqual(44);
+      expect(nbox.width).toBeGreaterThanOrEqual(44);
+      // No horizontal overflow at phone width.
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    } finally {
+      await context.close();
+    }
+  });
+});
+
+test.describe('Agent Dashboard filters panel', () => {
+  test.describe('below xl', () => {
+    test.use({ viewport: { width: 820, height: 1000 } });
+
+    test('SurveyJS only mounts after the first expand, and Apply works', async ({ page }) => {
+      await loginAs(page, 'agent.smith@example.com');
+      await page.goto('/agent');
+      await expect(page.getByTestId('views-filters-section')).toBeVisible();
+      await expect(page.getByTestId('views-and-filters-panel')).toHaveCount(0);
+      await expect(page.locator('[class*="sd-root"], [class*="sd-body"], .sd-element')).toHaveCount(0);
+
+      await openViewsFilters(page);
+      await page.getByLabel('Search').fill('Password');
+      await page.getByRole('button', { name: 'Apply Filters' }).click();
+      await expect(page).toHaveURL(/q=Password/);
+    });
+  });
+
+  test.describe('at xl', () => {
+    test.use({ viewport: { width: 1440, height: 900 } });
+
+    test('panel is open on load', async ({ page }) => {
+      await loginAs(page, 'agent.smith@example.com');
+      await page.goto('/agent');
+      await expect(page.getByTestId('views-and-filters-panel')).toBeVisible({ timeout: 10000 });
+      await expect(page.getByRole('button', { name: 'Collapse filters' })).toHaveAttribute('aria-expanded', 'true');
+    });
   });
 });
 

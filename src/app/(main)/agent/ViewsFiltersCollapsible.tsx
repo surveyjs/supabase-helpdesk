@@ -99,16 +99,19 @@ export function ViewsFiltersCollapsible({
           id="views-filters-panel-content"
           className={`px-4 pt-4 pb-4 border-t border-gray-200 ${toggled === null ? 'hidden xl:block' : ''}`}
         >
-          <ViewsAndFiltersPanel
-            filterOptions={filterOptions}
-            template={template}
-            savedViews={savedViews}
-            activeViewId={activeViewId}
-            activeViewName={activeViewName}
-            initialData={initialData}
-            activeDefinition={activeDefinition}
-            aiFilterEnabled={aiFilterEnabled}
-          />
+          {/* Mounted only while open, so SurveyJS never loads for a collapsed panel below xl. */}
+          {open && (
+            <ViewsAndFiltersPanel
+              filterOptions={filterOptions}
+              template={template}
+              savedViews={savedViews}
+              activeViewId={activeViewId}
+              activeViewName={activeViewName}
+              initialData={initialData}
+              activeDefinition={activeDefinition}
+              aiFilterEnabled={aiFilterEnabled}
+            />
+          )}
         </div>
       )}
     </section>

@@ -21,12 +21,20 @@ export function pageWindow(current: number, total: number, size = 5): (number | 
   return pages;
 }
 
+/** Clamp a requested page into [1, max(totalPages, 1)]. */
+export function clampPage(page: number, totalPages: number): number {
+  return Math.min(Math.max(1, page), Math.max(totalPages, 1));
+}
+
+// Coarse pointers (phones/tablets) get >= 44 px hit areas.
+const touchClass = 'items-center justify-center pointer-coarse:min-h-[44px] pointer-coarse:min-w-[44px]';
+
 const linkClass =
-  'px-3 py-1.5 text-sm rounded border border-gray-300 text-gray-600 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500';
-const disabledClass = 'px-3 py-1.5 text-sm rounded border border-gray-200 text-gray-300';
+  `inline-flex ${touchClass} px-3 py-1.5 text-sm rounded border border-gray-300 text-gray-600 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500`;
+const disabledClass = 'inline-flex items-center px-3 py-1.5 text-sm rounded border border-gray-200 text-gray-300';
 
 export function Pagination({
-  currentPage,
+  currentPage: requestedPage,
   totalPages,
   basePath,
   searchParams,
@@ -42,6 +50,7 @@ export function Pagination({
   totalItems?: number;
 }) {
   if (totalPages <= 1) return null;
+  const currentPage = clampPage(requestedPage, totalPages);
 
   function buildUrl(page: number) {
     const params = new URLSearchParams(searchParams ?? {});
@@ -55,7 +64,7 @@ export function Pagination({
 
   function edgeLink(label: string, page: number, disabled: boolean) {
     return disabled ? (
-      <span className={disabledClass} aria-disabled="true">
+      <span className={disabledClass} aria-hidden="true">
         {label}
       </span>
     ) : (
@@ -67,6 +76,7 @@ export function Pagination({
 
   const from = (currentPage - 1) * pageSize + 1;
   const to = totalItems === undefined ? 0 : Math.min(currentPage * pageSize, totalItems);
+  const showRange = totalItems !== undefined && totalItems > 0;
 
   return (
     <nav
@@ -86,10 +96,10 @@ export function Pagination({
             <Link
               key={page}
               href={buildUrl(page)}
-              className={`px-3 py-1.5 text-sm rounded border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+              className={`${touchClass} px-3 py-1.5 text-sm rounded border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
                 page === currentPage
-                  ? 'bg-blue-600 text-white border-blue-600'
-                  : 'hidden sm:inline border-gray-300 text-gray-600 hover:bg-gray-50'
+                  ? 'inline-flex bg-blue-600 text-white border-blue-600'
+                  : 'hidden sm:inline-flex border-gray-300 text-gray-600 hover:bg-gray-50'
               }`}
               aria-current={page === currentPage ? 'page' : undefined}
             >
@@ -102,7 +112,7 @@ export function Pagination({
         {edgeLink('Last', totalPages, isLast)}
       </div>
 
-      {totalItems !== undefined && (
+      {showRange && (
         <p className="text-sm text-gray-600 whitespace-nowrap">
           {from.toLocaleString('en-US')}–{to.toLocaleString('en-US')} of {totalItems.toLocaleString('en-US')}
         </p>

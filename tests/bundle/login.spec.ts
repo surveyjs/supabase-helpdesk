@@ -8,8 +8,10 @@ test('administrator signs in and opens the admin area', async ({ page }) => {
   await page.getByLabel('Password').fill(process.env.ADMIN_PASSWORD!);
   await page.getByRole('button', { name: 'Log in' }).click();
   await expect(page).not.toHaveURL(/\/login/);
-  // /admin redirects to /admin/types; requireAdmin() sends anyone else to /.
+  // /admin is the Setup overview (older releases redirect to /admin/types, and
+  // this spec also runs against the latest released image); requireAdmin()
+  // sends anyone else to /.
   await page.goto('/admin');
-  await expect(page).toHaveURL(/\/admin\/types/);
-  await expect(page.getByRole('heading', { name: 'Manage Ticket Types' })).toBeVisible();
+  await expect(page).toHaveURL(/\/admin(\/types)?$/);
+  await expect(page.getByRole('heading', { level: 1, name: /^(Setup|Manage Ticket Types)$/ })).toBeVisible();
 });

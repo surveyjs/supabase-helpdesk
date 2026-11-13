@@ -593,4 +593,37 @@ test.describe('Markdown editor follow-ups', () => {
     await page.keyboard.type(' more');
     await expect(editor.locator('.sec-html')).toBeHidden();
   });
+
+  test('toggle to write-only after the preview was already open (same view) stays write-only', async ({ page }) => {
+    await loginViaForm(page, 'alice@example.com');
+    await page.goto('/tickets/new');
+    const editor = page.getByTestId('markdown-editor');
+    const textarea = editor.locator('.rc-md-editor textarea').first();
+    await textarea.fill('first');
+    await expect(editor.locator('.sec-html')).toBeVisible();
+    // Further changes keep the same view (desired == current): no setView.
+    await textarea.click();
+    await page.keyboard.type(' second');
+    await expect(editor.locator('.sec-html')).toBeVisible();
+    await editor.locator('.button-type-mode').click();
+    await expect(editor.locator('.sec-html')).toBeHidden();
+    await textarea.click();
+    await page.keyboard.type(' third');
+    await expect(textarea).toHaveValue('first second third');
+    await expect(editor.locator('.sec-html')).toBeHidden();
+  });
+
+  test('auto preview re-arms after the editor is emptied', async ({ page }) => {
+    await loginViaForm(page, 'alice@example.com');
+    await page.goto('/tickets/new');
+    const editor = page.getByTestId('markdown-editor');
+    const textarea = editor.locator('.rc-md-editor textarea').first();
+    await textarea.fill('draft one');
+    await expect(editor.locator('.sec-html')).toBeVisible();
+    await editor.locator('.button-type-mode').click();
+    await expect(editor.locator('.sec-html')).toBeHidden();
+    await textarea.fill('');
+    await textarea.fill('draft two');
+    await expect(editor.locator('.sec-html')).toBeVisible();
+  });
 });

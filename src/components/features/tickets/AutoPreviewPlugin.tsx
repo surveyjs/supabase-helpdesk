@@ -8,7 +8,7 @@ const WIDE_QUERY = '(min-width: 1024px)';
  * Invisible plugin implementing the "Editor + Preview" preference: the editor
  * opens in write mode and the preview pane is added only when the viewport is
  * wide (Tailwind `lg`) and the editor has content. Once the user switches view
- * with the toolbar mode-toggle (detected by its click), the automatic rule stops for this instance.
+ * with the toolbar mode-toggle (detected by its click), the automatic rule stops until the editor becomes empty again.
  * Enabled via `pluginConfig['auto-preview'].enabled`.
  */
 class AutoPreviewPlugin extends PluginComponent {
@@ -24,7 +24,10 @@ class AutoPreviewPlugin extends PluginComponent {
   // or reordered event can't leave the preview out of step. `text` is passed by
   // callers that know the new value before the editor's state has caught up.
   private sync = (text: string = this.editor.getMdValue()) => {
-    if (this.manual || !this.mql) return;
+    if (!this.mql) return;
+    // An emptied editor (cleared, submitted, reset) starts a new draft: re-arm.
+    if (text.trim().length === 0) this.manual = false;
+    if (this.manual) return;
     const want = this.mql.matches && text.trim().length > 0;
     if (this.editor.getView().html === want) return;
     this.editor.setView({ md: true, html: want });

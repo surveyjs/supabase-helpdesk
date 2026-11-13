@@ -100,4 +100,4 @@ Found during PR #100; fixed on `fix/review-followups` (plan: `docs/superpowers/p
 - **C2 — Description editor layout shift.** The editor (`ssr:false`) mounts with no placeholder, shifting the ticket create form by about 300 px.
 - **C3 — `TicketSidebarSurvey` rebuilds its model on every realtime refresh,** dropping in-progress edits.
 - **C4 — `/agent` prefetch storm.** Every ticket-row and pager link is prefetched as a full dynamic RSC render (~25 per view). On the 2-vCPU CI runner a page=2 navigation took 6.5 s while competing with them.
-- **C5 — E2E isolation for global settings.** Specs that change global settings (`app_settings`) should run in their own `workers: 1` Playwright project so they never race specs that read those settings.
+- **C5 — E2E isolation for global settings.** Specs that change global settings (`app_settings`) should run in their own `workers: 1` Playwright project so they never race specs that read those settings. **[Fixed in fff3076]**

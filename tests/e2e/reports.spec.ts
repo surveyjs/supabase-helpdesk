@@ -250,17 +250,18 @@ test.describe('Reports - range, CSV and export menu', () => {
       .select('id')
       .single();
     const ids: number[] = [];
-    // Throwaway tier member: seeded users' tiers are asserted by other specs
-    const { data: created, error: userErr } = await svc.auth.admin.createUser({
-      email: `rpt-tier-${Date.now()}@example.com`,
-      password: 'Password123',
-      email_confirm: true,
-    });
-    if (userErr) throw userErr;
-    const memberId = created.user.id;
+    let memberId: string | undefined;
     try {
+      // Throwaway tier member: seeded users' tiers are asserted by other specs
+      const { data: created, error: userErr } = await svc.auth.admin.createUser({
+        email: `rpt-tier-${Date.now()}@example.com`,
+        password: 'Password123',
+        email_confirm: true,
+      });
+      if (userErr) throw userErr;
+      memberId = created.user.id;
       await svc.from('profiles').update({ tier_id: tier!.id }).eq('id', memberId);
-      for (const [n, creator] of [['tier', memberId], ['other', bob!.id]] as const) {
+      for (const [n, creator] of [['tier', memberId!], ['other', bob!.id]] as const) {
         const { data: t } = await svc
           .from('tickets')
           .insert({
@@ -287,8 +288,15 @@ test.describe('Reports - range, CSV and export menu', () => {
         await svc.from('activity_log').delete().eq('ticket_id', id);
         await svc.from('tickets').delete().eq('id', id);
       }
-      await svc.auth.admin.deleteUser(memberId).catch(() => {});
-      await svc.from('subscription_tiers').delete().eq('id', tier!.id);
+      // profiles.id has no ON DELETE CASCADE from auth.users: delete the profile first
+      if (memberId) {
+        const { error: profErr } = await svc.from('profiles').delete().eq('id', memberId);
+        if (profErr) console.warn('tier CSV test: profile cleanup failed', profErr.message);
+        const { error: delErr } = await svc.auth.admin.deleteUser(memberId);
+        if (delErr) console.warn('tier CSV test: user cleanup failed', delErr.message);
+      }
+      const { error: tierErr } = await svc.from('subscription_tiers').delete().eq('id', tier!.id);
+      if (tierErr) console.warn('tier CSV test: tier cleanup failed', tierErr.message);
     }
   });
 

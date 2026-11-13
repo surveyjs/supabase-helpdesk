@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import type { Model } from 'survey-core';
+import { planClearAfterSave } from '@/components/features/survey/clear-after-save';
 import { SurveyJsonForm } from '@/components/features/survey/SurveyJsonForm';
 
 type SaveResponse = { message?: string; error?: string } | void;
@@ -103,22 +104,31 @@ export function AdminSurveyForm({
         return;
       }
       lastSavedSnapshotRef.current = snapshot;
-      const toClear = (clearOnSave ?? []).filter((k) => String(nextData[k] ?? '').trim() !== '');
-      if (toClear.length > 0 && modelRef.current) {
-        // Clearing must neither autosave nor look like an unsaved change.
-        const cleared = { ...nextData };
-        suppressChangeRef.current = true;
-        try {
-          for (const k of toClear) {
-            modelRef.current.setValue(k, '');
-            cleared[k] = '';
+      if (clearOnSave?.length && modelRef.current) {
+        const plan = planClearAfterSave(
+          nextData,
+          (modelRef.current.data ?? {}) as Record<string, unknown>,
+          pendingDataRef.current,
+          clearOnSave,
+        );
+        if (plan.clear.length > 0) {
+          // Clearing must neither autosave nor look like an unsaved change.
+          suppressChangeRef.current = true;
+          try {
+            for (const k of plan.clear) modelRef.current.setValue(k, '');
+          } finally {
+            suppressChangeRef.current = false;
           }
-        } finally {
-          suppressChangeRef.current = false;
+          lastSavedSnapshotRef.current = JSON.stringify(plan.savedData);
+          if (pendingDataRef.current) {
+            if (plan.pending) {
+              pendingDataRef.current = plan.pending;
+            } else {
+              pendingDataRef.current = null;
+              if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+            }
+          }
         }
-        if (pendingDataRef.current) pendingDataRef.current = null;
-        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-        lastSavedSnapshotRef.current = JSON.stringify(cleared);
       }
       setIsError(false);
       setMessage(result?.message ?? successMessage);

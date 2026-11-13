@@ -521,11 +521,23 @@ test.describe('KB visibility toggle', () => {
 
     // Toggle visibility, and switch it back on right here: left off until
     // afterAll, it 404ed the Help Center for parallel tests for two tests.
-    const toggleBtn = page.getByRole('button', { name: /Enable|Disable/ });
+    const toggleBtn = page.getByRole('button', { name: /^(Enable|Disable)$/ });
     await expect(toggleBtn).toBeVisible();
+    const before = (await toggleBtn.textContent())!.trim();
+    const [after, stored] = before === 'Disable' ? ['Enable', 'false'] : ['Disable', 'true'];
+    const svc = createServiceRoleClient();
     try {
       await toggleBtn.click();
-      await page.waitForLoadState('networkidle');
+      // Restore only after the toggle's server action has landed; otherwise
+      // the restore can run first and the late action leaves the KB hidden.
+      await expect(page.getByRole('button', { name: after, exact: true })).toBeVisible({ timeout: 15000 });
+      await expect
+        .poll(async () => {
+          const { data, error } = await svc.from('app_settings').select('value').eq('key', 'kb_visible').single();
+          if (error) throw new Error(`read kb_visible: ${error.message}`);
+          return data.value;
+        }, { timeout: 15000 })
+        .toBe(stored);
     } finally {
       await setKbVisible('true');
     }

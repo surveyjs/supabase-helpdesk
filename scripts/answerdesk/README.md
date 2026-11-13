@@ -16,7 +16,7 @@ deploy-bundle instance** (bundled Supabase, DB container `supabase-db`, API gate
 | prepare | `import.sh prepare` | Parses the `\|@\|` CSVs, samples tickets, transforms rows, and writes `$WORK/*.tsv` plus `report.txt`. Takes seconds. |
 | upload | `import.sh upload` | Uploads the blobs of the sampled attachments to Storage `attachments/migrated/<FileItems.Id>`. Resumable through `$WORK/uploaded.txt`. Runs at about 8 MB/s locally. |
 | load | `import.sh load` | Copies the TSVs into the DB container, then runs `load.sql` in one transaction. Removes the copies afterwards. |
-| test-relink | `import.sh test-relink` | Self-test of `relink.sql` (`relink.test.sql`) on synthetic data in a transaction that is rolled back. Needs `DB_CONTAINER`; use a throwaway DB, and it refuses to run if an `adimport` schema already exists. |
+| test-relink | `import.sh test-relink` | Self-test of `relink.sql` (`relink.test.sql`) on synthetic data in a transaction that is rolled back. Defaults to the local test stack container `supabase_db_helpdesk` (ignores the `supabase-db` default), refuses any `supabase-*` container with exit 2 (no override), and refuses to run if an `adimport` schema already exists. |
 | relink | `import.sh relink` | Re-runs only the cross-ticket reference rewrite (`relink.sql`) on an already loaded instance. Needs `$WORK/ticket_friendly.tsv` from `prepare`. `load` runs it too. |
 | status | `import.sh status` | Prints the summary of the last load. |
 | reset | `import.sh reset` | Deletes the imported tickets and the accounts the import created. Dev only. |

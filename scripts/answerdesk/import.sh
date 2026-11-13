@@ -19,7 +19,7 @@
 #   ADMIN_EMAIL=                       source user who becomes admin (others in UserInRole -> agent)
 #   API_URL=http://127.0.0.1:8000      Supabase API gateway, for Storage uploads
 #   KEEP_AUTOMATED=                    set to 1 to also import automated DMARC report tickets (prepare)
-#   DB_CONTAINER=supabase-db
+#   DB_CONTAINER=supabase-db           (test-relink defaults to supabase_db_helpdesk and refuses supabase-* deploy containers)
 set -euo pipefail
 export MSYS_NO_PATHCONV=1 # Git Bash: don't rewrite /tmp/... args passed to docker
 
@@ -32,6 +32,7 @@ DEPLOY="${DEPLOY:-}"
 FRACTION="${FRACTION:-0.1}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-}"
 API_URL="${API_URL:-http://127.0.0.1:8000}"
+DB_CONTAINER_USER="${DB_CONTAINER:-}" # test-relink must not inherit the real-deploy default below
 DB_CONTAINER="${DB_CONTAINER:-supabase-db}"
 
 psql_c() { docker exec -i "$DB_CONTAINER" psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1 "$@"; }
@@ -98,6 +99,11 @@ SQL
 
 # Self-test of relink.sql on synthetic data only (relink.test.sql); rolled back, DB unchanged.
 test_relink() {
+  # Local test stack only: refuse a real deploy container BEFORE any docker command runs.
+  DB_CONTAINER="${DB_CONTAINER_USER:-supabase_db_helpdesk}"
+  case "$DB_CONTAINER" in
+    supabase-*) echo "test-relink refuses to run against $DB_CONTAINER (a real deployment). Use the local test stack: DB_CONTAINER=supabase_db_helpdesk." >&2; exit 2 ;;
+  esac
   docker exec "$DB_CONTAINER" rm -rf /tmp/adimport
   docker exec "$DB_CONTAINER" mkdir -p /tmp/adimport
   # Synthetic ticket_friendly.tsv: 4504 appears twice (high legacy_id first) to test the duplicate rule.

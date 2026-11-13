@@ -112,6 +112,20 @@ BEGIN
   PERFORM pg_temp.chk('other answerdesk.io url untouched', 'see https://fixture.answerdesk.io/about',
     'see https://fixture.answerdesk.io/about', 0, 0, 0, 0);
 
+  -- whole-table path used by `import.sh relink`: relink_ticket_refs() rewrites imported tickets' posts
+  INSERT INTO public.posts (id, ticket_id, author_id, body) VALUES
+    ('00000000-0000-4000-9000-000000000001', 9000000001, gen_random_uuid(), 'refs ' || m1 || ' and ' || m3),
+    ('00000000-0000-4000-9000-000000000002', 9000000001, gen_random_uuid(), 'no references here');
+  IF adimport.relink_ticket_refs() <> 1 THEN RAISE EXCEPTION 'relink_ticket_refs should change exactly 1 post'; END IF;
+  IF (SELECT body FROM public.posts WHERE id = '00000000-0000-4000-9000-000000000001')
+     IS DISTINCT FROM 'refs [T4502](' || u1 || ') and T4503 (legacy ticket)' THEN
+    RAISE EXCEPTION 'relink_ticket_refs wrote an unexpected body';
+  END IF;
+  IF (SELECT body FROM public.posts WHERE id = '00000000-0000-4000-9000-000000000002') <> 'no references here' THEN
+    RAISE EXCEPTION 'relink_ticket_refs changed a post without references';
+  END IF;
+  IF adimport.relink_ticket_refs() <> 0 THEN RAISE EXCEPTION 'relink_ticket_refs is not idempotent'; END IF;
+
   -- 10-digit FriendlyId is not a marker (at most 9 digits): left alone
   PERFORM pg_temp.chk('10-digit FriendlyId untouched', 'x ' || mbig, 'x ' || mbig, 0, 0, 0, 0);
 END $t$;

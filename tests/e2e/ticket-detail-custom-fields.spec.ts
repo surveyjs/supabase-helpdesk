@@ -299,11 +299,18 @@ test.describe('Boolean custom field rendering', () => {
 
     const box = page.getByLabel(CF_BOOL);
     await expect(box).toBeVisible();
-    const boxBounds = (await box.boundingBox())!;
-    const textBounds = (await page.locator('label', { has: box }).locator('span').first().boundingBox())!;
-    expect(Math.abs(
-      boxBounds.y + boxBounds.height / 2 - (textBounds.y + textBounds.height / 2),
-    )).toBeLessThanOrEqual(4);
+    // The Description editor mounts client-side (ssr: false, no placeholder) and
+    // then pushes the custom fields ~300 px down. Measured between two separate
+    // boundingBox() calls, that shift read as a 304 px misalignment. Wait for
+    // the editor, then take both centres in one synchronous read.
+    await expect(page.getByTestId('markdown-editor').first().locator('.rc-md-editor')).toBeVisible();
+    const offset = await box.evaluate((input) => {
+      const text = input.closest('label')!.querySelector('span')!;
+      const a = input.getBoundingClientRect();
+      const b = text.getBoundingClientRect();
+      return Math.abs(a.top + a.height / 2 - (b.top + b.height / 2));
+    });
+    expect(offset).toBeLessThanOrEqual(4);
 
     await page.setViewportSize({ width: 390, height: 800 });
     expect(await page.evaluate(

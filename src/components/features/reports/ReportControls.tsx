@@ -106,6 +106,7 @@ export function ReportControls({ rangeStart, rangeEnd, earliestDate, groupBy, is
         severity: currentSeverity || undefined,
         type: currentType || undefined,
         category: currentCategory || undefined,
+        tier: currentTier || undefined,
       });
       if (result.error || !result.csv) {
         setExportError(result.error || 'Export failed. Please try again.');

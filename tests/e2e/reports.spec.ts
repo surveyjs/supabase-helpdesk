@@ -203,6 +203,7 @@ test.describe('Reports Page - empty range', () => {
 
 test.describe('Reports - range, CSV and export menu', () => {
   const DAY = '2098-03-10';
+  const TIER_DAY = '2098-04-10'; // own day: tests run in parallel and tickets are global
 
   test('a ticket at noon on the end day is counted and exported', async ({ page }) => {
     const svc = createServiceRoleClient();
@@ -235,6 +236,52 @@ test.describe('Reports - range, CSV and export menu', () => {
     } finally {
       await svc.from('activity_log').delete().eq('ticket_id', ticketId);
       await svc.from('tickets').delete().eq('id', ticketId);
+    }
+  });
+
+  test('CSV export honours the tier filter', async ({ page }) => {
+    const svc = createServiceRoleClient();
+    const { data: alice } = await svc.from('profiles').select('id, tier_id').eq('email', 'alice@example.com').single();
+    const { data: bob } = await svc.from('profiles').select('id').eq('email', 'bob@example.com').single();
+    const { data: typeData } = await svc.from('ticket_types').select('id').limit(1).single();
+    const tierKey = `rpt-tier-${Date.now()}`;
+    const { data: tier } = await svc
+      .from('subscription_tiers')
+      .insert({ key: tierKey, display_name: 'Rpt tier', sort_order: 999 })
+      .select('id')
+      .single();
+    const ids: number[] = [];
+    try {
+      await svc.from('profiles').update({ tier_id: tier!.id }).eq('id', alice!.id);
+      for (const [n, creator] of [['tier', alice!.id], ['other', bob!.id]] as const) {
+        const { data: t } = await svc
+          .from('tickets')
+          .insert({
+            title: `E2E Reports tier csv ${n}`,
+            slug: `e2e-reports-tier-csv-${n}-${Date.now()}`,
+            creator_id: creator,
+            type_id: typeData!.id,
+            created_at: `${TIER_DAY}T12:00:00Z`,
+          })
+          .select('id')
+          .single();
+        ids.push(t!.id);
+      }
+      await loginAs(page, 'admin@example.com');
+      await page.goto(`/reports?start=${TIER_DAY}&end=${TIER_DAY}&tier=${tierKey}`);
+      await expect(page.getByLabel('Tier')).toHaveValue(tierKey, { timeout: 10000 });
+      const downloadPromise = page.waitForEvent('download', { timeout: 10000 });
+      await page.getByText('Export CSV').click();
+      await page.getByRole('button', { name: 'Ticket volume' }).click();
+      const csv = readFileSync((await (await downloadPromise).path())!, 'utf8');
+      expect(csv.split('\n').map((l) => l.trim())).toContain(`${TIER_DAY},1`);
+    } finally {
+      for (const id of ids) {
+        await svc.from('activity_log').delete().eq('ticket_id', id);
+        await svc.from('tickets').delete().eq('id', id);
+      }
+      await svc.from('profiles').update({ tier_id: alice!.tier_id }).eq('id', alice!.id);
+      await svc.from('subscription_tiers').delete().eq('id', tier!.id);
     }
   });
 

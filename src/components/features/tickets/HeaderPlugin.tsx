@@ -41,6 +41,8 @@ class HeaderPlugin extends PluginComponent<State> {
   private select = (level: (typeof LEVELS)[number]) => {
     this.editor.insertMarkdown(level);
     this.hide();
+    // The menu item held focus; hand it back to the editor.
+    this.editor.getMdElement()?.focus();
   };
 
   private onTriggerKeyDown = (e: KeyboardEvent<HTMLSpanElement>) => {
@@ -106,7 +108,12 @@ class HeaderPlugin extends PluginComponent<State> {
         >
           <i className="rmel-iconfont rmel-icon-font-size" />
         </span>
-        <div className={`drop-wrap ${show ? 'show' : 'hidden'}`}>
+        <div
+          className={`drop-wrap ${show ? 'show' : 'hidden'}`}
+          // Pressing the menu's padding must not blur the focused item (which
+          // would close the menu before the click lands).
+          onMouseDown={(e) => e.preventDefault()}
+        >
           <ul className="header-list" role="menu" aria-label="Header">
             {LEVELS.map((level, i) => (
               <li key={level} className="list-item" role="none">

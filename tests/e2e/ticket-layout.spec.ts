@@ -502,3 +502,95 @@ test.describe('Boolean custom field without a value', () => {
       .toEqual({ [CF_TEXT]: 'saved' });
   });
 });
+
+test.describe('Markdown editor follow-ups', () => {
+  test.describe.configure({ mode: 'serial' });
+  test.use({ viewport: { width: 1440, height: 900 } });
+  const FOLLOWUP_SLUG = 'e2e-editor-followups';
+  const CANNED_TITLE = 'E2E editor followup canned';
+  let ticketUrl: string;
+
+  test.beforeAll(async () => {
+    ticketUrl = await seedWithStatus(FOLLOWUP_SLUG, 'pending', 'E2E Editor Followups');
+    const admin = createServiceRoleClient();
+    await admin.from('canned_responses').delete().eq('title', CANNED_TITLE);
+    const { data: agent } = await admin.from('profiles').select('id').eq('email', 'agent.smith@example.com').single();
+    const { error } = await admin
+      .from('canned_responses')
+      .insert({ title: CANNED_TITLE, body: 'Canned **body** text', visibility: 'public', author_id: agent!.id });
+    if (error) throw new Error(error.message);
+  });
+
+  test.afterAll(async () => {
+    const admin = createServiceRoleClient();
+    await admin.from('canned_responses').delete().eq('title', CANNED_TITLE);
+  });
+
+  test('hover opens the heading menu and clicking H3 inserts "### "', async ({ page }) => {
+    await loginViaForm(page, 'alice@example.com');
+    await page.goto('/tickets/new');
+    const editor = page.getByTestId('markdown-editor');
+    const trigger = editor.locator('.button-type-header [role="button"]');
+    await trigger.hover();
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    await editor.getByTestId('editor-heading-3').click();
+    await expect(editor.locator('.rc-md-editor textarea').first()).toHaveValue(/### /);
+  });
+
+  test('choosing a heading via keyboard returns focus to the textarea', async ({ page }) => {
+    await loginViaForm(page, 'alice@example.com');
+    await page.goto('/tickets/new');
+    const editor = page.getByTestId('markdown-editor');
+    const trigger = editor.locator('.button-type-header [role="button"]');
+    await trigger.focus();
+    await page.keyboard.press('Enter');
+    await expect(editor.getByTestId('editor-heading-1')).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(editor.locator('.rc-md-editor textarea').first()).toBeFocused();
+  });
+
+  test('mousedown on the menu padding keeps it open', async ({ page }) => {
+    await loginViaForm(page, 'alice@example.com');
+    await page.goto('/tickets/new');
+    const editor = page.getByTestId('markdown-editor');
+    const trigger = editor.locator('.button-type-header [role="button"]');
+    await trigger.focus();
+    await page.keyboard.press('Enter');
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    const box = await editor.locator('.button-type-header .header-list').boundingBox();
+    // Left padding edge of the list, outside any menu item.
+    await page.mouse.move(box!.x + 1, box!.y + box!.height / 2);
+    await page.mouse.down();
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    await page.mouse.up();
+  });
+
+  test('canned response inserted into an empty editor shows the preview', async ({ page }) => {
+    await loginViaForm(page, 'agent.smith@example.com');
+    await page.goto(ticketUrl);
+    await page.getByTestId('main-reply-btn').click();
+    const editor = page.getByTestId('main-reply-panel').getByTestId('markdown-editor');
+    await expect(editor.locator('.rc-md-editor textarea').first()).toBeVisible();
+    await expect(editor.locator('.sec-html')).toBeHidden();
+    await editor.getByTestId('canned-response-toolbar-btn').click();
+    await editor.getByPlaceholder('Search canned responses…').fill('E2E editor followup');
+    await editor.getByRole('button', { name: CANNED_TITLE }).click();
+    await expect(editor.locator('.rc-md-editor textarea').first()).toHaveValue(/Canned \*\*body\*\* text/);
+    await expect(editor.locator('.sec-html')).toBeVisible();
+  });
+
+  test('write-only chosen with the mode toggle stays write-only while typing', async ({ page }) => {
+    await loginViaForm(page, 'alice@example.com');
+    await page.goto('/tickets/new');
+    const editor = page.getByTestId('markdown-editor');
+    const textarea = editor.locator('.rc-md-editor textarea').first();
+    await textarea.fill('some text');
+    await expect(editor.locator('.sec-html')).toBeVisible();
+    // both -> write-only
+    await editor.locator('.button-type-mode').click();
+    await expect(editor.locator('.sec-html')).toBeHidden();
+    await textarea.click();
+    await page.keyboard.type(' more');
+    await expect(editor.locator('.sec-html')).toBeHidden();
+  });
+});

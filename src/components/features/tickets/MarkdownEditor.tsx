@@ -207,6 +207,15 @@ export function MarkdownEditor({
     [measureAndUpdateHeight],
   );
 
+  // Tell AutoPreviewPlugin about every value this component applies, including
+  // programmatic ones (canned response insert, form reset) that the editor
+  // doesn't emit 'change' for.
+  useEffect(() => {
+    wrapperRef.current?.dispatchEvent(
+      new CustomEvent('mdeditor:value-applied', { detail: { text: value } }),
+    );
+  }, [value]);
+
   // Measuring needs the committed DOM, so it runs after render; the height
   // itself is set in the next animation frame (see scheduleMeasure).
   useEffect(() => {

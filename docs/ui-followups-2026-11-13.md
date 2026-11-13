@@ -98,6 +98,6 @@ Found during PR #100; fixed on `fix/review-followups` (plan: `docs/superpowers/p
 
 - **C1 — /admin/ai `saveAiSettings` lost update.** The form writes every toggle on each autosave, so two admins (or a test) overwrite each other's changes. The ai-features suggest-reply tests still flake from it. Fix: save only changed fields. **[Fixed in 3d289f9]**
 - **C2 — Description editor layout shift.** The editor (`ssr:false`) mounts with no placeholder, shifting the ticket create form by about 300 px.
-- **C3 — `TicketSidebarSurvey` rebuilds its model on every realtime refresh,** dropping in-progress edits.
+- **C3 — `TicketSidebarSurvey` rebuilds its model on every realtime refresh,** dropping in-progress edits. **[Fixed in 08e60e3]**
 - **C4 — `/agent` prefetch storm.** Every ticket-row and pager link is prefetched as a full dynamic RSC render (~25 per view). On the 2-vCPU CI runner a page=2 navigation took 6.5 s while competing with them.
 - **C5 — E2E isolation for global settings.** Specs that change global settings (`app_settings`) should run in their own `workers: 1` Playwright project so they never race specs that read those settings. **[Fixed in fff3076]**

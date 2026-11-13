@@ -34,7 +34,7 @@ test.describe('Team Tickets', () => {
   test('user not on a team does not see toggle', async ({ page }) => {
     await loginAs(page, 'dave@example.com');
     await page.goto('/tickets');
-    await expect(page.getByTestId('team-toggle')).not.toBeVisible();
+    await expect(page.getByTestId('team-toggle')).toHaveCount(0);
   });
 
   test('team tickets view shows teammates\' tickets with display names', async ({ page }) => {
@@ -479,7 +479,7 @@ test.describe('Admin Teams Management', () => {
     await teamSection.getByRole('button', { name: /Remove Dave/ }).click();
     await expect(
       page.locator('div.bg-white').filter({ hasText: 'E2E Test Team' }).last().getByText('Dave', { exact: true })
-    ).not.toBeVisible({ timeout: 10000 });
+    ).toHaveCount(0, { timeout: 10000 });
 
     // Now delete the now-empty team via the matrix.
     await gotoAdmin(page, '/admin/teams');
@@ -510,11 +510,11 @@ test.describe('NavBar Setup Link', () => {
 
   test('non-admin does not see Setup link', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
-    await expect(page.getByRole('link', { name: 'Setup' })).not.toBeVisible();
+    await expect(page.getByRole('link', { name: 'Setup' })).toHaveCount(0);
   });
 
   test('agent does not see Setup link', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
-    await expect(page.getByRole('link', { name: 'Setup' })).not.toBeVisible();
+    await expect(page.getByRole('link', { name: 'Setup' })).toHaveCount(0);
   });
 });

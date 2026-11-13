@@ -156,9 +156,16 @@ test.describe('Inline image paste in post editor', () => {
 
     // The attachment now belongs to the original post and renders inline in
     // the body; it is not listed a second time in the attachment list.
-    await expect(page.locator('.prose img[src*="/attachments/"]').first()).toBeVisible({
-      timeout: 10000,
-    });
+    const inlineImg = page.locator('.prose img[src*="/attachments/"]').first();
+    await expect(inlineImg).toBeVisible({ timeout: 10000 });
+    // Visible is not loaded: a broken image still has a box. The bytes must
+    // have come back through /attachments/<id> and decoded.
+    await expect
+      .poll(
+        () => inlineImg.evaluate((img: HTMLImageElement) => (img.complete ? img.naturalWidth : 0)),
+        { timeout: 10000, message: 'inline image never loaded (naturalWidth 0)' },
+      )
+      .toBeGreaterThan(0);
     await expect(page.locator('[data-testid="attachment-thumbnail"]')).toHaveCount(0);
   });
 

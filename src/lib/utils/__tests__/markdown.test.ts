@@ -90,14 +90,30 @@ describe('renderMarkdown', () => {
     // The Markdown parser percent-encodes backslashes, spaces and tabs in link
     // destinations, so these can only become same-origin relative paths. Assert
     // that nothing loadable from a third-party host is ever emitted as an <img>.
+    // A src is remote when it has a scheme or starts with two slashes
+    // (browsers strip leading whitespace and read `\` as `/`).
+    const REMOTE_IMG = /<img\b[^>]*\ssrc="\s*(?:[a-z][a-z0-9+.-]*:|[\\/]{2})/i;
+
+    it('the remote-<img> pattern catches remote srcs', () => {
+      for (const html of [
+        '<img src="//tracker.example/p.gif">',
+        '<img alt="x" src="https://tracker.example/p.gif">',
+        '<img src=" //tracker.example/p.gif">',
+        '<img src="\\\\tracker.example/p.gif">',
+        '<img src="http:tracker.example/p.gif">',
+      ]) {
+        expect(html).toMatch(REMOTE_IMG);
+      }
+      expect('<img src="/attachments/x.png">').not.toMatch(REMOTE_IMG);
+    });
+
     it.each([
       '\\tracker.example/p.gif',
       '/\tracker.example/p.gif',
       ' //tracker.example/p.gif',
     ])('never emits an <img> that targets a third-party host for %j', async (src) => {
       const html = await renderMarkdown(`![x](<${src}>)`, opts);
-      const m = html.match(/<img src="([^"]*)"/);
-      if (m) expect(m[1]).toMatch(/^(?!\/\/|[a-z][a-z0-9+.-]*:)[^\\s]*$/i);
+      expect(html).not.toMatch(REMOTE_IMG);
     });
 
     it('keeps plain relative images', async () => {

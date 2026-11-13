@@ -373,8 +373,8 @@ test.describe('Reports Page - Agent View', () => {
     await expect(page.getByTestId('agent-performance-table')).toBeVisible();
 
     // Agent should not see full filter set (only group by selector, dates)
-    await expect(page.getByLabel('Status')).not.toBeVisible();
-    await expect(page.getByLabel('Severity')).not.toBeVisible();
+    await expect(page.getByLabel('Status')).toHaveCount(0);
+    await expect(page.getByLabel('Severity')).toHaveCount(0);
   });
 });
 
@@ -402,6 +402,6 @@ test.describe('NavBar Reports Link', () => {
     await expect(page).toHaveURL('/login', { timeout: 10000 });
 
     await loginAs(page, 'alice@example.com');
-    await expect(page.getByRole('link', { name: 'Reports' })).not.toBeVisible();
+    await expect(page.getByRole('link', { name: 'Reports' })).toHaveCount(0);
   });
 });

@@ -67,24 +67,50 @@ async function cleanupTestFields() {
   }
 }
 
-async function getAliceTicketUrl(): Promise<{ url: string; id: number }> {
+// alice's ticket owned by this spec (per worker), so no other spec's alice
+// ticket can be picked up or changed under these tests.
+const CF_TICKET_TITLE = `E2E CF Detail Ticket ${BOOL_SUFFIX}`;
+const CF_TICKET_SLUG = `e2e-cf-detail-ticket-${BOOL_SUFFIX}`;
+
+async function seedAliceTicket() {
   const svc = createServiceRoleClient();
-  const { data: alice } = await svc
+  const { data: alice, error: aErr } = await svc
     .from('profiles')
     .select('id')
     .eq('email', 'alice@example.com')
     .single();
-  const { data: ticket } = await svc
+  if (aErr) throw new Error(aErr.message);
+  const { data: type, error: tErr } = await svc.from('ticket_types').select('id').limit(1).single();
+  if (tErr) throw new Error(tErr.message);
+  const { data: ticket, error } = await svc
+    .from('tickets')
+    .insert({
+      title: CF_TICKET_TITLE, slug: CF_TICKET_SLUG, creator_id: alice.id, type_id: type.id, is_private: true,
+    })
+    .select('id')
+    .single();
+  if (error) throw new Error(error.message);
+  const { error: pErr } = await svc.from('posts').insert({
+    ticket_id: ticket.id, author_id: alice.id, body: 'Custom fields detail test.', is_original: true, post_type: 'post',
+  });
+  if (pErr) throw new Error(pErr.message);
+}
+
+async function deleteAliceTicket() {
+  const svc = createServiceRoleClient();
+  const { error } = await svc.from('tickets').delete().eq('title', CF_TICKET_TITLE);
+  if (error) throw new Error(error.message);
+}
+
+async function getAliceTicketUrl(): Promise<{ url: string; id: number }> {
+  const svc = createServiceRoleClient();
+  const { data: ticket, error } = await svc
     .from('tickets')
     .select('id, slug')
-    .eq('creator_id', alice!.id)
-    // Exclude the ticket created by the boolean-field describe below.
-    // (BOOL_SUFFIX differs per worker, so match on the shared prefix.)
-    .not('title', 'ilike', `${BOOL_TICKET_PREFIX}%`)
-    .order('id', { ascending: false })
-    .limit(1)
+    .eq('title', CF_TICKET_TITLE)
     .single();
-  return { url: `/tickets/${ticket!.id}/${ticket!.slug}`, id: ticket!.id as number };
+  if (error) throw new Error(error.message);
+  return { url: `/tickets/${ticket.id}/${ticket.slug}`, id: ticket.id as number };
 }
 
 // Both describes mutate the global survey_ticket_detail_user_template settings, so
@@ -97,10 +123,15 @@ test.describe('Ticket detail custom fields (SurveyJS)', () => {
 
   test.beforeAll(async () => {
     await seedTestFields();
+    await seedAliceTicket();
   });
 
   test.afterAll(async () => {
-    await cleanupTestFields();
+    try {
+      await deleteAliceTicket();
+    } finally {
+      await cleanupTestFields();
+    }
   });
 
   test('owner can edit auto-generated custom-field question and it autosaves', async ({ page }) => {

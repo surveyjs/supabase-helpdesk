@@ -12,6 +12,12 @@ const SLUG = 'e2e-ticket-layout';
 const CLOSED_SLUG = 'e2e-ticket-layout-closed';
 const PENDING_SLUG = 'e2e-ticket-layout-pending';
 const LONG_URL = `https://example.com/${'a'.repeat(300)}`;
+// 1×1 PNG: a real storage object so the attachment row renders its thumbnail.
+const PNG_BYTES = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Zy0ZuYAAAAASUVORK5CYII=',
+  'base64',
+);
+const THUMB_NAME = `${'thumbnail-row-'.repeat(8)}.png`;
 
 async function seedWithStatus(
   slug: string,
@@ -47,6 +53,17 @@ async function seed() {
   const { data: stale } = await admin.from('tickets').select('id').eq('slug', SLUG);
   if (stale?.length) {
     const ids = stale.map((t: { id: number }) => t.id);
+    const { data: staleAtts, error: staleErr } = await admin
+      .from('attachments')
+      .select('storage_path, posts!inner(ticket_id)')
+      .in('posts.ticket_id', ids)
+      .not('storage_path', 'is', null);
+    if (staleErr) throw new Error(staleErr.message);
+    const stalePaths = (staleAtts ?? []).map((a: { storage_path: string }) => a.storage_path);
+    if (stalePaths.length) {
+      const { error } = await admin.storage.from('attachments').remove(stalePaths);
+      if (error) throw new Error(error.message);
+    }
     await admin.from('activity_log').delete().in('ticket_id', ids);
     await admin.from('posts').delete().in('ticket_id', ids);
     await admin.from('tickets').delete().in('id', ids);
@@ -90,6 +107,35 @@ async function seed() {
     },
   ]);
   if (attErr) throw new Error(attErr.message);
+
+  // An image with a real storage object, so the reply gets a thumbnail row.
+  const thumbPath = `tickets/${ticket!.id}/posts/${reply!.id}/${randomUUID()}-thumb.png`;
+  const { error: upErr } = await admin.storage
+    .from('attachments')
+    .upload(thumbPath, PNG_BYTES, { contentType: 'image/png', upsert: true });
+  if (upErr) throw new Error(upErr.message);
+  const { error: thumbErr } = await admin.from('attachments').insert({
+    post_id: reply!.id, uploader_id: alice!.id, storage_path: thumbPath,
+    original_filename: THUMB_NAME, file_size: PNG_BYTES.length, mime_type: 'image/png',
+  });
+  if (thumbErr) throw new Error(thumbErr.message);
+
+  // A comment and a reply to that comment, both under the reply's comment rail.
+  const { data: comment, error: cErr } = await admin
+    .from('posts')
+    .insert({
+      ticket_id: ticket!.id, author_id: alice!.id, parent_post_id: reply!.id,
+      body: `Comment with ${LONG_URL}`, post_type: 'comment',
+    })
+    .select('id')
+    .single();
+  if (cErr) throw new Error(cErr.message);
+  const { error: c2Err } = await admin.from('posts').insert({
+    ticket_id: ticket!.id, author_id: alice!.id, parent_comment_id: comment!.id,
+    body: `Nested comment with ${LONG_URL}`, post_type: 'comment',
+  });
+  if (c2Err) throw new Error(c2Err.message);
+
   const { data: agent } = await admin.from('profiles').select('id').eq('email', 'agent.smith@example.com').single();
   await admin.from('ticket_followers').upsert({ ticket_id: ticket!.id, user_id: agent!.id });
   return `/tickets/${ticket!.id}/${ticket!.slug}`;
@@ -251,10 +297,21 @@ test.describe('Ticket thread layout', () => {
 
   test.describe('phone width', () => {
     test.use({ viewport: { width: 390, height: 844 } });
-    test('no horizontal overflow at 390px on a ticket with an attachment and a long link', async ({ page }) => {
+    test('no horizontal overflow at 390px on a ticket with attachments, comments and a long link', async ({ page }) => {
       await loginViaForm(page, 'agent.smith@example.com');
       await page.goto(url);
       await expect(page.getByTestId('attachment-list')).toBeVisible();
+      // The thumbnail row is really there and its image loaded.
+      const thumb = page.getByTestId('attachment-thumbnail');
+      await expect(thumb).toHaveCount(1);
+      await expect(thumb).toHaveAttribute('alt', THUMB_NAME);
+      await expect
+        .poll(() => thumb.evaluate((img: HTMLImageElement) => (img.complete ? img.naturalWidth : 0)))
+        .toBeGreaterThan(0);
+      // Both comment levels render inside the reply's comment rail.
+      const rail = page.locator('[data-comments-rail="true"]').filter({ has: page.locator('[data-post-kind="comment"]') });
+      await expect(rail.locator('[data-post-kind="comment"]')).toHaveCount(2);
+      await expect(rail.getByText('Nested comment with', { exact: false })).toBeVisible();
       const { sw, cw } = await page.evaluate(() => ({
         sw: document.documentElement.scrollWidth,
         cw: document.documentElement.clientWidth,

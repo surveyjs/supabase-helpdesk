@@ -116,10 +116,18 @@ export async function loginViaForm(
     // otherwise). Let that navigation finish and assert the URL is stable so
     // callers never start a navigation mid-redirect.
     await page.waitForLoadState('load');
-    const landed = new URL(page.url()).pathname;
-    await expect
-      .poll(() => new URL(page.url()).pathname, { timeout: 5000 })
-      .toBe(landed);
+    // Stable means the same URL on two checks 250 ms apart.
+    let previous = page.url();
+    const deadline = Date.now() + 5000;
+    for (;;) {
+      await page.waitForTimeout(250);
+      const current = page.url();
+      if (current === previous) break;
+      if (Date.now() > deadline) {
+        throw new Error(`URL still changing after sign-in: ${previous} -> ${current}`);
+      }
+      previous = current;
+    }
     return true;
   };
 

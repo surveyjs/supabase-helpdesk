@@ -1,0 +1,1 @@
+{"006_agent_dashboard_template_labels.sql":{"app_settings":{"changed":true,"reason":"relabels the seeded agent-dashboard filter template (Active→Open, default sort)"}}}

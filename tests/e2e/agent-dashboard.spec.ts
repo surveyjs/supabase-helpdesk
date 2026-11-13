@@ -112,6 +112,7 @@ test.describe('Agent Dashboard pagination', () => {
 
   const prefix = `PG-${Math.random().toString(36).slice(2, 8)}`;
   const SEEDED = 45;
+  const OLD_MS = 25 * 3600_000;
   let pageSize = 20;
 
   test.beforeAll(async () => {
@@ -130,9 +131,10 @@ test.describe('Agent Dashboard pagination', () => {
       creator_id: alice!.id,
       type_id: type!.id,
       // Distinct timestamps: one bulk insert would otherwise tie on the sort key and
-      // make the page boundaries unstable.
-      created_at: new Date(Date.now() - i * 60_000).toISOString(),
-      updated_at: new Date(Date.now() - i * 60_000).toISOString(),
+      // make the page boundaries unstable. Older than 24 h so these alice-created tickets
+      // do not count against her 24 h ticket rate limit (shared with parallel specs).
+      created_at: new Date(Date.now() - OLD_MS - i * 60_000).toISOString(),
+      updated_at: new Date(Date.now() - OLD_MS - i * 60_000).toISOString(),
     }));
     const { error } = await admin.from('tickets').insert(rows);
     if (error) throw error;

@@ -15,10 +15,11 @@ test.describe.configure({ mode: 'serial' });
 
 async function enableAiFilter(enabled: boolean) {
   const svc = createServiceRoleClient();
-  await svc
+  const { error } = await svc
     .from('app_settings')
     .update({ value: enabled ? 'true' : 'false' })
     .eq('key', 'ai_filter_enabled');
+  if (error) throw new Error(`ai_filter_enabled: ${error.message}`);
 }
 
 /**
@@ -66,9 +67,32 @@ async function mockAiFilterAction(
   );
 }
 
-async function openViewsFiltersPanel(page: Page) {
-  // Shared helper waits for the post-hydration mount at xl instead of collapsing the panel.
-  await openViewsFilters(page);
+/**
+ * Open /agent (or `path`) with the Views & Filters panel expanded, rendered
+ * with the AI filter on or off.
+ *
+ * ai_filter_enabled is global, and /admin/ai autosaves its whole form
+ * (ai-features.spec.ts), writing every AI toggle back with the value it had
+ * when that page loaded. A parallel worker can so flip the flag after we
+ * set it. The pill renders with the panel, so once the panel is open its
+ * presence tells which value the page saw. Re-apply and reload only when the
+ * stored flag shows someone else changed it; otherwise return and let the
+ * test's own assertions report what the page did.
+ */
+async function gotoAgentWithAiFilter(page: Page, enabled: boolean, path = '/agent') {
+  const svc = createServiceRoleClient();
+  const pill = page.getByRole('button', { name: /✨\s*AI/i });
+  for (let attempt = 1; ; attempt++) {
+    await enableAiFilter(enabled);
+    await page.goto(path);
+    // Shared helper waits for the post-hydration mount at xl instead of collapsing the panel.
+    await openViewsFilters(page);
+    if ((await pill.count()) > 0 === enabled) return;
+    const { data, error } = await svc.from('app_settings').select('value').eq('key', 'ai_filter_enabled').single();
+    if (error) throw new Error(`read ai_filter_enabled: ${error.message}`);
+    if (data.value === String(enabled)) return;
+    if (attempt === 5) throw new Error(`ai_filter_enabled kept being reset (wanted ${enabled})`);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -94,8 +118,8 @@ test.describe('AI Filter — disabled state', () => {
 
   test('AI pill is not visible when feature is disabled', async ({ page }) => {
     await loginAsAgent(page);
-    await page.goto('/agent');
-    await expect(page.getByRole('button', { name: /✨\s*AI/i })).not.toBeVisible();
+    await gotoAgentWithAiFilter(page, false);
+    await expect(page.getByRole('button', { name: /✨\s*AI/i })).toHaveCount(0);
   });
 });
 
@@ -111,15 +135,13 @@ test.describe('AI Filter — enabled state', () => {
 
   test('AI pill appears in Views & Filters panel for agents', async ({ page }) => {
     await loginAsAgent(page);
-    await page.goto('/agent');
-    await openViewsFiltersPanel(page);
+    await gotoAgentWithAiFilter(page, true);
     await expect(page.getByRole('button', { name: /✨\s*AI/i })).toBeVisible({ timeout: 10000 });
   });
 
   test('clicking AI pill hides SurveyJS form and shows textarea', async ({ page }) => {
     await loginAsAgent(page);
-    await page.goto('/agent');
-    await openViewsFiltersPanel(page);
+    await gotoAgentWithAiFilter(page, true);
     await page.getByRole('button', { name: /✨\s*AI/i }).click();
     await expect(
       page.getByPlaceholder("Describe what you're looking for…"),
@@ -129,8 +151,7 @@ test.describe('AI Filter — enabled state', () => {
 
   test('clicking Standard pill restores the SurveyJS form', async ({ page }) => {
     await loginAsAgent(page);
-    await page.goto('/agent');
-    await openViewsFiltersPanel(page);
+    await gotoAgentWithAiFilter(page, true);
     await page.getByRole('button', { name: /✨\s*AI/i }).click();
     await page.getByRole('button', { name: 'Standard' }).click();
     await expect(page.getByTestId('filter-survey')).toBeVisible({ timeout: 5000 });
@@ -138,16 +159,14 @@ test.describe('AI Filter — enabled state', () => {
 
   test('Ask AI button is disabled when textarea is empty', async ({ page }) => {
     await loginAsAgent(page);
-    await page.goto('/agent');
-    await openViewsFiltersPanel(page);
+    await gotoAgentWithAiFilter(page, true);
     await page.getByRole('button', { name: /✨\s*AI/i }).click();
     await expect(page.getByRole('button', { name: /Ask AI/i })).toBeDisabled();
   });
 
   test('Ask AI button is enabled once text is entered', async ({ page }) => {
     await loginAsAgent(page);
-    await page.goto('/agent');
-    await openViewsFiltersPanel(page);
+    await gotoAgentWithAiFilter(page, true);
     await page.getByRole('button', { name: /✨\s*AI/i }).click();
     await page.getByPlaceholder("Describe what you're looking for…").fill('urgent open tickets');
     await expect(page.getByRole('button', { name: /Ask AI/i })).toBeEnabled();
@@ -156,8 +175,7 @@ test.describe('AI Filter — enabled state', () => {
   test('chips appear after a successful AI call', async ({ page }) => {
     await mockAiFilterAction(page, { data: { status: ['open'], urgency: 'high' } });
     await loginAsAgent(page);
-    await page.goto('/agent');
-    await openViewsFiltersPanel(page);
+    await gotoAgentWithAiFilter(page, true);
     await page.getByRole('button', { name: /✨\s*AI/i }).click();
     await page.getByPlaceholder("Describe what you're looking for…").fill('high urgency open');
     await page.getByRole('button', { name: /Ask AI/i }).click();
@@ -171,8 +189,7 @@ test.describe('AI Filter — enabled state', () => {
   test('Apply button appears alongside chips after successful AI call', async ({ page }) => {
     await mockAiFilterAction(page, { data: { urgency: 'low' } });
     await loginAsAgent(page);
-    await page.goto('/agent');
-    await openViewsFiltersPanel(page);
+    await gotoAgentWithAiFilter(page, true);
     await page.getByRole('button', { name: /✨\s*AI/i }).click();
     await page.getByPlaceholder("Describe what you're looking for…").fill('low urgency');
     await page.getByRole('button', { name: /Ask AI/i }).click();
@@ -186,8 +203,7 @@ test.describe('AI Filter — enabled state', () => {
       error: "Couldn't interpret that — try rephrasing.",
     });
     await loginAsAgent(page);
-    await page.goto('/agent');
-    await openViewsFiltersPanel(page);
+    await gotoAgentWithAiFilter(page, true);
     await page.getByRole('button', { name: /✨\s*AI/i }).click();
     await page.getByPlaceholder("Describe what you're looking for…").fill('???');
     await page.getByRole('button', { name: /Ask AI/i }).click();
@@ -204,8 +220,7 @@ test.describe('AI Filter — enabled state', () => {
       error: "Couldn't interpret that — try rephrasing.",
     });
     await loginAsAgent(page);
-    await page.goto('/agent');
-    await openViewsFiltersPanel(page);
+    await gotoAgentWithAiFilter(page, true);
     await page.getByRole('button', { name: /✨\s*AI/i }).click();
     await page.getByPlaceholder("Describe what you're looking for…").fill('???');
     await page.getByRole('button', { name: /Ask AI/i }).click();
@@ -216,8 +231,7 @@ test.describe('AI Filter — enabled state', () => {
   test('Clear resets textarea and removes chips', async ({ page }) => {
     await mockAiFilterAction(page, { data: { urgency: 'low' } });
     await loginAsAgent(page);
-    await page.goto('/agent');
-    await openViewsFiltersPanel(page);
+    await gotoAgentWithAiFilter(page, true);
     await page.getByRole('button', { name: /✨\s*AI/i }).click();
     await page.getByPlaceholder("Describe what you're looking for…").fill('low urgency');
     await page.getByRole('button', { name: /Ask AI/i }).click();
@@ -256,8 +270,7 @@ test.describe('AI Filter — enabled state', () => {
 
     try {
       await loginAsAgent(page);
-      await page.goto(`/agent?view=${view!.id}`);
-      await openViewsFiltersPanel(page);
+      await gotoAgentWithAiFilter(page, true, `/agent?view=${view!.id}`);
 
       await expect(
         page.getByRole('button', { name: /✨\s*AI/i }),

@@ -42,7 +42,13 @@ import {
   parseTicketDetailUserTemplate,
 } from '@/lib/constants/survey-ui-config';
 import { computeTicketDetailFieldPolicy } from '@/lib/tickets/ticket-detail-policy';
-import { applyTemplatePolicy, injectTemplateChoices } from '@/lib/tickets/apply-template-policy';
+import {
+  applyTemplatePolicy,
+  hasVisibleQuestion,
+  injectTemplateChoices,
+} from '@/lib/tickets/apply-template-policy';
+import { inlineAttachmentIds } from '@/lib/tickets/inline-attachments';
+import { POST_ACTION_CLASS } from './post-action-class';
 import {
   injectCustomFieldsPanel,
   type CustomFieldDef,
@@ -390,11 +396,10 @@ export default async function TicketDetailPage({
     const canClone = isAgent && !isOriginal && !isNote && !isDraft && !ticket!.merged_into_id;
     const canPublishDraft = isDraft && isCurrentUser;
     const hasActions = canDeletePost || canTogglePrivacy || canClone || canPublishDraft;
-    // Images embedded in the body are already visible there; don't list them again.
-    const inlineAttachmentIds = Array.from(
-      String(post.body).matchAll(/\/attachments\/([0-9a-f-]{36})/gi),
-      (m) => m[1].toLowerCase(),
-    );
+    // Files the body already shows (inline image or link) get no full row in
+    // the attachment list. Read from the rendered HTML, so ids that only appear
+    // inside code spans/blocks don't count.
+    const inlineIds = inlineAttachmentIds(post.htmlBody);
 
     const bgClass = isNote
       ? 'bg-amber-50 border-amber-200'
@@ -466,7 +471,7 @@ export default async function TicketDetailPage({
                   <input type="hidden" name="post_id" value={post.id} />
                   <button
                     type="submit"
-                    className="hover:text-red-600"
+                    className={`${POST_ACTION_CLASS} hover:text-red-600`}
                     data-testid="delete-post-btn"
                   >
                     Delete
@@ -482,7 +487,7 @@ export default async function TicketDetailPage({
                   <input type="hidden" name="post_id" value={post.id} />
                   <button
                     type="submit"
-                    className="text-green-600 hover:text-green-800 font-medium"
+                    className={`${POST_ACTION_CLASS} text-green-600 hover:text-green-800 font-medium`}
                     data-testid="publish-draft-btn"
                   >
                     Publish
@@ -497,7 +502,7 @@ export default async function TicketDetailPage({
         <AttachmentList
           postId={post.id}
           canDelete={isCurrentUser || isAgent}
-          hideIds={inlineAttachmentIds}
+          inlineIds={inlineIds}
         />
       </article>
     );
@@ -820,10 +825,20 @@ export default async function TicketDetailPage({
   const showDeleteRow =
     profile?.role === 'admin' && !ticket.merged_into_id && ticket.status !== 'closed';
   const showAdvancedRow = isAgent && !ticket.merged_into_id && !ticket.duplicate_of_id;
+  const showKbArticleRow =
+    isAgent && ticket.status === 'closed' && aiGenerateKbArticleEnabled && !ticket.merged_into_id;
+  // Sidebar detail groups: each <section> and its <dl> are subgrids of one
+  // two-column grid, so terms line up across groups.
+  const GROUP_SECTION = 'col-span-2 grid grid-cols-subgrid gap-y-1';
   const GROUP_HEADING = 'col-span-2 text-xs font-semibold uppercase tracking-wide text-gray-500';
-  // Agents/admins edit tags in the sidebar Tags question;
-  // everyone else gets the read-only chip list.
-  const showTagChips = !(isAgent && detailFieldPolicy.tag_ids?.editable);
+  const GROUP_LIST = 'col-span-2 grid grid-cols-subgrid gap-y-1';
+  // Agents/admins see (and edit) tags in the sidebar Tags question. Everyone
+  // else, and agents whose final template has no visible Tags question, gets
+  // the read-only chip list.
+  const showTagChips = !isAgent || !hasVisibleQuestion(sidebarTemplateJson, 'tag_ids');
+  const tagColors = Object.fromEntries(
+    [...ticketTags, ...allTags].map((t) => [t.id, t.color] as const),
+  );
 
   const hasAnySidebarSurveyField = Object.values(detailFieldPolicy).some((p) => p.visible);
 
@@ -913,7 +928,7 @@ export default async function TicketDetailPage({
                       editorMinHeightPx={editorMinHeightPx}
                       editorMaxHeightPx={editorMaxHeightPx}
                       aiSuggestedReplyEnabled={aiSuggestedReplyEnabled}
-                      willReopen={ticket.status === 'closed' && !isAgent}
+                      willReopen={!isAgent && (ticket.status === 'closed' || ticket.status === 'pending')}
                     />
                   </div>
                 )}
@@ -962,86 +977,104 @@ export default async function TicketDetailPage({
                   ticketId={ticket.id}
                   templateJson={sidebarTemplateJson}
                   initial={sidebarTemplateInitial}
+                  tagColors={tagColors}
                 />
               </div>
             )}
 
-            {/* Read-only / non-editable info rows (fields not represented in the survey template) */}
-            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-              <dt className={GROUP_HEADING}>People</dt>
-              <dt className="text-gray-500">Created by</dt>
-              <dd className="text-gray-900">
-                <DisplayName
-                  userId={ticket.creator_id}
-                  displayName={creatorName}
-                  isCurrentUserAgent={isAgent}
-                />
-                {teamName && (
-                  <span className="ml-1 text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">
-                    {teamName}
-                  </span>
-                )}
-              </dd>
-
-              <dt className={`${GROUP_HEADING} mt-3`}>Dates</dt>
-              <dt className="text-gray-500">Created</dt>
-              <dd className="text-gray-900" title={new Date(ticket.created_at).toLocaleString()}>
-                {formatDateTimeWithRelative(ticket.created_at)}
-              </dd>
-              <dt className="text-gray-500">Updated</dt>
-              <dd className="text-gray-900" title={new Date(ticket.updated_at).toLocaleString()}>
-                {formatDateTimeWithRelative(ticket.updated_at)}
-              </dd>
-
-              {sourceArticle && (
-                <>
-                  <dt className="text-gray-500">From article</dt>
-                  <dd data-testid="source-article">
-                    <Link
-                      href={`/help/${sourceArticle.id}/${sourceArticle.category_name ? generateSlug(sourceArticle.category_name) : 'uncategorized'}/${sourceArticle.slug}`}
-                      className="text-blue-600 hover:text-blue-800 text-xs"
-                    >
-                      {sourceArticle.title}
-                    </Link>
+            {/* Read-only / non-editable info (fields not represented in the survey
+                template), one labelled group per topic. */}
+            <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-3 text-sm">
+              <section aria-labelledby="ticket-sidebar-people" className={GROUP_SECTION}>
+                <h3 id="ticket-sidebar-people" className={GROUP_HEADING}>People</h3>
+                <dl className={GROUP_LIST}>
+                  <dt className="text-gray-500">Created by</dt>
+                  <dd className="text-gray-900">
+                    <DisplayName
+                      userId={ticket.creator_id}
+                      displayName={creatorName}
+                      isCurrentUserAgent={isAgent}
+                    />
+                    {teamName && (
+                      <span className="ml-1 text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">
+                        {teamName}
+                      </span>
+                    )}
                   </dd>
-                </>
+                </dl>
+              </section>
+
+              <section aria-labelledby="ticket-sidebar-dates" className={GROUP_SECTION}>
+                <h3 id="ticket-sidebar-dates" className={GROUP_HEADING}>Dates</h3>
+                <dl className={GROUP_LIST}>
+                  <dt className="text-gray-500">Created</dt>
+                  <dd className="text-gray-900" title={new Date(ticket.created_at).toLocaleString()}>
+                    {formatDateTimeWithRelative(ticket.created_at)}
+                  </dd>
+                  <dt className="text-gray-500">Updated</dt>
+                  <dd className="text-gray-900" title={new Date(ticket.updated_at).toLocaleString()}>
+                    {formatDateTimeWithRelative(ticket.updated_at)}
+                  </dd>
+                </dl>
+              </section>
+
+              {(sourceArticle || showKbArticleRow) && (
+                <section aria-labelledby="ticket-sidebar-source" className={GROUP_SECTION}>
+                  <h3 id="ticket-sidebar-source" className={GROUP_HEADING}>Source</h3>
+                  <dl className={GROUP_LIST}>
+                    {sourceArticle && (
+                      <>
+                        <dt className="text-gray-500">From article</dt>
+                        <dd data-testid="source-article">
+                          <Link
+                            href={`/help/${sourceArticle.id}/${sourceArticle.category_name ? generateSlug(sourceArticle.category_name) : 'uncategorized'}/${sourceArticle.slug}`}
+                            className="text-blue-600 hover:text-blue-800 text-xs"
+                          >
+                            {sourceArticle.title}
+                          </Link>
+                        </dd>
+                      </>
+                    )}
+                    {showKbArticleRow && (
+                      <>
+                        <dt className="text-gray-500">KB Article</dt>
+                        <dd>
+                          <GenerateKbArticleButton ticketId={ticket.id} />
+                        </dd>
+                      </>
+                    )}
+                  </dl>
+                </section>
               )}
 
               {(showAdvancedRow || showDeleteRow) && (
-                <>
-                  <dt className={`${GROUP_HEADING} mt-3`}>Actions</dt>
-                  {showAdvancedRow && (
-                    <>
-                      <dt className="text-gray-500">Advanced</dt>
-                      <dd>
-                        <div className="flex flex-wrap gap-2">
-                          <MarkAsDuplicateForm ticketId={ticket.id} />
-                          <MergeTicketForm ticketId={ticket.id} />
-                          <CloneTicketButton ticketId={ticket.id} />
-                        </div>
-                      </dd>
-                    </>
-                  )}
-                  {showDeleteRow && (
-                    <>
-                      <dt className="text-gray-500">Delete</dt>
-                      <dd>
-                        <DeleteTicketButton ticketId={ticket.id} />
-                      </dd>
-                    </>
-                  )}
-                </>
+                <section aria-labelledby="ticket-sidebar-actions" className={GROUP_SECTION}>
+                  <h3 id="ticket-sidebar-actions" className={GROUP_HEADING}>Actions</h3>
+                  <dl className={GROUP_LIST}>
+                    {showAdvancedRow && (
+                      <>
+                        <dt className="text-gray-500">Advanced</dt>
+                        <dd>
+                          <div className="flex flex-wrap gap-2">
+                            <MarkAsDuplicateForm ticketId={ticket.id} />
+                            <MergeTicketForm ticketId={ticket.id} />
+                            <CloneTicketButton ticketId={ticket.id} />
+                          </div>
+                        </dd>
+                      </>
+                    )}
+                    {showDeleteRow && (
+                      <>
+                        <dt className="text-gray-500">Delete</dt>
+                        <dd>
+                          <DeleteTicketButton ticketId={ticket.id} />
+                        </dd>
+                      </>
+                    )}
+                  </dl>
+                </section>
               )}
-
-              {isAgent && ticket.status === 'closed' && aiGenerateKbArticleEnabled && !ticket.merged_into_id && (
-                <>
-                  <dt className="text-gray-500">KB Article</dt>
-                  <dd>
-                    <GenerateKbArticleButton ticketId={ticket.id} />
-                  </dd>
-                </>
-              )}
-            </dl>
+            </div>
 
             {/* SLA Indicators (agents only) */}
             {isAgent && (

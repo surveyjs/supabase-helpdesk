@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { togglePostPrivacy } from '@/lib/actions/tickets';
+import { POST_ACTION_CLASS } from './post-action-class';
 
 export function PrivacyCheckbox({ postId, isPrivate }: { postId: string; isPrivate: boolean }) {
   const formRef = useRef<HTMLFormElement>(null);
@@ -19,7 +20,7 @@ export function PrivacyCheckbox({ postId, isPrivate }: { postId: string; isPriva
       />
       <label
         htmlFor={`private-${postId}`}
-        className="cursor-pointer select-none hover:text-gray-900"
+        className={`${POST_ACTION_CLASS} cursor-pointer select-none hover:text-gray-900`}
       >
         Private
       </label>

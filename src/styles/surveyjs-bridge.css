@@ -96,8 +96,9 @@
 
 /* Ticket sidebar: the "Private ticket" / "Follow this ticket" checkboxes share
  * a multi-question row that wraps in the 400px sidebar. Stock row gap (17px)
- * plus 12px item padding left ~40px between them; keep them visually paired. */
-[data-testid="ticket-sidebar-survey"] .sd-row--multiple {
+ * plus 12px item padding left ~40px between them; keep them visually paired.
+ * Only that row: other wrapped rows (e.g. Status / Urgency) keep stock spacing. */
+[data-testid="ticket-sidebar-survey"] .sd-row--multiple:has([data-name="is_private"]) {
   row-gap: 4px;
 }
 

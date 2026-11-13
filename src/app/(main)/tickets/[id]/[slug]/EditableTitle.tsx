@@ -25,7 +25,7 @@ export function EditableTitle({
           <button
             type="button"
             onClick={() => setEditing(true)}
-            className="inline-flex h-8 w-8 items-center justify-center rounded text-base text-gray-400 hover:text-gray-700 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
+            className="inline-flex h-8 w-8 items-center justify-center rounded text-base text-gray-400 hover:text-gray-700 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-blue-500 [@media(hover:none)]:opacity-100"
             data-testid="edit-title-btn"
             aria-label="Edit title"
           >

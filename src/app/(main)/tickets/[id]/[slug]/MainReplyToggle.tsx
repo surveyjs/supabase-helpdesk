@@ -19,7 +19,7 @@ export function MainReplyToggle({
   editorMinHeightPx?: number;
   editorMaxHeightPx?: number;
   aiSuggestedReplyEnabled?: boolean;
-  /** Replying will re-open the ticket (closed ticket, non-agent replier). */
+  /** Replying will re-open the ticket (closed or pending ticket, non-agent replier). */
   willReopen?: boolean;
 }) {
   return (
@@ -28,24 +28,26 @@ export function MainReplyToggle({
       panelClassName="bg-white rounded-lg border border-gray-200 p-6"
       trigger={({ open }) => (
         <>
-        <button
-          type="button"
-          onClick={open}
-          data-testid="main-reply-btn"
-          className="w-full h-11 text-left flex items-center gap-3 px-3 rounded-lg border border-gray-300 bg-white text-sm text-gray-500 hover:border-blue-500 hover:text-gray-700"
-        >
-          <span
-            aria-hidden="true"
-            className="shrink-0 w-7 h-7 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-xs font-semibold"
+          <button
+            type="button"
+            onClick={open}
+            data-testid="main-reply-btn"
+            className="w-full h-11 text-left flex items-center gap-3 px-3 rounded-lg border border-gray-300 bg-white text-sm text-gray-500 hover:border-blue-500 hover:text-gray-700"
           >
-            ↩
-          </span>
-          <span>Reply to this ticket…</span>
-          <span className="ml-auto text-xs text-gray-400">Markdown supported</span>
-        </button>
-        {willReopen && (
-          <p className="mt-1.5 text-xs text-gray-500">Replying will re-open this ticket</p>
-        )}
+            <span
+              aria-hidden="true"
+              className="shrink-0 w-7 h-7 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-xs font-semibold"
+            >
+              ↩
+            </span>
+            <span>Reply to this ticket…</span>
+            <span className="ml-auto text-xs text-gray-400">Markdown supported</span>
+          </button>
+          {willReopen && (
+            <p className="mt-1.5 text-xs text-gray-500" data-testid="reopen-hint">
+              Replying will re-open this ticket.
+            </p>
+          )}
         </>
       )}
     >

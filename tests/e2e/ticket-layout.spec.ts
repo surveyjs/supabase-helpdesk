@@ -1,15 +1,25 @@
 import { test, expect } from './fixtures';
 import { createServiceRoleClient } from '../helpers/supabase';
 import { loginViaForm } from '../helpers/auth';
+import { waitForSidebarSurveyAutosave } from '../helpers/surveyjs';
 import { randomUUID } from 'crypto';
+
+// Several describes below mutate global state (custom fields, the agent sidebar
+// template) and share seeded tickets, so keep the whole file in one worker.
+test.describe.configure({ mode: 'default' });
 
 const SLUG = 'e2e-ticket-layout';
 const CLOSED_SLUG = 'e2e-ticket-layout-closed';
+const PENDING_SLUG = 'e2e-ticket-layout-pending';
 const LONG_URL = `https://example.com/${'a'.repeat(300)}`;
 
-async function seedClosed() {
+async function seedWithStatus(
+  slug: string,
+  status: 'closed' | 'pending',
+  title = `E2E Ticket Layout ${status}`, // must slugify to `slug`
+) {
   const admin = createServiceRoleClient();
-  const { data: stale } = await admin.from('tickets').select('id').eq('slug', CLOSED_SLUG);
+  const { data: stale } = await admin.from('tickets').select('id').eq('slug', slug);
   if (stale?.length) {
     const ids = stale.map((t: { id: number }) => t.id);
     await admin.from('activity_log').delete().in('ticket_id', ids);
@@ -20,14 +30,17 @@ async function seedClosed() {
   const { data: type } = await admin.from('ticket_types').select('id').limit(1).single();
   const { data: ticket } = await admin
     .from('tickets')
-    .insert({ title: 'E2E Ticket Layout Closed', slug: CLOSED_SLUG, creator_id: alice!.id, type_id: type!.id, status: 'closed' })
+    .insert({ title, slug, creator_id: alice!.id, type_id: type!.id, status })
     .select('id, slug')
     .single();
   await admin.from('posts').insert({
-    ticket_id: ticket!.id, author_id: alice!.id, body: 'Closed original.', is_original: true, post_type: 'post',
+    ticket_id: ticket!.id, author_id: alice!.id, body: `${status} original.`, is_original: true, post_type: 'post',
   });
   return `/tickets/${ticket!.id}/${ticket!.slug}`;
 }
+
+let inlineId: string;
+let codeRefId: string;
 
 async function seed() {
   const admin = createServiceRoleClient();
@@ -48,13 +61,15 @@ async function seed() {
   await admin.from('posts').insert({
     ticket_id: ticket!.id, author_id: alice!.id, body: 'Original post.', is_original: true, post_type: 'post',
   });
-  const inlineId = randomUUID();
+  inlineId = randomUUID();
+  codeRefId = randomUUID();
   const { data: reply } = await admin
     .from('posts')
     .insert({
       ticket_id: ticket!.id,
       author_id: alice!.id,
-      body: `See ${LONG_URL}\n\n![shot](/attachments/${inlineId})`,
+      // The code span only mentions an id: that file is not shown inline.
+      body: `See ${LONG_URL}\n\n![shot](/attachments/${inlineId})\n\nSee \`/attachments/${codeRefId}\``,
       is_original: false,
       post_type: 'post',
     })
@@ -69,6 +84,10 @@ async function seed() {
       id: randomUUID(), post_id: reply!.id, uploader_id: alice!.id, legacy_blob_id: randomUUID(),
       original_filename: `${'long-file-name-'.repeat(12)}.txt`, file_size: 4321, mime_type: 'text/plain',
     },
+    {
+      id: codeRefId, post_id: reply!.id, uploader_id: alice!.id, legacy_blob_id: randomUUID(),
+      original_filename: 'code-ref-only.txt', file_size: 99, mime_type: 'text/plain',
+    },
   ]);
   if (attErr) throw new Error(attErr.message);
   const { data: agent } = await admin.from('profiles').select('id').eq('email', 'agent.smith@example.com').single();
@@ -80,9 +99,11 @@ test.describe('Ticket thread layout', () => {
   test.describe.configure({ mode: 'serial' });
   let url: string;
   let closedUrl: string;
+  let pendingUrl: string;
   test.beforeAll(async () => {
     url = await seed();
-    closedUrl = await seedClosed();
+    closedUrl = await seedWithStatus(CLOSED_SLUG, 'closed');
+    pendingUrl = await seedWithStatus(PENDING_SLUG, 'pending');
   });
 
   test('ticket number shows in header', async ({ page }) => {
@@ -156,12 +177,76 @@ test.describe('Ticket thread layout', () => {
     expect(Math.abs(edit!.y - del!.y)).toBeLessThanOrEqual(4);
   });
 
-  test('inline image is not repeated in the attachment list', async ({ page }) => {
-    await loginViaForm(page, 'agent.smith@example.com');
+  test('inline-referenced attachment is listed once, under "Shown inline", with Delete for the owner', async ({ page }) => {
+    await loginViaForm(page, 'alice@example.com');
     await page.goto(url);
-    const list = page.locator('[data-testid="attachment-list"]');
+    const list = page.getByTestId('attachment-list');
     await expect(list.getByText('long-file-name-', { exact: false })).toBeVisible();
-    await expect(list.getByText('inline-shot-only.png')).toHaveCount(0);
+    // A code span only mentions an id: that file keeps its full row.
+    await expect(list.getByText('code-ref-only.txt')).toBeVisible();
+    await expect(page.getByTestId('attachment-inline-list').getByText('code-ref-only.txt')).toHaveCount(0);
+
+    const inline = page.getByTestId('attachment-inline-list');
+    await expect(inline).toContainText('Shown inline:');
+    await expect(inline.getByText('inline-shot-only.png')).toHaveCount(1);
+    await expect(list.getByText('inline-shot-only.png')).toHaveCount(1);
+    await expect(inline.getByTestId(`attachment-${inlineId}`).getByTestId('delete-attachment-btn')).toBeVisible();
+  });
+
+  test('re-open hint shows for the creator on pending and closed tickets', async ({ page }) => {
+    await loginViaForm(page, 'alice@example.com');
+    for (const u of [pendingUrl, closedUrl]) {
+      await page.goto(u);
+      await expect(page.getByTestId('reopen-hint')).toHaveText('Replying will re-open this ticket.');
+    }
+    await page.goto(url);
+    await expect(page.getByTestId('main-reply-btn')).toBeVisible();
+    await expect(page.getByTestId('reopen-hint')).toHaveCount(0);
+  });
+
+  test('sidebar details are labelled sections with h3 headings and paired dt/dd', async ({ page }) => {
+    await loginViaForm(page, 'admin@example.com');
+    await page.goto(url);
+    const sidebar = page.getByTestId('ticket-sidebar');
+    for (const name of ['People', 'Dates', 'Actions']) {
+      await expect(sidebar.getByRole('heading', { level: 3, name, exact: true })).toBeVisible();
+      await expect(sidebar.getByRole('region', { name, exact: true })).toBeVisible();
+    }
+    const orphanDts = await sidebar.evaluate((root) =>
+      Array.from(root.querySelectorAll('dt'))
+        .filter((dt) => dt.nextElementSibling?.tagName !== 'DD')
+        .map((dt) => dt.textContent),
+    );
+    expect(orphanDts).toEqual([]);
+  });
+
+  test('post actions have touch-size targets on coarse pointers', async ({ browser }) => {
+    const ctx = await browser.newContext({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+    const page = await ctx.newPage();
+    try {
+      await loginViaForm(page, 'agent.smith@example.com');
+      await page.goto(url);
+      const post = page.locator('[data-post-kind="post"]').nth(1);
+      for (const id of ['edit-post-btn', 'delete-post-btn', 'clone-comment-btn']) {
+        const box = await post.getByTestId(id).first().boundingBox();
+        expect(box, id).not.toBeNull();
+        expect(box!.height, id).toBeGreaterThanOrEqual(44);
+      }
+    } finally {
+      await ctx.close();
+    }
+  });
+
+  test('title pencil shows a focus ring when focused by keyboard', async ({ page }) => {
+    await loginViaForm(page, 'alice@example.com');
+    await page.goto(url);
+    const pencil = page.getByTestId('edit-title-btn');
+    await pencil.focus();
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Tab');
+    await expect(pencil).toBeFocused();
+    const shadow = await pencil.evaluate((el) => getComputedStyle(el).boxShadow);
+    expect(shadow).not.toBe('none');
   });
 
   test.describe('phone width', () => {
@@ -252,6 +337,7 @@ test.describe('Markdown editor on /tickets/new', () => {
 });
 
 test.describe('Sidebar Tags tagbox', () => {
+  test.describe.configure({ mode: 'serial' }); // tests share the seeded ticket
   test.use({ viewport: { width: 1280, height: 720 } });
   const TAG_SLUG = 'e2e-ticket-layout-tags';
   // 50 chars (the tags.name limit): wider than the sidebar's tagbox minus the other chips.
@@ -324,5 +410,95 @@ test.describe('Sidebar Tags tagbox', () => {
     for (const l of m.labels) expect(l.truncated, `chip "${l.text}" is truncated`).toBe(false);
     expect(m.inputWidth, 'tagbox filter input width').toBeGreaterThan(20);
     expect(m.boxOverflow, 'tagbox horizontal overflow').toBeLessThanOrEqual(1);
+  });
+
+  test('tagbox chips carry their tag colour', async ({ page }) => {
+    await loginViaForm(page, 'agent.smith@example.com');
+    await page.goto(tagUrl);
+    const q = page.getByTestId('ticket-sidebar-survey').locator('.sd-question[data-name="tag_ids"]');
+    // Seeded tag "urgent" is #EF4444.
+    const chip = q.locator('.sd-tagbox-item', { hasText: /^urgent$/ });
+    await expect(chip).toBeVisible();
+    await expect
+      .poll(() => chip.evaluate((el) => getComputedStyle(el).boxShadow))
+      .toContain('rgb(239, 68, 68)');
+    const bg = await chip.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(bg).not.toMatch(/^rgba?\(255, 255, 255/);
+  });
+
+  test('agent template without a Tags question: read-only tag chips show instead', async ({ page }) => {
+    const admin = createServiceRoleClient();
+    const key = 'survey_ticket_detail_agent_template';
+    const { data: row } = await admin.from('app_settings').select('value').eq('key', key).single();
+    const original = row!.value as string;
+    const wrapper = JSON.parse(original) as { template: { pages: { elements: { name?: string }[] }[] } };
+    for (const pg of wrapper.template.pages) pg.elements = pg.elements.filter((el) => el.name !== 'tag_ids');
+    await admin.from('app_settings').update({ value: JSON.stringify(wrapper) }).eq('key', key);
+    try {
+      await loginViaForm(page, 'agent.smith@example.com');
+      await page.goto(tagUrl);
+      await expect(page.getByTestId('ticket-sidebar-survey')).toBeVisible();
+      await expect(page.locator('.sd-question[data-name="tag_ids"]')).toHaveCount(0);
+      const chips = page.getByTestId('ticket-tags');
+      await expect(chips).toBeVisible();
+      await expect(chips.getByText('urgent', { exact: true })).toBeVisible();
+    } finally {
+      await admin.from('app_settings').update({ value: original }).eq('key', key);
+    }
+  });
+});
+
+test.describe('Boolean custom field without a value', () => {
+  test.describe.configure({ mode: 'serial' });
+  // Not prefixed `E2E` (admin-setup.spec bulk-deletes `E2E%` custom fields).
+  const SUFFIX = randomUUID().slice(0, 8);
+  const CF_BOOL = `LayoutBool${SUFFIX}`;
+  const CF_TEXT = `LayoutText${SUFFIX}`;
+  const BOOL_SLUG = 'e2e-ticket-layout-bool-cf';
+  let boolUrl: string;
+  let boolTicketId: number;
+
+  test.beforeAll(async () => {
+    const admin = createServiceRoleClient();
+    await admin.from('custom_fields').insert([
+      { name: CF_BOOL, field_type: 'checkbox', is_required: false, options: null, default_value: null, display_order: 9200 },
+      { name: CF_TEXT, field_type: 'text', is_required: false, options: null, default_value: null, display_order: 9201 },
+    ]);
+    boolUrl = await seedWithStatus(BOOL_SLUG, 'pending', 'E2E Ticket Layout Bool CF');
+    boolTicketId = Number(boolUrl.split('/')[2]);
+    await admin.from('tickets').update({ custom_fields: {} }).eq('id', boolTicketId);
+  });
+
+  test.afterAll(async () => {
+    const admin = createServiceRoleClient();
+    try {
+      await admin.from('activity_log').delete().eq('ticket_id', boolTicketId);
+      await admin.from('posts').delete().eq('ticket_id', boolTicketId);
+      await admin.from('tickets').delete().eq('id', boolTicketId);
+    } finally {
+      await admin.from('custom_fields').delete().in('name', [CF_BOOL, CF_TEXT]);
+    }
+  });
+
+  test('renders unchecked (not indeterminate) and is not written when another field saves', async ({ page }) => {
+    await loginViaForm(page, 'agent.smith@example.com');
+    await page.goto(boolUrl);
+    const survey = page.getByTestId('ticket-sidebar-survey');
+    const box = survey.locator(`.sd-question[data-name="custom_fields.${CF_BOOL}"] input[type=checkbox]`);
+    await expect(box).toBeVisible({ timeout: 15000 });
+    expect(await box.evaluate((el) => (el as HTMLInputElement).indeterminate)).toBe(false);
+    await expect(box).not.toBeChecked();
+
+    const text = survey.locator(`.sd-question[data-name="custom_fields.${CF_TEXT}"] input`).first();
+    await text.fill('saved');
+    await text.blur();
+    await waitForSidebarSurveyAutosave(page);
+    const admin = createServiceRoleClient();
+    await expect
+      .poll(async () => {
+        const { data } = await admin.from('tickets').select('custom_fields').eq('id', boolTicketId).single();
+        return (data?.custom_fields ?? {}) as Record<string, unknown>;
+      }, { timeout: 15000 })
+      .toEqual({ [CF_TEXT]: 'saved' });
   });
 });

@@ -338,7 +338,7 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
                 type="button"
                 onClick={handleAddOk}
                 disabled={!newViewName.trim() || busy}
-                className="text-sm px-2 py-0.5 rounded bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50"
+                className="text-sm px-2 h-[36px] rounded bg-green-100 text-green-700 hover:bg-green-200 disabled:opacity-50"
                 aria-label="Confirm new view"
               >
                 Save
@@ -346,7 +346,7 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
               <button
                 type="button"
                 onClick={handleAddCancel}
-                className="text-sm px-2 py-0.5 rounded bg-gray-100 text-gray-700 hover:bg-gray-200"
+                className="text-sm px-2 h-[36px] rounded bg-gray-100 text-gray-700 hover:bg-gray-200"
                 aria-label="Cancel new view"
               >
                 Cancel

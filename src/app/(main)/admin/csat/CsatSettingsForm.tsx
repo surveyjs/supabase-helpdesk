@@ -69,7 +69,7 @@ export function CsatSettingsForm({ enabled, delay, emailVerified }: CsatSettings
                 name="csat_survey_delay"
                 value={option.value}
                 defaultChecked={delay === option.value}
-                className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
+                className="form-radio"
                 data-testid={`csat-delay-${option.value}`}
               />
               <span className="text-sm text-gray-700">{option.label}</span>

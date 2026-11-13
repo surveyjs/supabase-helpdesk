@@ -98,14 +98,14 @@ export function BulkActionToolbar({
           <button
             type="submit"
             disabled={isPending}
-            className="px-2 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+            className="px-2 h-[36px] text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
           >
             Apply
           </button>
           <button
             type="button"
             onClick={() => setActiveAction(null)}
-            className="text-xs text-gray-500"
+            className="h-[36px] text-xs text-gray-500"
           >
             ×
           </button>
@@ -144,14 +144,14 @@ export function BulkActionToolbar({
           <button
             type="submit"
             disabled={isPending}
-            className="px-2 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+            className="px-2 h-[36px] text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
           >
             Assign
           </button>
           <button
             type="button"
             onClick={() => setActiveAction(null)}
-            className="text-xs text-gray-500"
+            className="h-[36px] text-xs text-gray-500"
           >
             ×
           </button>
@@ -212,14 +212,14 @@ export function BulkActionToolbar({
             <button
               type="submit"
               disabled={isPending}
-              className="px-2 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+              className="px-2 h-[36px] text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
             >
               Add
             </button>
             <button
               type="button"
               onClick={() => setActiveAction(null)}
-              className="text-xs text-gray-500"
+              className="h-[36px] text-xs text-gray-500"
             >
               ×
             </button>
@@ -264,14 +264,14 @@ export function BulkActionToolbar({
             <button
               type="submit"
               disabled={isPending}
-              className="px-2 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+              className="px-2 h-[36px] text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
             >
               Remove
             </button>
             <button
               type="button"
               onClick={() => setActiveAction(null)}
-              className="text-xs text-gray-500"
+              className="h-[36px] text-xs text-gray-500"
             >
               ×
             </button>
@@ -310,14 +310,14 @@ export function BulkActionToolbar({
           <button
             type="submit"
             disabled={isPending}
-            className="px-2 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+            className="px-2 h-[36px] text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
           >
             Set
           </button>
           <button
             type="button"
             onClick={() => setActiveAction(null)}
-            className="text-xs text-gray-500"
+            className="h-[36px] text-xs text-gray-500"
           >
             ×
           </button>

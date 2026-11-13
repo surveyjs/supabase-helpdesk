@@ -139,7 +139,7 @@ export default async function UsersPage({
             className="text-xs form-input"
             aria-label={`Tier expiration${idSuffix}`}
           />
-          <button type="submit" className="px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200">Save</button>
+          <button type="submit" className="px-2 h-[36px] text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200">Save</button>
         </form>
       </details>
     ) : null;

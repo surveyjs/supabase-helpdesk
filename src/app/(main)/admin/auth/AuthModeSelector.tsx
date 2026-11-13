@@ -55,7 +55,7 @@ export function AuthModeSelector({ initialMode }: { initialMode: string }) {
             value="built-in"
             checked={mode === 'built-in'}
             onChange={() => handleModeChange('built-in')}
-            className="mt-0.5 h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
+            className="mt-0.5 form-radio"
           />
           <div>
             <div className="text-sm font-medium text-gray-900">Built-in</div>
@@ -75,7 +75,7 @@ export function AuthModeSelector({ initialMode }: { initialMode: string }) {
             value="external"
             checked={mode === 'external'}
             onChange={() => handleModeChange('external')}
-            className="mt-0.5 h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
+            className="mt-0.5 form-radio"
           />
           <div>
             <div className="text-sm font-medium text-gray-900">External (OAuth/OIDC)</div>

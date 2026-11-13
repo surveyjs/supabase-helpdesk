@@ -74,13 +74,13 @@ function PolicySection({ policies }: { policies: SlaPolicy[] }) {
                         className="w-16 text-xs ml-1 form-input" placeholder="FR min" aria-label={`${policy.name} — First response (min)`} />
                       <input type="number" name="resolution_minutes" defaultValue={policy.resolution_minutes} min={1}
                         className="w-16 text-xs ml-1 form-input" placeholder="Res min" aria-label={`${policy.name} — Resolution (min)`} />
-                      <button type="submit" className="ml-1 px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200">
+                      <button type="submit" className="ml-1 px-2 h-[36px] text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200">
                         Update
                       </button>
                     </form>
                     <form action={deleteSlaPolicy} className="inline">
                       <input type="hidden" name="policy_id" value={policy.id} />
-                      <button type="submit" className="px-2 py-0.5 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200"
+                      <button type="submit" className="px-2 h-[36px] text-xs bg-red-100 text-red-700 rounded hover:bg-red-200"
                         data-testid="delete-policy-btn">
                         Delete
                       </button>

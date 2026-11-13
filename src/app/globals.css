@@ -44,6 +44,10 @@ html {
   textarea.form-input {
     @apply py-1.5;
   }
+  input[type='radio'].form-radio {
+    @apply h-4 w-4 rounded-full accent-blue-600;
+    @apply focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-1 focus-visible:outline-none;
+  }
   input[type='checkbox'].form-checkbox {
     @apply h-4 w-4 accent-blue-600;
     @apply focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-1 focus-visible:outline-none;

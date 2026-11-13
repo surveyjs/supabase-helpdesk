@@ -84,7 +84,7 @@ export default async function AdminPage() {
   if (emailState === 'not-configured') {
     attention.push({ text: 'Outbound e-mail is not configured, so notifications are not sent.', href: '/admin/email' });
   } else if (emailState === 'not-verified') {
-    attention.push({ text: 'Outbound e-mail is not verified, so notifications may not be sent.', href: '/admin/email' });
+    attention.push({ text: 'Outbound e-mail is not verified, so notifications are not sent.', href: '/admin/email' });
   }
   if (shouldWarnTierSecret(tierCount.error ? null : (tierCount.count ?? null), tierApi.configured)) {
     attention.push({ text: 'Tier API secret is not set, so external tier assignment is unavailable.', href: '/admin/tiers' });

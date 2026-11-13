@@ -574,6 +574,34 @@ test.describe('Auth External', () => {
     await page.getByRole('button', { name: 'Log in' }).click();
   }
 
+  /**
+   * Submits the fallback form in External mode and reports what the server did.
+   * A parallel worker's loginViaForm() resets auth_mode to 'built-in', and if
+   * that lands before the server action reads it, the attempt is an ordinary
+   * built-in sign-in that says nothing about External mode. Only this file
+   * ever sets 'external', so still reading 'external' once the answer is in
+   * proves the mode held for the whole attempt; otherwise try again.
+   */
+  async function fallbackSignInOutcome(page: Page, email: string): Promise<'refused' | 'signed-in' | 'none'> {
+    const svc = createServiceRoleClient();
+    for (let attempt = 1; ; attempt++) {
+      await submitFallbackForm(page, email);
+      const outcome = await Promise.race([
+        page
+          .getByText('Invalid email or password.')
+          .waitFor({ timeout: 15000 })
+          .then(() => 'refused' as const, () => 'none' as const),
+        page
+          .waitForURL((url) => url.pathname !== '/login', { timeout: 15000 })
+          .then(() => 'signed-in' as const, () => 'none' as const),
+      ]);
+      const { data, error } = await svc.from('app_settings').select('value').eq('key', 'auth_mode').single();
+      if (error) throw new Error(`read auth_mode: ${error.message}`);
+      if (data.value === 'external') return outcome;
+      if (attempt === 5) throw new Error('auth_mode was reset to built-in during every attempt');
+    }
+  }
+
   test('an admin can sign in with a password through the no_redirect fallback', async ({ page }) => {
     await submitFallbackForm(page, 'admin@example.com');
     await page.waitForURL((url) => url.pathname !== '/login', { timeout: 15000 });
@@ -581,8 +609,8 @@ test.describe('Auth External', () => {
   });
 
   test('a non-admin is refused password sign-in in external mode, even with the right password', async ({ page }) => {
-    await submitFallbackForm(page, 'alice@example.com');
-    await expect(page.getByText('Invalid email or password.')).toBeVisible({ timeout: 15000 });
+    expect(await fallbackSignInOutcome(page, 'alice@example.com')).toBe('refused');
+    await expect(page.getByText('Invalid email or password.')).toBeVisible();
     expect(new URL(page.url()).pathname).toBe('/login');
 
     // No session was left behind: a protected page bounces back to /login.

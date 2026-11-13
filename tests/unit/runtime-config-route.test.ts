@@ -38,3 +38,15 @@ describe('GET /runtime-config.js', () => {
     expect(res.headers.get('cache-control')).toBe('no-store');
   });
 });
+
+describe('runtimeConfigScript()', () => {
+  it('matches the route body and cannot close a script element', async () => {
+    vi.stubEnv('APP_URL', 'https://help.example.com');
+    vi.stubEnv('SUPABASE_ANON_KEY', 'anon</script><script>alert(1)');
+    const { runtimeConfigScript } = await import('@/lib/runtime-config');
+    const script = runtimeConfigScript();
+    expect(script).toBe(await GET().text());
+    expect(script).not.toContain('</script>');
+    vi.unstubAllEnvs();
+  });
+});

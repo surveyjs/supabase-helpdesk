@@ -26,8 +26,7 @@ test.describe('Admin AI Configuration', () => {
 
   test('admin can navigate to /admin/ai', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.locator('details summary').click();
-    await expect(page.getByRole('menuitem', { name: 'Setup' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('link', { name: 'Setup' })).toBeVisible({ timeout: 10000 });
     await gotoAdmin(page, '/admin/ai');
 
     await expect(page.getByRole('heading', { name: 'AI Configuration' })).toBeVisible({ timeout: 10000 });
@@ -189,7 +188,7 @@ test.describe('Ticket detail AI features', () => {
 
     // Find a ticket to view
     await page.goto('/tickets');
-    const firstTicket = page.locator('.hidden.md\\:block a[href*="/tickets/"]').first();
+    const firstTicket = page.getByTestId('agent-ticket-table').locator('a[href*="/tickets/"]').first();
     if (await firstTicket.isVisible()) {
       await firstTicket.click();
       await page.waitForTimeout(2000);
@@ -208,7 +207,7 @@ test.describe('Ticket detail AI features', () => {
 
     // Navigate to agent dashboard and click first ticket
     await page.goto('/agent');
-    const firstTicket = page.locator('.hidden.md\\:block a[href*="/tickets/"]').first();
+    const firstTicket = page.getByTestId('agent-ticket-table').locator('a[href*="/tickets/"]').first();
     if (await firstTicket.isVisible()) {
       await firstTicket.click();
       await page.waitForTimeout(2000);
@@ -241,7 +240,7 @@ test.describe('Ticket detail AI features', () => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
 
-    const firstTicket = page.locator('.hidden.md\\:block a[href*="/tickets/"]').first();
+    const firstTicket = page.getByTestId('agent-ticket-table').locator('a[href*="/tickets/"]').first();
     await expect(firstTicket).toBeVisible({ timeout: 10000 });
     await firstTicket.click();
     await page.waitForLoadState('domcontentloaded');
@@ -268,7 +267,7 @@ test.describe('AI Summary panel', () => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
 
-    const firstTicket = page.locator('.hidden.md\\:block a[href*="/tickets/"]').first();
+    const firstTicket = page.getByTestId('agent-ticket-table').locator('a[href*="/tickets/"]').first();
     if (await firstTicket.isVisible()) {
       await firstTicket.click();
       await page.waitForTimeout(2000);
@@ -282,7 +281,7 @@ test.describe('AI Summary panel', () => {
     await loginAs(page, 'alice@example.com');
     await page.goto('/tickets');
 
-    const firstTicket = page.locator('.hidden.md\\:block a[href*="/tickets/"]').first();
+    const firstTicket = page.getByTestId('agent-ticket-table').locator('a[href*="/tickets/"]').first();
     if (await firstTicket.isVisible()) {
       await firstTicket.click();
       await page.waitForTimeout(2000);
@@ -307,7 +306,7 @@ test.describe('Generate KB Article', () => {
     await page.goto('/agent');
 
     // Find an open ticket
-    const firstTicket = page.locator('.hidden.md\\:block a[href*="/tickets/"]').first();
+    const firstTicket = page.getByTestId('agent-ticket-table').locator('a[href*="/tickets/"]').first();
     if (await firstTicket.isVisible()) {
       await firstTicket.click();
       await page.waitForTimeout(2000);
@@ -330,7 +329,7 @@ test.describe('Generate KB Article', () => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent');
 
-    const firstTicket = page.locator('.hidden.md\\:block a[href*="/tickets/"]').first();
+    const firstTicket = page.getByTestId('agent-ticket-table').locator('a[href*="/tickets/"]').first();
     if (await firstTicket.isVisible()) {
       await firstTicket.click();
       await page.waitForTimeout(2000);

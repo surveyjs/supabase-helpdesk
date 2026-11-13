@@ -56,12 +56,13 @@ export default async function AdminAuthPage() {
         />
 
         <div className="mt-6">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Redirect URI</label>
+          <label htmlFor="redirect-uri-input" className="block text-sm font-medium text-gray-700 mb-1">Redirect URI</label>
           <div className="flex items-center">
             <input
               type="text"
               value={redirectUri}
               readOnly
+              id="redirect-uri-input"
               className="block w-full rounded border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500"
               data-testid="redirect-uri"
             />

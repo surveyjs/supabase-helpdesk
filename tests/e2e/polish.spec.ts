@@ -57,12 +57,51 @@ test.describe('Polish', () => {
       expect(await mobileMenu.locator('a').count()).toBeGreaterThan(0);
     });
 
+    test('mobile menu offers Sign out and Setup for admin', async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await loginAs(page, 'admin@example.com');
+      await page.goto('/agent');
+      await page.locator('button[aria-controls="mobile-nav-menu"]').click();
+      const mobileMenu = page.locator('#mobile-nav-menu');
+      await expect(mobileMenu).toBeVisible();
+      await expect(mobileMenu.getByRole('link', { name: 'Setup' })).toBeVisible();
+      await expect(mobileMenu.getByRole('link', { name: 'My Tickets' })).toBeVisible();
+      await expect(mobileMenu.getByRole('link', { name: 'Profile' })).toBeVisible();
+      await expect(mobileMenu.getByRole('button', { name: 'Sign out' })).toBeVisible();
+    });
+
+    test('mobile menu keeps Sign out reachable in landscape', async ({ page }) => {
+      await page.setViewportSize({ width: 667, height: 375 });
+      await loginAs(page, 'admin@example.com');
+      await page.goto('/agent');
+      await page.locator('button[aria-controls="mobile-nav-menu"]').click();
+      // The panel itself must fit the viewport (and scroll internally) instead of spilling below it
+      const panel = (await page.locator('#mobile-nav-menu').boundingBox())!;
+      expect(panel.y + panel.height).toBeLessThanOrEqual(375);
+      const signOut = page.locator('#mobile-nav-menu').getByRole('button', { name: 'Sign out' });
+      await signOut.scrollIntoViewIfNeeded();
+      await expect(signOut).toBeVisible();
+      const box = await signOut.boundingBox();
+      expect(box!.y + box!.height).toBeLessThanOrEqual(375);
+    });
+
+    test('mobile menu for regular user has Sign out but no Setup', async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await loginAs(page, 'alice@example.com');
+      await page.goto('/tickets');
+      await page.locator('button[aria-controls="mobile-nav-menu"]').click();
+      const mobileMenu = page.locator('#mobile-nav-menu');
+      await expect(mobileMenu).toBeVisible();
+      await expect(mobileMenu.getByRole('button', { name: 'Sign out' })).toBeVisible();
+      await expect(mobileMenu.getByRole('link', { name: 'Setup' })).toHaveCount(0);
+    });
+
     test('ticket list uses card layout on mobile', async ({ page }) => {
       await loginAs(page, 'agent.smith@example.com');
       await page.goto('/agent');
       await page.waitForLoadState('networkidle');
       // The mobile card layout should be visible, desktop table hidden
-      const mobileCards = page.locator('.md\\:hidden');
+      const mobileCards = page.getByTestId('agent-ticket-cards');
       // At least the mobile layout container should exist
       await expect(mobileCards.first()).toBeVisible({ timeout: 5000 });
     });
@@ -98,6 +137,35 @@ test.describe('Polish', () => {
       expect(box!.width).toBeGreaterThanOrEqual(44);
       expect(box!.height).toBeGreaterThanOrEqual(44);
     });
+  });
+
+  test.describe('Admin nav widths', () => {
+    for (const width of [768, 1024]) {
+      test(`admin nav bar does not overflow at ${width}px`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+        await loginAs(page, 'admin@example.com');
+        await page.goto('/agent');
+        await page.waitForLoadState('networkidle');
+        const m = await page.evaluate(() => {
+          const nav = document.querySelector('nav[aria-label="Main navigation"]')!;
+          const bar = nav.firstElementChild as HTMLElement;
+          const kids = Array.from(bar.querySelectorAll('a, summary, button')).filter(
+            (el) => (el as HTMLElement).offsetParent !== null,
+          ) as HTMLElement[];
+          const hs = kids.map((el) => el.getBoundingClientRect().height);
+          return {
+            doc: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+            bar: bar.scrollWidth - bar.clientWidth,
+            tallest: Math.max(...hs),
+            barH: bar.getBoundingClientRect().height,
+          };
+        });
+        expect(m.doc).toBeLessThanOrEqual(0);
+        expect(m.bar).toBeLessThanOrEqual(0);
+        // A wrapped bar would be much taller than a single 44px row
+        expect(m.barH).toBeLessThan(60);
+      });
+    }
   });
 
   test.describe('Mobile Tablet', () => {

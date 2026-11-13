@@ -83,6 +83,8 @@ export default async function KbManagePage({
 
   return (
     <div>
+      <h1 className="text-2xl font-semibold text-gray-900 mb-6">Manage Articles</h1>
+
       {/* KB Visibility toggle */}
       <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
         <form action={toggleKbVisibility} className="flex items-center gap-3">

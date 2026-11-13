@@ -5,32 +5,11 @@ import { deleteTicket } from '@/lib/actions/delete-ticket';
 
 export function DeleteTicketButton({
   ticketId,
-  isClosed,
 }: {
   ticketId: number;
-  isClosed: boolean;
 }) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [isPending, startTransition] = useTransition();
-
-  if (isClosed) {
-    return (
-      <div>
-        <button
-          type="button"
-          disabled
-          className="px-3 py-1 text-xs rounded bg-red-100 text-red-400 cursor-not-allowed"
-          title="Closed tickets cannot be deleted. Re-open the ticket first."
-          data-testid="delete-ticket-btn-disabled"
-        >
-          Delete Ticket
-        </button>
-        <p className="text-xs text-red-500 mt-1">
-          Closed tickets cannot be deleted. Re-open first.
-        </p>
-      </div>
-    );
-  }
 
   return (
     <div>

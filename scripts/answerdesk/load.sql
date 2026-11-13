@@ -7,6 +7,8 @@
 --   adimport.user_map    source Users.Id      -> auth.users.id
 --   adimport.ticket_map  source Tickets.Id    -> tickets.id (BIGSERIAL)
 --   adimport.category_map / type_map / tag_map (source int ids)
+--   adimport.ticket_friendly  Tickets.FriendlyId number -> source Tickets.Id (all
+--                        source tickets; relink.sql, included below)
 --
 -- A source user is linked to an EXISTING account (instead of creating one)
 -- when the account has the same id, the same auth.surveyjs.io subject
@@ -296,6 +298,13 @@ JOIN public.tickets t ON t.id = tm.ticket_id
 WHERE NOT EXISTS (SELECT 1 FROM public.activity_log a WHERE a.ticket_id = t.id AND a.action = 'created');
 
 -- ------------------------------------------------------------------
+-- 6b. Cross-ticket references {'FriendlyId':'T123',...} and answerdesk.io
+--     ticket URLs -> /tickets/<id>/<slug> or "legacy ticket" text.
+-- ------------------------------------------------------------------
+\i /tmp/adimport/relink.sql
+CREATE TEMP TABLE relinked ON COMMIT DROP AS SELECT adimport.relink_ticket_refs() AS n;
+
+-- ------------------------------------------------------------------
 -- 7. Restore historical updated_at (post inserts bumped it to now()).
 --    Triggers off for this statement only.
 -- ------------------------------------------------------------------
@@ -326,7 +335,8 @@ SELECT * FROM (VALUES
   ('staged attachments w/o blob in Storage', (SELECT count(*) FROM adimport.s_attachments s WHERE NOT EXISTS (SELECT 1 FROM storage.objects o WHERE o.bucket_id = 'attachments' AND o.name = 'migrated/' || s.blob_id::text))),
   ('ticket tags',                     (SELECT count(*) FROM public.ticket_tags g JOIN adimport.ticket_map m ON m.ticket_id = g.ticket_id)),
   ('followers',                       (SELECT count(*) FROM public.ticket_followers f JOIN adimport.ticket_map m ON m.ticket_id = f.ticket_id)),
-  ('csat ratings',                    (SELECT count(*) FROM public.csat_ratings c JOIN adimport.ticket_map m ON m.ticket_id = c.ticket_id))
+  ('csat ratings',                    (SELECT count(*) FROM public.csat_ratings c JOIN adimport.ticket_map m ON m.ticket_id = c.ticket_id)),
+  ('ticket refs relinked',            (SELECT n FROM relinked))
 ) v(item, n);
 
 INSERT INTO adimport.runs (summary) SELECT jsonb_object_agg(item, n) FROM summary;

@@ -13,19 +13,19 @@ export type ReportFilters = {
 
 export type TicketVolumeRow = { period: string; count: number; status?: string };
 export type ResolutionMetrics = {
-  avgFirstResponse: number;
-  avgResolution: number;
-  medianResolution: number;
-  bySeverity: Record<string, { avgFirstResponse: number; avgResolution: number; medianResolution: number }>;
+  avgFirstResponse: number | null;
+  avgResolution: number | null;
+  medianResolution: number | null;
+  bySeverity: Record<string, { avgFirstResponse: number | null; avgResolution: number | null; medianResolution: number | null }>;
 };
 export type AgentPerformanceRow = {
   agentId: string;
   displayName: string;
   assigned: number;
   resolved: number;
-  avgResponseTime: number;
-  avgResolutionTime: number;
-  avgCsat: number;
+  avgResponseTime: number | null;
+  avgResolutionTime: number | null;
+  avgCsat: number | null;
 };
 export type CsatSummaryData = {
   average: number;
@@ -33,9 +33,9 @@ export type CsatSummaryData = {
   trend: Array<{ period: string; average: number }>;
 };
 export type SlaComplianceData = {
-  firstResponseCompliance: number;
-  resolutionCompliance: number;
-  bySeverity: Record<string, { firstResponseCompliance: number; resolutionCompliance: number }>;
+  firstResponseCompliance: number | null;
+  resolutionCompliance: number | null;
+  bySeverity: Record<string, { firstResponseCompliance: number | null; resolutionCompliance: number | null }>;
   breachedTickets: Array<{ ticketId: number; title: string; slaType: string; target: number; actual: number }>;
 };
 export type BacklogData = {
@@ -45,6 +45,31 @@ export type BacklogData = {
   unassigned: number;
   trend: Array<{ date: string; open: number; pending: number }>;
 };
+
+const PAGE_SIZE = 1000; // PostgREST max_rows
+
+/**
+ * Fetches every row of a query by paging with `.range()` until a short page.
+ * `page` must apply a stable order so pages don't overlap.
+ */
+export async function fetchAllRows<T>(
+  page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error?: { message: string } | null }>,
+): Promise<T[]> {
+  const all: T[] = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await page(from, from + PAGE_SIZE - 1);
+    if (error) throw new Error(error.message);
+    const rows = data ?? [];
+    all.push(...rows);
+    if (rows.length < PAGE_SIZE) return all;
+  }
+}
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function applyFilters(q: any, timeRange: TimeRange, filters?: ReportFilters, agentScope?: string, tierCreatorIds?: string[]) {
@@ -86,9 +111,9 @@ export async function getTicketVolumeData(
   const supabase = client ?? createServiceRoleClient();
   const tierCreatorIds = await getTierCreatorIds(filters, supabase);
   if (tierCreatorIds && tierCreatorIds.length === 0) return [];
-  const q = applyFilters(supabase.from('tickets').select('created_at, status'), timeRange, filters, agentScope, tierCreatorIds);
-  const { data: tickets } = await q;
-  if (!tickets || tickets.length === 0) return [];
+  const q = applyFilters(supabase.from('tickets').select('created_at, status'), timeRange, filters, agentScope, tierCreatorIds).order('id');
+  const tickets = await fetchAllRows<{ created_at: string; status: string | null }>((from, to) => q.range(from, to));
+  if (tickets.length === 0) return [];
 
   const grouped: Record<string, Record<string, number>> = {};
   for (const t of tickets) {
@@ -134,18 +159,19 @@ export async function getResolutionMetrics(
 
   // Get tickets with SLA timers joined
   const tierCreatorIds = await getTierCreatorIds(filters, supabase);
-  if (tierCreatorIds && tierCreatorIds.length === 0) return { avgFirstResponse: 0, avgResolution: 0, medianResolution: 0, bySeverity: {} };
+  if (tierCreatorIds && tierCreatorIds.length === 0) return { avgFirstResponse: null, avgResolution: null, medianResolution: null, bySeverity: {} };
   const q = applyFilters(
     supabase
       .from('tickets')
       .select('id, severity, created_at, sla_timers(first_response_at, resolved_at)')
       .not('sla_timers', 'is', null),
     timeRange, filters, agentScope, tierCreatorIds,
-  );
-  const { data: tickets } = await q;
+  ).order('id');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tickets = await fetchAllRows<any>((from, to) => q.range(from, to));
 
-  const empty: ResolutionMetrics = { avgFirstResponse: 0, avgResolution: 0, medianResolution: 0, bySeverity: {} };
-  if (!tickets || tickets.length === 0) return empty;
+  const empty: ResolutionMetrics = { avgFirstResponse: null, avgResolution: null, medianResolution: null, bySeverity: {} };
+  if (tickets.length === 0) return empty;
 
   const firstResponseTimes: number[] = [];
   const resolutionTimes: number[] = [];
@@ -170,9 +196,9 @@ export async function getResolutionMetrics(
     }
   }
 
-  const avg = (arr: number[]) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
+  const avg = (arr: number[]) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null);
   const median = (arr: number[]) => {
-    if (arr.length === 0) return 0;
+    if (arr.length === 0) return null;
     const s = [...arr].sort((a, b) => a - b);
     const mid = Math.floor(s.length / 2);
     return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
@@ -212,20 +238,27 @@ export async function getAgentPerformanceData(
     .gte('created_at', timeRange.start.toISOString())
     .lte('created_at', timeRange.end.toISOString());
   if (agentId) q = q.eq('assigned_agent_id', agentId);
-  const { data: tickets } = await q;
+  q = q.order('id');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tickets = await fetchAllRows<any>((from, to) => q.range(from, to));
 
-  if (!tickets || tickets.length === 0) return [];
+  if (tickets.length === 0) return [];
 
   // Get CSAT ratings
-  const ticketIds = tickets.map((t) => t.id);
-  const { data: csatRatings } = await supabase
-    .from('csat_ratings')
-    .select('ticket_id, rating')
-    .in('ticket_id', ticketIds)
-    .not('rating', 'is', null);
+  const ticketIds: number[] = tickets.map((t) => t.id);
+  const csatRatings: { ticket_id: number; rating: number | null }[] = [];
+  for (const ids of chunk(ticketIds, 200)) {
+    const cq = supabase
+      .from('csat_ratings')
+      .select('ticket_id, rating')
+      .in('ticket_id', ids)
+      .not('rating', 'is', null)
+      .order('id');
+    csatRatings.push(...(await fetchAllRows<{ ticket_id: number; rating: number | null }>((from, to) => cq.range(from, to))));
+  }
 
   const csatByTicket: Record<number, number> = {};
-  for (const r of csatRatings || []) {
+  for (const r of csatRatings) {
     csatByTicket[r.ticket_id] = r.rating!;
   }
 
@@ -257,7 +290,7 @@ export async function getAgentPerformanceData(
     if (csatByTicket[t.id] !== undefined) agentData[aid].csats.push(csatByTicket[t.id]);
   }
 
-  const avg = (arr: number[]) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
+  const avg = (arr: number[]) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null);
 
   return Object.entries(agentData).map(([aid, d]) => ({
     agentId: aid,
@@ -280,44 +313,51 @@ export async function getCsatSummaryData(
 ): Promise<CsatSummaryData> {
   const supabase = client ?? createServiceRoleClient();
 
-  // If tier filter, pre-filter by creator IDs
+  const emptyCsat: CsatSummaryData = { average: 0, distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, trend: [] };
+
+  // Restrict to tickets matching the tier filter and/or agent scope
+  let allowedIds: number[] | null = null;
+  const intersect = (ids: number[]) => {
+    const set = new Set(ids);
+    allowedIds = allowedIds ? allowedIds.filter((id) => set.has(id)) : ids;
+  };
   const tierCreatorIds = await getTierCreatorIds(filters, supabase);
-  let tierTicketIds: number[] | null = null;
   if (tierCreatorIds) {
-    if (tierCreatorIds.length === 0) return { average: 0, distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, trend: [] };
-    const { data: tierTickets } = await supabase
-      .from('tickets')
-      .select('id')
-      .in('creator_id', tierCreatorIds);
-    tierTicketIds = (tierTickets ?? []).map((t) => t.id);
-    if (tierTicketIds.length === 0) return { average: 0, distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, trend: [] };
+    if (tierCreatorIds.length === 0) return emptyCsat;
+    const ids: number[] = [];
+    for (const creators of chunk(tierCreatorIds, 200)) {
+      const tq = supabase.from('tickets').select('id').in('creator_id', creators).order('id');
+      ids.push(...(await fetchAllRows<{ id: number }>((from, to) => tq.range(from, to))).map((t) => t.id));
+    }
+    intersect(ids);
   }
-
-  let q = supabase
-    .from('csat_ratings')
-    .select('rating, submitted_at, ticket_id')
-    .not('rating', 'is', null)
-    .gte('submitted_at', timeRange.start.toISOString())
-    .lte('submitted_at', timeRange.end.toISOString());
-
-  // If agent-scoped, filter by tickets assigned to agent
   if (agentScope) {
-    const { data: agentTickets } = await supabase
-      .from('tickets')
-      .select('id')
-      .eq('assigned_agent_id', agentScope);
-    const ids = (agentTickets || []).map((t) => t.id);
-    if (ids.length === 0) return { average: 0, distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, trend: [] };
-    q = q.in('ticket_id', ids);
+    const aq = supabase.from('tickets').select('id').eq('assigned_agent_id', agentScope).order('id');
+    intersect((await fetchAllRows<{ id: number }>((from, to) => aq.range(from, to))).map((t) => t.id));
   }
+  if (allowedIds && (allowedIds as number[]).length === 0) return emptyCsat;
 
-  // Filter by tier
-  if (tierTicketIds) {
-    q = q.in('ticket_id', tierTicketIds);
+  type RatingRow = { rating: number | null; submitted_at: string | null; ticket_id: number };
+  const ratingsQuery = () =>
+    supabase
+      .from('csat_ratings')
+      .select('rating, submitted_at, ticket_id')
+      .not('rating', 'is', null)
+      .gte('submitted_at', timeRange.start.toISOString())
+      .lte('submitted_at', timeRange.end.toISOString())
+      .order('id');
+
+  const ratings: RatingRow[] = [];
+  if (allowedIds) {
+    for (const ids of chunk(allowedIds as number[], 200)) {
+      const rq = ratingsQuery().in('ticket_id', ids);
+      ratings.push(...(await fetchAllRows<RatingRow>((from, to) => rq.range(from, to))));
+    }
+  } else {
+    const rq = ratingsQuery();
+    ratings.push(...(await fetchAllRows<RatingRow>((from, to) => rq.range(from, to))));
   }
-
-  const { data: ratings } = await q;
-  if (!ratings || ratings.length === 0) return { average: 0, distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, trend: [] };
+  if (ratings.length === 0) return emptyCsat;
 
   const distribution: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
   let sum = 0;
@@ -360,10 +400,12 @@ export async function getSlaComplianceData(
   if (agentScope) {
     q = q.eq('tickets.assigned_agent_id', agentScope);
   }
+  q = q.order('id');
 
-  const { data: timers } = await q;
-  if (!timers || timers.length === 0) {
-    return { firstResponseCompliance: 0, resolutionCompliance: 0, bySeverity: {}, breachedTickets: [] };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const timers = await fetchAllRows<any>((from, to) => q.range(from, to));
+  if (timers.length === 0) {
+    return { firstResponseCompliance: null, resolutionCompliance: null, bySeverity: {}, breachedTickets: [] };
   }
 
   let frMet = 0;
@@ -410,7 +452,7 @@ export async function getSlaComplianceData(
     }
   }
 
-  const pct = (met: number, total: number) => (total ? Math.round((met / total) * 100) : 0);
+  const pct = (met: number, total: number) => (total ? Math.round((met / total) * 100) : null);
   const bySeverity: SlaComplianceData['bySeverity'] = {};
   for (const [sev, d] of Object.entries(bySev)) {
     bySeverity[sev] = {
@@ -440,9 +482,11 @@ export async function getBacklogData(
     .select('id, status, severity, assigned_agent_id, created_at, updated_at')
     .in('status', ['open', 'pending']);
   if (agentScope) q = q.eq('assigned_agent_id', agentScope);
-  const { data: tickets } = await q;
+  q = q.order('id');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tickets = await fetchAllRows<any>((from, to) => q.range(from, to));
 
-  if (!tickets || tickets.length === 0) {
+  if (tickets.length === 0) {
     return { open: 0, pending: 0, bySeverity: {}, unassigned: 0, trend: [] };
   }
 

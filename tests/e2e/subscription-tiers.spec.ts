@@ -1,6 +1,7 @@
 import { test, expect, Page } from './fixtures';
 import { createServiceRoleClient } from '../helpers/supabase';
 import { loginViaForm } from '../helpers/auth';
+import { openViewsFilters } from '../helpers/agent-dashboard';
 
 async function loginAs(page: Page, email: string, password = 'Password123') {
   await loginViaForm(page, email, password);
@@ -79,7 +80,7 @@ test.describe('Subscription Tiers', () => {
     await textInputs.nth(total - 2).fill('e2e-test-tier');
     await textInputs.nth(total - 1).fill('E2E Test Tier');
 
-    await page.getByRole('button', { name: 'Complete' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     // Wait for the success message rendered by AdminSurveyForm.
     const liveMsg = page.getByText(/Tiers saved|Error:/);
     await expect(liveMsg).toBeVisible({ timeout: 15000 });
@@ -108,7 +109,7 @@ test.describe('Subscription Tiers', () => {
     // The e2e-test-tier was added last (highest sort_order). Remove the last row.
     await survey.locator('.sd-matrixdynamic__remove-btn').last().click();
 
-    await page.getByRole('button', { name: 'Complete' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     await expect(page.getByText(/Tiers saved|Error:/)).toBeVisible({ timeout: 15000 });
 
     await gotoAdmin(page, '/admin/tiers');
@@ -136,7 +137,7 @@ test.describe('Subscription Tiers', () => {
     await expect(page.getByRole('link', { name: 'Agent Dashboard' })).toHaveAttribute('aria-current', 'page');
 
     // Expand the consolidated Views & Filters panel
-    await page.getByText(/Views & Filters:/).click();
+    await openViewsFilters(page);
 
     // There should be a tier filter dropdown
     const tierFilter = page.getByLabel('Tier');
@@ -220,11 +221,19 @@ test.describe('Subscription Tiers', () => {
 
   // ── Admin users page tier column ────────────────
 
-  test('admin users page shows tier column', async ({ page }) => {
+  test('admin users page shows tier column when a user on the page has a tier', async ({ page }) => {
+    // Alice has a seeded tier (Enterprise). Search for her so she is on the page regardless of how many users exist.
     await loginAs(page, 'admin@example.com');
-    await gotoAdmin(page, '/admin/users');
-
-    // Wait for table to load
+    await gotoAdmin(page, '/admin/users?q=alice@example.com');
     await expect(page.getByRole('columnheader', { name: 'Tier' })).toBeVisible({ timeout: 10000 });
+    const aliceRow = page.getByRole('row').filter({ hasText: 'alice@example.com' });
+    await expect(aliceRow.getByTestId(/^user-tier-/).locator('span').first()).toHaveText('Enterprise');
+  });
+
+  test('admin users page hides the empty Tier column', async ({ page }) => {
+    await loginAs(page, 'admin@example.com');
+    await gotoAdmin(page, '/admin/users?q=agent.smith@example.com');
+    await expect(page.getByRole('columnheader', { name: 'Status' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('columnheader', { name: 'Tier' })).toHaveCount(0);
   });
 });

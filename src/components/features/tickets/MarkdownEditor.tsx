@@ -5,6 +5,8 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import MdEditorLib from 'react-markdown-editor-lite';
 import CannedResponsePlugin from './CannedResponsePlugin';
 import AttachFilePlugin from './AttachFilePlugin';
+import HeaderPlugin from './HeaderPlugin';
+import AutoPreviewPlugin from './AutoPreviewPlugin';
 import type { InlineAttachmentUploaded } from './inlineAttachmentUpload';
 import { renderMarkdown } from '@/lib/utils/markdown';
 
@@ -17,10 +19,21 @@ const COMPACT_MIN_HEIGHT_FLOOR_PX = 120;
 
 type MdEditorLibWithUse = {
   use: (plugin: unknown) => void;
+  unuse: (plugin: unknown) => void;
+  plugins: Array<[{ pluginName?: string }, unknown]>;
 };
 
 function registerEditorPlugins() {
-  const registerPluginFn = (MdEditorLib as unknown as MdEditorLibWithUse).use;
+  const lib = MdEditorLib as unknown as MdEditorLibWithUse;
+  const registerPluginFn = lib.use;
+  // Swap the built-in 'header' plugin (renders real <h1>-<h6>) for ours. This
+  // relies on the library's static `plugins` registry (react-markdown-editor-lite
+  // 1.4.2); re-check it when upgrading.
+  for (const [plugin] of [...lib.plugins]) {
+    if (plugin.pluginName === 'header') lib.unuse(plugin);
+  }
+  registerPluginFn(HeaderPlugin);
+  registerPluginFn(AutoPreviewPlugin);
   registerPluginFn(CannedResponsePlugin);
   registerPluginFn(AttachFilePlugin);
 }
@@ -272,8 +285,11 @@ export function MarkdownEditor({
   // Derive view config from viewMode prop
   const viewConfig = {
     menu: true,
-    md: viewMode === 'both' || viewMode === 'editor',
-    html: viewMode === 'both' || viewMode === 'preview',
+    // Always open with one pane. For 'both', AutoPreviewPlugin adds the
+    // preview once there is content on a wide viewport; the toolbar
+    // mode-toggle switches views manually.
+    md: viewMode !== 'preview',
+    html: viewMode === 'preview',
   };
 
   // ---------------------------------------------------------------------------
@@ -455,13 +471,14 @@ export function MarkdownEditor({
   const plugins = useMemo(() => {
     const list = [...BASE_TOOLBAR_PLUGINS];
     if (onAttachmentUpload) list.push('attach-file');
+    if (viewMode === 'both') list.push('auto-preview');
     if (extraToolbarPlugins && extraToolbarPlugins.length > 0) {
       for (const p of extraToolbarPlugins) {
         if (!list.includes(p)) list.push(p);
       }
     }
     return list;
-  }, [onAttachmentUpload, extraToolbarPlugins]);
+  }, [onAttachmentUpload, extraToolbarPlugins, viewMode]);
 
   const acceptAttribute = '*/*';
 
@@ -512,6 +529,7 @@ export function MarkdownEditor({
         view={viewConfig}
         canView={{ menu: true, md: true, html: true, both: true, fullScreen: false, hideMenu: false }}
         plugins={plugins}
+        pluginConfig={{ 'auto-preview': { enabled: viewMode === 'both' } }}
       />
       {uploadError && (
         <p

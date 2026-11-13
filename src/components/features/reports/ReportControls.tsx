@@ -4,28 +4,48 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useTransition } from 'react';
 import { exportReportCsv } from '@/lib/actions/reports';
 import { downloadCsv } from '@/lib/utils/csv';
+import { presetRange } from '@/lib/utils/date-range';
 
 type Props = {
+  /** Effective range (URL params or the 30-day default), YYYY-MM-DD */
+  rangeStart: string;
+  rangeEnd: string;
+  /** Date of the earliest ticket, used by the "All time" preset */
+  earliestDate: string;
+  /** Effective granularity (the server may coarsen daily on long ranges) */
+  groupBy: string;
   isAdmin: boolean;
   types: { id: string; name: string }[];
   categories: { id: string; name: string }[];
   tiers?: { key: string; display_name: string }[];
 };
 
-const PRESETS: Record<string, { label: string; days: number }> = {
-  '7d': { label: 'Last 7 days', days: 7 },
-  '30d': { label: 'Last 30 days', days: 30 },
-  '90d': { label: 'Last 90 days', days: 90 },
+// groupBy: granularity a long range switches to (the select can still change it)
+const PRESETS: { key: string; label: string; days: number | null; groupBy?: string }[] = [
+  { key: '7d', label: 'Last 7 days', days: 7 },
+  { key: '30d', label: 'Last 30 days', days: 30 },
+  { key: '90d', label: 'Last 90 days', days: 90 },
+  { key: '12m', label: 'Last 12 months', days: 365, groupBy: 'week' },
+  { key: 'all', label: 'All time', days: null, groupBy: 'month' },
+];
+
+const EXPORT_TYPES: Record<string, string> = {
+  ticket_volume: 'Ticket volume',
+  resolution_metrics: 'Resolution metrics',
+  agent_performance: 'Agent performance',
+  csat_summary: 'CSAT summary',
+  sla_compliance: 'SLA compliance',
+  backlog: 'Backlog',
 };
 
-export function ReportControls({ isAdmin, types, categories, tiers }: Props) {
+export function ReportControls({ rangeStart, rangeEnd, earliestDate, groupBy, isAdmin, types, categories, tiers }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
 
-  const currentStart = searchParams.get('start') || '';
-  const currentEnd = searchParams.get('end') || '';
-  const currentGroupBy = searchParams.get('groupBy') || 'day';
+  const currentStart = rangeStart;
+  const currentEnd = rangeEnd;
+  const currentGroupBy = groupBy;
   const currentStatus = searchParams.get('status') || '';
   const currentSeverity = searchParams.get('severity') || '';
   const currentType = searchParams.get('type') || '';
@@ -46,23 +66,17 @@ export function ReportControls({ isAdmin, types, categories, tiers }: Props) {
     [router, searchParams, startTransition],
   );
 
-  const applyPreset = (days: number) => {
-    const end = new Date();
-    const start = new Date();
-    start.setDate(start.getDate() - days);
-    updateParams({
-      start: start.toISOString().slice(0, 10),
-      end: end.toISOString().slice(0, 10),
-    });
+  const activePreset = PRESETS.find((p) => {
+    const r = presetRange(p.days, earliestDate);
+    return r.start === currentStart && r.end === currentEnd;
+  })?.key;
+
+  const applyPreset = (days: number | null, groupBy?: string) => {
+    updateParams({ ...presetRange(days, earliestDate), ...(groupBy ? { groupBy } : {}) });
   };
 
   const handleExport = async (reportType: string) => {
-    const now = new Date();
-    const thirtyDaysAgo = new Date(now);
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const start = currentStart || thirtyDaysAgo.toISOString().slice(0, 10);
-    const end = currentEnd || now.toISOString().slice(0, 10);
-    const result = await exportReportCsv(reportType, { start, end }, {
+    const result = await exportReportCsv(reportType, { start: currentStart, end: currentEnd }, {
       status: currentStatus || undefined,
       severity: currentSeverity || undefined,
       type: currentType || undefined,
@@ -75,15 +89,20 @@ export function ReportControls({ isAdmin, types, categories, tiers }: Props) {
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4 mb-6" data-testid="report-controls">
-      {/* Time range presets */}
+      {/* Time range presets + export */}
       <div className="flex flex-wrap items-center gap-2 mb-3">
         <span className="text-sm font-medium text-gray-700">Period:</span>
-        {Object.entries(PRESETS).map(([key, { label, days }]) => (
+        {PRESETS.map(({ key, label, days, groupBy }) => (
           <button
             key={key}
             type="button"
-            onClick={() => applyPreset(days)}
-            className="px-3 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50"
+            onClick={() => applyPreset(days, groupBy)}
+            aria-pressed={activePreset === key}
+            className={`px-3 py-1 text-sm rounded border ${
+              activePreset === key
+                ? 'border-blue-600 bg-blue-50 text-blue-700 font-medium'
+                : 'border-gray-300 hover:bg-gray-50'
+            }`}
           >
             {label}
           </button>
@@ -92,7 +111,7 @@ export function ReportControls({ isAdmin, types, categories, tiers }: Props) {
           type="date"
           value={currentStart}
           onChange={(e) => updateParams({ start: e.target.value })}
-          className="px-2 py-1 text-sm border border-gray-300 rounded"
+          className="form-input"
           aria-label="Start date"
         />
         <span className="text-gray-500">–</span>
@@ -100,17 +119,37 @@ export function ReportControls({ isAdmin, types, categories, tiers }: Props) {
           type="date"
           value={currentEnd}
           onChange={(e) => updateParams({ end: e.target.value })}
-          className="px-2 py-1 text-sm border border-gray-300 rounded"
+          className="form-input"
           aria-label="End date"
         />
+        <details className="relative ml-auto">
+          <summary className="px-3 py-1 text-sm rounded border border-gray-300 hover:bg-gray-50 cursor-pointer list-none select-none">
+            Export CSV ▾
+          </summary>
+          <div className="absolute right-0 z-10 mt-1 w-48 rounded border border-gray-200 bg-white shadow-lg py-1 flex flex-col">
+            {Object.entries(EXPORT_TYPES).map(([type, label]) => (
+              <button
+                key={type}
+                type="button"
+                onClick={(e) => {
+                  e.currentTarget.closest('details')?.removeAttribute('open');
+                  handleExport(type);
+                }}
+                className="px-3 py-1.5 text-sm text-left hover:bg-gray-50"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </details>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2 mb-3">
+      <div className="flex flex-wrap items-center gap-2">
         <select
           value={currentGroupBy}
           onChange={(e) => updateParams({ groupBy: e.target.value })}
-          className="px-2 py-1 text-sm border border-gray-300 rounded"
+          className="form-select"
           aria-label="Group by"
         >
           <option value="day">Daily</option>
@@ -123,7 +162,7 @@ export function ReportControls({ isAdmin, types, categories, tiers }: Props) {
             <select
               value={currentStatus}
               onChange={(e) => updateParams({ status: e.target.value })}
-              className="px-2 py-1 text-sm border border-gray-300 rounded"
+              className="form-select"
               aria-label="Status"
             >
               <option value="">All Statuses</option>
@@ -135,7 +174,7 @@ export function ReportControls({ isAdmin, types, categories, tiers }: Props) {
             <select
               value={currentSeverity}
               onChange={(e) => updateParams({ severity: e.target.value })}
-              className="px-2 py-1 text-sm border border-gray-300 rounded"
+              className="form-select"
               aria-label="Severity"
             >
               <option value="">All Severities</option>
@@ -148,7 +187,7 @@ export function ReportControls({ isAdmin, types, categories, tiers }: Props) {
             <select
               value={currentType}
               onChange={(e) => updateParams({ type: e.target.value })}
-              className="px-2 py-1 text-sm border border-gray-300 rounded"
+              className="form-select"
               aria-label="Type"
             >
               <option value="">All Types</option>
@@ -160,7 +199,7 @@ export function ReportControls({ isAdmin, types, categories, tiers }: Props) {
             <select
               value={currentCategory}
               onChange={(e) => updateParams({ category: e.target.value })}
-              className="px-2 py-1 text-sm border border-gray-300 rounded"
+              className="form-select"
               aria-label="Category"
             >
               <option value="">All Categories</option>
@@ -173,7 +212,7 @@ export function ReportControls({ isAdmin, types, categories, tiers }: Props) {
               <select
                 value={currentTier}
                 onChange={(e) => updateParams({ tier: e.target.value })}
-                className="px-2 py-1 text-sm border border-gray-300 rounded"
+                className="form-select"
                 aria-label="Tier"
               >
                 <option value="">All Tiers</option>
@@ -184,23 +223,6 @@ export function ReportControls({ isAdmin, types, categories, tiers }: Props) {
               </select>
             )}
           </>
-        )}
-      </div>
-
-      {/* Export buttons */}
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-medium text-gray-700">Export CSV:</span>
-        {['ticket_volume', 'resolution_metrics', 'agent_performance', 'csat_summary', 'sla_compliance', 'backlog'].map(
-          (type) => (
-            <button
-              key={type}
-              type="button"
-              onClick={() => handleExport(type)}
-              className="px-2 py-1 text-xs rounded border border-gray-300 hover:bg-gray-50 capitalize"
-            >
-              {type.replace(/_/g, ' ')}
-            </button>
-          ),
         )}
       </div>
 

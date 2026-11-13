@@ -2,7 +2,7 @@ import Link from 'next/link';
 
 const STATUS_FILTERS = [
   { key: 'all', label: 'All' },
-  { key: 'active', label: 'Active' },
+  { key: 'active', label: 'Open' },
   { key: 'closed', label: 'Closed' },
 ];
 

@@ -1,6 +1,11 @@
 import { redirect } from 'next/navigation';
 import { createServerClient } from './server';
 
+/** Where a freshly signed-in user lands: agents/admins go straight to /agent (page `/` would redirect them there anyway). */
+export function homePathForRole(role: string | null | undefined): string {
+  return role === 'agent' || role === 'admin' ? '/agent' : '/';
+}
+
 export async function getUser() {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();

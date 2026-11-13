@@ -1,30 +1,13 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { RoleBadge } from '@/components/ui/RoleBadge';
 import { signOut } from '@/lib/actions/auth';
 import { notifyPopupOpened, subscribeToOtherPopups } from '@/lib/utils/popup-coordinator';
 
 const POPUP_ID = 'user-menu';
 
 type Role = 'admin' | 'agent' | string;
-
-function RoleBadge({ role }: { role: Role }) {
-  if (role === 'admin') {
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
-        Admin
-      </span>
-    );
-  }
-  if (role === 'agent') {
-    return (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
-        Agent
-      </span>
-    );
-  }
-  return null;
-}
 
 interface UserMenuProps {
   displayName: string;

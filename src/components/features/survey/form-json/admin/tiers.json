@@ -11,6 +11,8 @@
           "keyName": "id",
           "rowCount": 0,
           "addRowText": "Add Tier",
+          "hideColumnsIfEmpty": true,
+          "noRowsText": "No tiers yet. Click Add Tier to create the first one.",
           "removeRowText": "Delete",
           "confirmDelete": false,
           "allowRowsDragAndDrop": true,

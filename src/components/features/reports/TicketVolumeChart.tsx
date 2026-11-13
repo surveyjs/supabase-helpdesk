@@ -15,7 +15,12 @@ type Props = {
 
 export function TicketVolumeChart({ data }: Props) {
   if (data.length === 0) {
-    return <div className="py-12 text-center text-gray-500">No data for this period</div>;
+    return (
+      <div data-testid="ticket-volume-chart">
+        <h3 className="text-lg font-medium text-gray-900 mb-4">Ticket Volume</h3>
+        <div className="py-12 text-center text-gray-500">No data for this period</div>
+      </div>
+    );
   }
 
   // Collapse into per-period rows with status breakdown

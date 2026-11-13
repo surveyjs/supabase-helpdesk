@@ -13,7 +13,7 @@ export function MarkAsDuplicateForm({ ticketId }: { ticketId: number }) {
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="px-3 py-1 text-xs rounded bg-yellow-100 text-yellow-700 hover:bg-yellow-200"
+        className="inline-flex items-center rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
         data-testid="mark-duplicate-btn"
       >
         Mark as Duplicate

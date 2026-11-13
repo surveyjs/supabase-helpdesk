@@ -2,10 +2,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
 const exchangeCodeForSession = vi.fn();
+let profileRole: string | null = 'customer';
 
 vi.mock('@/lib/supabase/server', () => ({
   createServerClient: async () => ({ auth: { exchangeCodeForSession } }),
-  createServiceRoleClient: () => ({}),
+  createServiceRoleClient: () => ({
+    from: () => ({
+      select: () => ({ eq: () => ({ single: async () => ({ data: { role: profileRole } }) }) }),
+    }),
+  }),
 }));
 
 import { GET } from '../route';
@@ -31,6 +36,22 @@ describe('GET /auth/callback', () => {
 
     expect(res.status).toBe(307);
     expect(res.headers.get('location')).toBe('/tickets?keep=1');
+  });
+
+  it.each([
+    ['agent', '/agent'],
+    ['admin', '/agent'],
+    ['customer', '/'],
+  ])('sends a %s landing on / to %s', async (role, expected) => {
+    profileRole = role;
+    exchangeCodeForSession.mockResolvedValue({
+      data: { user: { id: 'u1', app_metadata: { provider: 'email' }, user_metadata: {} } },
+      error: null,
+    });
+
+    const res = await GET(request('?code=abc'));
+
+    expect(res.headers.get('location')).toBe(expected);
   });
 
   it('redirects errors to /login relative to the browser origin', async () => {

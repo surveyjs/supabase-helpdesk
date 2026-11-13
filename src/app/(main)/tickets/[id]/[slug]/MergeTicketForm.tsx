@@ -12,7 +12,7 @@ export function MergeTicketForm({ ticketId }: { ticketId: number }) {
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="px-3 py-1 text-xs rounded bg-purple-100 text-purple-700 hover:bg-purple-200"
+        className="inline-flex items-center rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
         data-testid="merge-ticket-btn"
       >
         Merge into…

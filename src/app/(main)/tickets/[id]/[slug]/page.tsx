@@ -242,7 +242,7 @@ export default async function TicketDetailPage({
   const renderedPosts = await Promise.all(
     allPosts.map(async (post) => ({
       ...post,
-      htmlBody: await renderMarkdown(post.body),
+      htmlBody: await renderMarkdown(post.body, { blockRemoteImages: true }),
     })),
   );
 
@@ -387,6 +387,14 @@ export default async function TicketDetailPage({
     );
     const canTogglePrivacy = isAgent && !isOriginal && !isNote;
     const canReplyToPost = canReply && !isDraft && !isNote && context === 'thread';
+    const canClone = isAgent && !isOriginal && !isNote && !isDraft && !ticket!.merged_into_id;
+    const canPublishDraft = isDraft && isCurrentUser;
+    const hasActions = canDeletePost || canTogglePrivacy || canClone || canPublishDraft;
+    // Images embedded in the body are already visible there; don't list them again.
+    const inlineAttachmentIds = Array.from(
+      String(post.body).matchAll(/\/attachments\/([0-9a-f-]{36})/gi),
+      (m) => m[1].toLowerCase(),
+    );
 
     const bgClass = isNote
       ? 'bg-amber-50 border-amber-200'
@@ -451,46 +459,45 @@ export default async function TicketDetailPage({
           editorViewMode={ticketDetailEditorViewMode}
           editorMinHeightPx={editorMinHeightPx}
           editorMaxHeightPx={editorMaxHeightPx}
+          actions={hasActions ? (
+            <>
+              {canDeletePost && (
+                <form action={deletePost} className="inline">
+                  <input type="hidden" name="post_id" value={post.id} />
+                  <button
+                    type="submit"
+                    className="hover:text-red-600"
+                    data-testid="delete-post-btn"
+                  >
+                    Delete
+                  </button>
+                </form>
+              )}
+              {canTogglePrivacy && (
+                <PrivacyCheckbox postId={post.id} isPrivate={post.is_private} />
+              )}
+              {canClone && <CloneCommentButton postId={post.id} />}
+              {canPublishDraft && (
+                <form action={publishDraft} className="inline">
+                  <input type="hidden" name="post_id" value={post.id} />
+                  <button
+                    type="submit"
+                    className="text-green-600 hover:text-green-800 font-medium"
+                    data-testid="publish-draft-btn"
+                  >
+                    Publish
+                  </button>
+                </form>
+              )}
+            </>
+          ) : undefined}
         />
-
-        {/* Action buttons */}
-        <div className="flex items-center gap-3 mt-2">
-          {canDeletePost && (
-            <form action={deletePost} className="inline">
-              <input type="hidden" name="post_id" value={post.id} />
-              <button
-                type="submit"
-                className="text-xs text-red-600 hover:text-red-800"
-                data-testid="delete-post-btn"
-              >
-                Delete
-              </button>
-            </form>
-          )}
-          {canTogglePrivacy && (
-            <PrivacyCheckbox postId={post.id} isPrivate={post.is_private} />
-          )}
-          {isAgent && !isOriginal && !isNote && !isDraft && !ticket!.merged_into_id && (
-            <CloneCommentButton postId={post.id} />
-          )}
-          {isDraft && isCurrentUser && (
-            <form action={publishDraft} className="inline">
-              <input type="hidden" name="post_id" value={post.id} />
-              <button
-                type="submit"
-                className="text-xs text-green-600 hover:text-green-800 font-medium"
-                data-testid="publish-draft-btn"
-              >
-                Publish
-              </button>
-            </form>
-          )}
-        </div>
 
         {/* Attachments */}
         <AttachmentList
           postId={post.id}
           canDelete={isCurrentUser || isAgent}
+          hideIds={inlineAttachmentIds}
         />
       </article>
     );
@@ -537,7 +544,7 @@ export default async function TicketDetailPage({
 
             {(postComments.length > 0 || canReplyToPost) && (
               <div
-                className="mt-2 ml-5 pl-4 border-l-2 border-gray-100 space-y-2"
+                className="mt-2 ml-2 pl-3 sm:ml-5 sm:pl-4 border-l-2 border-gray-100 space-y-2"
                 data-comments-rail="true"
               >
                 {shouldCollapseComments && (
@@ -809,6 +816,15 @@ export default async function TicketDetailPage({
     }
   }
 
+  // Closed tickets can't be deleted: hide the row instead of showing a disabled button.
+  const showDeleteRow =
+    profile?.role === 'admin' && !ticket.merged_into_id && ticket.status !== 'closed';
+  const showAdvancedRow = isAgent && !ticket.merged_into_id && !ticket.duplicate_of_id;
+  const GROUP_HEADING = 'col-span-2 text-xs font-semibold uppercase tracking-wide text-gray-500';
+  // Agents/admins edit tags in the sidebar Tags question;
+  // everyone else gets the read-only chip list.
+  const showTagChips = !(isAgent && detailFieldPolicy.tag_ids?.editable);
+
   const hasAnySidebarSurveyField = Object.values(detailFieldPolicy).some((p) => p.visible);
 
   return (
@@ -860,7 +876,9 @@ export default async function TicketDetailPage({
           {/* Subject */}
           <div className="mb-4">
             <EditableTitle ticketId={ticket.id} title={ticket.title} canEdit={canEditTitle} />
-            <div className="flex items-center gap-2 mt-1 text-sm text-gray-500">
+            <div className="flex flex-wrap items-center gap-x-2 mt-1 text-sm text-gray-500">
+              <span className="font-mono" data-testid="ticket-number">#{ticket.id}</span>
+              <span>·</span>
               <time title={new Date(ticket.created_at).toLocaleString()}>{formatRelativeTime(ticket.created_at)}</time>
               <span>·</span>
               <span>
@@ -887,7 +905,7 @@ export default async function TicketDetailPage({
                   {renderTimelineItems(tailItems)}
                 </ul>
                 {canReply && !ticket.merged_into_id && (
-                  <div className="mt-4">
+                  <div className="mt-8 border-t border-gray-200 pt-6">
                     <MainReplyToggle
                       ticketId={ticket.id}
                       isAgent={isAgent}
@@ -895,6 +913,7 @@ export default async function TicketDetailPage({
                       editorMinHeightPx={editorMinHeightPx}
                       editorMaxHeightPx={editorMaxHeightPx}
                       aiSuggestedReplyEnabled={aiSuggestedReplyEnabled}
+                      willReopen={ticket.status === 'closed' && !isAgent}
                     />
                   </div>
                 )}
@@ -925,11 +944,12 @@ export default async function TicketDetailPage({
         {/* RIGHT: Sidebar */}
         <aside className="w-full lg:w-[400px] lg:min-w-[400px] lg:max-w-[400px] flex-shrink-0 lg:sticky lg:top-4 lg:self-start" data-testid="ticket-sidebar">
           <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
-            {/* Ticket # + autosave status (issue #77) */}
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <span className="text-xs text-gray-500 font-mono">#{ticket.id}</span>
-              {hasAnySidebarSurveyField && <TicketSaveStatus ticketId={ticket.id} />}
-            </div>
+            {/* Autosave status (issue #77); the ticket number lives in the header meta line */}
+            {hasAnySidebarSurveyField && (
+              <div className="mb-3 flex items-center justify-end gap-2">
+                <TicketSaveStatus ticketId={ticket.id} />
+              </div>
+            )}
 
             {ticket.merged_into_id && (
               <p className="mb-3 text-xs text-gray-500 italic">Read-only (merged)</p>
@@ -948,47 +968,30 @@ export default async function TicketDetailPage({
 
             {/* Read-only / non-editable info rows (fields not represented in the survey template) */}
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
-              <>
-                <dt className="text-gray-500">Created by</dt>
-                <dd className="text-gray-900">
-                  <DisplayName
-                    userId={ticket.creator_id}
-                    displayName={creatorName}
-                    isCurrentUserAgent={isAgent}
-                  />
-                  {teamName && (
-                    <span className="ml-1 text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">
-                      {teamName}
-                    </span>
-                  )}
-                </dd>
-              </>
+              <dt className={GROUP_HEADING}>People</dt>
+              <dt className="text-gray-500">Created by</dt>
+              <dd className="text-gray-900">
+                <DisplayName
+                  userId={ticket.creator_id}
+                  displayName={creatorName}
+                  isCurrentUserAgent={isAgent}
+                />
+                {teamName && (
+                  <span className="ml-1 text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full">
+                    {teamName}
+                  </span>
+                )}
+              </dd>
 
-              {isAgent && !ticket.merged_into_id && !ticket.duplicate_of_id && (
-                <>
-                  <dt className="text-gray-500">Advanced</dt>
-                  <dd>
-                    <div className="flex flex-wrap gap-2">
-                      <MarkAsDuplicateForm ticketId={ticket.id} />
-                      <MergeTicketForm ticketId={ticket.id} />
-                      <CloneTicketButton ticketId={ticket.id} />
-                    </div>
-                  </dd>
-                </>
-              )}
-
-              <>
-                <dt className="text-gray-500">Created</dt>
-                <dd className="text-gray-900" title={new Date(ticket.created_at).toLocaleString()}>
-                  {formatDateTimeWithRelative(ticket.created_at)}
-                </dd>
-              </>
-              <>
-                <dt className="text-gray-500">Updated</dt>
-                <dd className="text-gray-900" title={new Date(ticket.updated_at).toLocaleString()}>
-                  {formatDateTimeWithRelative(ticket.updated_at)}
-                </dd>
-              </>
+              <dt className={`${GROUP_HEADING} mt-3`}>Dates</dt>
+              <dt className="text-gray-500">Created</dt>
+              <dd className="text-gray-900" title={new Date(ticket.created_at).toLocaleString()}>
+                {formatDateTimeWithRelative(ticket.created_at)}
+              </dd>
+              <dt className="text-gray-500">Updated</dt>
+              <dd className="text-gray-900" title={new Date(ticket.updated_at).toLocaleString()}>
+                {formatDateTimeWithRelative(ticket.updated_at)}
+              </dd>
 
               {sourceArticle && (
                 <>
@@ -1004,12 +1007,29 @@ export default async function TicketDetailPage({
                 </>
               )}
 
-              {profile?.role === 'admin' && !ticket.merged_into_id && (
+              {(showAdvancedRow || showDeleteRow) && (
                 <>
-                  <dt className="text-gray-500">Delete</dt>
-                  <dd>
-                    <DeleteTicketButton ticketId={ticket.id} isClosed={ticket.status === 'closed'} />
-                  </dd>
+                  <dt className={`${GROUP_HEADING} mt-3`}>Actions</dt>
+                  {showAdvancedRow && (
+                    <>
+                      <dt className="text-gray-500">Advanced</dt>
+                      <dd>
+                        <div className="flex flex-wrap gap-2">
+                          <MarkAsDuplicateForm ticketId={ticket.id} />
+                          <MergeTicketForm ticketId={ticket.id} />
+                          <CloneTicketButton ticketId={ticket.id} />
+                        </div>
+                      </dd>
+                    </>
+                  )}
+                  {showDeleteRow && (
+                    <>
+                      <dt className="text-gray-500">Delete</dt>
+                      <dd>
+                        <DeleteTicketButton ticketId={ticket.id} />
+                      </dd>
+                    </>
+                  )}
                 </>
               )}
 
@@ -1095,13 +1115,15 @@ export default async function TicketDetailPage({
             {/* Tags (chip list shown next to the SurveyJS tagbox so colors stay visible).
                 Lives as a client component so the chips update live when the tagbox
                 writes back via TicketSidebarSurvey. */}
-            <TicketTagChips
-              ticketId={ticket.id}
-              initialTagIds={ticketTags.map((t) => t.id)}
-              tagsById={Object.fromEntries(
-                [...ticketTags, ...allTags].map((t) => [t.id, t]),
-              )}
-            />
+            {showTagChips && (
+              <TicketTagChips
+                ticketId={ticket.id}
+                initialTagIds={ticketTags.map((t) => t.id)}
+                tagsById={Object.fromEntries(
+                  [...ticketTags, ...allTags].map((t) => [t.id, t]),
+                )}
+              />
+            )}
 
             {/* Follow status (owner / blocked / agent counter — toggle is in the SurveyJS form) */}
             {(isTicketOwner || (isAgent && followers.length > 0)) && (
@@ -1169,10 +1191,6 @@ export default async function TicketDetailPage({
           {isAgent && !ticket.merged_into_id && (
             <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4" data-testid="agent-info-under-ticket-info">
               <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-                <dt className="text-gray-500">Followers</dt>
-                <dd className="text-gray-900">
-                  {followers.length} follower{followers.length !== 1 ? 's' : ''}
-                </dd>
                 <dt className="text-gray-500">User notes</dt>
                 <dd className="text-gray-900">{creatorNoteCount}</dd>
                 <dt className="text-gray-500">AI summary</dt>

@@ -21,15 +21,21 @@ import {
 import {
   buildTicketFilterSurveyJson,
   dataToSurveyData,
+  getTemplateDefaultSort,
   type FilterOptions,
 } from '@/lib/filters/ticket-filter-survey';
 import type { SurveyJsonDefinition } from '@/lib/constants/survey-ui-config';
 
 const Survey = dynamic(() => import('survey-react-ui').then((mod) => mod.Survey), { ssr: false });
 
-function buildUrlForData(data: TicketFilterData, viewId: string | null): string {
+function buildUrlForData(
+  data: TicketFilterData,
+  viewId: string | null,
+  defaultSort: string | undefined,
+): string {
   if (viewId) return `/agent?view=${viewId}`;
-  const params = dataToUrlParams(data);
+  // The template's default sort is implied by its absence, keeping URLs clean.
+  const params = dataToUrlParams(data.sort === defaultSort ? { ...data, sort: undefined } : data);
   const qs = params.toString();
   return qs ? `/agent?${qs}` : '/agent';
 }
@@ -82,6 +88,8 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
     [filterOptions, template],
   );
 
+  const defaultSort = useMemo(() => getTemplateDefaultSort(template), [template]);
+
   const surveyData = useMemo(
     () => dataToSurveyData(initialData),
     [initialData],
@@ -97,12 +105,12 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
       id: 'sv-nav-clear-filtering',
       title: 'Clear All',
       action: () => {
-        m.data = { status: ['open', 'pending', 'closed'] };
+        m.data = { status: ['open', 'pending', 'closed'], sort: defaultSort };
       },
     });
 
     return m;
-  }, [schema, surveyData]);
+  }, [schema, surveyData, defaultSort]);
 
   useEffect(() => {
     const handler = () => {
@@ -121,7 +129,7 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
         .catch((err) => { console.error('updateSavedViewDefinition failed', err); })
         .finally(() => {
           setBusy(false);
-          router.push(buildUrlForData(data, activeViewId));
+          router.push(buildUrlForData(data, activeViewId, defaultSort));
           router.refresh();
         });
     } else {
@@ -131,7 +139,7 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
         .catch((err) => { console.error('setAgentActiveView failed', err); })
         .finally(() => {
           setBusy(false);
-          router.push(buildUrlForData(data, null));
+          router.push(buildUrlForData(data, null, defaultSort));
         });
     }
   }
@@ -158,7 +166,7 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
         .catch((err) => { console.error('updateSavedViewDefinition failed', err); })
         .finally(() => {
           setBusy(false);
-          router.push(buildUrlForData(data, activeViewId));
+          router.push(buildUrlForData(data, activeViewId, defaultSort));
           router.refresh();
         });
     } else {
@@ -167,7 +175,7 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
         .catch((err) => { console.error('setAgentActiveView failed', err); })
         .finally(() => {
           setBusy(false);
-          router.push(buildUrlForData(data, null));
+          router.push(buildUrlForData(data, null, defaultSort));
         });
     }
   }

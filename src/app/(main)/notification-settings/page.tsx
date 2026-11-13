@@ -54,7 +54,7 @@ export default async function NotificationSettingsPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto py-8">
+    <div className="py-8">
       <h1 className="text-2xl font-semibold text-gray-900 mb-6">Notification Settings</h1>
       <NotificationPreferencesForm
         eventTypes={EVENT_TYPES}

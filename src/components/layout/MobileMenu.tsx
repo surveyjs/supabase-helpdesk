@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { RoleBadge } from '@/components/ui/RoleBadge';
+import { signOut } from '@/lib/actions/auth';
 import { isActivePath } from './nav-utils';
 import { notifyPopupOpened, subscribeToOtherPopups } from '@/lib/utils/popup-coordinator';
 
@@ -10,9 +12,12 @@ const POPUP_ID = 'mobile-menu';
 
 interface MobileMenuProps {
   links: { href: string; label: string }[];
+  userLinks: { href: string; label: string }[];
+  displayName: string;
+  role: string | null;
 }
 
-export function MobileMenu({ links }: MobileMenuProps) {
+export function MobileMenu({ links, userLinks, displayName, role }: MobileMenuProps) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
@@ -51,6 +56,26 @@ export function MobileMenu({ links }: MobileMenuProps) {
     });
   }
 
+  function renderLink(link: { href: string; label: string }) {
+    const active = isActivePath(pathname, link.href);
+    return (
+      <li key={link.href}>
+        <Link
+          href={link.href}
+          className={`block px-4 py-3 min-h-[44px] text-sm focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 focus-visible:outline-none ${
+            active
+              ? 'bg-blue-50 text-blue-700 font-medium'
+              : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
+          }`}
+          aria-current={active ? 'page' : undefined}
+          onClick={() => setOpen(false)}
+        >
+          {link.label}
+        </Link>
+      </li>
+    );
+  }
+
   return (
     <div ref={menuRef} className="md:hidden">
       <button
@@ -74,30 +99,28 @@ export function MobileMenu({ links }: MobileMenuProps) {
       {open && (
         <nav
           id="mobile-nav-menu"
-          className="absolute left-0 right-0 top-full bg-white border-b border-gray-200 shadow-lg z-50 py-2"
+          className="absolute left-0 right-0 top-full max-h-[calc(100dvh-5rem)] overflow-y-auto bg-white border-b border-gray-200 shadow-lg z-50 py-2"
           aria-label="Mobile navigation"
         >
-          <ul className="flex flex-col">
-            {links.map((link) => {
-              const active = isActivePath(pathname, link.href);
-              return (
-                <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    className={`block px-4 py-3 min-h-[44px] text-sm focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 focus-visible:outline-none ${
-                      active
-                        ? 'bg-blue-50 text-blue-700 font-medium'
-                        : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
-                    }`}
-                    aria-current={active ? 'page' : undefined}
-                    onClick={() => setOpen(false)}
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
+          <ul className="flex flex-col">{links.map(renderLink)}</ul>
+          {userLinks.length > 0 && (
+            <>
+              <hr className="my-2 border-gray-200" />
+              <div className="flex items-center gap-2 px-4 py-2 text-sm text-gray-900">
+                <span className="font-medium break-all">{displayName}</span>
+                <RoleBadge role={role} />
+              </div>
+              <ul className="flex flex-col">{userLinks.map(renderLink)}</ul>
+              <form action={signOut}>
+                <button
+                  type="submit"
+                  className="w-full text-left px-4 py-3 min-h-[44px] text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 focus-visible:outline-none"
+                >
+                  Sign out
+                </button>
+              </form>
+            </>
+          )}
         </nav>
       )}
     </div>

@@ -29,4 +29,90 @@ describe('renderMarkdown', () => {
     const html = await renderMarkdown('<script>alert(1)</script>');
     expect(html).not.toContain('<script>');
   });
+
+  describe('blockRemoteImages', () => {
+    const opts = { blockRemoteImages: true };
+
+    it('blocks remote images when asked', async () => {
+      const html = await renderMarkdown('![logo](https://example.org/a.png)', opts);
+      expect(html).toContain('class="external-image"');
+      expect(html).toContain('href="https://example.org/a.png"');
+      expect(html).toContain('target="_blank"');
+      expect(html).toContain('rel="noopener noreferrer nofollow"');
+      expect(html).toContain('data-external-image');
+      expect(html).not.toContain('<img');
+    });
+
+    it('keeps relative attachment images', async () => {
+      const html = await renderMarkdown('![x](/attachments/123e4567-e89b-12d3-a456-426614174000)', opts);
+      expect(html).toContain('<img src="/attachments/');
+    });
+
+    it('keeps storage-hosted images', async () => {
+      const base = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321';
+      const prev = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      process.env.NEXT_PUBLIC_SUPABASE_URL = base;
+      try {
+        const html = await renderMarkdown(`![x](${base}/storage/v1/object/public/a/b.png)`, opts);
+        expect(html).toContain('<img');
+        expect(html).not.toContain('external-image');
+      } finally {
+        if (prev === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+        else process.env.NEXT_PUBLIC_SUPABASE_URL = prev;
+      }
+    });
+
+    it('blocks protocol-relative images', async () => {
+      const html = await renderMarkdown('![x](//tracker.example.net/p.gif)', opts);
+      expect(html).toContain('class="external-image"');
+      expect(html).toContain('href="https://tracker.example.net/p.gif"');
+      expect(html).not.toContain('<img');
+    });
+
+    it('blocks look-alike hosts of the trusted origin', async () => {
+      const base = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321';
+      const html = await renderMarkdown(`![x](${base}.evil.com/x.png)`, opts);
+      expect(html).toContain('external-image');
+      expect(html).not.toContain('<img');
+    });
+
+    it('never emits a javascript: image or link', async () => {
+      const html = await renderMarkdown('![x](javascript:alert(1))', opts);
+      expect(html).not.toContain('javascript:');
+    });
+
+    it('blocks scheme-only http: host form', async () => {
+      const html = await renderMarkdown('![x](http:tracker.example/p.gif)', opts);
+      expect(html).not.toContain('<img');
+      expect(html).toContain('href="http://tracker.example/p.gif"');
+    });
+
+    // The Markdown parser percent-encodes backslashes, spaces and tabs in link
+    // destinations, so these can only become same-origin relative paths. Assert
+    // that nothing loadable from a third-party host is ever emitted as an <img>.
+    it.each([
+      '\\tracker.example/p.gif',
+      '/\tracker.example/p.gif',
+      ' //tracker.example/p.gif',
+    ])('never emits an <img> that targets a third-party host for %j', async (src) => {
+      const html = await renderMarkdown(`![x](<${src}>)`, opts);
+      const m = html.match(/<img src="([^"]*)"/);
+      if (m) expect(m[1]).toMatch(/^(?!\/\/|[a-z][a-z0-9+.-]*:)[^\\s]*$/i);
+    });
+
+    it('keeps plain relative images', async () => {
+      const html = await renderMarkdown('![x](attachments/x.png)', opts);
+      expect(html).toContain('<img src="attachments/x.png"');
+    });
+
+    it('does not block by default', async () => {
+      const html = await renderMarkdown('![logo](https://example.org/a.png)');
+      expect(html).toContain('<img src="https://example.org/a.png"');
+    });
+
+    it('uses hostname when alt is empty', async () => {
+      const html = await renderMarkdown('![](https://example.org/a.png)', opts);
+      expect(html).toContain('External image: example.org');
+    });
+  });
 });

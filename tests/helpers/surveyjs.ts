@@ -161,7 +161,7 @@ export async function addSurveyTag(
     await page.keyboard.press('Escape').catch(() => {});
     // Clear the filter so subsequent operations don't see lingering text.
     try {
-      await filterInput.fill('');
+      await filterInput.fill('', { timeout: 2000 });
     } catch { /* ignore */ }
     return true;
   };

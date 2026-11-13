@@ -19,13 +19,13 @@ export function EditableTitle({
 
   if (!canEdit || !editing) {
     return (
-      <div className="flex items-center gap-2">
+      <div className="group flex items-center gap-1">
         <h1 className="text-xl font-semibold text-gray-900">{title}</h1>
         {canEdit && (
           <button
             type="button"
             onClick={() => setEditing(true)}
-            className="text-xs text-blue-600 hover:text-blue-800"
+            className="inline-flex h-8 w-8 items-center justify-center rounded text-base text-gray-400 hover:text-gray-700 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
             data-testid="edit-title-btn"
             aria-label="Edit title"
           >

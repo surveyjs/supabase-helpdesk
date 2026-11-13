@@ -5,7 +5,7 @@
 // that load.sql loads into the `adimport` schema.
 //
 //   node scripts/answerdesk/prepare.mjs --pkg <answerdesk-migration dir> \
-//        --out <work dir> --fraction 0.1 --admin-email someone@example.com
+//        --out <work dir> --fraction 0.1 --admin-email someone@example.com [--keep-automated]
 //
 // Output contains real customer data: keep --out outside the repo.
 // The console output and report.txt hold counts only.
@@ -20,6 +20,11 @@
 //   * Post bodies are already Markdown in AnswerDesk; they are kept as-is.
 //     Inline attachment references `({'Id':'<FileItems.Id>','CheckAnswerDesk':...})`
 //     and `/attachment/file/<id>` URLs are rewritten to `/attachments/<attachment id>`.
+//   * Automated DMARC aggregate-report e-mails ("Report Domain: ... Submitter:
+//     ... Report-ID: ...") are not imported unless --keep-automated.
+//   * Cross-ticket references `{'FriendlyId':'T123',...}` are left in the
+//     bodies; load.sql relinks them via ticket_friendly.tsv (all source
+//     tickets' FriendlyId -> Id) once the referenced ticket ids are known.
 //   * Posts.Type: 0 = question (original post), 1 = answer (top-level post),
 //     2 = comment, 3 = staff comment -> comment. Comments hang off their
 //     top-level ancestor (parent_post_id); deeper chains are flattened to two
@@ -30,6 +35,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { loadSchema, readTable, readAll, toTs, bit, blobPath, stats as parserStats } from './lib/source.mjs';
+import { isAutomatedReport, friendlyNo, distribution } from './lib/rules.mjs';
 
 const { values: args } = parseArgs({
   options: {
@@ -38,10 +44,11 @@ const { values: args } = parseArgs({
     fraction: { type: 'string', default: '0.1' },
     'admin-email': { type: 'string', default: '' },
     'max-file-mb': { type: 'string', default: '50' },
+    'keep-automated': { type: 'boolean', default: false },
   },
 });
 if (!args.pkg || !args.out) {
-  console.error('usage: node prepare.mjs --pkg <answerdesk-migration dir> --out <work dir> [--fraction 0.1] [--admin-email a@b.c] [--max-file-mb 50]');
+  console.error('usage: node prepare.mjs --pkg <answerdesk-migration dir> --out <work dir> [--fraction 0.1] [--admin-email a@b.c] [--max-file-mb 50] [--keep-automated]');
   process.exit(2);
 }
 const PKG = args.pkg;
@@ -146,7 +153,20 @@ wCf(CF_LICENSE_STATUS, 'dropdown', JSON.stringify(['Licensed', 'Unlicensed', 'En
 wCf(CF_LICENSE_OWNER, 'checkbox', null, 2);
 
 // ---------- Tickets ----------
-const tickets = readAll(PKG, schema, 'Tickets').filter((t) => inSample(t.Id));
+const allTickets = readAll(PKG, schema, 'Tickets');
+// FriendlyId -> Id for every source ticket (not only the sample): load.sql
+// uses it to relink `{'FriendlyId':'T123',...}` references between tickets.
+const wFriendly = writer('ticket_friendly');
+for (const t of allTickets) {
+  const n = friendlyNo(t.FriendlyId);
+  if (n === null) note('ticket FriendlyId not of the form T<number>');
+  else wFriendly(n, t.Id);
+}
+const tickets = allTickets.filter((t) => {
+  if (!inSample(t.Id)) return false;
+  if (!args['keep-automated'] && isAutomatedReport(clean(t.Subject).trim())) { note('ticket skipped: automated DMARC report'); return false; }
+  return true;
+});
 const ticketIds = new Set(tickets.map((t) => t.Id));
 const props = new Map();
 for (const p of readTable(PKG, schema, 'TicketProperties')) {
@@ -323,7 +343,7 @@ for (const f of latestFeedback.values()) {
 const totalBytes = uploadBytes;
 const report = [
   `prepared ${new Date().toISOString()}  fraction=${FRACTION}`,
-  `sampled tickets: ${tickets.length} of ${readAll(PKG, schema, 'Tickets').length}`,
+  `sampled tickets: ${tickets.length} of ${allTickets.length}`,
   '',
   'staging rows:',
   ...Object.entries(files).map(([k, v]) => `  ${k.padEnd(16)} ${v}`),
@@ -332,6 +352,15 @@ const report = [
   'notes:',
   ...[...warn].sort().map(([k, v]) => `  ${String(v).padStart(7)}  ${k}`),
   `  parser: text values containing the |@| delimiter: ${parserStats.delimiterInText}`,
+  '',
+  'value distributions (sampled tickets, source values):',
+  ...Object.entries({
+    TicketStatus: tickets.map((t) => props.get(t.Id)?.TicketStatus),
+    Severity: tickets.map((t) => props.get(t.Id)?.Severity),
+    Urgent: tickets.map((t) => props.get(t.Id)?.Urgent),
+    'assignee present': tickets.map((t) => (props.get(t.Id)?.Assignee ? 'yes' : 'no')),
+    IsPrivate: tickets.map((t) => (bit(t.IsPrivate) ? 'yes' : 'no')),
+  }).flatMap(([name, values]) => [`  ${name}`, ...distribution(values).map(([v, n]) => `    ${String(n).padStart(7)}  ${v.trim() === v ? v : JSON.stringify(v)}`)]),
 ];
 fs.writeFileSync(path.join(OUT, 'report.txt'), report.join('\n') + '\n');
 fs.writeFileSync(path.join(OUT, 'manifest.json'), JSON.stringify({ fraction: FRACTION, preparedAt: new Date().toISOString(), files }, null, 2));

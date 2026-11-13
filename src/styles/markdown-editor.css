@@ -1,0 +1,16 @@
+/* react-markdown-editor-lite toolbar polish: larger, higher-contrast icons. */
+.rc-md-editor .rc-md-navigation .button-wrap .button {
+  color: var(--color-gray-600, #4b5563);
+  min-width: 30px;
+}
+.rc-md-editor .rc-md-navigation .button-wrap .button:hover {
+  color: var(--color-gray-900, #111827);
+}
+.rc-md-editor .rc-md-navigation .button-wrap .rmel-iconfont {
+  font-size: 18px;
+}
+.rc-md-editor .header-list .list-item {
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 600;
+}

@@ -13,7 +13,7 @@ export function TopNavLinks({ links }: { links: NavLink[] }) {
   const pathname = usePathname();
 
   return (
-    <div className="hidden md:flex items-center gap-4">
+    <div className="hidden md:flex items-center md:gap-0 lg:gap-4">
       {links.map((link) => {
         const isActive = isActivePath(pathname, link.href);
         return (

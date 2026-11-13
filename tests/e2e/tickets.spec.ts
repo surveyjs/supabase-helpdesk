@@ -19,7 +19,7 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
 
   // Retry once on transient auth failure (rate-limit / timing)
   try {
-    await expect(page).toHaveURL('/', { timeout: 10000 });
+    await expect(page).toHaveURL(/\/(agent)?$/, { timeout: 10000 });
   } catch {
     // Only retry if we're actually on the login page (not already logged in)
     if (page.url().includes('/login')) {
@@ -28,7 +28,7 @@ async function loginAs(page: Page, email: string, password = 'Password123') {
       await page.getByLabel('Email').fill(email);
       await page.getByLabel('Password').fill(password);
       await page.getByRole('button', { name: 'Log in' }).click();
-      await expect(page).toHaveURL('/', { timeout: 15000 });
+      await expect(page).toHaveURL(/\/(agent)?$/, { timeout: 15000 });
     }
   }
 
@@ -208,6 +208,11 @@ test.describe('Tickets', () => {
   test('filter by status → correct results', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
     await page.goto('/tickets');
+    await expect(page.getByRole('heading', { level: 1, name: 'My Tickets' })).toBeAttached();
+
+    // "Open" (open + pending) uses the same word as the status badges.
+    await page.getByRole('link', { name: 'Open', exact: true }).click();
+    await expect(page).toHaveURL(/status=active/);
 
     // Click "Closed" filter
     await page.getByRole('link', { name: 'Closed', exact: true }).click();
@@ -216,6 +221,18 @@ test.describe('Tickets', () => {
     // Click "All" filter
     await page.getByRole('link', { name: 'All', exact: true }).click();
     // URL should not have status param
+  });
+
+  test('ticket list has no horizontal overflow at 390px', async ({ page }) => {
+    await loginAs(page, 'alice@example.com');
+    // Log in at desktop width (the helper waits for the desktop user menu).
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/tickets?status=active');
+    await expect(page.getByRole('link', { name: 'Open', exact: true })).toHaveAttribute('aria-current', 'page');
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
   });
 
   test('slug redirect works', async ({ page }) => {

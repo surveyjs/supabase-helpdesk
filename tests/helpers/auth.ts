@@ -99,7 +99,8 @@ export async function loginViaForm(
     // getByRole('alert') would win this race the moment the page hydrates.
     const result = await Promise.race([
       page
-        .waitForURL('/', { timeout: 10000 })
+        // Agents/admins are redirected from / to /agent.
+        .waitForURL((u) => u.pathname === '/' || u.pathname === '/agent', { timeout: 10000 })
         .then(() => 'ok' as const)
         .catch(() => 'timeout' as const),
       page
@@ -109,7 +110,16 @@ export async function loginViaForm(
         .then(() => 'alert' as const)
         .catch(() => 'no-alert' as const),
     ]);
-    return result === 'ok';
+    if (result !== 'ok') return false;
+    // Sign-in lands directly on the final page (/agent for agents/admins, /
+    // otherwise). Let that navigation finish and assert the URL is stable so
+    // callers never start a navigation mid-redirect.
+    await page.waitForLoadState('load');
+    const landed = new URL(page.url()).pathname;
+    await expect
+      .poll(() => new URL(page.url()).pathname, { timeout: 5000 })
+      .toBe(landed);
+    return true;
   };
 
   if (!(await submit())) {
@@ -117,7 +127,7 @@ export async function loginViaForm(
     await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
     if (!(await submit())) {
       // Final assertion provides the diagnostic in the test report.
-      await expect(page).toHaveURL('/', { timeout: 5000 });
+      await expect(page).toHaveURL(/\/(agent)?$/, { timeout: 5000 });
     }
   }
 

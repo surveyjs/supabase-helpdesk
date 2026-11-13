@@ -21,7 +21,7 @@ async function loginAs(page: Page, email: string, password: string, expectSucces
 
   if (expectSuccess) {
     try {
-      await expect(page).toHaveURL('/', { timeout: 10000 });
+      await expect(page).toHaveURL(/\/(agent)?$/, { timeout: 10000 });
     } catch {
       if (page.url().includes('/login')) {
         await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
@@ -29,7 +29,7 @@ async function loginAs(page: Page, email: string, password: string, expectSucces
         await page.getByLabel('Email').fill(email);
         await page.getByLabel('Password').fill(password);
         await page.getByRole('button', { name: 'Log in' }).click();
-        await expect(page).toHaveURL('/', { timeout: 15000 });
+        await expect(page).toHaveURL(/\/(agent)?$/, { timeout: 15000 });
       }
     }
     // The middleware can briefly redirect back to /login while the auth cookie
@@ -109,6 +109,13 @@ test.describe('Authentication', () => {
     await loginAs(page, 'alice@example.com', 'Password123');
     await expect(page).toHaveURL('/', { timeout: 10000 });
     await expect(page.getByText('Welcome, Alice')).toBeVisible();
+  });
+
+  test('agent landing on / is redirected to /agent', async ({ page }) => {
+    await loginAs(page, 'agent.smith@example.com', 'Password123', true);
+    await expect(page).toHaveURL(/\/agent$/, { timeout: 10000 });
+    await page.goto('/');
+    await expect(page).toHaveURL(/\/agent$/, { timeout: 10000 });
   });
 
   test('login: wrong password → error message', async ({ page }) => {

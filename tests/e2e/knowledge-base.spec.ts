@@ -568,7 +568,7 @@ test.describe('KB Categories Admin', () => {
       (resp) => resp.request().method() === 'POST' && resp.status() < 400,
       { timeout: 15000 },
     );
-    await page.getByRole('button', { name: 'Complete' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     await savePromise;
 
     await gotoAdmin(page, '/admin/kb-categories');
@@ -591,7 +591,7 @@ test.describe('KB Categories Admin', () => {
       (resp) => resp.request().method() === 'POST' && resp.status() < 400,
       { timeout: 15000 },
     );
-    await page.getByRole('button', { name: 'Complete' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     await savePromise;
 
     await gotoAdmin(page, '/admin/kb-categories');
@@ -613,7 +613,7 @@ test.describe('KB Categories Admin', () => {
       (resp) => resp.request().method() === 'POST' && resp.status() < 400,
       { timeout: 15000 },
     );
-    await page.getByRole('button', { name: 'Complete' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     await savePromise;
 
     await gotoAdmin(page, '/admin/kb-categories');

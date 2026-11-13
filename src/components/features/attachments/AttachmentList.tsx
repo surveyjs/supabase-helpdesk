@@ -18,9 +18,12 @@ function getExtension(filename: string): string {
 export async function AttachmentList({
   postId,
   canDelete,
+  hideIds = [],
 }: {
   postId: string;
   canDelete: boolean;
+  /** Attachment ids to leave out (e.g. images already shown inline in the post body). */
+  hideIds?: string[];
 }) {
   const supabase = await createServerClient();
 
@@ -30,12 +33,13 @@ export async function AttachmentList({
     .eq('post_id', postId)
     .order('created_at', { ascending: true });
 
-  if (!attachments || attachments.length === 0) return null;
+  const visible = (attachments ?? []).filter((att) => !hideIds.includes(att.id));
+  if (visible.length === 0) return null;
 
   // Resolve the effective Storage path for each attachment.
   // Migrated attachments have legacy_blob_id set and storage_path null;
   // their blobs live at migrated/{legacy_blob_id} in the bucket.
-  const withPaths = attachments.map((att) => ({
+  const withPaths = visible.map((att) => ({
     ...att,
     effectivePath: att.legacy_blob_id
       ? `migrated/${att.legacy_blob_id}`
@@ -71,16 +75,16 @@ export async function AttachmentList({
         return (
           <div
             key={att.id}
-            className="flex items-center gap-3 text-sm bg-gray-50 rounded px-3 py-2 border border-gray-200"
+            className="flex flex-wrap items-center gap-3 text-sm bg-gray-50 rounded px-3 py-2 border border-gray-200"
             data-testid={`attachment-${att.id}`}
           >
             {isImage && att.signedUrl ? (
-              <a href={att.signedUrl} target="_blank" rel="noopener noreferrer">
+              <a href={att.signedUrl} target="_blank" rel="noopener noreferrer" className="block w-20 sm:w-32 shrink-0">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={att.signedUrl}
                   alt={att.original_filename}
-                  className="max-w-[200px] max-h-[200px] object-contain rounded"
+                  className="w-full max-h-[200px] object-contain rounded"
                   data-testid="attachment-thumbnail"
                 />
               </a>
@@ -108,7 +112,7 @@ export async function AttachmentList({
             </div>
 
             {canDelete && (
-              <form action={deleteAttachment} className="shrink-0">
+              <form action={deleteAttachment} className="ml-auto shrink-0">
                 <input type="hidden" name="attachment_id" value={att.id} />
                 <button
                   type="submit"

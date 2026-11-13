@@ -304,7 +304,7 @@ export function TicketForm({
           maxLength={300}
           defaultValue={initialTitle ?? ''}
           onChange={(e) => handleTitleChange(e.target.value)}
-          className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+          className="block w-full form-input"
         />
         {state.fieldErrors?.title && (
           <p className="mt-1 text-sm text-red-600">{state.fieldErrors.title}</p>
@@ -369,7 +369,7 @@ export function TicketForm({
             name="type_id"
             defaultValue={defaultType}
             onChange={() => markFieldModified('type_id')}
-            className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            className="block w-full form-select"
           >
             {ticketTypes.map((t) => (
               <option key={t.id} value={t.id}>
@@ -394,7 +394,7 @@ export function TicketForm({
             name="urgency"
             defaultValue={initialUrgency ?? 'medium'}
             onChange={() => markFieldModified('urgency')}
-            className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            className="block w-full form-select"
           >
             <option value="low">Low</option>
             <option value="medium">Medium</option>
@@ -420,7 +420,7 @@ export function TicketForm({
             name="category_id"
             defaultValue={initialCategory ?? ''}
             onChange={() => markFieldModified('category_id')}
-            className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+            className="block w-full form-select"
           >
             <option value="">None</option>
             {categories.map((c) => (
@@ -478,10 +478,12 @@ export function TicketForm({
           <h3 className="text-sm font-medium text-gray-700">Additional Fields</h3>
           {customFields.map((field) => (
             <div key={field.id}>
-              <label htmlFor={`cf-${field.name}`} className="block text-sm font-medium text-gray-700 mb-1">
-                {field.name}
-                {field.is_required && <span className="text-red-500"> *</span>}
-              </label>
+              {field.field_type !== 'checkbox' && (
+                <label htmlFor={`cf-${field.name}`} className="block text-sm font-medium text-gray-700 mb-1">
+                  {field.name}
+                  {field.is_required && <span className="text-red-500"> *</span>}
+                </label>
+              )}
               {field.field_type === 'text' && (
                 <input
                   id={`cf-${field.name}`}
@@ -490,7 +492,7 @@ export function TicketForm({
                   defaultValue={customFieldDefault(field)}
                   maxLength={1000}
                   required={field.is_required}
-                  className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  className="block w-full form-input"
                 />
               )}
               {field.field_type === 'number' && (
@@ -500,7 +502,7 @@ export function TicketForm({
                   name={`cf_${field.name}`}
                   defaultValue={customFieldDefault(field)}
                   required={field.is_required}
-                  className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  className="block w-full form-input"
                 />
               )}
               {field.field_type === 'dropdown' && (
@@ -509,7 +511,7 @@ export function TicketForm({
                   name={`cf_${field.name}`}
                   defaultValue={customFieldDefault(field)}
                   required={field.is_required}
-                  className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  className="block w-full form-select"
                 >
                   <option value="">Select…</option>
                   {field.options?.map((opt) => (
@@ -518,17 +520,23 @@ export function TicketForm({
                 </select>
               )}
               {field.field_type === 'checkbox' && (
-                <input
-                  id={`cf-${field.name}`}
-                  type="checkbox"
-                  name={`cf_${field.name}`}
-                  defaultChecked={
-                    initialCustomFields?.[field.name] != null
-                      ? initialCustomFields[field.name] === true
-                      : field.default_value === 'true'
-                  }
-                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
+                <label htmlFor={`cf-${field.name}`} className="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <input
+                    id={`cf-${field.name}`}
+                    type="checkbox"
+                    name={`cf_${field.name}`}
+                    defaultChecked={
+                      initialCustomFields?.[field.name] != null
+                        ? initialCustomFields[field.name] === true
+                        : field.default_value === 'true'
+                    }
+                    className="form-checkbox"
+                  />
+                  <span>
+                    {field.name}
+                    {field.is_required && <span className="text-red-500"> *</span>}
+                  </span>
+                </label>
               )}
               {field.field_type === 'date' && (
                 <input
@@ -537,7 +545,7 @@ export function TicketForm({
                   name={`cf_${field.name}`}
                   defaultValue={customFieldDefault(field)}
                   required={field.is_required}
-                  className="block w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                  className="block w-full form-input"
                 />
               )}
               {state.fieldErrors?.[`cf_${field.name}`] && (
@@ -555,7 +563,7 @@ export function TicketForm({
             name="is_private"
             type="checkbox"
             defaultChecked={initialPrivate ?? defaultPrivate}
-            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            className="form-checkbox"
           />
           <label htmlFor="is_private" className="text-sm text-gray-700">
             Private ticket (only visible to you, your teammates, and agents)
@@ -563,11 +571,11 @@ export function TicketForm({
         </div>
       )}
 
-      <div className="flex gap-3">
+      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
         <Link
           href={cancelHref ?? '/tickets'}
           data-testid="cancel-ticket-btn"
-          className="flex-1 text-center bg-white text-gray-700 border border-gray-300 rounded py-2 px-4 text-sm font-medium hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
+          className="text-center bg-white text-gray-700 border border-gray-300 rounded py-2 px-4 text-sm font-medium hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
         >
           Cancel
         </Link>
@@ -575,7 +583,7 @@ export function TicketForm({
           type="submit"
           disabled={pending}
           data-testid="create-ticket-btn"
-          className="flex-1 bg-blue-600 text-white rounded py-2 px-4 text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
+          className="bg-blue-600 text-white rounded py-2 px-4 text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
         >
           {pending ? 'Creating…' : 'Create Ticket'}
         </button>

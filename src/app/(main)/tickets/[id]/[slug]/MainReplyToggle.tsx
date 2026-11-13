@@ -11,6 +11,7 @@ export function MainReplyToggle({
   editorMinHeightPx,
   editorMaxHeightPx,
   aiSuggestedReplyEnabled = false,
+  willReopen = false,
 }: {
   ticketId: number;
   isAgent: boolean;
@@ -18,17 +19,20 @@ export function MainReplyToggle({
   editorMinHeightPx?: number;
   editorMaxHeightPx?: number;
   aiSuggestedReplyEnabled?: boolean;
+  /** Replying will re-open the ticket (closed ticket, non-agent replier). */
+  willReopen?: boolean;
 }) {
   return (
     <ComposerToggle
       panelTestId="main-reply-panel"
       panelClassName="bg-white rounded-lg border border-gray-200 p-6"
       trigger={({ open }) => (
+        <>
         <button
           type="button"
           onClick={open}
           data-testid="main-reply-btn"
-          className="w-full text-left flex items-center gap-3 px-3 py-2.5 rounded-lg border border-gray-300 bg-white text-sm text-gray-500 hover:border-blue-500 hover:text-gray-700"
+          className="w-full h-11 text-left flex items-center gap-3 px-3 rounded-lg border border-gray-300 bg-white text-sm text-gray-500 hover:border-blue-500 hover:text-gray-700"
         >
           <span
             aria-hidden="true"
@@ -39,6 +43,10 @@ export function MainReplyToggle({
           <span>Reply to this ticket…</span>
           <span className="ml-auto text-xs text-gray-400">Markdown supported</span>
         </button>
+        {willReopen && (
+          <p className="mt-1.5 text-xs text-gray-500">Replying will re-open this ticket</p>
+        )}
+        </>
       )}
     >
       {({ close }) => (

@@ -47,7 +47,13 @@ export function NotificationBell({ initialUnreadCount, userId }: NotificationBel
 
   // Subscribe to realtime notification changes
   useEffect(() => {
-    const supabase = createBrowserClient();
+    let supabase: ReturnType<typeof createBrowserClient>;
+    try {
+      supabase = createBrowserClient();
+    } catch {
+      // Missing runtime config: render the bell without realtime updates.
+      return;
+    }
     const channel = supabase
       .channel('notifications-bell')
       .on(

@@ -14,7 +14,7 @@ async function loginAs(page: Page, email: string) {
   await page.getByRole('button', { name: 'Log in' }).click();
 
   try {
-    await expect(page).toHaveURL('/', { timeout: 10000 });
+    await expect(page).toHaveURL(/\/(agent)?$/, { timeout: 10000 });
   } catch {
     if (page.url().includes('/login')) {
       await svc.from('login_attempts').delete().eq('email', email.toLowerCase());
@@ -22,7 +22,7 @@ async function loginAs(page: Page, email: string) {
       await page.getByLabel('Email').fill(email);
       await page.getByLabel('Password').fill(SEED_PASSWORD);
       await page.getByRole('button', { name: 'Log in' }).click();
-      await expect(page).toHaveURL('/', { timeout: 15000 });
+      await expect(page).toHaveURL(/\/(agent)?$/, { timeout: 15000 });
     }
   }
   await expect(page.locator('summary[aria-haspopup="true"]')).toBeVisible({ timeout: 15000 });
@@ -39,6 +39,7 @@ const userPages = [
   { name: 'My Tickets', path: '/tickets' },
   { name: 'Help Center', path: '/help' },
   { name: 'Profile', path: '/profile' },
+  { name: 'Notification Settings', path: '/notification-settings' },
 ];
 
 // Pages that require an agent/admin
@@ -52,6 +53,9 @@ const agentPages = [
 const adminPages = [
   { name: 'Admin Setup', path: '/admin/types' },
   { name: 'Reports', path: '/reports' },
+  { name: 'Admin User Settings', path: '/admin/user-settings' },
+  { name: 'Admin SLA', path: '/admin/sla' },
+  { name: 'Admin Auth', path: '/admin/auth' },
 ];
 
 test.describe('Accessibility', () => {

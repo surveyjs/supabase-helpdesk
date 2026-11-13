@@ -9,7 +9,7 @@ export function CloneCommentButton({ postId }: { postId: string }) {
   return (
     <Link
       href={`/tickets/new?clone_post=${postId}`}
-      className="text-xs text-blue-600 hover:text-blue-800"
+      className="hover:text-gray-900"
       data-testid="clone-comment-btn"
     >
       Clone to new ticket

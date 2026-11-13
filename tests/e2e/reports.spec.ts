@@ -1,5 +1,6 @@
 import { test, expect, Page } from './fixtures';
 import { loginViaForm } from '../helpers/auth';
+import { createServiceRoleClient } from '../helpers/supabase';
 
 async function loginAs(page: Page, email: string, password = 'Password123') {
   await loginViaForm(page, email, password);
@@ -97,7 +98,7 @@ test.describe('Reports Page - Admin View', () => {
     await page.goto('/reports?start=2025-01-01&end=2025-12-31&groupBy=month&severity=high');
     await expect(page.getByRole('heading', { name: 'Reports' })).toBeVisible({ timeout: 10000 });
     await expect(page.getByLabel('Severity')).toHaveValue('high');
-    await expect(page.getByLabel('Group by')).toHaveValue('month');
+    await expect(page.getByLabel('Group by')).toHaveValue('month', { timeout: 10000 });
   });
 
   test('CSV export triggers download', async ({ page }) => {
@@ -110,9 +111,87 @@ test.describe('Reports Page - Admin View', () => {
     await expect(page).toHaveURL(/start=/, { timeout: 10000 });
 
     const downloadPromise = page.waitForEvent('download', { timeout: 10000 });
-    await page.getByRole('button', { name: 'ticket volume' }).click();
+    await page.getByText('Export CSV').click();
+    await page.getByRole('button', { name: 'Ticket volume' }).click();
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toBe('ticket_volume_report.csv');
+  });
+});
+
+test.describe('Reports Page - empty range', () => {
+  test('shows an em dash instead of 0% / 0m when there is no data', async ({ page }) => {
+    await loginAs(page, 'admin@example.com');
+    await page.goto('/reports?start=2001-01-01&end=2001-01-31');
+    await expect(page.getByRole('heading', { name: 'Reports' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('ticket-volume-chart')).toBeVisible();
+    await expect(page.getByTestId('ticket-volume-chart').getByRole('heading', { name: 'Ticket Volume' })).toBeVisible();
+    const sla = page.getByTestId('sla-compliance-panel');
+    await expect(sla.getByText('—')).toHaveCount(2);
+    await expect(sla.getByText('0%')).toHaveCount(0);
+    await expect(sla.getByText('No tickets in period')).toHaveCount(2);
+    await expect(page.getByTestId('resolution-metrics').getByText('0m')).toHaveCount(0);
+  });
+
+  test('a real 0% SLA compliance stays "0%" (not "—")', async ({ page }) => {
+    const svc = createServiceRoleClient();
+    const { data: alice } = await svc.from('profiles').select('id').eq('email', 'alice@example.com').single();
+    const { data: typeData } = await svc.from('ticket_types').select('id').limit(1).single();
+    const { data: ticket } = await svc
+      .from('tickets')
+      .insert({
+        title: 'E2E Reports breached SLA ticket',
+        slug: 'e2e-reports-breached-sla-ticket',
+        creator_id: alice!.id,
+        type_id: typeData!.id,
+        created_at: '2099-06-15T12:00:00Z',
+      })
+      .select('id')
+      .single();
+    const ticketId = ticket!.id;
+    try {
+      await svc.from('sla_timers').upsert(
+        {
+          ticket_id: ticketId,
+          first_response_met: false,
+          resolution_met: false,
+          created_at: '2099-06-15T12:00:00Z',
+        },
+        { onConflict: 'ticket_id' },
+      );
+      await loginAs(page, 'admin@example.com');
+      await page.goto('/reports?start=2099-06-01&end=2099-06-30');
+      const sla = page.getByTestId('sla-compliance-panel');
+      // 2 gauges + 2 per-severity cells
+      await expect(sla.getByText('0%')).toHaveCount(4, { timeout: 10000 });
+      await expect(sla.getByText('—')).toHaveCount(0);
+    } finally {
+      await svc.from('sla_timers').delete().eq('ticket_id', ticketId);
+      await svc.from('activity_log').delete().eq('ticket_id', ticketId);
+      await svc.from('tickets').delete().eq('id', ticketId);
+    }
+  });
+
+  test('presets: 12 months and all time, active preset is marked', async ({ page }) => {
+    await loginAs(page, 'admin@example.com');
+    await page.goto('/reports');
+    await expect(page.getByRole('button', { name: 'Last 30 days' })).toHaveAttribute('aria-pressed', 'true', { timeout: 10000 });
+    await page.getByRole('button', { name: 'All time' }).click();
+    await expect(page).toHaveURL(/start=/, { timeout: 10000 });
+    await expect(page.getByRole('button', { name: 'All time' })).toHaveAttribute('aria-pressed', 'true', { timeout: 10000 });
+    await expect(page).toHaveURL(/groupBy=month/, { timeout: 10000 });
+    await expect(page.getByLabel('Group by')).toHaveValue('month', { timeout: 10000 });
+    await page.getByRole('button', { name: 'Last 12 months' }).click();
+    await expect(page.getByRole('button', { name: 'Last 12 months' })).toHaveAttribute('aria-pressed', 'true', { timeout: 10000 });
+    await expect(page.getByLabel('Group by')).toHaveValue('week', { timeout: 10000 });
+  });
+
+  test('no horizontal overflow at 390px', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 800 });
+    await loginAs(page, 'admin@example.com');
+    await page.goto('/reports');
+    await expect(page.getByTestId('report-controls')).toBeVisible({ timeout: 10000 });
+    const ok = await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth);
+    expect(ok).toBe(true);
   });
 });
 
@@ -141,25 +220,24 @@ test.describe('Reports Page - Agent View', () => {
 
 test.describe('NavBar Reports Link', () => {
   test('reports link visibility by role', async ({ page }) => {
-    // Agent sees the link in user menu dropdown
+    // Agent sees Reports as a top-nav link
     await loginAs(page, 'agent.smith@example.com');
-    await page.locator('details summary').click();
-    await expect(page.getByRole('menuitem', { name: 'Reports' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Reports' })).toBeVisible();
 
     // Sign out and log in as admin
+    await page.locator('summary[aria-haspopup="true"]').click();
     await page.getByRole('menuitem', { name: 'Sign out' }).click();
     await expect(page).toHaveURL('/login', { timeout: 10000 });
 
     await loginAs(page, 'admin@example.com');
-    await page.locator('details summary').click();
-    await expect(page.getByRole('menuitem', { name: 'Reports' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Reports' })).toBeVisible();
 
     // Sign out and log in as regular user
+    await page.locator('summary[aria-haspopup="true"]').click();
     await page.getByRole('menuitem', { name: 'Sign out' }).click();
     await expect(page).toHaveURL('/login', { timeout: 10000 });
 
     await loginAs(page, 'alice@example.com');
-    await page.locator('details summary').click();
-    await expect(page.getByRole('menuitem', { name: 'Reports' })).not.toBeVisible();
+    await expect(page.getByRole('link', { name: 'Reports' })).not.toBeVisible();
   });
 });

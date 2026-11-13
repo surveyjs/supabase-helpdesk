@@ -2,6 +2,7 @@ import { test, expect, Page } from './fixtures';
 import { createServiceRoleClient } from '../helpers/supabase';
 import { gotoAuthed, loginViaForm } from '../helpers/auth';
 import { addSurveyTag, waitForSidebarSurveyAutosave } from '../helpers/surveyjs';
+import { openViewsFilters } from '../helpers/agent-dashboard';
 
 /**
  * Helper: log in via the login form (delegates to the shared, retry-hardened helper).
@@ -84,6 +85,17 @@ test.describe('Tag Display and Management', () => {
     await expect(tagSection).toBeVisible();
     await expect(tagSection.getByText('urgent')).toBeVisible();
     await expect(tagSection.getByText('bug')).toBeVisible();
+  });
+
+  test('agent sees tags once, in the sidebar Tags question', async ({ page }) => {
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto(ticketUrl);
+
+    const survey = page.getByTestId('ticket-sidebar').getByTestId('ticket-sidebar-survey');
+    await expect(survey).toBeVisible({ timeout: 10000 });
+    await expect(survey.getByText('urgent')).toBeVisible();
+    await expect(survey.getByText('bug')).toBeVisible();
+    await expect(page.getByTestId('ticket-tags')).toHaveCount(0);
   });
 
   test('agent can add a tag to a ticket', async ({ page }) => {
@@ -174,7 +186,7 @@ test.describe('Agent Dashboard Tag Filter', () => {
     await page.goto('/agent');
 
     // Expand the consolidated Views & Filters panel
-    await page.getByText(/Views & Filters:/).click();
+    await openViewsFilters(page);
 
     // The Tags filter is rendered as a SurveyJS tagbox question.
     const tagFilter = page.locator('.sd-question[data-name="tags"]').first();
@@ -227,7 +239,7 @@ test.describe('Admin Types Management', () => {
       (resp) => resp.request().method() === 'POST' && resp.status() < 400,
       { timeout: 15000 },
     );
-    await page.getByRole('button', { name: 'Complete' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     await savePromise;
 
     await gotoAdmin(page, '/admin/types');
@@ -243,7 +255,7 @@ test.describe('Admin Types Management', () => {
       (resp) => resp.request().method() === 'POST' && resp.status() < 400,
       { timeout: 15000 },
     );
-    await page.getByRole('button', { name: 'Complete' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     await savePromise;
 
     await gotoAdmin(page, '/admin/types');
@@ -298,7 +310,7 @@ test.describe('Admin Categories Management', () => {
       (resp) => resp.request().method() === 'POST' && resp.status() < 400,
       { timeout: 15000 },
     );
-    await page.getByRole('button', { name: 'Complete' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     await savePromise;
 
     await gotoAdmin(page, '/admin/categories');
@@ -314,7 +326,7 @@ test.describe('Admin Categories Management', () => {
       (resp) => resp.request().method() === 'POST' && resp.status() < 400,
       { timeout: 15000 },
     );
-    await page.getByRole('button', { name: 'Complete' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     await savePromise;
 
     await gotoAdmin(page, '/admin/categories');
@@ -360,7 +372,7 @@ test.describe('Admin Tags Management', () => {
       (resp) => resp.request().method() === 'POST' && resp.status() < 400,
       { timeout: 15000 },
     );
-    await page.getByRole('button', { name: 'Complete' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     await savePromise;
 
     await gotoAdmin(page, '/admin/tags');
@@ -377,7 +389,7 @@ test.describe('Admin Tags Management', () => {
       (resp) => resp.request().method() === 'POST' && resp.status() < 400,
       { timeout: 15000 },
     );
-    await page.getByRole('button', { name: 'Complete' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     await savePromise;
 
     await gotoAdmin(page, '/admin/tags');
@@ -411,7 +423,7 @@ test.describe('Admin Teams Management', () => {
       (resp) => resp.request().method() === 'POST' && resp.status() < 400,
       { timeout: 15000 },
     );
-    await page.getByRole('button', { name: 'Complete' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     await responsePromise;
 
     await gotoAdmin(page, '/admin/teams');
@@ -449,7 +461,7 @@ test.describe('Admin Teams Management', () => {
       (resp) => resp.request().method() === 'POST',
       { timeout: 15000 },
     );
-    await page.getByRole('button', { name: 'Complete' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     await responsePromise;
 
     // Server action should refuse and the team should still be present after reload
@@ -482,7 +494,7 @@ test.describe('Admin Teams Management', () => {
       (resp) => resp.request().method() === 'POST' && resp.status() < 400,
       { timeout: 15000 },
     );
-    await page.getByRole('button', { name: 'Complete' }).click();
+    await page.getByRole('button', { name: 'Save changes' }).click();
     await savePromise;
 
     await gotoAdmin(page, '/admin/teams');
@@ -491,21 +503,18 @@ test.describe('Admin Teams Management', () => {
 });
 
 test.describe('NavBar Setup Link', () => {
-  test('admin sees Setup link in user menu', async ({ page }) => {
+  test('admin sees Setup link in top nav', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
-    await page.locator('details summary').click();
-    await expect(page.getByRole('menuitem', { name: 'Setup' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('link', { name: 'Setup' })).toBeVisible({ timeout: 10000 });
   });
 
   test('non-admin does not see Setup link', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
-    await page.locator('details summary').click();
-    await expect(page.getByRole('menuitem', { name: 'Setup' })).not.toBeVisible();
+    await expect(page.getByRole('link', { name: 'Setup' })).not.toBeVisible();
   });
 
   test('agent does not see Setup link', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
-    await page.locator('details summary').click();
-    await expect(page.getByRole('menuitem', { name: 'Setup' })).not.toBeVisible();
+    await expect(page.getByRole('link', { name: 'Setup' })).not.toBeVisible();
   });
 });

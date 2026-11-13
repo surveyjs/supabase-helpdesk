@@ -3,6 +3,8 @@ import { createServerClient } from '@/lib/supabase/server';
 import { requireAdmin } from '@/lib/supabase/auth';
 import { blockUser, unblockUser, adminDeleteUser } from '@/lib/actions/admin';
 import { assignTier } from '@/lib/actions/tiers';
+import { RoleBadge } from '@/components/ui/RoleBadge';
+import { Pagination } from '@/components/ui/Pagination';
 
 export default async function UsersPage({
   searchParams,
@@ -60,25 +62,6 @@ export default async function UsersPage({
     .select('id, key, display_name')
     .order('sort_order');
 
-  function buildUrl(overrides: Record<string, string>) {
-    const p = new URLSearchParams();
-    if (overrides.page ?? params.page) p.set('page', overrides.page ?? params.page ?? '1');
-    if (overrides.role ?? roleFilter) {
-      const r = overrides.role ?? roleFilter;
-      if (r !== 'all') p.set('role', r);
-    }
-    if (overrides.status ?? statusFilter) {
-      const s = overrides.status ?? statusFilter;
-      if (s !== 'all') p.set('status', s);
-    }
-    if (overrides.q ?? searchQuery) {
-      const q = overrides.q ?? searchQuery;
-      if (q) p.set('q', q);
-    }
-    const qs = p.toString();
-    return `/admin/users${qs ? `?${qs}` : ''}`;
-  }
-
   function getUserStatus(user: { is_blocked: boolean; display_name: string | null }) {
     if (user.display_name?.startsWith('Deleted User #')) return 'deleted';
     if (user.is_blocked) return 'blocked';
@@ -87,9 +70,106 @@ export default async function UsersPage({
 
   const statusBadgeClass: Record<string, string> = {
     active: 'bg-green-100 text-green-700',
-    blocked: 'bg-red-100 text-red-700',
+    blocked: 'bg-red-50 text-red-700 ring-1 ring-inset ring-red-200',
     deleted: 'bg-gray-100 text-gray-600',
   };
+  const statusLabel: Record<string, string> = { active: 'Active', blocked: 'Blocked', deleted: 'Deleted' };
+
+  const rows = (users ?? []).map((user) => {
+    const team = Array.isArray(user.team) ? user.team[0] : user.team;
+    const tierObj = Array.isArray(user.tier) ? user.tier[0] : user.tier;
+    return { user, team, tierObj };
+  });
+  type UserRow = (typeof rows)[number]['user'];
+  type TierObj = (typeof rows)[number]['tierObj'];
+
+  // Team/Tier are empty for most imported users; only show the columns when this page has a value.
+  const showTeam = rows.some((r) => !!r.team?.name);
+  const showTier = rows.some((r) => !!r.tierObj);
+  const colCount = 6 + (showTeam ? 1 : 0) + (showTier ? 1 : 0);
+
+  const linkParams: Record<string, string> = {};
+  if (roleFilter !== 'all') linkParams.role = roleFilter;
+  if (statusFilter !== 'all') linkParams.status = statusFilter;
+  if (searchQuery) linkParams.q = searchQuery;
+
+  const roleCell = (role: string | null) =>
+    role === 'admin' || role === 'agent' ? (
+      <RoleBadge role={role} />
+    ) : (
+      <span className="text-gray-600">User</span>
+    );
+
+  const statusPill = (status: string) => (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusBadgeClass[status]}`}>
+      {statusLabel[status]}
+    </span>
+  );
+
+  const tierLabel = (tierObj: TierObj, expiresAt: string | null) => {
+    const expired = expiresAt && new Date(expiresAt) < new Date();
+    return tierObj ? (
+      <span className={expired ? 'text-gray-500 line-through' : ''}>{tierObj.display_name}</span>
+    ) : (
+      '—'
+    );
+  };
+
+  const tierChange = (user: UserRow, idSuffix: string) =>
+    allTiers && allTiers.length > 0 ? (
+      <details className="mt-1">
+        <summary className="text-xs text-blue-600 cursor-pointer">Change tier</summary>
+        <form action={assignTier} className="mt-1 flex flex-col gap-1">
+          <input type="hidden" name="user_id" value={user.id} />
+          <select
+            name="tier_id"
+            defaultValue={user.tier_id ?? 'none'}
+            className="rounded border border-gray-300 px-1 py-0.5 text-xs"
+            aria-label={`Tier for ${user.display_name ?? user.email}${idSuffix}`}
+          >
+            <option value="none">None</option>
+            {allTiers.map((t) => (
+              <option key={t.id} value={t.id}>{t.display_name}</option>
+            ))}
+          </select>
+          <input
+            name="expires_at"
+            type="datetime-local"
+            defaultValue={user.tier_expires_at ? new Date(user.tier_expires_at).toISOString().slice(0, 16) : ''}
+            className="rounded border border-gray-300 px-1 py-0.5 text-xs"
+            aria-label={`Tier expiration${idSuffix}`}
+          />
+          <button type="submit" className="px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200">Save</button>
+        </form>
+      </details>
+    ) : null;
+
+  const userActions = (user: UserRow, status: string) => {
+    const isAgentOrAdmin = user.role === 'agent' || user.role === 'admin';
+    return (
+      <div className="flex gap-3">
+        <form action={user.is_blocked ? unblockUser : blockUser}>
+          <input type="hidden" name="user_id" value={user.id} />
+          <button
+            type="submit"
+            className={`text-xs ${user.is_blocked ? 'text-green-600 hover:text-green-800' : 'text-yellow-600 hover:text-yellow-800'}`}
+          >
+            {user.is_blocked ? 'Unblock' : 'Block'}
+          </button>
+        </form>
+        {!isAgentOrAdmin && status !== 'deleted' && (
+          <form action={adminDeleteUser}>
+            <input type="hidden" name="user_id" value={user.id} />
+            <button type="submit" className="text-xs text-red-600 hover:text-red-800">
+              Delete
+            </button>
+          </form>
+        )}
+      </div>
+    );
+  };
+
+  const th = 'text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider';
 
   return (
     <div>
@@ -104,7 +184,7 @@ export default async function UsersPage({
               id="filter-role"
               name="role"
               defaultValue={roleFilter}
-              className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+              className="form-select"
             >
               <option value="all">All</option>
               <option value="user">User</option>
@@ -118,7 +198,7 @@ export default async function UsersPage({
               id="filter-status"
               name="status"
               defaultValue={statusFilter}
-              className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+              className="form-select"
             >
               <option value="all">All</option>
               <option value="active">Active</option>
@@ -134,125 +214,112 @@ export default async function UsersPage({
               type="text"
               defaultValue={searchQuery}
               placeholder="Email or display name…"
-              className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+              className="form-input"
             />
           </div>
-          <button
-            type="submit"
-            className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
-          >
-            Filter
-          </button>
-          <Link
-            href="/admin/users"
-            className="px-4 py-1.5 bg-gray-100 text-gray-700 text-sm rounded hover:bg-gray-200"
-          >
-            Reset
-          </Link>
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
+            >
+              Filter
+            </button>
+            <Link
+              href="/admin/users"
+              prefetch={false}
+              className="px-4 py-1.5 bg-gray-100 text-gray-700 text-sm rounded hover:bg-gray-200"
+            >
+              Reset
+            </Link>
+          </div>
         </form>
       </div>
 
-      {/* Users table */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      {/* Users: cards below md, table from md up */}
+      <div className="md:hidden space-y-3" data-testid="users-cards">
+        {rows.length === 0 ? (
+          <p className="bg-white rounded-lg border border-gray-200 px-4 py-8 text-center text-gray-500">No users found.</p>
+        ) : (
+          rows.map(({ user, team, tierObj }) => {
+            const status = getUserStatus(user);
+            return (
+              <div key={user.id} className="bg-white rounded-lg border border-gray-200 p-4 space-y-2" data-testid={`user-card-${user.id}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <Link
+                    href={`/agent/users/${user.id}`}
+                    prefetch={false}
+                    className="text-blue-600 hover:text-blue-800 hover:underline font-medium break-words min-w-0"
+                  >
+                    {user.display_name ?? '—'}
+                  </Link>
+                  {statusPill(status)}
+                </div>
+                <p className="text-sm text-gray-600 break-all">{user.email}</p>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
+                  {roleCell(user.role)}
+                  {team?.name && <span>Team: {team.name}</span>}
+                  {tierObj && <span>Tier: {tierLabel(tierObj, user.tier_expires_at)}</span>}
+                  <span>{new Date(user.created_at).toLocaleDateString()}</span>
+                </div>
+                {tierChange(user, ' (card)')}
+                {userActions(user, status)}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      <div className="hidden md:block bg-white rounded-lg border border-gray-200 overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Display Name</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Team</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Tier</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
-              <th className="text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+              <th className={th}>Display Name</th>
+              <th className={th}>Email</th>
+              <th className={th}>Role</th>
+              {showTeam && <th className={th}>Team</th>}
+              {showTier && <th className={th}>Tier</th>}
+              <th className={th}>Status</th>
+              <th className={th}>Created</th>
+              <th className={th}>Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {(!users || users.length === 0) ? (
+            {rows.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
+                <td colSpan={colCount} className="px-4 py-8 text-center text-gray-500">
                   No users found.
                 </td>
               </tr>
-            ) : users.map((user) => {
-              const team = Array.isArray(user.team) ? user.team[0] : user.team;
-              const tierObj = Array.isArray(user.tier) ? user.tier[0] : user.tier;
-              const tierExpired = user.tier_expires_at && new Date(user.tier_expires_at) < new Date();
+            ) : rows.map(({ user, team, tierObj }) => {
               const status = getUserStatus(user);
-              const isAgentOrAdmin = user.role === 'agent' || user.role === 'admin';
               return (
                 <tr key={user.id} className="hover:bg-gray-50" data-testid={`user-row-${user.id}`}>
                   <td className="px-4 py-3">
                     <Link
                       href={`/agent/users/${user.id}`}
+                      prefetch={false}
                       className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
                     >
                       {user.display_name ?? '—'}
                     </Link>
                   </td>
                   <td className="px-4 py-3 text-gray-600">{user.email}</td>
-                  <td className="px-4 py-3 capitalize text-gray-600">{user.role}</td>
-                  <td className="px-4 py-3 text-gray-600">{team?.name ?? '—'}</td>
-                  <td className="px-4 py-3 text-gray-600" data-testid={`user-tier-${user.id}`}>
-                    {tierObj ? (
-                      <span className={tierExpired ? 'text-gray-500 line-through' : ''}>
-                        {tierObj.display_name}
-                      </span>
-                    ) : '—'}
-                    {allTiers && allTiers.length > 0 && (
-                      <details className="mt-1">
-                        <summary className="text-xs text-blue-600 cursor-pointer">Change</summary>
-                        <form action={assignTier} className="mt-1 flex flex-col gap-1">
-                          <input type="hidden" name="user_id" value={user.id} />
-                          <select name="tier_id" defaultValue={user.tier_id ?? 'none'} className="rounded border border-gray-300 px-1 py-0.5 text-xs">
-                            <option value="none">None</option>
-                            {allTiers.map((t) => (
-                              <option key={t.id} value={t.id}>{t.display_name}</option>
-                            ))}
-                          </select>
-                          <input
-                            name="expires_at"
-                            type="datetime-local"
-                            defaultValue={user.tier_expires_at ? new Date(user.tier_expires_at).toISOString().slice(0, 16) : ''}
-                            className="rounded border border-gray-300 px-1 py-0.5 text-xs"
-                            aria-label="Tier expiration"
-                          />
-                          <button type="submit" className="px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200">Save</button>
-                        </form>
-                      </details>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusBadgeClass[status]}`}>
-                      {status}
-                    </span>
-                  </td>
+                  <td className="px-4 py-3">{roleCell(user.role)}</td>
+                  {showTeam && <td className="px-4 py-3 text-gray-600">{team?.name ?? '—'}</td>}
+                  {showTier && (
+                    <td className="px-4 py-3 text-gray-600" data-testid={`user-tier-${user.id}`}>
+                      {tierLabel(tierObj, user.tier_expires_at)}
+                      {tierChange(user, '')}
+                    </td>
+                  )}
+                  <td className="px-4 py-3">{statusPill(status)}</td>
                   <td className="px-4 py-3 text-gray-600">
                     {new Date(user.created_at).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex gap-2">
-                      <form action={user.is_blocked ? unblockUser : blockUser}>
-                        <input type="hidden" name="user_id" value={user.id} />
-                        <button
-                          type="submit"
-                          className={`text-xs ${user.is_blocked ? 'text-green-600 hover:text-green-800' : 'text-yellow-600 hover:text-yellow-800'}`}
-                        >
-                          {user.is_blocked ? 'Unblock' : 'Block'}
-                        </button>
-                      </form>
-                      {!isAgentOrAdmin && status !== 'deleted' && (
-                        <form action={adminDeleteUser}>
-                          <input type="hidden" name="user_id" value={user.id} />
-                          <button
-                            type="submit"
-                            className="text-xs text-red-600 hover:text-red-800"
-                          >
-                            Delete
-                          </button>
-                        </form>
-                      )}
-                    </div>
+                    {userActions(user, status)}
+                    {/* With the Tier column hidden, keep tier assignment reachable from here. */}
+                    {!showTier && tierChange(user, '')}
                   </td>
                 </tr>
               );
@@ -261,32 +328,14 @@ export default async function UsersPage({
         </table>
       </div>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between mt-4">
-          <p className="text-sm text-gray-500">
-            Page {page} of {totalPages} ({count} users)
-          </p>
-          <div className="flex gap-2">
-            {page > 1 && (
-              <Link
-                href={buildUrl({ page: String(page - 1) })}
-                className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
-              >
-                Previous
-              </Link>
-            )}
-            {page < totalPages && (
-              <Link
-                href={buildUrl({ page: String(page + 1) })}
-                className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
-              >
-                Next
-              </Link>
-            )}
-          </div>
-        </div>
-      )}
+      <Pagination
+        currentPage={page}
+        totalPages={totalPages}
+        basePath="/admin/users"
+        searchParams={linkParams}
+        pageSize={pageSize}
+        totalItems={count ?? 0}
+      />
     </div>
   );
 }

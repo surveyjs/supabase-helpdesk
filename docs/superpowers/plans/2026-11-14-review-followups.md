@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Fix the five product follow-ups C1–C5 left open by PR #100.
+**Goal:** Fix the product follow-ups C1–C5 left open by PR #100, plus C6 (found during C3).
 
 **Architecture:** Five independent, area-scoped changes: Playwright project config (+ CI command), the /admin/ai save path (client diff + server partial update), the ticket sidebar SurveyJS model lifecycle, a sized placeholder for the lazily loaded Markdown editor, and an intent-based prefetch link for list pages. No new dependencies, no DB migrations.
 
 **Tech Stack:** Next.js 16.4 (read `node_modules/next/dist/docs/` before any Next API), React 19, SurveyJS 3 (`survey-core`/`survey-react-ui`), react-markdown-editor-lite, Vitest, Playwright 1.65, Supabase/Postgres.
 
-**Spec:** `docs/ui-followups-2026-11-13.md`, section "Product follow-ups found during this work" (C1–C5).
+**Spec:** `docs/ui-followups-2026-11-13.md`, section "Product follow-ups found during this work" (C1–C6).
 
 ## Global Constraints
 
@@ -144,6 +144,29 @@ Decisions:
 - [ ] **Step 3:** Implement.
 - [ ] **Step 4:** Run `agent-prefetch.spec.ts` with `--repeat-each=3`, plus `agent-dashboard.spec.ts tickets.spec.ts notifications.spec.ts knowledge-base.spec.ts` → PASS.
 - [ ] **Step 5:** Commit `perf(agent): prefetch ticket, user and pager links on intent only`.
+
+### Task 6: Ticket page Realtime reports status and backfills after reconnect (C6)
+
+Added during execution. Found while fixing C3: locally the browser never seemed to receive `postgres_changes`, while Node clients did. A read-only investigation found no browser-specific defect. The likeliest cause is a readiness race, since the subscription has no status callback and errors are swallowed.
+
+**Files:**
+- Modify: `src/components/features/tickets/RealtimeTicketUpdates.tsx`
+- Test: create `tests/e2e/realtime-ticket-updates.spec.ts`. If it now passes without injection, also simplify Task 3's injected test in `tests/e2e/ticket-detail-custom-fields.spec.ts` to use a real service-client update.
+
+**Interfaces:**
+- Produces: a hidden element `<span hidden data-testid="realtime-status" data-status={status} />`, where `status` is the latest channel status (`'connecting'` initially, then the realtime-js subscribe status strings such as `'SUBSCRIBED'`, `'CHANNEL_ERROR'`, `'TIMED_OUT'`, `'CLOSED'`).
+
+Decisions:
+- `.subscribe((status, err) => …)`: record the status. On `CHANNEL_ERROR` or `TIMED_OUT`, `console.warn('HelpDesk: ticket realtime', status, err)` once per status change. On a `SUBSCRIBED` that follows an earlier `SUBSCRIBED` (a reconnect), call `router.refresh()` once to backfill missed events. Verify the callback signature against the installed `@supabase/realtime-js`.
+- Do not change the deploy bundle's Realtime image or `REGION`. That is a manual workaround the deploy CHANGELOG documents.
+
+- [ ] **Step 1: Failing e2e** `tests/e2e/realtime-ticket-updates.spec.ts`. Use a scoped ticket and log in as its creator.
+  - `a new post appears on the open ticket page without a reload`: open the ticket and `expect(getByTestId('realtime-status')).toHaveAttribute('data-status', 'SUBSCRIBED')`. Then insert a post with the service client, checking `{error}`, and expect its text visible within 15 s with no reload. Clean up.
+  - `a ticket field change from elsewhere appears without a reload`: same flow, with a service-client update to a field shown on the page.
+- [ ] **Step 2:** Run → FAIL (no status element).
+- [ ] **Step 3:** Implement. If, after `SUBSCRIBED`, the event still never reaches the browser, stop and report BLOCKED with evidence: the WS frames from `page.on('websocket')`, the realtime container log lines, and the subscription row in `realtime.subscription` (read-only query). Do not work around it.
+- [ ] **Step 4:** Run the new spec with `--repeat-each=3`, plus `realtime-notifications.spec.ts ticket-detail-custom-fields.spec.ts` → PASS.
+- [ ] **Step 5:** Commit `fix(realtime): ticket page reports channel status and backfills after reconnect`, then mark C6 in the doc.
 
 ---
 

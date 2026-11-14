@@ -213,32 +213,6 @@ test.describe('Ticket detail custom fields (SurveyJS)', () => {
       .eq('id', id);
     if (resetErr) throw new Error(resetErr.message);
 
-    // Local Realtime does not deliver postgres_changes to the browser session,
-    // so relay the server's join reply and push the change event over the
-    // page's own socket: the real RealtimeTicketUpdates handler still runs
-    // and calls router.refresh().
-    const topic = `realtime:ticket-${id}`;
-    let relayToPage: ((frame: string) => void) | null = null;
-    let joinRef: string | null = null;
-    let changeIds: number[] = [];
-    await page.routeWebSocket(/\/realtime\/v1\/websocket/, (ws) => {
-      const server = ws.connectToServer();
-      relayToPage = (frame) => ws.send(frame);
-      ws.onMessage((m) => {
-        const msg = JSON.parse(String(m));
-        if (msg[2] === topic && msg[3] === 'phx_join') joinRef = msg[0];
-        server.send(m);
-      });
-      server.onMessage((m) => {
-        const msg = JSON.parse(String(m));
-        if (msg[2] === topic && msg[3] === 'phx_reply') {
-          const bindings = (msg[4]?.response?.postgres_changes ?? []) as { id: number; table: string }[];
-          changeIds = bindings.filter((b) => b.table === 'tickets').map((b) => b.id);
-        }
-        ws.send(m);
-      });
-    });
-
     await loginAs(page, 'agent.smith@example.com');
     await page.goto(url);
 
@@ -250,37 +224,18 @@ test.describe('Ticket detail custom fields (SurveyJS)', () => {
       .locator('input')
       .first();
     await expect(input).toBeVisible({ timeout: 10000 });
-    await expect.poll(() => changeIds.length, { timeout: 15000 }).toBeGreaterThan(0);
+    await expect(page.getByTestId('realtime-status')).toHaveAttribute('data-status', 'SUBSCRIBED', {
+      timeout: 15000,
+    });
 
     // Type without blurring, so the draft is not yet committed to the model.
     await input.click();
     await input.pressSequentially('draft');
 
-    // Another sidebar field changes remotely and the page is told about it;
-    // the refresh shows the new urgency in the (untouched) dropdown.
+    // Another sidebar field changes remotely; the realtime refresh shows the new
+    // urgency in the (untouched) dropdown.
     const { error: updErr } = await svc.from('tickets').update({ urgency: 'critical' }).eq('id', id);
     if (updErr) throw new Error(updErr.message);
-    relayToPage!(
-      JSON.stringify([
-        joinRef,
-        null,
-        topic,
-        'postgres_changes',
-        {
-          ids: changeIds,
-          data: {
-            schema: 'public',
-            table: 'tickets',
-            type: 'UPDATE',
-            commit_timestamp: new Date().toISOString(),
-            columns: [],
-            record: { id },
-            old_record: { id },
-            errors: null,
-          },
-        },
-      ]),
-    );
     await expect(urgency).toContainText('Critical', { timeout: 20000 });
 
     await expect(input).toHaveValue('draft');

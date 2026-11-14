@@ -11,3 +11,13 @@ services:
   db:
     healthcheck:
       start_period: 180s
+
+  # Realtime v2.143.x restarts its database connection and Postgres Changes
+  # replication every 10 minutes ("rebalancing") unless REGION is set, and
+  # changes made during the reconnect are never delivered. HelpDesk's live
+  # ticket, dashboard and notification updates are Postgres Changes, so set it
+  # until the upstream fix ships (deploy/supabase/CHANGELOG.md, realtime#2289).
+  # This REGION is Realtime's own; the .env REGION belongs to Storage.
+  realtime:
+    environment:
+      REGION: us-east-1

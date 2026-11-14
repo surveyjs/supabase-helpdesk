@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { createBrowserClient } from '@/lib/supabase/client';
+import { authorizeRealtime } from '@/lib/supabase/realtime';
 
 interface RealtimeTicketUpdatesProps {
   ticketId: number;
@@ -21,11 +22,7 @@ export function RealtimeTicketUpdates({ ticketId }: RealtimeTicketUpdatesProps) 
     let lastStatus = 'connecting';
 
     async function start() {
-      // Give the socket the user's JWT before joining. Without it the channel
-      // joins as `anon`, and Realtime filters every posts/tickets change out by
-      // RLS, so the subscription reports SUBSCRIBED but never receives events.
-      const { data } = await supabase.auth.getSession();
-      if (data.session) await supabase.realtime.setAuth(data.session.access_token);
+      await authorizeRealtime(supabase);
       if (cancelled) return;
 
       channel = supabase

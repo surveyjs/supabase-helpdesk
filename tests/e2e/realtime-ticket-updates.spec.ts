@@ -97,3 +97,76 @@ test.describe('Ticket page realtime updates', () => {
     await expect(urgency).toContainText('Critical', { timeout: 15000 });
   });
 });
+
+// Bell and agent dashboard use the same browser Realtime path as the ticket page.
+test.describe('Bell and dashboard realtime updates', () => {
+  const rtEmail = `e2e-rt-bell-${SUFFIX}@example.com`;
+  const dashTitle = `E2E Realtime Dashboard ${SUFFIX}`;
+  let bellUserId = '';
+
+  test.afterEach(async () => {
+    const svc = createServiceRoleClient();
+    if (bellUserId) {
+      const { error: nErr } = await svc.from('notifications').delete().eq('recipient_id', bellUserId);
+      if (nErr) throw new Error(nErr.message);
+      const { error: pErr } = await svc.from('profiles').delete().eq('id', bellUserId);
+      if (pErr) throw new Error(pErr.message);
+      const { error } = await svc.auth.admin.deleteUser(bellUserId);
+      if (error && error.status !== 404) throw new Error(error.message);
+      bellUserId = '';
+    }
+    const { error: tErr } = await svc.from('tickets').delete().eq('title', dashTitle);
+    if (tErr) throw new Error(tErr.message);
+  });
+
+  test('bell count updates without a reload', async ({ page }) => {
+    const svc = createServiceRoleClient();
+    const { data: created, error: uErr } = await svc.auth.admin.createUser({
+      email: rtEmail,
+      password: 'Password123',
+      email_confirm: true,
+    });
+    if (uErr) throw new Error(`createUser: ${uErr.message}`);
+    bellUserId = created.user.id;
+
+    await loginViaForm(page, rtEmail, 'Password123');
+    await page.goto('/tickets');
+    await expect(page.getByTestId('notifications-realtime-status')).toHaveAttribute('data-status', 'SUBSCRIBED', {
+      timeout: 15000,
+    });
+    await expect(page.getByLabel('Notifications', { exact: true })).toBeVisible();
+
+    const { error } = await svc.from('notifications').insert({
+      recipient_id: bellUserId,
+      event_type: 'new_post',
+      ticket_id: null,
+      message: `Realtime bell ${SUFFIX}`,
+    });
+    if (error) throw new Error(error.message);
+
+    await expect(page.getByLabel('Notifications, 1 unread')).toBeVisible({ timeout: 15000 });
+  });
+
+  test('agent dashboard shows a new ticket without a reload', async ({ page }) => {
+    await loginViaForm(page, 'agent.smith@example.com', 'Password123');
+    await page.goto('/agent');
+    await expect(page.getByTestId('dashboard-realtime-status')).toHaveAttribute('data-status', 'SUBSCRIBED', {
+      timeout: 15000,
+    });
+
+    const svc = createServiceRoleClient();
+    const { data: alice, error: aErr } = await svc.from('profiles').select('id').eq('email', 'alice@example.com').single();
+    if (aErr) throw new Error(aErr.message);
+    const { data: type, error: tErr } = await svc.from('ticket_types').select('id').limit(1).single();
+    if (tErr) throw new Error(tErr.message);
+    const { error } = await svc.from('tickets').insert({
+      title: dashTitle,
+      slug: `e2e-realtime-dashboard-${SUFFIX}`,
+      creator_id: alice.id,
+      type_id: type.id,
+    });
+    if (error) throw new Error(error.message);
+
+    await expect(page.getByTestId('agent-ticket-table').getByText(dashTitle)).toBeVisible({ timeout: 15000 });
+  });
+});

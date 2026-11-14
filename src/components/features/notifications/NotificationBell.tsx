@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import { createBrowserClient } from '@/lib/supabase/client';
+import { authorizeRealtime } from '@/lib/supabase/realtime';
 import { notifyPopupOpened, subscribeToOtherPopups } from '@/lib/utils/popup-coordinator';
 import { NotificationDropdown, type Notification } from './NotificationDropdown';
 
@@ -16,6 +18,7 @@ export function NotificationBell({ initialUnreadCount, userId }: NotificationBel
   const [unreadCount, setUnreadCount] = useState(initialUnreadCount);
   const [isOpen, setIsOpen] = useState(false);
   const [dropdownNotifications, setDropdownNotifications] = useState<Notification[] | null>(null);
+  const [realtimeStatus, setRealtimeStatus] = useState<string>('connecting');
   const bellRef = useRef<HTMLDivElement>(null);
   // Guards against rapid double-clicks starting concurrent fetches while
   // `isOpen` hasn't flipped yet.
@@ -55,40 +58,61 @@ export function NotificationBell({ initialUnreadCount, userId }: NotificationBel
       console.warn('HelpDesk: realtime notifications disabled —', err);
       return;
     }
-    const channel = supabase
-      .channel('notifications-bell')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: `recipient_id=eq.${userId}`,
-        },
-        () => {
-          setUnreadCount((prev) => prev + 1);
-        },
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'notifications',
-          filter: `recipient_id=eq.${userId}`,
-        },
-        (payload) => {
-          const newRow = payload.new as { is_read?: boolean };
-          const oldRow = payload.old as { is_read?: boolean };
-          if (newRow.is_read && !oldRow.is_read) {
-            setUnreadCount((prev) => Math.max(0, prev - 1));
+    let cancelled = false;
+    let channel: RealtimeChannel | null = null;
+    let lastStatus = 'connecting';
+
+    async function start() {
+      await authorizeRealtime(supabase);
+      if (cancelled) return;
+
+      channel = supabase
+        .channel('notifications-bell')
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'notifications',
+            filter: `recipient_id=eq.${userId}`,
+          },
+          () => {
+            setUnreadCount((prev) => prev + 1);
+          },
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'notifications',
+            filter: `recipient_id=eq.${userId}`,
+          },
+          (payload) => {
+            const newRow = payload.new as { is_read?: boolean };
+            const oldRow = payload.old as { is_read?: boolean };
+            if (newRow.is_read && !oldRow.is_read) {
+              setUnreadCount((prev) => Math.max(0, prev - 1));
+            }
+          },
+        )
+        .subscribe((next, err) => {
+          if (cancelled || next === lastStatus) return;
+          lastStatus = next;
+          setRealtimeStatus(next);
+          if (next === 'CHANNEL_ERROR' || next === 'TIMED_OUT') {
+            console.warn('HelpDesk: notifications realtime', next, err);
           }
-        },
-      )
-      .subscribe();
+        });
+    }
+
+    start().catch((err) => {
+      console.warn('HelpDesk: notifications realtime setup failed', err);
+    });
 
     return () => {
-      supabase.removeChannel(channel);
+      cancelled = true;
+      if (channel) supabase.removeChannel(channel);
     };
   }, [userId]);
 
@@ -110,6 +134,7 @@ export function NotificationBell({ initialUnreadCount, userId }: NotificationBel
 
   return (
     <div ref={bellRef} className="relative">
+      <span hidden data-testid="notifications-realtime-status" data-status={realtimeStatus} />
       <button
         type="button"
         onClick={handleToggle}

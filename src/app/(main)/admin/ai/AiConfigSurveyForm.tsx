@@ -1,9 +1,9 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState, useTransition } from 'react';
+import { useCallback, useMemo, useState, useTransition } from 'react';
 import { saveAiSettings, testAiConnection } from '@/lib/actions/ai';
 import { AdminSurveyForm } from '@/components/features/survey/AdminSurveyForm';
-import { buildAiSettingsDiff } from '@/lib/ai/settings-diff';
+import { createAiSettingsSaveTracker } from '@/lib/ai/settings-diff';
 import aiSchema from '@/components/features/survey/form-json/admin/ai.json';
 
 type Props = {
@@ -78,14 +78,29 @@ function buildData(settings: Record<string, string>): Record<string, unknown> {
 export function AiConfigSurveyForm({ settings, usage }: Props) {
   // Memoised: AdminSurveyForm resets its saved snapshot whenever `data` changes identity.
   const data = useMemo(() => buildData(settings), [settings]);
-  // Last successfully saved values; only fields differing from it are sent.
-  const baselineRef = useRef<Record<string, unknown>>(data);
-  const pendingRef = useRef<Record<string, unknown> | null>(null);
+  // Last successfully saved values; only fields differing from them are sent.
+  // Saves can overlap (AdminSurveyForm does not serialise them), so each save's
+  // data is tracked per FormData and only a successful save advances the baseline.
+  const [tracker] = useState(() => createAiSettingsSaveTracker(data));
 
-  const toFormData = useCallback((current: Record<string, unknown>) => {
-    pendingRef.current = current;
-    return buildAiSettingsDiff(current, baselineRef.current);
-  }, []);
+  const toFormData = useCallback(
+    (current: Record<string, unknown>) => tracker.begin(current),
+    [tracker],
+  );
+  const saveAction = useCallback(
+    async (fd: FormData) => {
+      let ok = false;
+      try {
+        const res = await saveAiSettings(fd);
+        if (res?.error) return { error: res.error };
+        ok = true;
+        return { message: 'AI settings saved.' };
+      } finally {
+        tracker.settle(fd, ok);
+      }
+    },
+    [tracker],
+  );
   const keySource = settings.ai_api_key_source ?? 'none';
 
   const [testResult, setTestResult] = useState<{ success?: boolean; error?: string; model?: string } | null>(null);
@@ -111,14 +126,7 @@ export function AiConfigSurveyForm({ settings, usage }: Props) {
           data={data}
           mode="autosave"
           debounceMs={700}
-          saveAction={async (fd) => {
-            const res = await saveAiSettings(fd);
-            if (res?.error) return { error: res.error };
-            if (pendingRef.current) {
-              baselineRef.current = { ...pendingRef.current, ai_api_key: '' };
-            }
-            return { message: 'AI settings saved.' };
-          }}
+          saveAction={saveAction}
           toFormData={toFormData}
           clearOnSave={CLEAR_ON_SAVE}
           successMessage="AI settings saved."

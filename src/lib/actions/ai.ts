@@ -742,16 +742,17 @@ export async function saveAiSettings(formData: FormData): Promise<{ error?: stri
   }
 
   // Handle API key if provided
+  let keyError: string | null = null;
   const apiKey = (formData.get('ai_api_key') as string ?? '').trim();
   if (apiKey) {
     const serviceClient = createServiceRoleClient();
     // Delete existing secret
     try { await serviceClient.rpc('delete_ai_api_key'); } catch { /* ignore if not exists */ }
-    // Try vault insert via raw SQL
     const { error: vaultError } = await serviceClient.rpc('store_ai_api_key', { key_value: apiKey });
     if (vaultError) {
-      // Fallback: try direct vault access
+      // The old key is already gone: report it, so the form keeps the key for a retry.
       console.error('[AI Settings] Vault storage error:', vaultError.message);
+      keyError = 'The API key could not be stored in Vault. Enter it again to retry.';
     }
   }
 
@@ -766,7 +767,7 @@ export async function saveAiSettings(formData: FormData): Promise<{ error?: stri
   }
 
   revalidatePath('/admin/ai');
-  return {};
+  return keyError ? { error: keyError } : {};
 }
 
 export async function testAiConnection(): Promise<{ success: boolean; error?: string; model?: string }> {

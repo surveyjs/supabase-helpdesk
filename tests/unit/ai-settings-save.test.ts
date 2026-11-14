@@ -123,6 +123,47 @@ describe('saveAiSettings', () => {
     expect(audits).toEqual([]);
   });
 
+  it("provider '' is written as unconfigured", async () => {
+    await saveAiSettings(fd({ ai_provider: '' }));
+    expect(updates).toEqual([{ key: 'ai_provider', value: '' }]);
+  });
+
+  it("text fields '' are written as empty", async () => {
+    await saveAiSettings(fd({ ai_model: '', ai_custom_endpoint_url: '' }));
+    expect(val('ai_model')).toBe('');
+    expect(val('ai_custom_endpoint_url')).toBe('');
+  });
+
+  it("numeric '' falls back to each field's default", async () => {
+    await saveAiSettings(fd({
+      ai_request_timeout: '',
+      ai_auto_categorize_min_body_length: '',
+      ai_suggested_reply_context_window: '',
+      ai_suggested_reply_rate_limit: '',
+      ai_ticket_summary_min_posts: '',
+    }));
+    expect(val('ai_request_timeout')).toBe('60');
+    expect(val('ai_auto_categorize_min_body_length')).toBe('20');
+    expect(val('ai_suggested_reply_context_window')).toBe('20');
+    expect(val('ai_suggested_reply_rate_limit')).toBe('20');
+    expect(val('ai_ticket_summary_min_posts')).toBe('10');
+  });
+
+  it("threshold '' is ignored and boolean '' means false", async () => {
+    await saveAiSettings(fd({ ai_duplicate_detection_threshold: '', ai_filter_enabled: '' }));
+    expect(val('ai_duplicate_detection_threshold')).toBeUndefined();
+    expect(val('ai_filter_enabled')).toBe('false');
+  });
+
+  it('a vault failure is returned as an error, after the settings are written and audited', async () => {
+    rpc.mockImplementation(async (name: string) =>
+      name === 'store_ai_api_key' ? { error: { message: 'vault down' } } : { error: null });
+    const res = await saveAiSettings(fd({ ai_api_key: 'sk-x', ai_model: 'm' }));
+    expect(res.error).toMatch(/API key could not be stored/);
+    expect(val('ai_model')).toBe('m');
+    expect(audits).toHaveLength(1);
+  });
+
   it('non-admin gets Forbidden', async () => {
     setup('user');
     const res = await saveAiSettings(fd({ ai_model: 'm' }));

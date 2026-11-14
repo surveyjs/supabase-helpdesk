@@ -154,6 +154,45 @@ test.describe('Admin AI Configuration', () => {
     }
   });
 
+  test('choosing provider None and clearing Model on /admin/ai is saved', async ({ page }) => {
+    // SurveyJS drops emptied keys from the form data; the save must still send them as ''.
+    const svc = createServiceRoleClient();
+    const keys = ['ai_provider', 'ai_model'] as const;
+    const { data: before, error: readErr } = await svc.from('app_settings').select('key, value').in('key', [...keys]);
+    expect(readErr).toBeNull();
+    const original = Object.fromEntries((before ?? []).map((r) => [r.key, r.value as string]));
+    const read = async (key: string) => {
+      const { data, error } = await svc.from('app_settings').select('value').eq('key', key).single();
+      expect(error).toBeNull();
+      return data?.value as string;
+    };
+
+    try {
+      const r1 = await svc.from('app_settings').update({ value: 'openai' }).eq('key', 'ai_provider');
+      const r2 = await svc.from('app_settings').update({ value: 'e2e-clear-model' }).eq('key', 'ai_model');
+      expect(r1.error).toBeNull();
+      expect(r2.error).toBeNull();
+
+      await loginAs(page, 'admin@example.com');
+      await gotoAdmin(page, '/admin/ai');
+      const form = page.getByTestId('ai-config-survey-form');
+      await expect(page.getByLabel('Model')).toHaveValue('e2e-clear-model');
+
+      await form.getByText('None (unconfigured)', { exact: true }).click();
+      await page.getByLabel('Model').fill('');
+      await page.getByLabel('Model').blur();
+
+      await expect.poll(() => read('ai_provider'), { timeout: 15000 }).toBe('');
+      await expect.poll(() => read('ai_model'), { timeout: 15000 }).toBe('');
+      await expect(page.getByText('AI settings saved.')).toBeVisible({ timeout: 10000 });
+    } finally {
+      for (const key of keys) {
+        const { error } = await svc.from('app_settings').update({ value: original[key] ?? '' }).eq('key', key);
+        expect(error).toBeNull();
+      }
+    }
+  });
+
   test('usage counter section shows data', async ({ page }) => {
     await loginAs(page, 'admin@example.com');
     await gotoAdmin(page, '/admin/ai');

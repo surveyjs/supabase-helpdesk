@@ -68,6 +68,8 @@ export function AdminSurveyForm({
   const lastSavedSnapshotRef = useRef(JSON.stringify(data));
   const modelRef = useRef<Model | null>(null);
   const suppressChangeRef = useRef(false);
+  // Saves started but not yet resolved.
+  const inFlightRef = useRef(0);
 
   useEffect(() => {
     lastSavedSnapshotRef.current = JSON.stringify(data);
@@ -83,7 +85,9 @@ export function AdminSurveyForm({
 
   const saveNow = useCallback((nextData: Record<string, unknown>) => {
     const snapshot = JSON.stringify(nextData ?? {});
-    if (snapshot === lastSavedSnapshotRef.current) {
+    // While a save is in flight the saved snapshot is not final: data equal to
+    // it (e.g. a field changed and changed back) must still be sent.
+    if (snapshot === lastSavedSnapshotRef.current && inFlightRef.current === 0) {
       // An explicit Save with nothing changed should not look like a dead button.
       if (mode === 'complete') {
         setIsError(false);
@@ -96,7 +100,13 @@ export function AdminSurveyForm({
     setIsError(false);
     startTransition(async () => {
       const formData = (toFormData ?? defaultToFormData)(nextData);
-      const result = await saveAction(formData);
+      inFlightRef.current += 1;
+      let result: SaveResponse;
+      try {
+        result = await saveAction(formData);
+      } finally {
+        inFlightRef.current -= 1;
+      }
       if (result?.error) {
         // Don't advance the saved snapshot so the next change re-attempts the save.
         setIsError(true);

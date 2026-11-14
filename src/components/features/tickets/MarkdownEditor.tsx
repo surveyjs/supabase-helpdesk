@@ -42,7 +42,21 @@ function registerEditorPlugins() {
 registerEditorPlugins();
 
 // Import react-markdown-editor-lite with SSR disabled (it depends on browser APIs)
-const MdEditor = dynamic(() => import('react-markdown-editor-lite'), { ssr: false });
+// `loading` receives no parent props, so it flex-fills a column wrapper that
+// reserves the editor's final height (min-height); the page does not jump when
+// the chunk lands. (height: 100% would not resolve against a min-height-only parent.)
+const MdEditor = dynamic(() => import('react-markdown-editor-lite'), {
+  ssr: false,
+  loading: () => (
+    <div
+      data-testid="markdown-editor-placeholder"
+      aria-hidden="true"
+      className="box-border flex flex-1 flex-col border border-[#e0e0e0] bg-white"
+    >
+      <div className="h-[38px] shrink-0 bg-[#f5f5f5]" />
+    </div>
+  ),
+});
 
 // Import editor styles
 import 'react-markdown-editor-lite/lib/index.css';
@@ -526,20 +540,22 @@ export function MarkdownEditor({
           tabIndex={-1}
         />
       )}
-      <MdEditor
-        id={id}
-        value={value}
-        onChange={handleChange}
-        renderHTML={(text: string) => renderMarkdown(text)}
-        onImageUpload={onImageUpload ? handleEditorImageUpload : undefined}
-        imageAccept="image/*"
-        style={{ height: `${renderedHeight}px` }}
-        placeholder={placeholder ?? 'Write using Markdown…'}
-        view={viewConfig}
-        canView={{ menu: true, md: true, html: true, both: true, fullScreen: false, hideMenu: false }}
-        plugins={plugins}
-        pluginConfig={{ 'auto-preview': { enabled: viewMode === 'both' } }}
-      />
+      <div className="flex flex-col" style={{ minHeight: `${renderedHeight}px` }}>
+        <MdEditor
+          id={id}
+          value={value}
+          onChange={handleChange}
+          renderHTML={(text: string) => renderMarkdown(text)}
+          onImageUpload={onImageUpload ? handleEditorImageUpload : undefined}
+          imageAccept="image/*"
+          style={{ height: `${renderedHeight}px` }}
+          placeholder={placeholder ?? 'Write using Markdown…'}
+          view={viewConfig}
+          canView={{ menu: true, md: true, html: true, both: true, fullScreen: false, hideMenu: false }}
+          plugins={plugins}
+          pluginConfig={{ 'auto-preview': { enabled: viewMode === 'both' } }}
+        />
+      </div>
       {uploadError && (
         <p
           role="alert"

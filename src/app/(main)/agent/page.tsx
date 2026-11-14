@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createServerClient } from '@/lib/supabase/server';
 import { requireAgent } from '@/lib/supabase/auth';
@@ -11,6 +10,7 @@ import {
   filterDataToQueryFilters,
   type AgentTicketRow,
 } from '@/lib/queries/agent-dashboard';
+import { IntentPrefetchLink } from '@/components/ui/IntentPrefetchLink';
 import { Badge } from '@/components/ui/Badge';
 import { TierBadge } from '@/components/ui/TierBadge';
 import { DisplayName } from '@/components/features/users/DisplayName';
@@ -277,13 +277,13 @@ export default async function AgentDashboardPage({
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start gap-1">
-                          <Link
+                          <IntentPrefetchLink
                             href={`/tickets/${ticket.id}/${ticket.slug}`}
                             title={ticket.title}
                             className="text-sm font-medium text-blue-600 hover:text-blue-800 line-clamp-2 break-words focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none rounded"
                           >
                             {ticket.title}
-                          </Link>
+                          </IntentPrefetchLink>
                           {ticket.is_private && <PrivateIcon className="mt-0.5" />}
                         </div>
                         <div className="flex items-center gap-1 mt-1 text-xs text-gray-500 min-w-0">
@@ -347,13 +347,13 @@ export default async function AgentDashboardPage({
                           </td>
                           <td className="px-3 py-2">
                             <div className="flex items-start gap-1">
-                              <Link
+                              <IntentPrefetchLink
                                 href={`/tickets/${ticket.id}/${ticket.slug}`}
                                 title={ticket.title}
                                 className="text-sm font-medium text-blue-600 hover:text-blue-800 line-clamp-2 break-words"
                               >
                                 {ticket.title}
-                              </Link>
+                              </IntentPrefetchLink>
                               {ticket.is_private && <PrivateIcon className="mt-0.5" />}
                             </div>
                           </td>

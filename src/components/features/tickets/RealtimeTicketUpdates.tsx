@@ -1,50 +1,30 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { createBrowserClient } from '@/lib/supabase/client';
+import { useRealtimeRefresh } from '@/lib/supabase/use-realtime-refresh';
 
 interface RealtimeTicketUpdatesProps {
   ticketId: number;
 }
 
 export function RealtimeTicketUpdates({ ticketId }: RealtimeTicketUpdatesProps) {
-  const router = useRouter();
+  // A reply fires a posts INSERT plus a tickets UPDATE (timestamp trigger); the
+  // hook merges them into one refresh.
+  const status = useRealtimeRefresh(
+    `ticket-${ticketId}`,
+    (channel, onChange) =>
+      channel
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'posts', filter: `ticket_id=eq.${ticketId}` },
+          onChange,
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'tickets', filter: `id=eq.${ticketId}` },
+          onChange,
+        ),
+    'ticket realtime',
+  );
 
-  useEffect(() => {
-    const supabase = createBrowserClient();
-    const channel = supabase
-      .channel(`ticket-${ticketId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'posts',
-          filter: `ticket_id=eq.${ticketId}`,
-        },
-        () => {
-          router.refresh();
-        },
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'tickets',
-          filter: `id=eq.${ticketId}`,
-        },
-        () => {
-          router.refresh();
-        },
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [ticketId, router]);
-
-  return null;
+  return <span hidden data-testid="realtime-status" data-status={status} />;
 }

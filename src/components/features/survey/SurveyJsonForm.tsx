@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useMemo } from 'react';
+import { useEffect, useId, useMemo, type MutableRefObject } from 'react';
 import dynamic from 'next/dynamic';
 import { Model } from 'survey-core';
 
@@ -21,6 +21,8 @@ type SurveyJsonFormProps = {
   /** Overrides the schema's / SurveyJS's default Complete button label. */
   completeText?: string;
   className?: string;
+  /** Optional: receives the SurveyJS model so a parent can set values programmatically. */
+  modelRef?: MutableRefObject<Model | null>;
 };
 
 export function SurveyJsonForm({
@@ -32,6 +34,7 @@ export function SurveyJsonForm({
   keepOpen = false,
   completeText,
   className,
+  modelRef,
 }: SurveyJsonFormProps) {
   const idPrefix = useId();
   const model = useMemo(() => {
@@ -72,6 +75,10 @@ export function SurveyJsonForm({
     // Add button on subsequent navigations.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idPrefix, mode, schema, completeText]);
+
+  useEffect(() => {
+    if (modelRef) modelRef.current = model;
+  }, [model, modelRef]);
 
   useEffect(() => {
     if (!onComplete) return;

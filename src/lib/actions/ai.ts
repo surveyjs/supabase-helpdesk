@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createServerClient, createServiceRoleClient } from '@/lib/supabase/server';
+import { parseBool } from '@/lib/ai/settings-diff';
 import { callAi, callAiText, logAiUsage, getAiConfig } from '@/lib/ai/client';
 import { generateSlug } from '@/lib/utils/slug';
 import { normalizeFilterData, type TicketFilterData } from '@/lib/filters/ticket-filter';
@@ -683,78 +684,90 @@ export async function saveAiSettings(formData: FormData): Promise<{ error?: stri
     return { error: 'Forbidden' };
   }
 
+  // Only keys present in the FormData are written; absent keys are left untouched.
   const settingsToUpdate: Record<string, string> = {};
 
-  // Provider
-  const provider = formData.get('ai_provider') as string ?? '';
-  if (['', 'openai', 'anthropic', 'custom'].includes(provider)) {
-    settingsToUpdate.ai_provider = provider;
+  const provider = formData.get('ai_provider');
+  if (formData.has('ai_provider') && ['', 'openai', 'anthropic', 'custom'].includes(String(provider))) {
+    settingsToUpdate.ai_provider = String(provider);
   }
 
-  // Model
-  settingsToUpdate.ai_model = (formData.get('ai_model') as string ?? '').trim();
-
-  // Custom endpoint
-  settingsToUpdate.ai_custom_endpoint_url = (formData.get('ai_custom_endpoint_url') as string ?? '').trim();
-
-  // Timeout
-  const timeout = parseInt(formData.get('ai_request_timeout') as string ?? '60', 10);
-  settingsToUpdate.ai_request_timeout = String(Math.max(10, Math.min(300, timeout || 60)));
-
-  // Feature toggles
-  settingsToUpdate.ai_auto_categorize_enabled = formData.get('ai_auto_categorize_enabled') === 'on' ? 'true' : 'false';
-  const minBodyLength = parseInt(formData.get('ai_auto_categorize_min_body_length') as string ?? '20', 10);
-  settingsToUpdate.ai_auto_categorize_min_body_length = String(Math.max(10, minBodyLength || 20));
-
-  settingsToUpdate.ai_duplicate_detection_enabled = formData.get('ai_duplicate_detection_enabled') === 'on' ? 'true' : 'false';
-  const threshold = formData.get('ai_duplicate_detection_threshold') as string ?? 'medium';
-  if (['low', 'medium', 'high'].includes(threshold)) {
-    settingsToUpdate.ai_duplicate_detection_threshold = threshold;
+  if (formData.has('ai_model')) {
+    settingsToUpdate.ai_model = String(formData.get('ai_model') ?? '').trim();
+  }
+  if (formData.has('ai_custom_endpoint_url')) {
+    settingsToUpdate.ai_custom_endpoint_url = String(formData.get('ai_custom_endpoint_url') ?? '').trim();
   }
 
-  settingsToUpdate.ai_suggested_reply_enabled = formData.get('ai_suggested_reply_enabled') === 'on' ? 'true' : 'false';
-  const contextWindow = parseInt(formData.get('ai_suggested_reply_context_window') as string ?? '20', 10);
-  settingsToUpdate.ai_suggested_reply_context_window = String(Math.max(5, Math.min(50, contextWindow || 20)));
-  const rateLimit = parseInt(formData.get('ai_suggested_reply_rate_limit') as string ?? '20', 10);
-  settingsToUpdate.ai_suggested_reply_rate_limit = String(Math.max(0, rateLimit));
+  const intOf = (key: string) => parseInt(String(formData.get(key) ?? ''), 10);
 
-  settingsToUpdate.ai_ticket_summary_enabled = formData.get('ai_ticket_summary_enabled') === 'on' ? 'true' : 'false';
-  const minPosts = parseInt(formData.get('ai_ticket_summary_min_posts') as string ?? '10', 10);
-  settingsToUpdate.ai_ticket_summary_min_posts = String(Math.max(5, minPosts || 10));
+  if (formData.has('ai_request_timeout')) {
+    settingsToUpdate.ai_request_timeout = String(Math.max(10, Math.min(300, intOf('ai_request_timeout') || 60)));
+  }
+  if (formData.has('ai_auto_categorize_min_body_length')) {
+    settingsToUpdate.ai_auto_categorize_min_body_length = String(Math.max(10, intOf('ai_auto_categorize_min_body_length') || 20));
+  }
+  if (formData.has('ai_duplicate_detection_threshold')) {
+    const threshold = String(formData.get('ai_duplicate_detection_threshold'));
+    if (['low', 'medium', 'high'].includes(threshold)) {
+      settingsToUpdate.ai_duplicate_detection_threshold = threshold;
+    }
+  }
+  if (formData.has('ai_suggested_reply_context_window')) {
+    settingsToUpdate.ai_suggested_reply_context_window = String(Math.max(5, Math.min(50, intOf('ai_suggested_reply_context_window') || 20)));
+  }
+  if (formData.has('ai_suggested_reply_rate_limit')) {
+    const rateLimit = intOf('ai_suggested_reply_rate_limit');
+    settingsToUpdate.ai_suggested_reply_rate_limit = String(Math.max(0, Number.isNaN(rateLimit) ? 20 : rateLimit));
+  }
+  if (formData.has('ai_ticket_summary_min_posts')) {
+    settingsToUpdate.ai_ticket_summary_min_posts = String(Math.max(5, intOf('ai_ticket_summary_min_posts') || 10));
+  }
 
-  settingsToUpdate.ai_generate_kb_article_enabled = formData.get('ai_generate_kb_article_enabled') === 'on' ? 'true' : 'false';
+  for (const key of [
+    'ai_auto_categorize_enabled',
+    'ai_duplicate_detection_enabled',
+    'ai_suggested_reply_enabled',
+    'ai_ticket_summary_enabled',
+    'ai_generate_kb_article_enabled',
+    'ai_filter_enabled',
+  ]) {
+    const flag = parseBool(formData.get(key));
+    if (flag !== undefined) settingsToUpdate[key] = flag ? 'true' : 'false';
+  }
 
-  settingsToUpdate.ai_filter_enabled = formData.get('ai_filter_enabled') === 'on' ? 'true' : 'false';
-
-  // Save all settings
   for (const [key, value] of Object.entries(settingsToUpdate)) {
-    await supabase.from('app_settings').update({ value }).eq('key', key);
+    const { error } = await supabase.from('app_settings').update({ value }).eq('key', key);
+    if (error) return { error: error.message };
   }
 
   // Handle API key if provided
+  let keyError: string | null = null;
   const apiKey = (formData.get('ai_api_key') as string ?? '').trim();
   if (apiKey) {
     const serviceClient = createServiceRoleClient();
     // Delete existing secret
     try { await serviceClient.rpc('delete_ai_api_key'); } catch { /* ignore if not exists */ }
-    // Try vault insert via raw SQL
     const { error: vaultError } = await serviceClient.rpc('store_ai_api_key', { key_value: apiKey });
     if (vaultError) {
-      // Fallback: try direct vault access
+      // The old key is already gone: report it, so the form keeps the key for a retry.
       console.error('[AI Settings] Vault storage error:', vaultError.message);
+      keyError = 'The API key could not be stored in Vault. Enter it again to retry.';
     }
   }
 
   // Audit log
-  await supabase.from('admin_audit_log').insert({
-    admin_id: profile.id,
-    action: 'update_ai_settings',
-    target_type: 'app_settings',
-    details: { updated_keys: Object.keys(settingsToUpdate) },
-  });
+  if (Object.keys(settingsToUpdate).length > 0) {
+    await supabase.from('admin_audit_log').insert({
+      admin_id: profile.id,
+      action: 'update_ai_settings',
+      target_type: 'app_settings',
+      details: { updated_keys: Object.keys(settingsToUpdate) },
+    });
+  }
 
   revalidatePath('/admin/ai');
-  return {};
+  return keyError ? { error: keyError } : {};
 }
 
 export async function testAiConnection(): Promise<{ success: boolean; error?: string; model?: string }> {

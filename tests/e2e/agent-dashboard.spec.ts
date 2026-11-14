@@ -1453,3 +1453,76 @@ test.describe('Agent Stats Panel', () => {
     expect(await naElements.count()).toBeGreaterThanOrEqual(3);
   });
 });
+
+// A realtime ticket change refreshes /agent (router.refresh). The refresh must not
+// rebuild the filter form and drop picks the agent has not applied yet.
+test.describe('Filter panel across a realtime refresh', () => {
+  const prefix = `RTF-${Math.random().toString(36).slice(2, 8)}`;
+  const OLD_MS = 25 * 3600_000;
+
+  test.afterAll(async () => {
+    const { error } = await createServiceRoleClient().from('tickets').delete().like('title', `${prefix} %`);
+    if (error) throw new Error(error.message);
+  });
+
+  test('unapplied filter picks survive a live refresh', async ({ page }) => {
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto(`/agent?q=${prefix}`);
+    await expect(page.getByTestId('dashboard-realtime-status')).toHaveAttribute('data-status', 'SUBSCRIBED', {
+      timeout: 15000,
+    });
+    await openViewsFilters(page);
+
+    const survey = page.getByTestId('filter-survey');
+    const status = survey.locator('.sd-question[data-name="status"]');
+    const closed = status.getByRole('checkbox', { name: 'Closed' });
+    await expect(closed).toBeChecked();
+    // Unapplied picks: untick Closed and type a submitter e-mail (committed on blur).
+    await status.locator('label').filter({ hasText: 'Closed' }).click();
+    await expect(closed).not.toBeChecked();
+    const email = page.getByLabel('Submitter Email');
+    await email.fill('draft-pick@example.com');
+    await email.blur();
+
+    // A ticket matching the page's search: it shows up only once the refresh has rendered.
+    const svc = createServiceRoleClient();
+    const { data: alice, error: aErr } = await svc.from('profiles').select('id').eq('email', 'alice@example.com').single();
+    if (aErr) throw new Error(aErr.message);
+    const { data: type, error: tErr } = await svc.from('ticket_types').select('id').limit(1).single();
+    if (tErr) throw new Error(tErr.message);
+    const title = `${prefix} live ticket`;
+    // Older than 24 h so it does not count against alice's ticket rate limit.
+    const old = new Date(Date.now() - OLD_MS).toISOString();
+    const { error } = await svc.from('tickets').insert({
+      title,
+      slug: `${prefix.toLowerCase()}-live-ticket-${Date.now()}`,
+      creator_id: alice.id,
+      type_id: type.id,
+      created_at: old,
+      updated_at: old,
+    });
+    if (error) throw new Error(error.message);
+
+    await expect(page.getByTestId('agent-ticket-table').getByText(title)).toBeVisible({ timeout: 15000 });
+    await expect(page).toHaveURL(new RegExp(`[?]q=${prefix}$`));
+    await expect(closed).not.toBeChecked();
+    await expect(status.getByRole('checkbox', { name: 'Open' })).toBeChecked();
+    await expect(email).toHaveValue('draft-pick@example.com');
+  });
+
+  test('applying unchanged filters keeps the filter form', async ({ page }) => {
+    // Same filters -> same props -> the content-keyed model is reused, not rebuilt.
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto(`/agent?q=${prefix}`);
+    await openViewsFilters(page);
+    await expect(page.getByLabel('Search')).toHaveValue(prefix);
+    await applyFilters(page, new RegExp(`[?]q=${prefix}$`));
+    await expect(page.getByRole('button', { name: 'Apply Filters' })).toBeVisible();
+    await expect(page.getByLabel('Search')).toHaveValue(prefix);
+
+    // Picks made after that apply normally.
+    await page.getByLabel('Submitter Email').fill('alice@example.com');
+    await applyFilters(page, /email=alice/);
+    await expect(page.getByLabel('Submitter Email')).toHaveValue('alice@example.com');
+  });
+});

@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import { IntentPrefetchLink } from '@/components/ui/IntentPrefetchLink';
 
 /**
  * Page numbers to show: a window of `size` pages around `current`, plus the
@@ -68,9 +68,9 @@ export function Pagination({
         {label}
       </span>
     ) : (
-      <Link href={buildUrl(page)} className={linkClass}>
+      <IntentPrefetchLink href={buildUrl(page)} className={linkClass}>
         {label}
-      </Link>
+      </IntentPrefetchLink>
     );
   }
 
@@ -93,7 +93,7 @@ export function Pagination({
               …
             </span>
           ) : (
-            <Link
+            <IntentPrefetchLink
               key={page}
               href={buildUrl(page)}
               className={`${touchClass} px-3 py-1.5 text-sm rounded border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
@@ -104,7 +104,7 @@ export function Pagination({
               aria-current={page === currentPage ? 'page' : undefined}
             >
               {page}
-            </Link>
+            </IntentPrefetchLink>
           ),
         )}
 

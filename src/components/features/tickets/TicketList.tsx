@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { IntentPrefetchLink } from '@/components/ui/IntentPrefetchLink';
 import { Badge } from '@/components/ui/Badge';
 
 type TicketEntry = {
@@ -29,7 +30,7 @@ export function TicketList({ tickets, showCreator }: { tickets: TicketEntry[]; s
     <ul className="divide-y divide-gray-200 bg-white rounded-lg border border-gray-200">
       {tickets.map((ticket) => (
         <li key={ticket.id}>
-          <Link
+          <IntentPrefetchLink
             href={`/tickets/${ticket.id}/${ticket.slug}`}
             className="block px-4 py-3 hover:bg-gray-50 transition-colors"
           >
@@ -52,7 +53,7 @@ export function TicketList({ tickets, showCreator }: { tickets: TicketEntry[]; s
                 {new Date(ticket.updated_at).toLocaleDateString()}
               </time>
             </div>
-          </Link>
+          </IntentPrefetchLink>
         </li>
       ))}
     </ul>

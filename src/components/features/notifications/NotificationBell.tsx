@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { createBrowserClient } from '@/lib/supabase/client';
+import { useRealtimeChannel } from '@/lib/supabase/use-realtime-refresh';
 import { notifyPopupOpened, subscribeToOtherPopups } from '@/lib/utils/popup-coordinator';
 import { NotificationDropdown, type Notification } from './NotificationDropdown';
 
@@ -45,52 +46,41 @@ export function NotificationBell({ initialUnreadCount, userId }: NotificationBel
     }
   }
 
-  // Subscribe to realtime notification changes
-  useEffect(() => {
-    let supabase: ReturnType<typeof createBrowserClient>;
-    try {
-      supabase = createBrowserClient();
-    } catch (err) {
-      // Missing runtime config: render the bell without realtime updates.
-      console.warn('HelpDesk: realtime notifications disabled —', err);
-      return;
-    }
-    const channel = supabase
-      .channel('notifications-bell')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: `recipient_id=eq.${userId}`,
-        },
-        () => {
-          setUnreadCount((prev) => prev + 1);
-        },
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'notifications',
-          filter: `recipient_id=eq.${userId}`,
-        },
-        (payload) => {
-          const newRow = payload.new as { is_read?: boolean };
-          const oldRow = payload.old as { is_read?: boolean };
-          if (newRow.is_read && !oldRow.is_read) {
-            setUnreadCount((prev) => Math.max(0, prev - 1));
-          }
-        },
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [userId]);
+  // Subscribe to realtime notification changes (counts only, no page refresh).
+  const realtimeStatus = useRealtimeChannel(
+    `notifications-bell-${userId}`,
+    (channel) =>
+      channel
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'notifications',
+            filter: `recipient_id=eq.${userId}`,
+          },
+          () => {
+            setUnreadCount((prev) => prev + 1);
+          },
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'notifications',
+            filter: `recipient_id=eq.${userId}`,
+          },
+          (payload) => {
+            const newRow = payload.new as { is_read?: boolean };
+            const oldRow = payload.old as { is_read?: boolean };
+            if (newRow.is_read && !oldRow.is_read) {
+              setUnreadCount((prev) => Math.max(0, prev - 1));
+            }
+          },
+        ),
+    { label: 'notifications realtime' },
+  );
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -110,6 +100,7 @@ export function NotificationBell({ initialUnreadCount, userId }: NotificationBel
 
   return (
     <div ref={bellRef} className="relative">
+      <span hidden data-testid="notifications-realtime-status" data-status={realtimeStatus} />
       <button
         type="button"
         onClick={handleToggle}

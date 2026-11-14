@@ -1,53 +1,18 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { createBrowserClient } from '@/lib/supabase/client';
+import { useRealtimeRefresh } from '@/lib/supabase/use-realtime-refresh';
 
 export function RealtimeDashboard() {
-  const router = useRouter();
+  // Bulk actions update tickets row by row; the hook merges such bursts into one refresh.
+  const status = useRealtimeRefresh(
+    'agent-dashboard',
+    (channel, onChange) =>
+      channel
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'tickets' }, onChange)
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'tickets' }, onChange)
+        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'tickets' }, onChange),
+    'dashboard realtime',
+  );
 
-  useEffect(() => {
-    const supabase = createBrowserClient();
-    const refreshDashboard = () => {
-      router.refresh();
-    };
-
-    const channel = supabase
-      .channel('agent-dashboard')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'tickets',
-        },
-        refreshDashboard,
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'tickets',
-        },
-        refreshDashboard,
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'DELETE',
-          schema: 'public',
-          table: 'tickets',
-        },
-        refreshDashboard,
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [router]);
-
-  return null;
+  return <span hidden data-testid="dashboard-realtime-status" data-status={status} />;
 }

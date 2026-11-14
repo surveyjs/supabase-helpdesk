@@ -204,6 +204,55 @@ test.describe('Ticket detail custom fields (SurveyJS)', () => {
     ).toBe('agent-edit');
   });
 
+  test('typed sidebar text survives a realtime refresh', async ({ page }) => {
+    const { url, id } = await getAliceTicketUrl();
+    const svc = createServiceRoleClient();
+    const { error: resetErr } = await svc
+      .from('tickets')
+      .update({ custom_fields: {}, urgency: 'low' })
+      .eq('id', id);
+    if (resetErr) throw new Error(resetErr.message);
+
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto(url);
+
+    const survey = page.getByTestId('ticket-sidebar-survey');
+    const urgency = survey.locator('.sd-question[data-name="urgency"]');
+    await expect(urgency).toContainText('Low', { timeout: 15000 });
+    const input = survey
+      .locator(`.sd-question[data-name="custom_fields.${TEST_CF_TEXT}"]`)
+      .locator('input')
+      .first();
+    await expect(input).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('realtime-status')).toHaveAttribute('data-status', 'SUBSCRIBED', {
+      timeout: 15000,
+    });
+
+    // Type without blurring, so the draft is not yet committed to the model.
+    await input.click();
+    await input.pressSequentially('draft');
+
+    // Another sidebar field changes remotely; the realtime refresh shows the new
+    // urgency in the (untouched) dropdown.
+    const { error: updErr } = await svc.from('tickets').update({ urgency: 'critical' }).eq('id', id);
+    if (updErr) throw new Error(updErr.message);
+    await expect(urgency).toContainText('Critical', { timeout: 20000 });
+
+    await expect(input).toHaveValue('draft');
+    await expect(input).toBeFocused();
+
+    await input.blur();
+    await waitForSidebarSurveyAutosave(page);
+    await expect.poll(
+      async () => {
+        const { data, error } = await svc.from('tickets').select('custom_fields').eq('id', id).single();
+        if (error) throw new Error(error.message);
+        return ((data?.custom_fields ?? {}) as Record<string, unknown>)[TEST_CF_TEXT];
+      },
+      { timeout: 15000 },
+    ).toBe('draft');
+  });
+
   test('non-owner non-agent sees custom fields read-only', async ({ page }) => {
     // bob is a different non-agent user; the ticket is alice's so bob is
     // neither owner nor agent. The ticket must be public for bob to load it.
@@ -299,11 +348,7 @@ test.describe('Boolean custom field rendering', () => {
 
     const box = page.getByLabel(CF_BOOL);
     await expect(box).toBeVisible();
-    // The Description editor mounts client-side (ssr: false, no placeholder) and
-    // then pushes the custom fields ~300 px down. Measured between two separate
-    // boundingBox() calls, that shift read as a 304 px misalignment. Wait for
-    // the editor, then take both centres in one synchronous read.
-    await expect(page.getByTestId('markdown-editor').first().locator('.rc-md-editor')).toBeVisible();
+    // Both centres in one synchronous read, so no layout change can fall between them.
     const offset = await box.evaluate((input) => {
       const text = input.closest('label')!.querySelector('span')!;
       const a = input.getBoundingClientRect();

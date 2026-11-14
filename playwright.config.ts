@@ -5,6 +5,16 @@ dotenv.config({ path: '.env.test' });
 
 const isCI = !!process.env.CI;
 
+// Specs that write global settings other specs read (app_settings rows, SLA
+// policies, tiers, templates, custom fields). They run serially in their own
+// project so no parallel chromium worker reads a half-changed value. Locally,
+// `npx playwright test` runs global-settings first via chromium's dependency.
+// In CI each project runs in its own shards with `--no-deps` (own Supabase each).
+// Anchored on a path separator so e.g. realtime-notifications.spec.ts does not
+// match `notifications`.
+export const GLOBAL_SETTINGS_SPECS =
+  /(^|[\\/])(admin-setup|ai-features|ai-filter|attach-files|attachments|auth-external|csat|inbound-email|knowledge-base|notifications|polish|sla|subscription-tiers|ticket-detail-custom-fields|ticket-layout)\.spec\.ts$/;
+
 export default defineConfig({
   testDir: './tests/e2e',
   globalSetup: './tests/e2e/global-setup.ts',
@@ -21,7 +31,19 @@ export default defineConfig({
     trace: isCI ? 'on-first-retry' : 'off',
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    {
+      name: 'global-settings',
+      use: { ...devices['Desktop Chrome'] },
+      testMatch: GLOBAL_SETTINGS_SPECS,
+      workers: 1,
+      fullyParallel: false,
+    },
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+      testIgnore: GLOBAL_SETTINGS_SPECS,
+      dependencies: ['global-settings'],
+    },
     {
       name: 'firefox',
       use: { ...devices['Desktop Firefox'] },

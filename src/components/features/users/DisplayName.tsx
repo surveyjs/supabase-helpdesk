@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import { IntentPrefetchLink } from '@/components/ui/IntentPrefetchLink';
 
 export function DisplayName({
   userId,
@@ -11,12 +11,12 @@ export function DisplayName({
 }) {
   if (isCurrentUserAgent) {
     return (
-      <Link
+      <IntentPrefetchLink
         href={`/agent/users/${userId}`}
         className="text-blue-600 hover:text-blue-800 hover:underline"
       >
         {displayName}
-      </Link>
+      </IntentPrefetchLink>
     );
   }
 

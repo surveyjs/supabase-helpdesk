@@ -204,23 +204,41 @@ test.describe('Admin AI Configuration', () => {
   });
 
   test('custom endpoint URL shown only for custom provider', async ({ page }) => {
-    await loginAs(page, 'admin@example.com');
-    await gotoAdmin(page, '/admin/ai');
+    // The form autosaves the provider clicks: restore the global setting afterwards.
+    const svc = createServiceRoleClient();
+    const { data: before, error: readErr } = await svc.from('app_settings').select('value').eq('key', 'ai_provider').single();
+    expect(readErr).toBeNull();
+    const original = (before?.value as string | undefined) ?? '';
 
-    const form = page.getByTestId('ai-config-survey-form');
+    try {
+      await loginAs(page, 'admin@example.com');
+      await gotoAdmin(page, '/admin/ai');
 
-    // Not visible with default (none)
-    await expect(page.getByLabel('Custom Endpoint URL')).not.toBeVisible();
+      const form = page.getByTestId('ai-config-survey-form');
 
-    // Select custom provider
-    await form.getByText('Custom (OpenAI-compatible)', { exact: true }).click();
+      // Not visible with default (none)
+      await expect(page.getByLabel('Custom Endpoint URL')).not.toBeVisible();
 
-    // Now visible
-    await expect(page.getByLabel('Custom Endpoint URL')).toBeVisible();
+      // Select custom provider
+      await form.getByText('Custom (OpenAI-compatible)', { exact: true }).click();
 
-    // Switch to OpenAI - hidden again
-    await form.getByText('OpenAI', { exact: true }).click();
-    await expect(page.getByLabel('Custom Endpoint URL')).not.toBeVisible();
+      // Now visible
+      await expect(page.getByLabel('Custom Endpoint URL')).toBeVisible();
+
+      // Switch to OpenAI - hidden again
+      await form.getByText('OpenAI', { exact: true }).click();
+      await expect(page.getByLabel('Custom Endpoint URL')).not.toBeVisible();
+
+      // Let the autosave land before restoring, so it cannot overwrite the restore.
+      await expect.poll(async () => {
+        const { data, error } = await svc.from('app_settings').select('value').eq('key', 'ai_provider').single();
+        expect(error).toBeNull();
+        return data?.value;
+      }, { timeout: 15000 }).toBe('openai');
+    } finally {
+      const { error } = await svc.from('app_settings').update({ value: original }).eq('key', 'ai_provider');
+      expect(error).toBeNull();
+    }
   });
 });
 

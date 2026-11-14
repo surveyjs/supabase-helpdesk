@@ -1,9 +1,8 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import type { RealtimeChannel } from '@supabase/supabase-js';
 import { createBrowserClient } from '@/lib/supabase/client';
-import { authorizeRealtime } from '@/lib/supabase/realtime';
+import { useRealtimeChannel } from '@/lib/supabase/use-realtime-refresh';
 import { notifyPopupOpened, subscribeToOtherPopups } from '@/lib/utils/popup-coordinator';
 import { NotificationDropdown, type Notification } from './NotificationDropdown';
 
@@ -18,7 +17,6 @@ export function NotificationBell({ initialUnreadCount, userId }: NotificationBel
   const [unreadCount, setUnreadCount] = useState(initialUnreadCount);
   const [isOpen, setIsOpen] = useState(false);
   const [dropdownNotifications, setDropdownNotifications] = useState<Notification[] | null>(null);
-  const [realtimeStatus, setRealtimeStatus] = useState<string>('connecting');
   const bellRef = useRef<HTMLDivElement>(null);
   // Guards against rapid double-clicks starting concurrent fetches while
   // `isOpen` hasn't flipped yet.
@@ -48,26 +46,11 @@ export function NotificationBell({ initialUnreadCount, userId }: NotificationBel
     }
   }
 
-  // Subscribe to realtime notification changes
-  useEffect(() => {
-    let supabase: ReturnType<typeof createBrowserClient>;
-    try {
-      supabase = createBrowserClient();
-    } catch (err) {
-      // Missing runtime config: render the bell without realtime updates.
-      console.warn('HelpDesk: realtime notifications disabled —', err);
-      return;
-    }
-    let cancelled = false;
-    let channel: RealtimeChannel | null = null;
-    let lastStatus = 'connecting';
-
-    async function start() {
-      await authorizeRealtime(supabase);
-      if (cancelled) return;
-
-      channel = supabase
-        .channel('notifications-bell')
+  // Subscribe to realtime notification changes (counts only, no page refresh).
+  const realtimeStatus = useRealtimeChannel(
+    `notifications-bell-${userId}`,
+    (channel) =>
+      channel
         .on(
           'postgres_changes',
           {
@@ -95,26 +78,9 @@ export function NotificationBell({ initialUnreadCount, userId }: NotificationBel
               setUnreadCount((prev) => Math.max(0, prev - 1));
             }
           },
-        )
-        .subscribe((next, err) => {
-          if (cancelled || next === lastStatus) return;
-          lastStatus = next;
-          setRealtimeStatus(next);
-          if (next === 'CHANNEL_ERROR' || next === 'TIMED_OUT') {
-            console.warn('HelpDesk: notifications realtime', next, err);
-          }
-        });
-    }
-
-    start().catch((err) => {
-      console.warn('HelpDesk: notifications realtime setup failed', err);
-    });
-
-    return () => {
-      cancelled = true;
-      if (channel) supabase.removeChannel(channel);
-    };
-  }, [userId]);
+        ),
+    { label: 'notifications realtime' },
+  );
 
   // Close dropdown on outside click
   useEffect(() => {

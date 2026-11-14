@@ -83,34 +83,40 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiPending, startAiTransition] = useTransition();
 
-  const schema = useMemo(
-    () => buildTicketFilterSurveyJson(filterOptions, template),
-    [filterOptions, template],
-  );
-
   const defaultSort = useMemo(() => getTemplateDefaultSort(template), [template]);
 
-  const surveyData = useMemo(
-    () => dataToSurveyData(initialData),
-    [initialData],
-  );
+  // Server props get a new identity on every router.refresh() (realtime ticket
+  // changes refresh /agent). The model is keyed on their content, so a refresh
+  // keeps the user's unapplied picks; applied filters, a view switch or a
+  // template change still rebuild it.
+  const modelKey = JSON.stringify({
+    schema: buildTicketFilterSurveyJson(filterOptions, template),
+    data: dataToSurveyData(initialData),
+    defaultSort: defaultSort ?? null,
+    viewId: activeViewId,
+  });
 
   const model = useMemo(() => {
-    const m = new Model(schema);
+    const key = JSON.parse(modelKey) as {
+      schema: Record<string, unknown>;
+      data: Record<string, unknown>;
+      defaultSort: string | null;
+    };
+    const m = new Model(key.schema);
     m.showCompletedPage = false;
     m.completeText = 'Apply Filters';
-    m.data = surveyData;
+    m.data = key.data;
 
     m.addNavigationItem({
       id: 'sv-nav-clear-filtering',
       title: 'Clear All',
       action: () => {
-        m.data = { status: ['open', 'pending', 'closed'], sort: defaultSort };
+        m.data = { status: ['open', 'pending', 'closed'], sort: key.defaultSort ?? undefined };
       },
     });
 
     return m;
-  }, [schema, surveyData, defaultSort]);
+  }, [modelKey]);
 
   useEffect(() => {
     const handler = () => {
@@ -153,7 +159,12 @@ export function ViewsAndFiltersPanel(props: ViewsAndFiltersPanelProps) {
   });
 
   useEffect(() => {
-    const handler = () => onSurveyComplete();
+    const handler = () => {
+      onSurveyComplete();
+      // Keep the form showing: applying unchanged filters leads to the same
+      // props, so the model is not rebuilt and would stay "completed" (blank).
+      model.clear(false, true);
+    };
     model.onComplete.add(handler);
     return () => { model.onComplete.remove(handler); };
   }, [model]);

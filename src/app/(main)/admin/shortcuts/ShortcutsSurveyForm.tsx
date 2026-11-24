@@ -12,6 +12,7 @@ export function ShortcutsSurveyForm({ values }: { values: ShortcutMap }) {
         schema={shortcutsSchema as Record<string, unknown>}
         data={values}
         mode="complete"
+        keepOpen
         saveAction={saveAgentShortcuts}
         successMessage="Shortcuts saved."
       />

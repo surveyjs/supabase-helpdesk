@@ -43,7 +43,7 @@ export function ViewSwitcherDropdown({ savedViews, activeViewId, activeViewName 
   }
 
   return (
-    <div ref={containerRef} className="relative inline-flex items-center">
+    <div ref={containerRef} className="relative inline-flex min-w-0 items-center">
       <button
         type="button"
         data-testid="view-switcher-trigger"
@@ -55,15 +55,15 @@ export function ViewSwitcherDropdown({ savedViews, activeViewId, activeViewName 
             return next;
           });
         }}
-        className="inline-flex items-center gap-1 text-sm font-medium text-gray-700 hover:text-blue-600 px-1 py-0.5 rounded hover:bg-blue-50 transition-colors"
+        className="inline-flex min-w-0 items-center gap-1 text-sm font-medium text-gray-700 hover:text-blue-600 px-1 py-0.5 rounded hover:bg-blue-50 transition-colors"
         aria-haspopup="listbox"
         aria-expanded={open}
         title="Switch view"
       >
-        {activeViewName}
+        <span className="truncate">{activeViewName}</span>
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`h-3.5 w-3.5 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"

@@ -62,6 +62,9 @@ test.describe('Agent Dashboard', () => {
     await page.goto('/agent');
     const section = page.getByTestId('views-filters-section');
     await expect(section).toBeVisible();
+    // The header (label, view switcher, collapse and hide buttons) stays on one line.
+    const header = section.locator(':scope > div').first();
+    expect((await header.boundingBox())!.height).toBeLessThan(56);
     const tableWidth = async () => (await page.getByTestId('result-count').locator('..').boundingBox())!.width;
     const before = await tableWidth();
 

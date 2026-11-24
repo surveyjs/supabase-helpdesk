@@ -63,17 +63,17 @@ export function ViewsFiltersCollapsible({
       className={`bg-white rounded-lg border border-gray-200 mb-4 ${className}`}
       data-testid="views-filters-section"
     >
-      <div className="px-4 py-3 text-sm font-medium text-gray-700 flex flex-wrap items-center justify-between gap-3">
+      <div className="px-4 py-3 text-sm font-medium text-gray-700 flex flex-wrap xl:flex-nowrap items-center justify-between gap-3">
         <button
           type="button"
-          className="inline-flex items-center gap-1.5 hover:text-gray-900"
+          className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap hover:text-gray-900"
           aria-expanded={open}
           aria-controls="views-filters-panel-content"
           onClick={toggle}
         >
           <span>Views &amp; Filters:</span>
         </button>
-        <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-center gap-1 min-w-0">
           <ViewSwitcherDropdown
             savedViews={savedViews}
             activeViewId={activeViewId}

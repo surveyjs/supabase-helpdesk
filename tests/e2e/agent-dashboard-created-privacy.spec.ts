@@ -24,7 +24,8 @@ test.describe('Agent dashboard: Created and Visibility filters', () => {
         title: NEW_PRIVATE, slug: `e2e-${MARK.toLowerCase()}-new`, creator_id: alice!.id, type_id: type!.id,
         is_private: true,
       },
-    ]);
+      // Keys a row omits (created_at) take the column default, not NULL.
+    ], { defaultToNull: false });
     if (error) throw new Error(error.message);
   });
 

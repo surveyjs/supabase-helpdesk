@@ -725,3 +725,40 @@ export async function changeTicketOwner(
   revalidatePath('/agent');
   return {};
 }
+
+/**
+ * Save a person's user-field values (#103). Staff only. One form posts every
+ * field as `field_<id>`; an empty value removes the stored one.
+ */
+export async function saveUserFieldValues(
+  _prev: { error?: string; message?: string },
+  formData: FormData,
+): Promise<{ error?: string; message?: string }> {
+  const { supabase, user } = await requireAgentRole();
+  const userId = formData.get('user_id') as string;
+  if (!userId) return { error: 'Missing user.' };
+
+  const { loadUserFields, parseUserFieldInput } = await import('@/lib/users/user-fields');
+  const fields = await loadUserFields(supabase, userId, { staff: true });
+
+  const upserts: { user_id: string; field_id: string; value: unknown; updated_by: string; updated_at: string }[] = [];
+  const removals: string[] = [];
+  for (const f of fields) {
+    const parsed = parseUserFieldInput(f, formData.get(`field_${f.id}`) as string | null);
+    if ('error' in parsed) return { error: parsed.error };
+    if (parsed.value === null) removals.push(f.id);
+    else upserts.push({ user_id: userId, field_id: f.id, value: parsed.value, updated_by: user.id, updated_at: new Date().toISOString() });
+  }
+
+  if (upserts.length) {
+    const { error } = await supabase.from('user_field_values').upsert(upserts);
+    if (error) return { error: 'Failed to save the fields.' };
+  }
+  if (removals.length) {
+    const { error } = await supabase.from('user_field_values').delete().eq('user_id', userId).in('field_id', removals);
+    if (error) return { error: 'Failed to save the fields.' };
+  }
+
+  revalidatePath(`/agent/users/${userId}`);
+  return { message: 'Saved.' };
+}

@@ -63,6 +63,7 @@ export default async function NewTicketPage({
   const { data: customFields } = await supabase
     .from('custom_fields')
     .select('*')
+    .eq('applies_to', 'ticket')
     .order('display_order');
 
   // Fetch privacy settings

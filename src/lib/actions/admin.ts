@@ -274,6 +274,7 @@ type CustomFieldInputRow = {
   options?: unknown;
   agent_only?: unknown;
   show_on_create?: unknown;
+  applies_to?: unknown;
 };
 
 type CustomFieldDbRow = {
@@ -286,6 +287,7 @@ type CustomFieldDbRow = {
   display_order: number;
   agent_only: boolean;
   show_on_create: boolean;
+  applies_to: 'ticket' | 'user';
 };
 
 export async function saveCustomFields(
@@ -379,13 +381,17 @@ export async function saveCustomFields(
       agent_only: row.agent_only === true,
       // Absent means "on the form", the behaviour before the flag existed.
       show_on_create: row.show_on_create !== false,
+      applies_to: row.applies_to === 'user' ? 'user' : 'ticket',
     });
   }
 
   // Capture pre-save state to maintain ticket JSONB integrity for renames/deletes.
+  // Only ticket fields have values keyed by name in tickets.custom_fields;
+  // user field values reference the field id (user_field_values).
   const { data: existingFields } = await supabase
     .from('custom_fields')
-    .select('id, name');
+    .select('id, name')
+    .eq('applies_to', 'ticket');
   const existingNameById = new Map<string, string>();
   for (const f of existingFields ?? []) {
     existingNameById.set(f.id as string, f.name as string);
@@ -397,7 +403,7 @@ export async function saveCustomFields(
     result = await diffAndSave({
       table: 'custom_fields',
       rows: cleanRows,
-      columns: ['name', 'field_type', 'is_required', 'default_value', 'options', 'display_order', 'agent_only', 'show_on_create'],
+      columns: ['name', 'field_type', 'is_required', 'default_value', 'options', 'display_order', 'agent_only', 'show_on_create', 'applies_to'],
       auditAction: 'update_custom_fields_bulk',
     });
   } catch (e) {
@@ -1100,6 +1106,7 @@ export async function updateCustomFieldValue(formData: FormData): Promise<void> 
     .from('custom_fields')
     .select('*')
     .eq('name', fieldName)
+    .eq('applies_to', 'ticket')
     .single();
   if (!fieldDef) throw new Error(`Custom field "${fieldName}" does not exist.`);
   if (fieldDef.agent_only && !isAgent) {
@@ -1481,6 +1488,7 @@ export async function saveSurveyTemplate(
         const { data: rows } = await supabase
           .from('custom_fields')
           .select('name')
+          .eq('applies_to', 'ticket')
           .in('name', bareNames);
         const known = new Set((rows ?? []).map((r) => String(r.name)));
         const missing = bareNames.filter((n) => !known.has(n));

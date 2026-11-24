@@ -643,6 +643,22 @@ test.describe('Markdown editor follow-ups', () => {
     await expect(editor.locator('.sec-html')).toBeVisible();
   });
 
+  test('canned responses are listed as soon as the popup opens, and again when the search is cleared (#115)', async ({ page }) => {
+    await loginViaForm(page, 'agent.smith@example.com');
+    await page.goto(ticketUrl);
+    await page.getByTestId('main-reply-btn').click();
+    const editor = page.getByTestId('main-reply-panel').getByTestId('markdown-editor');
+    await editor.getByTestId('canned-response-toolbar-btn').click();
+    // No search typed: the newest response is already listed.
+    await expect(editor.getByRole('button', { name: CANNED_TITLE })).toBeVisible();
+
+    const search = editor.getByPlaceholder('Search canned responses…');
+    await search.fill('zz-no-such-canned-response');
+    await expect(editor.getByTestId('canned-response-empty')).toHaveText('No matches');
+    await search.fill('');
+    await expect(editor.getByRole('button', { name: CANNED_TITLE })).toBeVisible();
+  });
+
   test('write-only chosen with the mode toggle stays write-only while typing', async ({ page }) => {
     await loginViaForm(page, 'alice@example.com');
     await page.goto('/tickets/new');

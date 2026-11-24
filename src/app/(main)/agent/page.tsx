@@ -187,6 +187,10 @@ export default async function AgentDashboardPage({
     if (effectiveData.status && effectiveData.status.length > 0 && effectiveData.status.length < 3) {
       linkParams.status = effectiveData.status.join(',');
     }
+    if (effectiveData.created) linkParams.created = effectiveData.created;
+    if (effectiveData.created_from) linkParams.created_from = effectiveData.created_from;
+    if (effectiveData.created_to) linkParams.created_to = effectiveData.created_to;
+    if (effectiveData.privacy) linkParams.privacy = effectiveData.privacy;
   }
 
   const thClass = 'px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap';

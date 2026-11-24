@@ -404,6 +404,90 @@ describe('Attachment deletion', () => {
 });
 
 // ============================================================
+// SOFT DELETE / RESTORE (#119)
+// ============================================================
+
+describe('Attachment soft delete and restore', () => {
+  async function insertOwnAttachment(name: string) {
+    const { data, error } = await clients['user8@test.com']
+      .from('attachments')
+      .insert({
+        post_id: postId,
+        storage_path: `tickets/1/posts/test/${name}`,
+        original_filename: name,
+        file_size: 100,
+        mime_type: 'image/png',
+      })
+      .select('id')
+      .single();
+    if (error) throw new Error(error.message);
+    return data!.id as string;
+  }
+
+  it('author soft-deletes own attachment: row kept, hidden from users, visible to agents', async () => {
+    const id = await insertOwnAttachment('soft-own.png');
+    const userClient = clients['user8@test.com'];
+
+    const { data: returnedPost, error } = await userClient.rpc('soft_delete_attachment', { p_attachment_id: id });
+    expect(error).toBeNull();
+    expect(returnedPost).toBe(postId);
+
+    const { data: row } = await svc.from('attachments').select('deleted_at, deleted_by').eq('id', id).single();
+    expect(row!.deleted_at).not.toBeNull();
+    expect(row!.deleted_by).toBe(USER_ID);
+
+    const { data: asUser } = await userClient.from('attachments').select('id').eq('id', id);
+    expect(asUser ?? []).toHaveLength(0);
+    const { data: asAgent } = await clients['agent8@test.com'].from('attachments').select('id').eq('id', id);
+    expect(asAgent ?? []).toHaveLength(1);
+
+    // Deleting again is a no-op.
+    const { data: again } = await userClient.rpc('soft_delete_attachment', { p_attachment_id: id });
+    expect(again).toBeNull();
+
+    await svc.from('attachments').delete().eq('id', id);
+  });
+
+  it('another regular user cannot soft-delete the attachment', async () => {
+    const id = await insertOwnAttachment('soft-other.png');
+    const { error } = await clients['user8b@test.com'].rpc('soft_delete_attachment', { p_attachment_id: id });
+    expect(error?.code).toBe('42501');
+    const { data: row } = await svc.from('attachments').select('deleted_at').eq('id', id).single();
+    expect(row!.deleted_at).toBeNull();
+    await svc.from('attachments').delete().eq('id', id);
+  });
+
+  it('only agents can restore; restore clears the stamp', async () => {
+    const id = await insertOwnAttachment('soft-restore.png');
+    const { error: delErr } = await clients['agent8@test.com'].rpc('soft_delete_attachment', { p_attachment_id: id });
+    expect(delErr).toBeNull();
+
+    const { error: userErr } = await clients['user8@test.com'].rpc('restore_attachment', { p_attachment_id: id });
+    expect(userErr?.code).toBe('42501');
+
+    const { data: restored, error } = await clients['agent8@test.com'].rpc('restore_attachment', { p_attachment_id: id });
+    expect(error).toBeNull();
+    expect(restored).toBe(postId);
+    const { data: row } = await svc.from('attachments').select('deleted_at, deleted_by').eq('id', id).single();
+    expect(row!.deleted_at).toBeNull();
+    expect(row!.deleted_by).toBeNull();
+    const { data: asUser } = await clients['user8@test.com'].from('attachments').select('id').eq('id', id);
+    expect(asUser ?? []).toHaveLength(1);
+
+    await svc.from('attachments').delete().eq('id', id);
+  });
+
+  it('the RPCs are not callable with the anon key', async () => {
+    const anon = createClient(supabaseUrl, anonKey);
+    const fakeId = '00000000-0000-0000-0000-000000000000';
+    const { error: delErr } = await anon.rpc('soft_delete_attachment', { p_attachment_id: fakeId });
+    expect(delErr?.code).toBe('42501');
+    const { error: resErr } = await anon.rpc('restore_attachment', { p_attachment_id: fakeId });
+    expect(resErr?.code).toBe('42501');
+  });
+});
+
+// ============================================================
 // CASCADE DELETE
 // ============================================================
 

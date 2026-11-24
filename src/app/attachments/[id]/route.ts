@@ -11,7 +11,7 @@ import { toBrowserUrl } from '@/lib/runtime-config';
  * URL each request.
  */
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
@@ -24,14 +24,20 @@ export async function GET(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return new NextResponse('Unauthorized', { status: 401 });
 
-  // RLS on `attachments` decides visibility (post visibility, orphan ownership, etc.).
+  // RLS on `attachments` decides visibility (post visibility, orphan ownership,
+  // and soft-deleted rows for agents only).
   const { data: attachment } = await supabase
     .from('attachments')
-    .select('id, storage_path, legacy_blob_id')
+    .select('id, storage_path, legacy_blob_id, deleted_at')
     .eq('id', id)
     .single();
 
   if (!attachment) return new NextResponse('Not found', { status: 404 });
+  // A deleted file stays gone from post bodies, agents included; only the
+  // explicit download link in the Logs tab (?deleted=1) serves it (#119).
+  if (attachment.deleted_at && new URL(req.url).searchParams.get('deleted') !== '1') {
+    return new NextResponse('Not found', { status: 404 });
+  }
 
   const storagePath = attachment.legacy_blob_id
     ? `migrated/${attachment.legacy_blob_id}`

@@ -145,7 +145,8 @@ export async function uploadAttachments(
   const { count: existingCount } = await supabase
     .from('attachments')
     .select('id', { count: 'exact', head: true })
-    .eq('post_id', postId);
+    .eq('post_id', postId)
+    .is('deleted_at', null);
 
   const totalFiles = (existingCount ?? 0) + files.length;
   if (totalFiles > maxFilesPerPost) {
@@ -228,87 +229,104 @@ export async function uploadAttachments(
   return {};
 }
 
+/**
+ * Soft-delete a post attachment (#119): the file leaves the post for everyone,
+ * but the Storage object and the row stay, so an agent can download or
+ * restore it from the ticket's Logs tab. Permission (post author or agent) is
+ * checked by the `soft_delete_attachment` RPC.
+ */
 export async function deleteAttachment(formData: FormData): Promise<void> {
   const supabase = await createServerClient();
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('id, role')
-    .eq('id', user.id)
-    .single();
+  const attachmentId = formData.get('attachment_id') as string;
+  if (!attachmentId) return;
 
-  if (!profile) return;
+  const { data: attachment } = await supabase
+    .from('attachments')
+    .select('id, original_filename')
+    .eq('id', attachmentId)
+    .is('deleted_at', null)
+    .maybeSingle();
+  if (!attachment) return;
+
+  const { data: postId, error } = await supabase.rpc('soft_delete_attachment', {
+    p_attachment_id: attachmentId,
+  });
+  if (error) {
+    console.error(`Failed to delete attachment: ${error.message}`);
+    return;
+  }
+  if (!postId) return;
+
+  await logAttachmentActivity(supabase, user.id, postId as string, 'file_deleted', {
+    filename: attachment.original_filename,
+    attachment_id: attachmentId,
+  });
+}
+
+/**
+ * Restore a soft-deleted attachment onto its post. Agents only (enforced by
+ * the `restore_attachment` RPC); offered from the ticket's Logs tab.
+ */
+export async function restoreAttachment(formData: FormData): Promise<void> {
+  const supabase = await createServerClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/login');
 
   const attachmentId = formData.get('attachment_id') as string;
   if (!attachmentId) return;
 
-  // Fetch attachment
+  // Agents can read deleted rows (RLS); anyone else gets nothing here.
   const { data: attachment } = await supabase
     .from('attachments')
-    .select('id, post_id, storage_path, legacy_blob_id, original_filename')
+    .select('id, original_filename')
     .eq('id', attachmentId)
-    .single();
-
+    .maybeSingle();
   if (!attachment) return;
 
-  // Fetch parent post
-  const { data: post } = await supabase
-    .from('posts')
-    .select('id, author_id, ticket_id')
-    .eq('id', attachment.post_id)
-    .single();
-
-  if (!post) return;
-
-  // Permission: post author or agent
-  const isAgent = profile.role === 'agent' || profile.role === 'admin';
-  if (post.author_id !== user.id && !isAgent) return;
-
-  const storagePath = attachment.legacy_blob_id
-    ? `migrated/${attachment.legacy_blob_id}`
-    : attachment.storage_path;
-
-  // Delete from storage first so we don't orphan the DB row on failure
-  const { error: storageDeleteError } = await supabase.storage
-    .from('attachments')
-    .remove(storagePath ? [storagePath] : []);
-
-  if (storageDeleteError) {
-    console.error(`Failed to delete attachment from storage: ${storageDeleteError.message}`);
-    return; // Don't delete the DB row if storage cleanup failed
-  }
-
-  // Delete record only after the storage object was removed successfully
-  const { error: attachmentDeleteError } = await supabase
-    .from('attachments')
-    .delete()
-    .eq('id', attachmentId);
-
-  if (attachmentDeleteError) {
-    console.error(`Failed to delete attachment record: ${attachmentDeleteError.message}`);
+  const { data: postId, error } = await supabase.rpc('restore_attachment', {
+    p_attachment_id: attachmentId,
+  });
+  if (error) {
+    console.error(`Failed to restore attachment: ${error.message}`);
     return;
   }
+  if (!postId) return;
 
-  // Log activity
-  const { data: ticket } = await supabase
-    .from('tickets')
-    .select('id, slug')
-    .eq('id', post.ticket_id)
-    .single();
+  await logAttachmentActivity(supabase, user.id, postId as string, 'file_restored', {
+    filename: attachment.original_filename,
+    attachment_id: attachmentId,
+  });
+}
 
-  if (ticket) {
-    await supabase.from('activity_log').insert({
-      ticket_id: ticket.id,
-      actor_id: user.id,
-      action: 'file_deleted',
-      details: { filename: attachment.original_filename, post_id: post.id },
-    });
+async function logAttachmentActivity(
+  supabase: Awaited<ReturnType<typeof createServerClient>>,
+  actorId: string,
+  postId: string,
+  action: 'file_deleted' | 'file_restored',
+  details: { filename: string; attachment_id: string },
+): Promise<void> {
+  const { data: post } = await supabase
+    .from('posts')
+    .select('ticket_id, ticket:tickets!posts_ticket_id_fkey(id, slug)')
+    .eq('id', postId)
+    .maybeSingle();
+  if (!post) return;
+  const ticket = Array.isArray(post.ticket) ? post.ticket[0] : post.ticket;
 
-    revalidatePath(`/tickets/${ticket.id}/${ticket.slug}`);
-  }
+  const { error } = await supabase.from('activity_log').insert({
+    ticket_id: post.ticket_id,
+    actor_id: actorId,
+    action,
+    details: { ...details, post_id: postId },
+  });
+  if (error) console.error(`Failed to log ${action}: ${error.message}`);
+
+  if (ticket) revalidatePath(`/tickets/${ticket.id}/${ticket.slug}`);
 }
 
 export async function getAttachmentUrl(attachmentId: string): Promise<string | null> {
@@ -322,6 +340,7 @@ export async function getAttachmentUrl(attachmentId: string): Promise<string | n
     .from('attachments')
     .select('id, storage_path, legacy_blob_id')
     .eq('id', attachmentId)
+    .is('deleted_at', null)
     .single();
 
   if (!attachment) return null;

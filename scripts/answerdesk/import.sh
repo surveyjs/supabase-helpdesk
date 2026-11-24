@@ -7,6 +7,7 @@
 #   scripts/answerdesk/import.sh load      # $WORK/*.tsv -> database (one transaction)
 #   scripts/answerdesk/import.sh all       # prepare + upload + load
 #   scripts/answerdesk/import.sh relink    # rewrite cross-ticket references in imported posts
+#   scripts/answerdesk/import.sh fix-notes # make imported staff notes internal again (private-tasks#635)
 #   scripts/answerdesk/import.sh test-relink  # self-test of relink.sql on synthetic data (rolled back)
 #   scripts/answerdesk/import.sh status    # what is imported so far
 #   scripts/answerdesk/import.sh reset     # remove imported tickets and created users
@@ -97,6 +98,27 @@ SQL
   return $rc
 }
 
+# Turn staff notes imported as public comments (before private-tasks#635) into
+# internal notes: fix-notes.mjs lists their source ids, fix-notes.sql converts.
+fix_notes() {
+  need PKG WORK
+  node --max-old-space-size=4096 "$HERE/fix-notes.mjs" --pkg "$PKG" --out "$WORK"
+  docker exec "$DB_CONTAINER" rm -rf /tmp/adimport
+  docker exec "$DB_CONTAINER" mkdir -p /tmp/adimport
+  docker cp "$WORK/notes.tsv" "$DB_CONTAINER:/tmp/adimport/" >/dev/null
+  docker cp "$HERE/fix-notes.sql" "$DB_CONTAINER:/tmp/adimport/" >/dev/null
+  docker exec -u root "$DB_CONTAINER" chmod -R a+rX /tmp/adimport
+  local rc=0
+  psql_c -q -t -A <<'SQL' || rc=$?
+SET client_min_messages = warning;
+BEGIN;
+\i /tmp/adimport/fix-notes.sql
+COMMIT;
+SQL
+  docker exec "$DB_CONTAINER" rm -rf /tmp/adimport
+  return $rc
+}
+
 # Self-test of relink.sql on synthetic data only (relink.test.sql); rolled back, DB unchanged.
 test_relink() {
   # Local test stack only: refuse a real deploy container BEFORE any docker command runs.
@@ -140,6 +162,7 @@ case "${1:-}" in
   load) load ;;
   all) prepare && upload && load ;;
   relink) relink ;;
+  fix-notes) fix_notes ;;
   test-relink) test_relink ;;
   status) status ;;
   reset) reset ;;

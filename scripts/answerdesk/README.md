@@ -70,12 +70,14 @@ idempotent.
   | 0 = question | original `post` |
   | 1 = answer | top-level `post` |
   | 2 = comment | `comment` |
-  | 3 = staff comment | `comment` |
+  | 3 = staff note | internal `note` (agents only, no parent) |
 
+  Type 3 is what AnswerDesk shows in its **NOTES** panel ("On ticket description by …"): 99% are
+  written by employees, each hangs off a question or answer, and none is anyone's parent. Imports
+  made before private-tasks#635 turned them into public comments; see **Fixing staff notes** below.
   A comment's `parent_post_id` is its top-level ancestor. Chains deeper than two levels are
   flattened, with `parent_comment_id` set to the level-1 comment. `IsPrivate` becomes `is_private`:
-  visible to the author, the ticket creator and agents. That matches AnswerDesk, so no post
-  becomes an internal `note`.
+  visible to the author, the ticket creator and agents.
 - **Inline attachments.** `({'Id':'<FileItems.Id>','CheckAnswerDesk':…})` and `/attachment/file/<id>`
   links are rewritten to `/attachments/<attachment id>`. That is the URL form the editor itself
   stores, and the app resolves it to a signed URL. References to files that weren't migrated
@@ -132,6 +134,21 @@ replying to an imported ticket emails real customers.
 Raised roles on pre-existing accounts, categories, tags, ticket types, custom fields and the
 Storage blobs are kept. A re-import reuses them. To drop the blobs too, delete the
 `attachments/migrated/` folder in Studio (Storage), then delete `$WORK/uploaded.txt`.
+
+## Fixing staff notes
+
+Imports made before private-tasks#635 put AnswerDesk staff notes (Posts.Type 3, 2,724 in the
+full export) into the conversation as public comments, so customers could read them. To repair an
+existing import, run on the machine with the export package and the DB container:
+
+```bash
+PKG=/path/to/answerdesk-migration WORK=/path/to/work DB_CONTAINER=supabase-db \
+  scripts/answerdesk/import.sh fix-notes
+```
+
+`fix-notes.mjs` writes `$WORK/notes.tsv` (the notes' source post ids only, no text), and
+`fix-notes.sql` turns those posts into internal notes in one transaction. It prints how many were
+converted. Running it again converts nothing more.
 
 ## Other tools
 

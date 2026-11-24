@@ -1,9 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-
-/** Cookie remembering a collapsed ticket details panel (read on the server, so no flash). */
-export const TICKET_DETAILS_COLLAPSED_COOKIE = 'hd_ticket_details_collapsed';
+import { TICKET_DETAILS_COLLAPSED_COOKIE } from './ticket-details-cookie';
 
 const EXPANDED_ASIDE =
   'w-full lg:w-[400px] lg:min-w-[400px] lg:max-w-[400px] flex-shrink-0 lg:sticky lg:top-4 lg:self-start';

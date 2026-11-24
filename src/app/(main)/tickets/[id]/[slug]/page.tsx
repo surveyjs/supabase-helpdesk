@@ -50,7 +50,8 @@ import {
 } from '@/lib/tickets/apply-template-policy';
 import { inlineAttachmentIds } from '@/lib/tickets/inline-attachments';
 import { POST_ACTION_CLASS } from './post-action-class';
-import { TicketDetailsPanel, TICKET_DETAILS_COLLAPSED_COOKIE } from './TicketDetailsPanel';
+import { TicketDetailsPanel } from './TicketDetailsPanel';
+import { TICKET_DETAILS_COLLAPSED_COOKIE } from './ticket-details-cookie';
 import { cookies } from 'next/headers';
 import {
   injectCustomFieldsPanel,

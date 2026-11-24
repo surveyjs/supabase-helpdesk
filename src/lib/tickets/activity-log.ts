@@ -50,8 +50,14 @@ export type ActivityDescriptor = {
 export function isActivityVisibleToNonAgent(
   action: string,
   details: Record<string, unknown> | null | undefined,
+  /** Names of agent-only custom fields; their changes are hidden (#103). */
+  agentOnlyCustomFields?: ReadonlySet<string>,
 ): boolean {
   if (action === 'draft_published' || action === 'post_privacy_changed') return false;
+  if (action === 'custom_field_changed' && agentOnlyCustomFields?.size) {
+    const field = details?.field;
+    if (typeof field === 'string' && agentOnlyCustomFields.has(field)) return false;
+  }
   if (action === 'post_edited' || action === 'post_deleted') {
     const d = details ?? {};
     const isPublicPostOrComment =

@@ -56,6 +56,14 @@ describe('computeTicketDetailFieldPolicy custom fields', () => {
     expect(p['custom_fields.priority']).toEqual({ visible: true, editable: false });
   });
 
+  it('hides agent-only fields from the owner but not from agents (#103)', () => {
+    const owner = computeTicketDetailFieldPolicy(baseInput({ isOwner: true, agentOnlyCustomFieldNames: ['priority'] }));
+    expect(owner['custom_fields.priority']).toEqual({ visible: false, editable: false });
+    expect(owner['custom_fields.note']).toEqual({ visible: true, editable: true });
+    const agent = computeTicketDetailFieldPolicy(baseInput({ isAgent: true, agentOnlyCustomFieldNames: ['priority'] }));
+    expect(agent['custom_fields.priority']).toEqual({ visible: true, editable: true });
+  });
+
   it('omits entries when customFieldNames is empty/undefined', () => {
     const p = computeTicketDetailFieldPolicy(baseInput({ customFieldNames: [] }));
     expect(p['custom_fields.priority']).toBeUndefined();

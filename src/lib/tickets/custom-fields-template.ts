@@ -12,7 +12,27 @@ export type CustomFieldDef = {
   options: string[] | null;
   default_value: string | null;
   display_order: number;
+  /** Only agents see and edit the field (#103). */
+  agent_only?: boolean;
+  /** Ask for the field on the New Ticket form (#103). Defaults to true. */
+  show_on_create?: boolean;
 };
+
+/** Whether a viewer may see / edit a custom field at all. */
+export function canViewCustomField(
+  def: Pick<CustomFieldDef, 'agent_only'>,
+  isAgent: boolean,
+): boolean {
+  return isAgent || !def.agent_only;
+}
+
+/** Whether the New Ticket form asks this viewer for the field. */
+export function isCustomFieldOnCreateForm(
+  def: Pick<CustomFieldDef, 'agent_only' | 'show_on_create'>,
+  isAgent: boolean,
+): boolean {
+  return def.show_on_create !== false && canViewCustomField(def, isAgent);
+}
 
 /**
  * Legacy panel name retained for backwards-compatible stripping of

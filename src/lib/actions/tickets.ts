@@ -10,6 +10,7 @@ import { cancelCsatSurvey } from '@/lib/utils/csat';
 import { claimInlineAttachments } from '@/lib/actions/attachments';
 import { initializeSlaTimer, stopFirstResponseTimer, resumeSlaTimer } from '@/lib/utils/sla';
 import { resolveCloneSource, finalizeClone } from '@/lib/actions/clone';
+import { isCustomFieldOnCreateForm } from '@/lib/tickets/custom-fields-template';
 
 export type TicketActionState = {
   error?: string;
@@ -155,6 +156,9 @@ export async function createTicket(
   const customFieldValues: Record<string, unknown> = {};
   if (customFieldDefs) {
     for (const def of customFieldDefs) {
+      // Fields not on this viewer's New Ticket form are never read from the
+      // form (#103); a clone copies them from its source below.
+      if (!isCustomFieldOnCreateForm(def, isAgent)) continue;
       const raw = formData.get(`cf_${def.name}`) as string | null;
       if (def.field_type === 'checkbox') {
         customFieldValues[def.name] = raw === 'on';
@@ -196,6 +200,15 @@ export async function createTicket(
     isAgent && (cloneFromRaw || clonePostRaw)
       ? await resolveCloneSource(cloneFromRaw, clonePostRaw)
       : null;
+
+  // A clone keeps the source's values of fields the form doesn't ask for.
+  if (clone && customFieldDefs) {
+    for (const def of customFieldDefs) {
+      if (isCustomFieldOnCreateForm(def, isAgent)) continue;
+      const v = clone.prefill.customFields[def.name];
+      if (v !== undefined && v !== null) customFieldValues[def.name] = v;
+    }
+  }
 
   const db = clone ? createServiceRoleClient() : supabase;
   const ownerId = clone ? clone.ownerId : user.id;

@@ -188,8 +188,10 @@ WHERE t.name IN ('Question', 'Issue', 'Suggestion')
   AND NOT t.is_default
   AND NOT EXISTS (SELECT 1 FROM public.tickets WHERE type_id = t.id);
 
-INSERT INTO public.custom_fields (name, field_type, options, display_order)
-SELECT name, field_type, options, display_order FROM adimport.s_custom_fields
+-- License data is maintained by agents: not asked on the New Ticket form and
+-- hidden from customers (migration 008, #103).
+INSERT INTO public.custom_fields (name, field_type, options, display_order, agent_only, show_on_create)
+SELECT name, field_type, options, display_order, true, false FROM adimport.s_custom_fields
 ON CONFLICT (name) DO NOTHING;
 
 -- ------------------------------------------------------------------

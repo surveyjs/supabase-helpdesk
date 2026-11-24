@@ -4,6 +4,8 @@ import {
   CUSTOM_FIELDS_PANEL_NAME,
   injectCustomFieldsPanel,
   type CustomFieldDef,
+  canViewCustomField,
+  isCustomFieldOnCreateForm,
 } from '../custom-fields-template';
 
 function def(partial: Partial<CustomFieldDef> & { name: string; field_type: CustomFieldDef['field_type'] }): CustomFieldDef {
@@ -100,5 +102,21 @@ describe('injectCustomFieldsPanel', () => {
     const els = (out as { pages: Array<{ elements: Array<Record<string, unknown>> }> }).pages[0].elements;
     expect(els.find((e) => e.name === CUSTOM_FIELDS_PANEL_NAME)).toBeUndefined();
     expect(els.some((e) => typeof e.name === 'string' && (e.name as string).startsWith('custom_fields.'))).toBe(false);
+  });
+});
+
+describe('custom field visibility (#103)', () => {
+  it('agent-only fields are for agents only', () => {
+    expect(canViewCustomField({ agent_only: true }, false)).toBe(false);
+    expect(canViewCustomField({ agent_only: true }, true)).toBe(true);
+    expect(canViewCustomField({ agent_only: false }, false)).toBe(true);
+    expect(canViewCustomField({}, false)).toBe(true);
+  });
+
+  it('the New Ticket form asks only for fields shown on create and visible to the viewer', () => {
+    expect(isCustomFieldOnCreateForm({}, false)).toBe(true);
+    expect(isCustomFieldOnCreateForm({ show_on_create: false }, true)).toBe(false);
+    expect(isCustomFieldOnCreateForm({ show_on_create: true, agent_only: true }, false)).toBe(false);
+    expect(isCustomFieldOnCreateForm({ show_on_create: true, agent_only: true }, true)).toBe(true);
   });
 });

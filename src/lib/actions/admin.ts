@@ -272,6 +272,8 @@ type CustomFieldInputRow = {
   is_required?: unknown;
   default_value?: unknown;
   options?: unknown;
+  agent_only?: unknown;
+  show_on_create?: unknown;
 };
 
 type CustomFieldDbRow = {
@@ -282,6 +284,8 @@ type CustomFieldDbRow = {
   default_value: string | null;
   options: string[] | null;
   display_order: number;
+  agent_only: boolean;
+  show_on_create: boolean;
 };
 
 export async function saveCustomFields(
@@ -372,6 +376,9 @@ export async function saveCustomFields(
       default_value: defaultValue,
       options,
       display_order: i,
+      agent_only: row.agent_only === true,
+      // Absent means "on the form", the behaviour before the flag existed.
+      show_on_create: row.show_on_create !== false,
     });
   }
 
@@ -390,7 +397,7 @@ export async function saveCustomFields(
     result = await diffAndSave({
       table: 'custom_fields',
       rows: cleanRows,
-      columns: ['name', 'field_type', 'is_required', 'default_value', 'options', 'display_order'],
+      columns: ['name', 'field_type', 'is_required', 'default_value', 'options', 'display_order', 'agent_only', 'show_on_create'],
       auditAction: 'update_custom_fields_bulk',
     });
   } catch (e) {
@@ -1095,6 +1102,9 @@ export async function updateCustomFieldValue(formData: FormData): Promise<void> 
     .eq('name', fieldName)
     .single();
   if (!fieldDef) throw new Error(`Custom field "${fieldName}" does not exist.`);
+  if (fieldDef.agent_only && !isAgent) {
+    throw new Error(`Not authorized to update custom field "${fieldName}".`);
+  }
 
   // Type validation
   let parsedValue: unknown = value;

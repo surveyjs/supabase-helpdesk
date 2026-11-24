@@ -14,13 +14,24 @@
           "removeRowText": "Delete",
           "confirmDelete": false,
           "allowRowsDragAndDrop": true,
-          "defaultRowValue": { "field_type": "text", "show_on_create": true },
+          "defaultRowValue": { "field_type": "text", "applies_to": "ticket", "show_on_create": true },
           "columns": [
             {
               "name": "name",
               "title": "Name",
               "cellType": "text",
               "isRequired": true
+            },
+            {
+              "name": "applies_to",
+              "title": "Applies to",
+              "cellType": "dropdown",
+              "renderAs": "select",
+              "isRequired": true,
+              "choices": [
+                { "value": "ticket", "text": "Ticket" },
+                { "value": "user", "text": "User" }
+              ]
             },
             {
               "name": "field_type",
@@ -47,11 +58,12 @@
               "title": "On New Ticket form",
               "cellType": "boolean",
               "renderAs": "checkbox",
-              "defaultValue": true
+              "defaultValue": true,
+              "visibleIf": "{row.applies_to} = 'ticket'"
             },
             {
               "name": "agent_only",
-              "title": "Agents only",
+              "title": "Staff only",
               "cellType": "boolean",
               "renderAs": "checkbox"
             },

@@ -13,7 +13,7 @@ const isCI = !!process.env.CI;
 // Anchored on a path separator so e.g. realtime-notifications.spec.ts does not
 // match `notifications`.
 export const GLOBAL_SETTINGS_SPECS =
-  /(^|[\\/])(admin-setup|agent-shortcuts|ai-features|ai-filter|attach-files|attachments|auth-external|branding|csat|inbound-email|knowledge-base|notifications|polish|sla|subscription-tiers|ticket-detail-custom-fields|ticket-layout|user-fields)\.spec\.ts$/;
+  /(^|[\\/])(admin-setup|agent-shortcuts|ai-features|ai-filter|attach-files|attachments|auth-external|branding|csat|inbound-email|knowledge-base|notifications|polish|sla|spam-rules|subscription-tiers|ticket-detail-custom-fields|ticket-layout|user-fields)\.spec\.ts$/;
 
 export default defineConfig({
   testDir: './tests/e2e',

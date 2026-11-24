@@ -1912,3 +1912,41 @@ export async function saveBranding(
   revalidatePath('/', 'layout');
   return { message: 'Appearance saved. Reload other open pages to see it.' };
 }
+
+// ============================================================
+// Spam rules (#28)
+// ============================================================
+
+export async function saveSpamSettings(
+  formData: FormData,
+): Promise<{ message?: string; error?: string }> {
+  const { supabase, profile: adminProfile } = await requireAdminRole();
+  const { validateSpamSettings, SPAM_SETTINGS_KEY } = await import('@/lib/spam');
+  const result = validateSpamSettings({
+    enabled: formData.get('enabled') ?? '',
+    action: formData.get('action') ?? '',
+    blockedSenders: formData.get('blocked_senders') ?? '',
+    blockedDomains: formData.get('blocked_domains') ?? '',
+    keywords: formData.get('keywords') ?? '',
+    patterns: formData.get('patterns') ?? '',
+    aiEnabled: formData.get('ai_enabled') ?? '',
+    aiThreshold: formData.get('ai_threshold') ?? '',
+  });
+  if ('error' in result) return { error: result.error };
+
+  const { error } = await supabase
+    .from('app_settings')
+    .upsert({ key: SPAM_SETTINGS_KEY, value: JSON.stringify(result.settings), updated_at: new Date().toISOString() });
+  if (error) return { error: 'Failed to save the spam rules.' };
+
+  await logAudit(supabase, adminProfile.id, 'update_spam_rules', 'app_settings', null, {
+    enabled: result.settings.enabled,
+    action: result.settings.action,
+    rules:
+      result.settings.blockedSenders.length + result.settings.blockedDomains.length
+      + result.settings.keywords.length + result.settings.patterns.length,
+    ai: result.settings.aiEnabled,
+  });
+  revalidatePath('/admin/spam');
+  return { message: 'Spam rules saved.' };
+}

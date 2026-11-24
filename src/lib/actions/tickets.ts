@@ -11,6 +11,7 @@ import { claimInlineAttachments } from '@/lib/actions/attachments';
 import { initializeSlaTimer, stopFirstResponseTimer, resumeSlaTimer } from '@/lib/utils/sla';
 import { resolveCloneSource, finalizeClone } from '@/lib/actions/clone';
 import { changeTicketStatus } from '@/lib/actions/agent';
+import { screenNewTicket } from '@/lib/spam-screen';
 import { isCustomFieldOnCreateForm } from '@/lib/tickets/custom-fields-template';
 
 export type TicketActionState = {
@@ -271,13 +272,21 @@ export async function createTicket(
     await claimInlineAttachments(originalPost.id, body);
   }
 
+  // Spam screening (#28) for tickets customers create; a ticket closed as spam
+  // gets no SLA timer.
+  const spam = !isAgent && !clone
+    ? await screenNewTicket(ticket.id, ownerId, { email: user.email ?? '', title, body })
+    : { closedAsSpam: false };
+
   // Auto-follow: insert ticket_followers row for the owner
   await db
     .from('ticket_followers')
     .insert({ ticket_id: ticket.id, user_id: ownerId });
 
   // Initialize SLA timer (clones inherit the source severity; otherwise medium)
-  initializeSlaTimer(ticket.id, clone?.severity ?? 'medium').catch((err) => console.error('[sla]', err));
+  if (!spam.closedAsSpam) {
+    initializeSlaTimer(ticket.id, clone?.severity ?? 'medium').catch((err) => console.error('[sla]', err));
+  }
 
   // Clone side effects: copy tags, record lineage, replace the source comment.
   if (clone) {

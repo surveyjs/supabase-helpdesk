@@ -42,6 +42,7 @@ const GROUPS: AdminGroup[] = [
     links: [
       { label: 'Email', href: '/admin/email' },
       { label: 'Inbound Email', href: '/admin/inbound-email' },
+      { label: 'Spam Rules', href: '/admin/spam' },
       { label: 'AI Configuration', href: '/admin/ai' },
     ],
   },

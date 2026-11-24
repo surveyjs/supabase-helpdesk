@@ -55,6 +55,8 @@ export function isActivityVisibleToNonAgent(
   agentOnlyCustomFields?: ReadonlySet<string>,
 ): boolean {
   if (action === 'draft_published' || action === 'post_privacy_changed') return false;
+  // Spam screening is staff business (#28).
+  if (action === 'spam_detected') return false;
   // Can point at private posts; agent workflow only (#106).
   if (action === 'post_converted') return false;
   // Names (or emails) of other people: agents only (#108).
@@ -233,6 +235,11 @@ export function buildActivityDescriptor(
       return {
         actorName,
         message: d.to === 'comment' ? 'converted an answer to a comment' : 'converted a comment to an answer',
+      };
+    case 'spam_detected':
+      return {
+        actorName: 'Spam filter',
+        message: `${d.action === 'close' ? 'closed this ticket as spam' : 'flagged this ticket as spam'} (${d.reason ?? 'rule'})`,
       };
     case 'file_uploaded':
       return { actorName, message: `uploaded file "${d.filename ?? ''}"` };

@@ -1,0 +1,78 @@
+{
+  "showQuestionNumbers": "off",
+  "completeText": "Save",
+  "pages": [
+    {
+      "elements": [
+        {
+          "type": "boolean",
+          "name": "enabled",
+          "title": "Screen new tickets for spam",
+          "description": "Applies to tickets customers create in the app or by email. Agents' tickets are never screened.",
+          "renderAs": "checkbox"
+        },
+        {
+          "type": "radiogroup",
+          "name": "action",
+          "title": "When a ticket is caught",
+          "enableIf": "{enabled} = true",
+          "choices": [
+            { "value": "flag", "text": "Flag it: add the \"spam\" tag and keep it open" },
+            { "value": "close", "text": "Close it: no SLA timer, no new-ticket notifications" }
+          ]
+        },
+        {
+          "type": "comment",
+          "name": "blocked_senders",
+          "title": "Blocked sender addresses",
+          "description": "One email address per line.",
+          "enableIf": "{enabled} = true",
+          "rows": 3
+        },
+        {
+          "type": "comment",
+          "name": "blocked_domains",
+          "title": "Blocked sender domains",
+          "description": "One domain per line; example.com also covers mail.example.com.",
+          "enableIf": "{enabled} = true",
+          "rows": 3
+        },
+        {
+          "type": "comment",
+          "name": "keywords",
+          "title": "Keywords and phrases",
+          "description": "One per line; matched case-insensitively in the title and the first post.",
+          "enableIf": "{enabled} = true",
+          "rows": 4
+        },
+        {
+          "type": "comment",
+          "name": "patterns",
+          "title": "Regular expressions",
+          "description": "One per line, case-insensitive, same scope as keywords. Example: (seo|backlinks?).*(offer|price)",
+          "enableIf": "{enabled} = true",
+          "rows": 3
+        },
+        {
+          "type": "boolean",
+          "name": "ai_enabled",
+          "title": "Also ask the AI when no rule matches",
+          "description": "Uses the provider from Admin > AI Configuration. Runs after the ticket is created, so customers never wait for it.",
+          "enableIf": "{enabled} = true",
+          "renderAs": "checkbox"
+        },
+        {
+          "type": "text",
+          "name": "ai_threshold",
+          "title": "AI spam probability from which a ticket counts as spam",
+          "inputType": "number",
+          "min": 0.5,
+          "max": 0.99,
+          "step": 0.01,
+          "visibleIf": "{ai_enabled} = true",
+          "enableIf": "{enabled} = true"
+        }
+      ]
+    }
+  ]
+}

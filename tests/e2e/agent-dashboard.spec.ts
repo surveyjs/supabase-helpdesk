@@ -47,6 +47,15 @@ test.describe('Agent Dashboard', () => {
     expect(resultText).toMatch(/\d+ tickets? found/);
   });
 
+  test('Create Ticket button opens the New Ticket form (#109)', async ({ page }) => {
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto('/agent');
+    const btn = page.getByTestId('agent-create-ticket-btn');
+    await expect(btn).toHaveText('Create Ticket');
+    await btn.click();
+    await expect(page).toHaveURL(/\/tickets\/new$/, { timeout: 20000 });
+  });
+
   test('status filter works', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent?status=closed');

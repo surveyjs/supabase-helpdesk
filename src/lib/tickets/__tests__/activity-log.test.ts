@@ -182,6 +182,17 @@ describe('buildActivityDescriptor — file entries', () => {
   });
 });
 
+describe('buildActivityDescriptor — owner change (#108)', () => {
+  it('shows old -> new owner names', () => {
+    const desc = build('owner_changed', { from: 'u1', to: 'u2', from_name: 'Dana', to_name: 'Eve' });
+    expect(desc).toMatchObject({ field: 'owner', oldValue: 'Dana', newValue: 'Eve' });
+  });
+
+  it('is hidden from non-agents', () => {
+    expect(isActivityVisibleToNonAgent('owner_changed', { from_name: 'Dana', to_name: 'Eve' })).toBe(false);
+  });
+});
+
 describe('isActivityVisibleToNonAgent', () => {
   it('shows ordinary change entries to non-agents', () => {
     expect(isActivityVisibleToNonAgent('status_changed', { from: 'open', to: 'closed' })).toBe(true);

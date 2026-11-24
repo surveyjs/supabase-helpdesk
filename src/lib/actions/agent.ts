@@ -605,3 +605,76 @@ export async function removeTagFromTicket(formData: FormData): Promise<void> {
   revalidatePath(`/tickets/${ticketId}/${ticket.slug}`);
   revalidatePath('/agent');
 }
+
+export type OwnerCandidate = { id: string; display_name: string | null; email: string };
+
+/**
+ * People an agent can make a ticket's owner (#108): profiles whose name or
+ * email contains `query` (at least 2 characters), blocked users excluded.
+ */
+export async function searchTicketOwnerCandidates(query: string): Promise<OwnerCandidate[]> {
+  const { supabase } = await requireAgentRole();
+  const term = query.trim().replace(/[,()."\%_*]/g, '');
+  if (term.length < 2) return [];
+  const { data } = await supabase
+    .from('profiles')
+    .select('id, display_name, email')
+    .or(`email.ilike.%${term}%,display_name.ilike.%${term}%`)
+    .eq('is_blocked', false)
+    .order('display_name')
+    .limit(8);
+  return (data ?? []) as OwnerCandidate[];
+}
+
+/**
+ * Make another user the ticket's owner (#108). Agents only; not on merged
+ * tickets. The new owner gets the ticket's access (private tickets, My
+ * Tickets); post authors stay as they are. Logged as `owner_changed`.
+ */
+export async function changeTicketOwner(
+  ticketId: number,
+  newOwnerId: string,
+): Promise<{ error?: string }> {
+  const { supabase, user } = await requireAgentRole();
+  if (!Number.isInteger(ticketId) || !newOwnerId) return { error: 'Invalid request.' };
+
+  const { data: ticket } = await supabase
+    .from('tickets')
+    .select('id, slug, creator_id, merged_into_id')
+    .eq('id', ticketId)
+    .single();
+  if (!ticket) return { error: 'Ticket not found.' };
+  if (ticket.merged_into_id != null) return { error: 'A merged ticket cannot change owner.' };
+  if (ticket.creator_id === newOwnerId) return {};
+
+  const { data: people } = await supabase
+    .from('profiles')
+    .select('id, display_name, email, is_blocked')
+    .in('id', [ticket.creator_id, newOwnerId]);
+  const oldOwner = people?.find((p) => p.id === ticket.creator_id);
+  const newOwner = people?.find((p) => p.id === newOwnerId);
+  if (!newOwner) return { error: 'User not found.' };
+  if (newOwner.is_blocked) return { error: 'A blocked user cannot own a ticket.' };
+
+  const { error } = await supabase
+    .from('tickets')
+    .update({ creator_id: newOwnerId })
+    .eq('id', ticketId);
+  if (error) return { error: 'Failed to change the owner.' };
+
+  await supabase.from('activity_log').insert({
+    ticket_id: ticketId,
+    actor_id: user.id,
+    action: 'owner_changed',
+    details: {
+      from: ticket.creator_id,
+      to: newOwnerId,
+      from_name: oldOwner?.display_name ?? oldOwner?.email ?? null,
+      to_name: newOwner.display_name ?? newOwner.email,
+    },
+  });
+
+  revalidatePath(`/tickets/${ticketId}/${ticket.slug}`);
+  revalidatePath('/agent');
+  return {};
+}

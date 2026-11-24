@@ -60,6 +60,7 @@ const GROUPS: AdminGroup[] = [
   {
     heading: 'Appearance & UX',
     links: [
+      { label: 'Appearance', href: '/admin/appearance' },
       { label: 'Survey Templates', href: '/admin/survey-templates' },
       { label: 'User Settings', href: '/admin/user-settings' },
     ],

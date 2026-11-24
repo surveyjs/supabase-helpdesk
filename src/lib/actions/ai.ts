@@ -576,7 +576,7 @@ Convert the user's description into a JSON object matching this TypeScript type:
   status?: ('open' | 'pending' | 'closed')[];
   urgency?: 'low' | 'medium' | 'high' | 'critical';
   severity?: 'low' | 'medium' | 'high' | 'critical';
-  sort?: 'updated' | 'created' | 'sla';
+  sort?: 'auto' | 'updated' | 'updated_asc' | 'activated' | 'activated_asc' | 'created' | 'sla';
   created?: 'today' | 'yesterday' | '7d' | '30d' | '6m' | '1y' | 'custom';
   created_from?: string; // YYYY-MM-DD, only with created: 'custom'
   created_to?: string;   // YYYY-MM-DD, only with created: 'custom'

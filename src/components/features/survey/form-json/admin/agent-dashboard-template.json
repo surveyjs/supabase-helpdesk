@@ -38,8 +38,12 @@
           "allowClear": false,
           "choices": [
             { "value": "updated", "text": "Last Modified" },
+            { "value": "updated_asc", "text": "Last Modified (oldest first)" },
+            { "value": "activated", "text": "Customer Activity" },
+            { "value": "activated_asc", "text": "Customer Activity (oldest first)" },
             { "value": "created", "text": "Created Date" },
-            { "value": "sla", "text": "SLA Risk" }
+            { "value": "sla", "text": "SLA Risk" },
+            { "value": "auto", "text": "Auto (Enterprise, priority, recent)" }
           ]
         },
         {

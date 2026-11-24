@@ -186,12 +186,40 @@ export function generateSqlFromJson(data: TicketFilterData): string {
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-  let order: string;
-  if (data.sort === 'created') order = 'ORDER BY created_at DESC';
-  else if (data.sort === 'sla') order = 'ORDER BY sla_risk_rank ASC, sla_remaining_minutes ASC';
-  else order = 'ORDER BY updated_at DESC';
+  const order = data.sort === 'sla'
+    ? 'ORDER BY sla_risk_rank ASC, sla_remaining_minutes ASC'
+    : `ORDER BY ${sortOrder(data.sort).map((o) => `${o.column} ${o.ascending ? 'ASC' : 'DESC'}${o.nullsFirst === false ? ' NULLS LAST' : ''}`).join(', ')}`;
 
   return `SELECT * FROM agent_tickets t ${where} ${order}`.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Dashboard sort modes (#7). `sla` is special (sorted after SLA enrichment);
+ * every other mode is a list of view columns. Unknown values sort by Last
+ * Modified, newest first.
+ *  - updated / updated_asc: tickets.updated_at
+ *  - activated / activated_asc: the customer's latest post (#104 column)
+ *  - created: creation time, newest first
+ *  - auto: Enterprise customers first, then the higher of urgency/severity,
+ *    then the most recently modified
+ */
+export type SortColumn = { column: string; ascending: boolean; nullsFirst?: boolean };
+
+const SORT_ORDERS: Record<string, SortColumn[]> = {
+  updated: [{ column: 'updated_at', ascending: false }],
+  updated_asc: [{ column: 'updated_at', ascending: true }],
+  activated: [{ column: 'last_user_activity_at', ascending: false }],
+  activated_asc: [{ column: 'last_user_activity_at', ascending: true }],
+  created: [{ column: 'created_at', ascending: false }],
+  auto: [
+    { column: 'is_enterprise', ascending: false, nullsFirst: false },
+    { column: 'priority_rank', ascending: false, nullsFirst: false },
+    { column: 'updated_at', ascending: false },
+  ],
+};
+
+export function sortOrder(sort: string | undefined): SortColumn[] {
+  return SORT_ORDERS[sort ?? ''] ?? SORT_ORDERS.updated;
 }
 
 export function generateSqlFromAi(data: TicketFilterData): string {

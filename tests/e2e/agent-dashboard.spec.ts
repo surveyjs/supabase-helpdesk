@@ -879,8 +879,12 @@ test.describe('Consolidated Views & Filters Panel', () => {
     const sortBox = (await sort.boundingBox())!;
     const optionBox = (await option.boundingBox())!;
     expect(Math.abs(optionBox.x - sortBox.x)).toBeLessThan(40);
-    expect(optionBox.y).toBeGreaterThan(sortBox.y);
-    expect(optionBox.y - (sortBox.y + sortBox.height)).toBeLessThan(80);
+    // The list opens right below the input, or right above it when it does not
+    // fit below (Sort By has seven choices since #7): either way it touches it.
+    const popupBox = (await page.locator('.sv-popup__container').filter({ visible: true }).first().boundingBox())!;
+    const gapBelow = popupBox.y - (sortBox.y + sortBox.height);
+    const gapAbove = sortBox.y - (popupBox.y + popupBox.height);
+    expect(Math.min(Math.abs(gapBelow), Math.abs(gapAbove))).toBeLessThan(40);
     await page.keyboard.press('Escape');
   });
 

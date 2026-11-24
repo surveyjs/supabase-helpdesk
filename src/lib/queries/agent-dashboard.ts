@@ -6,6 +6,7 @@ import {
   calculateSlaPercentage,
 } from '@/lib/utils/business-hours';
 import {
+  sortOrder,
   createdRange,
   isAllStatusSelected,
   normalizeStoredDefinition,
@@ -245,10 +246,12 @@ export async function getAgentTickets(filters: AgentTicketFilters): Promise<{
   }
 
   // Sort
-  if (filters.sort === 'created') {
-    query = query.order('created_at', { ascending: false });
-  } else if (filters.sort !== 'sla') {
-    query = query.order('updated_at', { ascending: false });
+  if (filters.sort !== 'sla') {
+    for (const o of sortOrder(filters.sort)) {
+      query = query.order(o.column, { ascending: o.ascending, nullsFirst: o.nullsFirst });
+    }
+    // Stable pages when the sort keys tie.
+    query = query.order('id', { ascending: false });
   } else {
     // For SLA sort, we apply server-side ordering then sort again after enrichment
     query = query.order('updated_at', { ascending: false });

@@ -7,6 +7,8 @@ interface CannedState {
   open: boolean;
   query: string;
   results: { id: string; title: string; body: string }[];
+  /** False until the first response for the current popup arrives. */
+  loaded: boolean;
 }
 
 class CannedResponsePlugin extends PluginComponent<CannedState> {
@@ -15,7 +17,9 @@ class CannedResponsePlugin extends PluginComponent<CannedState> {
 
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
   private containerRef: HTMLSpanElement | null = null;
-  state: CannedState = { open: false, query: '', results: [] };
+  /** Bumped per request so a slow, older response can't overwrite a newer one. */
+  private requestSeq = 0;
+  state: CannedState = { open: false, query: '', results: [], loaded: false };
   private handleOutsideClick = (e: MouseEvent) => {
     if (this.containerRef && !this.containerRef.contains(e.target as Node)) {
       this.setState({ open: false });
@@ -31,29 +35,47 @@ class CannedResponsePlugin extends PluginComponent<CannedState> {
     if (this.searchTimer) clearTimeout(this.searchTimer);
   }
 
+  /** Fetch responses matching `query`; an empty query lists them all (#115). */
+  private load = async (query: string) => {
+    const seq = ++this.requestSeq;
+    const res = await searchCannedResponses(query);
+    if (seq !== this.requestSeq) return;
+    this.setState({ results: res, loaded: true });
+  };
+
+  handleToggle = () => {
+    if (this.state.open) {
+      this.setState({ open: false });
+      return;
+    }
+    // Show the list as soon as the popup opens, not only after a search.
+    this.setState({ open: true, query: '', results: [], loaded: false });
+    void this.load('');
+  };
+
   handleQueryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const query = e.target.value;
     this.setState({ query });
 
     if (this.searchTimer) clearTimeout(this.searchTimer);
-    if (query.length < 1) {
-      this.setState({ results: [] });
+    if (!query.trim()) {
+      // Cleared: back to the full list right away.
+      void this.load('');
       return;
     }
 
-    this.searchTimer = setTimeout(async () => {
-      const res = await searchCannedResponses(query);
-      this.setState({ results: res });
+    this.searchTimer = setTimeout(() => {
+      void this.load(query);
     }, 300);
   };
 
   handleSelect = (body: string) => {
     this.editor.insertText(body);
-    this.setState({ open: false, query: '', results: [] });
+    this.setState({ open: false, query: '', results: [], loaded: false });
   };
 
   render() {
-    const { open, query, results } = this.state;
+    const { open, query, results, loaded } = this.state;
     return (
       <span
         className="button"
@@ -62,7 +84,7 @@ class CannedResponsePlugin extends PluginComponent<CannedState> {
         style={{ position: 'relative' }}
       >
         <span
-          onClick={() => this.setState({ open: !open })}
+          onClick={this.handleToggle}
           style={{ cursor: 'pointer', fontSize: '14px' }}
           data-testid="canned-response-toolbar-btn"
         >
@@ -137,8 +159,13 @@ class CannedResponsePlugin extends PluginComponent<CannedState> {
                   </span>
                 </button>
               ))}
-              {query && results.length === 0 && (
-                <p style={{ fontSize: '12px', color: '#9ca3af', padding: '4px 8px' }}>No matches</p>
+              {!loaded && results.length === 0 && (
+                <p style={{ fontSize: '12px', color: '#9ca3af', padding: '4px 8px' }}>Loading…</p>
+              )}
+              {loaded && results.length === 0 && (
+                <p style={{ fontSize: '12px', color: '#9ca3af', padding: '4px 8px' }} data-testid="canned-response-empty">
+                  {query.trim() ? 'No matches' : 'No canned responses yet'}
+                </p>
               )}
             </div>
           </div>

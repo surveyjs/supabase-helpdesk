@@ -130,6 +130,10 @@ export function dataToSurveyData(data: TicketFilterData): Record<string, unknown
     team: data.team ?? '',
     tier: data.tier ?? '',
     tags: data.tags ?? [],
+    created: data.created ?? '',
+    created_from: data.created_from ?? '',
+    created_to: data.created_to ?? '',
+    privacy: data.privacy ?? '',
   };
   if (data.sort !== undefined) result.sort = data.sort;
   return result;

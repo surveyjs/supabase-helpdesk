@@ -628,6 +628,7 @@ async function processAsNewTicket(
   const { data: customFieldDefs } = await supabase
     .from('custom_fields')
     .select('*')
+    .eq('applies_to', 'ticket')
     .order('display_order');
 
   const customFieldValues: Record<string, unknown> = {};

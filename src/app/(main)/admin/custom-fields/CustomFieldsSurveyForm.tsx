@@ -11,6 +11,7 @@ type CustomFieldRow = {
   is_required: boolean;
   show_on_create: boolean;
   agent_only: boolean;
+  applies_to: 'ticket' | 'user';
   default_value: string;
   options: string;
 };

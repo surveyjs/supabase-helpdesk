@@ -50,6 +50,7 @@ import {
 } from '@/lib/tickets/apply-template-policy';
 import { inlineAttachmentIds } from '@/lib/tickets/inline-attachments';
 import { POST_ACTION_CLASS } from './post-action-class';
+import { formatUserFieldValue, loadUserFields } from '@/lib/users/user-fields';
 import { TicketShortcuts } from './TicketShortcuts';
 import { SHORTCUTS_SETTING_KEY, SHORTCUT_ACTIONS, resolveShortcuts } from '@/lib/shortcuts';
 import { convertPostKind } from '@/lib/actions/agent';
@@ -324,6 +325,7 @@ export default async function TicketDetailPage({
     const { data: agentOnlyRows } = await supabase
       .from('custom_fields')
       .select('name')
+      .eq('applies_to', 'ticket')
       .eq('agent_only', true);
     for (const r of agentOnlyRows ?? []) agentOnlyFieldNames.add(String(r.name));
   }
@@ -764,6 +766,7 @@ export default async function TicketDetailPage({
   const { data: customFieldDefsRaw } = await supabase
     .from('custom_fields')
     .select('*')
+    .eq('applies_to', 'ticket')
     .order('display_order');
 
   const customFieldDefs: CustomFieldDef[] = (customFieldDefsRaw ?? []).map((row) => ({
@@ -779,6 +782,7 @@ export default async function TicketDetailPage({
   }));
 
   const ticketCustomFields = (ticket.custom_fields ?? {}) as Record<string, unknown>;
+  const ownerFields = isAgent ? await loadUserFields(supabase, ticket.creator_id, { staff: true }) : [];
   const isOwner = ticket.creator_id === user.id;
 
   // Fetch CSAT rating
@@ -1099,6 +1103,13 @@ export default async function TicketDetailPage({
                     )}
                     {isAgent && !ticket.merged_into_id && <ChangeOwnerControl ticketId={ticket.id} />}
                   </dd>
+                  {/* The owner's user fields (#103), for agents */}
+                  {ownerFields.map((f) => (
+                    <div key={f.id} className="contents" data-testid={`owner-field-${f.name}`}>
+                      <dt className="text-gray-500">{f.name}</dt>
+                      <dd className="text-gray-900">{formatUserFieldValue(f, f.value)}</dd>
+                    </div>
+                  ))}
                 </dl>
               </section>
 

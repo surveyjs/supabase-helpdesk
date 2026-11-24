@@ -11,6 +11,8 @@ import {
   type AgentTicketRow,
 } from '@/lib/queries/agent-dashboard';
 import { IntentPrefetchLink } from '@/components/ui/IntentPrefetchLink';
+import { formatPreciseRelativeTime } from '@/lib/utils/time';
+import { ticketLicenseStatus } from '@/lib/tickets/license';
 import { Badge } from '@/components/ui/Badge';
 import { TierBadge } from '@/components/ui/TierBadge';
 import { DisplayName } from '@/components/features/users/DisplayName';
@@ -294,12 +296,23 @@ export default async function AgentDashboardPage({
                               isCurrentUserAgent={true}
                             />
                           </span>
+                          {ticketLicenseStatus(ticket.custom_fields) && (
+                            <>
+                              <span aria-hidden="true">·</span>
+                              <span className="whitespace-nowrap">{ticketLicenseStatus(ticket.custom_fields)}</span>
+                            </>
+                          )}
                           <span aria-hidden="true">·</span>
-                          <span className="whitespace-nowrap">
-                            {ticket.post_count} post{ticket.post_count !== 1 ? 's' : ''}
-                          </span>
-                          <span aria-hidden="true">·</span>
-                          <span className="whitespace-nowrap">{new Date(ticket.updated_at).toLocaleDateString()}</span>
+                          <ActivityTime label="Activated" at={ticket.last_user_activity_at} />
+                        </div>
+                        <div className="mt-1 text-xs text-gray-500">
+                          {ticket.agent_display_name ?? 'Unassigned'}
+                          {ticket.last_agent_activity_at && (
+                            <>
+                              {' · '}
+                              <ActivityTime label="Updated" at={ticket.last_agent_activity_at} />
+                            </>
+                          )}
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5 mt-2">
                           <Badge variant="status" value={ticket.status} />
@@ -328,13 +341,18 @@ export default async function AgentDashboardPage({
                         <SelectAllCheckbox ticketIds={tickets.map((t) => t.id)} />
                       </th>
                       <th scope="col" className={thClass}>Title</th>
-                      <th scope="col" className={thClass}>Submitter</th>
+                      <th scope="col" className={thClass}>
+                        Submitter
+                        <span className="block font-normal normal-case text-gray-400">License · Activated</span>
+                      </th>
                       <th scope="col" className={thClass}>Status</th>
                       <th scope="col" className={thClass}>Urgency</th>
                       <th scope="col" className={thClass}>Severity</th>
                       {showSla && <th scope="col" className={thClass}>SLA</th>}
-                      <th scope="col" className={thClass}>Posts</th>
-                      <th scope="col" className={thClass}>Updated</th>
+                      <th scope="col" className={thClass}>
+                        Agent
+                        <span className="block font-normal normal-case text-gray-400">Updated</span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
@@ -374,6 +392,15 @@ export default async function AgentDashboardPage({
                                 />
                               )}
                             </div>
+                            <div className="mt-0.5 text-xs text-gray-500 whitespace-nowrap" data-testid={`submitter-meta-${ticket.id}`}>
+                              {ticketLicenseStatus(ticket.custom_fields) && (
+                                <>
+                                  <span data-testid="license-status">{ticketLicenseStatus(ticket.custom_fields)}</span>
+                                  {' · '}
+                                </>
+                              )}
+                              <ActivityTime label="Activated" at={ticket.last_user_activity_at} />
+                            </div>
                           </td>
                           <td className="px-3 py-2">
                             <Badge variant="status" value={ticket.status} />
@@ -401,11 +428,17 @@ export default async function AgentDashboardPage({
                               )}
                             </td>
                           )}
-                          <td className="px-3 py-2 text-sm text-gray-600">
-                            {ticket.post_count}
-                          </td>
-                          <td className="px-3 py-2 text-sm text-gray-500 whitespace-nowrap">
-                            {new Date(ticket.updated_at).toLocaleDateString()}
+                          <td className="px-3 py-2 text-sm text-gray-700" data-testid={`agent-cell-${ticket.id}`}>
+                            <span className="block whitespace-nowrap max-w-[10rem] truncate">
+                              {ticket.agent_display_name ?? <span className="text-gray-400">Unassigned</span>}
+                            </span>
+                            <span className="block mt-0.5 text-xs text-gray-500 whitespace-nowrap">
+                              {ticket.last_agent_activity_at ? (
+                                <ActivityTime label="Updated" at={ticket.last_agent_activity_at} />
+                              ) : (
+                                'No agent reply yet'
+                              )}
+                            </span>
                           </td>
                         </tr>
                       );
@@ -430,5 +463,23 @@ export default async function AgentDashboardPage({
       {/* Realtime subscription for live dashboard updates */}
       <RealtimeDashboard />
     </div>
+  );
+}
+
+/**
+ * "3 hours ago" with the exact time on hover; `label` says which activity it is
+ * (Activated = the customer's last post, Updated = the last agent reply), #104.
+ */
+function ActivityTime({ label, at }: { label: 'Activated' | 'Updated'; at: string }) {
+  return (
+    <time
+      dateTime={at}
+      title={`${label} ${new Date(at).toLocaleString()}`}
+      className="whitespace-nowrap"
+      data-testid={`${label.toLowerCase()}-time`}
+    >
+      <span className="sr-only">{label} </span>
+      {formatPreciseRelativeTime(at)}
+    </time>
   );
 }

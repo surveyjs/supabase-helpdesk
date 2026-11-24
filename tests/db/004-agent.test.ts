@@ -470,6 +470,47 @@ describe('agent_tickets VIEW', () => {
     const ids = data!.map((r: { id: number }) => r.id);
     expect(ids).toContain(aliceTicketId);
   });
+
+  it('last_user_activity_at / last_agent_activity_at skip drafts and notes (#104)', async () => {
+    const { data: t, error: tErr } = await admin
+      .from('tickets')
+      .insert({
+        title: 'Activity columns ticket', slug: 'activity-columns-ticket', creator_id: USER_ALICE_ID,
+        type_id: defaultTypeId, created_at: '2026-01-01T00:00:00Z',
+      })
+      .select('id')
+      .single();
+    expect(tErr).toBeNull();
+    const ticketId = t!.id as number;
+    try {
+      const agent = await clientForUser('agent@test.com');
+      const cols = 'last_user_activity_at, last_agent_activity_at';
+
+      // No posts yet: activated = ticket creation, no agent activity.
+      const { data: empty } = await agent.from('agent_tickets').select(cols).eq('id', ticketId).single();
+      expect(new Date(empty!.last_user_activity_at).toISOString()).toBe('2026-01-01T00:00:00.000Z');
+      expect(empty!.last_agent_activity_at).toBeNull();
+
+      const { error: pErr } = await admin.from('posts').insert([
+        { ticket_id: ticketId, author_id: USER_ALICE_ID, body: 'q', is_original: true, post_type: 'post', created_at: '2026-01-02T00:00:00Z' },
+        { ticket_id: ticketId, author_id: AGENT_ID, body: 'a', post_type: 'post', created_at: '2026-01-03T00:00:00Z' },
+        { ticket_id: ticketId, author_id: AGENT_ID, body: 'note', post_type: 'note', created_at: '2026-01-04T00:00:00Z' },
+        { ticket_id: ticketId, author_id: AGENT_ID, body: 'draft', post_type: 'post', is_draft: true, created_at: '2026-01-05T00:00:00Z' },
+        { ticket_id: ticketId, author_id: USER_ALICE_ID, body: 'draft', post_type: 'post', is_draft: true, created_at: '2026-01-06T00:00:00Z' },
+      ]);
+      expect(pErr).toBeNull();
+
+      const { data, error } = await agent.from('agent_tickets').select(cols).eq('id', ticketId).single();
+      expect(error).toBeNull();
+      expect(new Date(data!.last_user_activity_at).toISOString()).toBe('2026-01-02T00:00:00.000Z');
+      expect(new Date(data!.last_agent_activity_at!).toISOString()).toBe('2026-01-03T00:00:00.000Z');
+    } finally {
+      await admin.from('activity_log').delete().eq('ticket_id', ticketId);
+      await admin.from('posts').delete().eq('ticket_id', ticketId);
+      await admin.from('sla_timers').delete().eq('ticket_id', ticketId);
+      await admin.from('tickets').delete().eq('id', ticketId);
+    }
+  });
 });
 
 describe('Activity log', () => {

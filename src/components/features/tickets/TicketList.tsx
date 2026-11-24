@@ -42,7 +42,7 @@ export function TicketList({ tickets, showCreator }: { tickets: TicketEntry[]; s
                   {ticket.title}
                 </span>
                 {ticket.category_name && (
-                  <span className="hidden sm:inline text-xs text-gray-500 bg-gray-100 rounded-full px-2 py-0.5 shrink-0" data-testid="ticket-category">
+                  <span className="hidden sm:inline text-xs text-gray-600 bg-gray-100 rounded-full px-2 py-0.5 shrink-0" data-testid="ticket-category">
                     {ticket.category_name}
                   </span>
                 )}

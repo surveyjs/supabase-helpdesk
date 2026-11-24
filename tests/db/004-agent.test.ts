@@ -524,6 +524,36 @@ describe('agent_tickets VIEW', () => {
   });
 });
 
+describe('agent_tickets ranking columns (#7)', () => {
+  it('is_enterprise follows License Status; priority_rank is the higher of urgency and severity', async () => {
+    const { data: t, error } = await admin
+      .from('tickets')
+      .insert({
+        title: 'Ranking columns ticket', slug: 'ranking-columns-ticket', creator_id: USER_ALICE_ID,
+        type_id: defaultTypeId, urgency: 'low', severity: 'high',
+        custom_fields: { 'License Status': 'Enterprise' },
+      })
+      .select('id')
+      .single();
+    expect(error).toBeNull();
+    const ticketId = t!.id as number;
+    try {
+      const agent = await clientForUser('agent@test.com');
+      const cols = 'is_enterprise, priority_rank';
+      const { data: a } = await agent.from('agent_tickets').select(cols).eq('id', ticketId).single();
+      expect(a).toEqual({ is_enterprise: true, priority_rank: 3 });
+
+      await admin.from('tickets').update({ custom_fields: {}, urgency: 'critical' }).eq('id', ticketId);
+      const { data: b } = await agent.from('agent_tickets').select(cols).eq('id', ticketId).single();
+      expect(b).toEqual({ is_enterprise: null, priority_rank: 4 });
+    } finally {
+      await admin.from('activity_log').delete().eq('ticket_id', ticketId);
+      await admin.from('sla_timers').delete().eq('ticket_id', ticketId);
+      await admin.from('tickets').delete().eq('id', ticketId);
+    }
+  });
+});
+
 describe('Activity log', () => {
   it('agent can insert activity log entries', async () => {
     const agent = await clientForUser('agent@test.com');

@@ -576,7 +576,7 @@ Convert the user's description into a JSON object matching this TypeScript type:
   status?: ('open' | 'pending' | 'closed')[];
   urgency?: 'low' | 'medium' | 'high' | 'critical';
   severity?: 'low' | 'medium' | 'high' | 'critical';
-  sort?: 'updated' | 'created' | 'sla';
+  sort?: 'auto' | 'updated' | 'updated_asc' | 'activated' | 'activated_asc' | 'created' | 'sla';
 }
 Omit any field you cannot confidently infer. Respond with JSON only — no prose.`;
 

@@ -10,6 +10,7 @@ import { cancelCsatSurvey } from '@/lib/utils/csat';
 import { claimInlineAttachments } from '@/lib/actions/attachments';
 import { initializeSlaTimer, stopFirstResponseTimer, resumeSlaTimer } from '@/lib/utils/sla';
 import { resolveCloneSource, finalizeClone } from '@/lib/actions/clone';
+import { changeTicketStatus } from '@/lib/actions/agent';
 import { isCustomFieldOnCreateForm } from '@/lib/tickets/custom-fields-template';
 
 export type TicketActionState = {
@@ -400,6 +401,15 @@ export async function replyToTicket(
 
     if (agentReplyCount !== null && agentReplyCount <= 1) {
       stopFirstResponseTimer(ticket.id).catch((err) => console.error('[sla]', err));
+    }
+
+    // "Reply and close" shortcut (#1): close the ticket after the reply, with
+    // the usual status-change side effects (log, notification, CSAT, SLA).
+    if (formData.get('close_after') === '1' && ticket.status !== 'closed') {
+      const fd = new FormData();
+      fd.set('ticket_id', String(ticket.id));
+      fd.set('new_status', 'closed');
+      await changeTicketStatus(fd);
     }
   } else {
     // User reply → notify ticket owner + followers (non-agent, no coalescing)

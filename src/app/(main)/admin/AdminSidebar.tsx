@@ -34,6 +34,7 @@ const GROUPS: AdminGroup[] = [
       { label: 'SLA Policies', href: '/admin/sla' },
       { label: 'CSAT Settings', href: '/admin/csat' },
       { label: 'Templates', href: '/admin/templates' },
+      { label: 'Keyboard Shortcuts', href: '/admin/shortcuts' },
     ],
   },
   {

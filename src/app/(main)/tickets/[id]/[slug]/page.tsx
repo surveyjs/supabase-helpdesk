@@ -50,6 +50,8 @@ import {
 } from '@/lib/tickets/apply-template-policy';
 import { inlineAttachmentIds } from '@/lib/tickets/inline-attachments';
 import { POST_ACTION_CLASS } from './post-action-class';
+import { TicketShortcuts } from './TicketShortcuts';
+import { SHORTCUTS_SETTING_KEY, SHORTCUT_ACTIONS, resolveShortcuts } from '@/lib/shortcuts';
 import { ChangeOwnerControl } from './ChangeOwnerControl';
 import { TicketDetailsPanel } from './TicketDetailsPanel';
 import { TICKET_DETAILS_COLLAPSED_COOKIE } from './ticket-details-cookie';
@@ -235,6 +237,7 @@ export default async function TicketDetailPage({
       'ai_generate_kb_article_enabled',
       'survey_ticket_detail_agent_template',
       'survey_ticket_detail_user_template',
+      SHORTCUTS_SETTING_KEY,
     ]);
 
   const settingsMap = new Map(allSettings?.map((s) => [s.key, s.value]) ?? []);
@@ -247,6 +250,7 @@ export default async function TicketDetailPage({
   const visibleCommentsThreshold = parseInt(settingsMap.get('visible_comments_threshold') ?? '3', 10) || 3;
   const detailAgentTemplate = parseTicketDetailAgentTemplate(settingsMap.get('survey_ticket_detail_agent_template'));
   const detailUserTemplate = parseTicketDetailUserTemplate(settingsMap.get('survey_ticket_detail_user_template'));
+  const agentShortcuts = resolveShortcuts(settingsMap.get(SHORTCUTS_SETTING_KEY));
 
   // Check if user can reply (non-agents cannot reply to duplicates)
   const canReply = isAgent || !ticket.duplicate_of_id;
@@ -1309,6 +1313,29 @@ export default async function TicketDetailPage({
                 </dd>
               </dl>
             </div>
+          )}
+
+          {/* Keyboard shortcuts (agents only, #1) */}
+          {isAgent && (
+            <>
+              <TicketShortcuts
+                ticketId={ticket.id}
+                title={ticket.title}
+                slug={ticket.slug}
+                shortcuts={agentShortcuts}
+              />
+              <details className="mt-4 text-xs text-gray-600" data-testid="shortcuts-help">
+                <summary className="cursor-pointer text-gray-500 hover:text-gray-800">Keyboard shortcuts</summary>
+                <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+                  {SHORTCUT_ACTIONS.filter((a) => agentShortcuts[a.id]).map((a) => (
+                    <div key={a.id} className="contents">
+                      <dt><kbd className="rounded border border-gray-300 bg-gray-50 px-1 font-mono">{agentShortcuts[a.id]}</kbd></dt>
+                      <dd title={a.description}>{a.label}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </details>
+            </>
           )}
         </TicketDetailsPanel>
       </div>

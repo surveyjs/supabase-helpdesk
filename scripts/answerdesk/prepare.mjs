@@ -26,9 +26,13 @@
 //     bodies; load.sql relinks them via ticket_friendly.tsv (all source
 //     tickets' FriendlyId -> Id) once the referenced ticket ids are known.
 //   * Posts.Type: 0 = question (original post), 1 = answer (top-level post),
-//     2 = comment, 3 = staff comment -> comment. Comments hang off their
-//     top-level ancestor (parent_post_id); deeper chains are flattened to two
-//     levels (parent_comment_id = the level-1 comment).
+//     2 = comment, 3 = staff note -> internal `note` (agents only). Type 3 is
+//     what AnswerDesk shows in its NOTES panel ("On ticket description by
+//     ..."): 99% are written by employees, they hang off a question or answer
+//     and are never anyone's parent (private-tasks#635). Notes are imported
+//     without a parent. Comments hang off their top-level ancestor
+//     (parent_post_id); deeper chains are flattened to two levels
+//     (parent_comment_id = the level-1 comment).
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -263,7 +267,9 @@ for (const a of attRows) {
 
 // ---------- Posts -> target ----------
 const wPosts = writer('posts');
-const kindOf = (p) => (p.Type === '0' ? 'original' : p.Type === '1' || !p.Parent_Id || !posts.has(p.Parent_Id) ? 'root' : 'comment');
+const kindOf = (p) => (p.Type === '0' ? 'original'
+  : p.Type === '3' ? 'note'
+  : p.Type === '1' || !p.Parent_Id || !posts.has(p.Parent_Id) ? 'root' : 'comment');
 const INLINE_MD = /(!?)\[([^\]\n]*)\]\(\s*<?\{'Id':'([0-9a-fA-F-]{36})','CheckAnswerDesk':'[0-9a-fA-F-]{36}'\}>?\s*\)/g;
 const INLINE_BARE = /\{'Id':'([0-9a-fA-F-]{36})','CheckAnswerDesk':'[0-9a-fA-F-]{36}'\}/g;
 const LEGACY_URL = /(?:https?:\/\/[^\s/)"'>]+)?\/attachment\/file\/([0-9a-fA-F-]{36})/g;
@@ -281,9 +287,11 @@ for (const p of posts.values()) {
     const chain = [];
     let cur = posts.get(p.Parent_Id);
     const seen = new Set([p.Id]);
-    while (cur && kindOf(cur) === 'comment' && !seen.has(cur.Id)) {
+    while (cur && (kindOf(cur) === 'comment' || kindOf(cur) === 'note') && !seen.has(cur.Id)) {
       seen.add(cur.Id);
-      chain.push(cur);
+      // A note is never a parent in the target; climb past it (none in the data).
+      if (kindOf(cur) === 'comment') chain.push(cur);
+      else note('comment parent was a staff note: attached to the parent of the note');
       cur = posts.get(cur.Parent_Id);
     }
     if (!cur || seen.has(cur.Id)) { note('comment re-parented to ticket root: broken parent chain'); }
@@ -314,7 +322,7 @@ for (const p of posts.values()) {
   const created = toTs(p.Created);
   const modified = toTs(p.Modified);
   const edited = modified && Date.parse(modified) - Date.parse(created) > 1000 ? modified : null;
-  const postType = kind === 'comment' && parentPost ? 'comment' : 'post';
+  const postType = kind === 'note' ? 'note' : kind === 'comment' && parentPost ? 'comment' : 'post';
   wPosts(p.Id, p.Ticket_Id, p.Owner, postType === 'comment' ? parentPost : null, postType === 'comment' ? parentComment : null,
     postType, body, bit(p.IsPrivate), kind === 'original', edited, created);
 }

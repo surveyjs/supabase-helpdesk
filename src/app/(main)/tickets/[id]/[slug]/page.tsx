@@ -496,13 +496,15 @@ export default async function TicketDetailPage({
               )}
             </>
           ) : undefined}
-        />
-
-        {/* Attachments */}
-        <AttachmentList
-          postId={post.id}
-          canDelete={isCurrentUser || isAgent}
-          inlineIds={inlineIds}
+          attachments={
+            // Deleting a file is part of editing the post (#118): only those
+            // who may edit it get Delete, and only while it is in edit mode.
+            <AttachmentList
+              postId={post.id}
+              canDelete={canEditPost}
+              inlineIds={inlineIds}
+            />
+          }
         />
       </article>
     );

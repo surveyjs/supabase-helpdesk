@@ -7,6 +7,7 @@ import {
   type EditorViewMode,
 } from './MarkdownActionForm';
 import { POST_ACTION_CLASS } from './post-action-class';
+import { PostEditingContext } from '@/components/features/attachments/AttachmentDeleteButton';
 
 export function EditablePost({
   postId,
@@ -17,6 +18,7 @@ export function EditablePost({
   editorMinHeightPx,
   editorMaxHeightPx,
   actions,
+  attachments,
 }: {
   postId: string;
   htmlBody: string;
@@ -27,6 +29,11 @@ export function EditablePost({
   editorMaxHeightPx?: number;
   /** Extra action controls rendered in the same row as the Edit button. */
   actions?: ReactNode;
+  /**
+   * The post's attachment list. Rendered under the body in every mode; its
+   * Delete buttons are enabled only while the post is being edited.
+   */
+  attachments?: ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
 
@@ -38,23 +45,27 @@ export function EditablePost({
           dangerouslySetInnerHTML={{ __html: htmlBody }}
         />
         {actions && <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 text-xs text-gray-500">{actions}</div>}
+        {attachments}
       </div>
     );
   }
 
   if (editing) {
     return (
-      <MarkdownActionForm
-        action={editPost}
-        hiddenFields={<input type="hidden" name="post_id" value={postId} />}
-        defaultBody={rawBody}
-        editorViewMode={editorViewMode}
-        editorMinHeightPx={editorMinHeightPx}
-        editorMaxHeightPx={editorMaxHeightPx}
-        submitLabel="Save"
-        pendingLabel="Saving…"
-        onCancel={() => setEditing(false)}
-      />
+      <PostEditingContext.Provider value={true}>
+        <MarkdownActionForm
+          action={editPost}
+          hiddenFields={<input type="hidden" name="post_id" value={postId} />}
+          defaultBody={rawBody}
+          editorViewMode={editorViewMode}
+          editorMinHeightPx={editorMinHeightPx}
+          editorMaxHeightPx={editorMaxHeightPx}
+          submitLabel="Save"
+          pendingLabel="Saving…"
+          onCancel={() => setEditing(false)}
+        />
+        {attachments}
+      </PostEditingContext.Provider>
     );
   }
 
@@ -75,6 +86,7 @@ export function EditablePost({
         </button>
         {actions}
       </div>
+      {attachments}
     </div>
   );
 }

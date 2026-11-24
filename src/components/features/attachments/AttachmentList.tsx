@@ -1,6 +1,6 @@
 import { createServerClient } from '@/lib/supabase/server';
 import { toBrowserUrl } from '@/lib/runtime-config';
-import { deleteAttachment } from '@/lib/actions/attachments';
+import { AttachmentDeleteButton } from './AttachmentDeleteButton';
 
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'];
 
@@ -21,6 +21,10 @@ export async function AttachmentList({
   inlineIds = [],
 }: {
   postId: string;
+  /**
+   * Whether the viewer may delete these files. The buttons are still disabled
+   * until the owning post is in edit mode (PostEditingContext).
+   */
   canDelete: boolean;
   /**
    * Attachment ids the post body already shows inline. They get no full row,
@@ -117,16 +121,12 @@ export async function AttachmentList({
             </div>
 
             {canDelete && (
-              <form action={deleteAttachment} className="ml-auto shrink-0">
-                <input type="hidden" name="attachment_id" value={att.id} />
-                <button
-                  type="submit"
-                  className="text-xs text-red-600 hover:text-red-800"
-                  data-testid="delete-attachment-btn"
-                >
-                  Delete
-                </button>
-              </form>
+              <AttachmentDeleteButton
+                attachmentId={att.id}
+                filename={att.original_filename}
+                formClassName="ml-auto shrink-0"
+                className="text-xs"
+              />
             )}
           </div>
         );
@@ -148,17 +148,12 @@ export async function AttachmentList({
               {i > 0 && <span aria-hidden="true">·</span>}
               <span className="wrap-anywhere">{att.original_filename}</span>
               {canDelete && (
-                <form action={deleteAttachment} className="inline-flex">
-                  <input type="hidden" name="attachment_id" value={att.id} />
-                  <button
-                    type="submit"
-                    className="inline-flex items-center text-red-600 hover:text-red-800 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:px-2"
-                    data-testid="delete-attachment-btn"
-                    aria-label={`Delete ${att.original_filename}`}
-                  >
-                    Delete
-                  </button>
-                </form>
+                <AttachmentDeleteButton
+                  attachmentId={att.id}
+                  filename={att.original_filename}
+                  formClassName="inline-flex"
+                  className="inline-flex items-center [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:px-2"
+                />
               )}
             </span>
           ))}

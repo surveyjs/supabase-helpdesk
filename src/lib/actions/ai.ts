@@ -577,6 +577,10 @@ Convert the user's description into a JSON object matching this TypeScript type:
   urgency?: 'low' | 'medium' | 'high' | 'critical';
   severity?: 'low' | 'medium' | 'high' | 'critical';
   sort?: 'updated' | 'created' | 'sla';
+  created?: 'today' | 'yesterday' | '7d' | '30d' | '6m' | '1y' | 'custom';
+  created_from?: string; // YYYY-MM-DD, only with created: 'custom'
+  created_to?: string;   // YYYY-MM-DD, only with created: 'custom'
+  privacy?: 'private' | 'public';
 }
 Omit any field you cannot confidently infer. Respond with JSON only — no prose.`;
 

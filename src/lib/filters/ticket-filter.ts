@@ -27,7 +27,70 @@ export type TicketFilterData = {
   tier?: string;
   tags?: string[];
   sort?: string;
+  /** Created-date preset, or 'custom' with created_from / created_to (#113). */
+  created?: CreatedPreset;
+  /** YYYY-MM-DD, inclusive; only with created === 'custom'. */
+  created_from?: string;
+  /** YYYY-MM-DD, inclusive; only with created === 'custom'. */
+  created_to?: string;
+  /** 'private' or 'public' tickets only (#113). */
+  privacy?: 'private' | 'public';
 };
+
+export const CREATED_PRESETS = ['today', 'yesterday', '7d', '30d', '6m', '1y', 'custom'] as const;
+export type CreatedPreset = (typeof CREATED_PRESETS)[number];
+
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+function isIsoDay(v: unknown): v is string {
+  return typeof v === 'string' && ISO_DAY.test(v) && !Number.isNaN(Date.parse(`${v}T00:00:00Z`));
+}
+
+function startOfUtcDay(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+}
+
+/**
+ * The created_at window a filter asks for, as ISO timestamps: `gte` inclusive,
+ * `lt` exclusive (#113). Days are UTC days. Empty when there is no filter.
+ */
+export function createdRange(
+  data: Pick<TicketFilterData, 'created' | 'created_from' | 'created_to'>,
+  now: Date = new Date(),
+): { gte?: string; lt?: string } {
+  const day = 24 * 60 * 60 * 1000;
+  const today = startOfUtcDay(now);
+  switch (data.created) {
+    case 'today':
+      return { gte: today.toISOString() };
+    case 'yesterday':
+      return { gte: new Date(today.getTime() - day).toISOString(), lt: today.toISOString() };
+    case '7d':
+      return { gte: new Date(now.getTime() - 7 * day).toISOString() };
+    case '30d':
+      return { gte: new Date(now.getTime() - 30 * day).toISOString() };
+    case '6m': {
+      const d = new Date(now);
+      d.setUTCMonth(d.getUTCMonth() - 6);
+      return { gte: d.toISOString() };
+    }
+    case '1y': {
+      const d = new Date(now);
+      d.setUTCFullYear(d.getUTCFullYear() - 1);
+      return { gte: d.toISOString() };
+    }
+    case 'custom': {
+      const out: { gte?: string; lt?: string } = {};
+      if (isIsoDay(data.created_from)) out.gte = `${data.created_from}T00:00:00.000Z`;
+      if (isIsoDay(data.created_to)) {
+        out.lt = new Date(Date.parse(`${data.created_to}T00:00:00Z`) + day).toISOString();
+      }
+      return out;
+    }
+    default:
+      return {};
+  }
+}
 
 export type TicketFilterDefinition = {
   /** Display name. Empty / missing => "Default". */
@@ -114,6 +177,12 @@ export function generateSqlFromJson(data: TicketFilterData): string {
       `id IN (SELECT ticket_id FROM ticket_tags WHERE tag_id IN (${tagList}))`,
     );
   }
+
+  const range = createdRange(data);
+  if (range.gte) conditions.push(`created_at >= '${range.gte}'`);
+  if (range.lt) conditions.push(`created_at < '${range.lt}'`);
+  if (data.privacy === 'private') conditions.push('is_private = true');
+  else if (data.privacy === 'public') conditions.push('is_private = false');
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -246,6 +315,21 @@ export function normalizeFilterData(input: unknown): TicketFilterData {
   } else if (typeof obj.tags === 'string' && obj.tags.length > 0) {
     out.tags = obj.tags.split(',').map((t) => t.trim()).filter(Boolean);
   }
+  Object.assign(out, normalizeCreatedAndPrivacy(obj));
+  return out;
+}
+
+/** The #113 keys of `obj`, validated; dates only for a custom range. */
+function normalizeCreatedAndPrivacy(obj: Record<string, unknown>): TicketFilterData {
+  const out: TicketFilterData = {};
+  if (typeof obj.created === 'string' && (CREATED_PRESETS as readonly string[]).includes(obj.created)) {
+    out.created = obj.created as CreatedPreset;
+    if (out.created === 'custom') {
+      if (isIsoDay(obj.created_from)) out.created_from = obj.created_from;
+      if (isIsoDay(obj.created_to)) out.created_to = obj.created_to;
+    }
+  }
+  if (obj.privacy === 'private' || obj.privacy === 'public') out.privacy = obj.privacy;
   return out;
 }
 
@@ -266,6 +350,10 @@ export function dataToUrlParams(data: TicketFilterData): URLSearchParams {
   if (data.tier) params.set('tier', data.tier);
   if (data.sort) params.set('sort', data.sort);
   if (data.tags && data.tags.length > 0) params.set('tags', data.tags.join(','));
+  if (data.created) params.set('created', data.created);
+  if (data.created === 'custom' && data.created_from) params.set('created_from', data.created_from);
+  if (data.created === 'custom' && data.created_to) params.set('created_to', data.created_to);
+  if (data.privacy) params.set('privacy', data.privacy);
   if (data.status && !isAllStatusSelected(data.status)) {
     params.set('status', data.status.join(','));
   }
@@ -310,5 +398,6 @@ export function urlParamsToData(params: Record<string, string | string[] | undef
       if (parts.length > 0) data.status = parts;
     }
   }
+  Object.assign(data, normalizeCreatedAndPrivacy(flat));
   return data;
 }

@@ -40,6 +40,7 @@ export type ActivityDescriptor = {
  * Decides whether a non-agent viewer may see an activity entry. Most entries
  * are visible, but a few expose information that must stay agent-only:
  *  - `draft_published` / `post_privacy_changed`: agent-only workflow events.
+ *  - `owner_changed`: names the previous and new owner.
  *  - `post_edited` / `post_deleted`: carry body snippets, so they are shown only
  *    when the payload *proves* the post is a public, non-private reply/comment.
  *    This fails closed — legacy/malformed rows missing the flags are hidden so
@@ -56,6 +57,8 @@ export function isActivityVisibleToNonAgent(
   if (action === 'draft_published' || action === 'post_privacy_changed') return false;
   // Can point at private posts; agent workflow only (#106).
   if (action === 'post_converted') return false;
+  // Names (or emails) of other people: agents only (#108).
+  if (action === 'owner_changed') return false;
   if (action === 'custom_field_changed' && agentOnlyCustomFields?.size) {
     const field = details?.field;
     if (typeof field === 'string' && agentOnlyCustomFields.has(field)) return false;
@@ -143,6 +146,13 @@ export function buildActivityDescriptor(
         newValue: formatPlainValue(hasComparison ? d.to : d.value),
       };
     }
+    case 'owner_changed':
+      return {
+        actorName,
+        field: 'owner',
+        oldValue: d.from_name != null ? String(d.from_name) : '—',
+        newValue: d.to_name != null ? String(d.to_name) : '—',
+      };
     case 'title_changed':
       return {
         actorName,

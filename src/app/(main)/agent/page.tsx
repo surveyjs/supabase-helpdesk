@@ -11,6 +11,8 @@ import {
   type AgentTicketRow,
 } from '@/lib/queries/agent-dashboard';
 import { IntentPrefetchLink } from '@/components/ui/IntentPrefetchLink';
+import { formatPreciseRelativeTime } from '@/lib/utils/time';
+import { ticketLicenseStatus } from '@/lib/tickets/license';
 import { Badge } from '@/components/ui/Badge';
 import { TierBadge } from '@/components/ui/TierBadge';
 import { DisplayName } from '@/components/features/users/DisplayName';
@@ -20,7 +22,9 @@ import { RealtimeDashboard } from '@/components/features/agent/RealtimeDashboard
 import { BulkSelectProvider } from '@/components/features/bulk-actions/BulkSelectProvider';
 import { TicketCheckbox, SelectAllCheckbox } from '@/components/features/bulk-actions/TicketCheckbox';
 import { BulkActionToolbar } from '@/components/features/bulk-actions/BulkActionToolbar';
-import { ViewsFiltersCollapsible } from './ViewsFiltersCollapsible';
+import { AgentFiltersLayout } from './AgentFiltersLayout';
+import { AGENT_FILTERS_HIDDEN_COOKIE } from './agent-filters-cookie';
+import { cookies } from 'next/headers';
 import { parseAgentDashboardTemplate } from '@/lib/constants/survey-ui-config';
 import { getTemplateDefaultSort } from '@/lib/filters/ticket-filter-survey';
 import {
@@ -187,7 +191,13 @@ export default async function AgentDashboardPage({
     if (effectiveData.status && effectiveData.status.length > 0 && effectiveData.status.length < 3) {
       linkParams.status = effectiveData.status.join(',');
     }
+    if (effectiveData.created) linkParams.created = effectiveData.created;
+    if (effectiveData.created_from) linkParams.created_from = effectiveData.created_from;
+    if (effectiveData.created_to) linkParams.created_to = effectiveData.created_to;
+    if (effectiveData.privacy) linkParams.privacy = effectiveData.privacy;
   }
+
+  const filtersHidden = (await cookies()).get(AGENT_FILTERS_HIDDEN_COOKIE)?.value === '1';
 
   const thClass = 'px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap';
 
@@ -234,21 +244,21 @@ export default async function AgentDashboardPage({
         </dl>
       </details>
 
-      <div className="xl:flex xl:items-start xl:gap-6">
-        {/* Consolidated Views & Filters Panel: on top below xl, left column from xl */}
-        <ViewsFiltersCollapsible
-          className="xl:w-72 xl:shrink-0 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto"
-          filterOptions={filterOptions}
-          template={surveyFilterTemplate}
-          savedViews={savedViews.map((v) => ({ id: v.id, name: v.name }))}
-          activeViewId={activeView.id}
-          activeViewName={activeView.name}
-          initialData={effectiveData}
-          activeDefinition={activeView.definition}
-          aiFilterEnabled={aiFilterEnabled}
-        />
-
-        <div className="min-w-0 xl:flex-1">
+      {/* Views & Filters: on top below xl, a left column from xl that can be hidden (#105) */}
+      <AgentFiltersLayout
+        initialHidden={filtersHidden}
+        filterProps={{
+          filterOptions,
+          template: surveyFilterTemplate,
+          savedViews: savedViews.map((v) => ({ id: v.id, name: v.name })),
+          activeViewId: activeView.id,
+          activeViewName: activeView.name,
+          initialData: effectiveData,
+          activeDefinition: activeView.definition,
+          aiFilterEnabled,
+        }}
+      >
+        <>
           {/* Result count and Create Ticket (#109) */}
           <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
             <p className="text-sm text-gray-600" data-testid="result-count">
@@ -303,12 +313,23 @@ export default async function AgentDashboardPage({
                               isCurrentUserAgent={true}
                             />
                           </span>
+                          {ticketLicenseStatus(ticket.custom_fields) && (
+                            <>
+                              <span aria-hidden="true">·</span>
+                              <span className="whitespace-nowrap">{ticketLicenseStatus(ticket.custom_fields)}</span>
+                            </>
+                          )}
                           <span aria-hidden="true">·</span>
-                          <span className="whitespace-nowrap">
-                            {ticket.post_count} post{ticket.post_count !== 1 ? 's' : ''}
-                          </span>
-                          <span aria-hidden="true">·</span>
-                          <span className="whitespace-nowrap">{new Date(ticket.updated_at).toLocaleDateString()}</span>
+                          <ActivityTime label="Activated" at={ticket.last_user_activity_at} />
+                        </div>
+                        <div className="mt-1 text-xs text-gray-500">
+                          {ticket.agent_display_name ?? 'Unassigned'}
+                          {ticket.last_agent_activity_at && (
+                            <>
+                              {' · '}
+                              <ActivityTime label="Updated" at={ticket.last_agent_activity_at} />
+                            </>
+                          )}
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5 mt-2">
                           <Badge variant="status" value={ticket.status} />
@@ -337,13 +358,18 @@ export default async function AgentDashboardPage({
                         <SelectAllCheckbox ticketIds={tickets.map((t) => t.id)} />
                       </th>
                       <th scope="col" className={thClass}>Title</th>
-                      <th scope="col" className={thClass}>Submitter</th>
+                      <th scope="col" className={thClass}>
+                        Submitter
+                        <span className="block font-normal normal-case text-gray-500">License · Activated</span>
+                      </th>
                       <th scope="col" className={thClass}>Status</th>
                       <th scope="col" className={thClass}>Urgency</th>
                       <th scope="col" className={thClass}>Severity</th>
                       {showSla && <th scope="col" className={thClass}>SLA</th>}
-                      <th scope="col" className={thClass}>Posts</th>
-                      <th scope="col" className={thClass}>Updated</th>
+                      <th scope="col" className={thClass}>
+                        Agent
+                        <span className="block font-normal normal-case text-gray-500">Updated</span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
@@ -383,6 +409,15 @@ export default async function AgentDashboardPage({
                                 />
                               )}
                             </div>
+                            <div className="mt-0.5 text-xs text-gray-500 whitespace-nowrap" data-testid={`submitter-meta-${ticket.id}`}>
+                              {ticketLicenseStatus(ticket.custom_fields) && (
+                                <>
+                                  <span data-testid="license-status">{ticketLicenseStatus(ticket.custom_fields)}</span>
+                                  {' · '}
+                                </>
+                              )}
+                              <ActivityTime label="Activated" at={ticket.last_user_activity_at} />
+                            </div>
                           </td>
                           <td className="px-3 py-2">
                             <Badge variant="status" value={ticket.status} />
@@ -410,11 +445,17 @@ export default async function AgentDashboardPage({
                               )}
                             </td>
                           )}
-                          <td className="px-3 py-2 text-sm text-gray-600">
-                            {ticket.post_count}
-                          </td>
-                          <td className="px-3 py-2 text-sm text-gray-500 whitespace-nowrap">
-                            {new Date(ticket.updated_at).toLocaleDateString()}
+                          <td className="px-3 py-2 text-sm text-gray-700" data-testid={`agent-cell-${ticket.id}`}>
+                            <span className="block whitespace-nowrap max-w-[10rem] truncate">
+                              {ticket.agent_display_name ?? <span className="text-gray-500">Unassigned</span>}
+                            </span>
+                            <span className="block mt-0.5 text-xs text-gray-500 whitespace-nowrap">
+                              {ticket.last_agent_activity_at ? (
+                                <ActivityTime label="Updated" at={ticket.last_agent_activity_at} />
+                              ) : (
+                                'No agent reply yet'
+                              )}
+                            </span>
                           </td>
                         </tr>
                       );
@@ -433,11 +474,29 @@ export default async function AgentDashboardPage({
             pageSize={pageSize}
             totalItems={total}
           />
-        </div>
-      </div>
+        </>
+      </AgentFiltersLayout>
 
       {/* Realtime subscription for live dashboard updates */}
       <RealtimeDashboard />
     </div>
+  );
+}
+
+/**
+ * "3 hours ago" with the exact time on hover; `label` says which activity it is
+ * (Activated = the customer's last post, Updated = the last agent reply), #104.
+ */
+function ActivityTime({ label, at }: { label: 'Activated' | 'Updated'; at: string }) {
+  return (
+    <time
+      dateTime={at}
+      title={`${label} ${new Date(at).toLocaleString()}`}
+      className="whitespace-nowrap"
+      data-testid={`${label.toLowerCase()}-time`}
+    >
+      <span className="sr-only">{label} </span>
+      {formatPreciseRelativeTime(at)}
+    </time>
   );
 }

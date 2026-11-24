@@ -4,6 +4,9 @@ import { requireAuth } from '@/lib/supabase/auth';
 import { TicketList } from '@/components/features/tickets/TicketList';
 import { StatusFilter } from '@/components/features/tickets/StatusFilter';
 import { Pagination, clampPage } from '@/components/ui/Pagination';
+import { CategorySelect } from '@/components/features/tickets/CategorySelect';
+import { parseCategoryParam } from '@/lib/filters/category-param';
+import { toQuery } from '@/lib/utils/query-string';
 
 const PAGE_SIZE = 20;
 
@@ -19,13 +22,19 @@ export default async function PublicTicketsPage({
   const statusFilter = (params.status as string) ?? 'all';
   const search = (params.q as string) ?? '';
   const requestedPage = Math.max(1, parseInt((params.page as string) ?? '1', 10) || 1);
+  const category = parseCategoryParam(params.category);
+
+  const { data: categories } = await supabase.from('categories').select('id, name').order('name');
 
   // Build query — public tickets only
   let query = supabase
     .from('tickets')
-    .select('id, title, slug, status, updated_at', { count: 'exact' })
+    .select('id, title, slug, status, updated_at, category:categories(name)', { count: 'exact' })
     .eq('is_private', false)
     .order('updated_at', { ascending: false });
+
+  // Product (category) filter (#120)
+  if (category) query = query.eq('category_id', category);
 
   // Status filter
   if (statusFilter === 'active') {
@@ -58,6 +67,12 @@ export default async function PublicTicketsPage({
   const linkParams: Record<string, string> = {};
   if (statusFilter !== 'all') linkParams.status = statusFilter;
   if (search) linkParams.q = search;
+  if (category) linkParams.category = category;
+
+  const ticketsForList = (tickets ?? []).map((t) => {
+    const cat = Array.isArray(t.category) ? t.category[0] : t.category;
+    return { ...t, category_name: cat?.name ?? null };
+  });
 
   return (
     <div>
@@ -78,10 +93,11 @@ export default async function PublicTicketsPage({
           searchParams={linkParams}
         />
 
-        <form method="get" action="/tickets/public" className="flex gap-2 flex-1 max-w-md">
+        <form method="get" action="/tickets/public" className="flex flex-wrap gap-2 flex-1 max-w-2xl">
           {statusFilter !== 'all' && (
             <input type="hidden" name="status" value={statusFilter} />
           )}
+          <CategorySelect categories={categories ?? []} current={category} />
           <input
             type="search"
             name="q"
@@ -98,11 +114,7 @@ export default async function PublicTicketsPage({
           </button>
           {search && (
             <Link
-              href={
-                statusFilter !== 'all'
-                  ? `/tickets/public?status=${statusFilter}`
-                  : '/tickets/public'
-              }
+              href={`/tickets/public${toQuery({ status: statusFilter !== 'all' ? statusFilter : '', category })}`}
               className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700"
             >
               Clear
@@ -111,7 +123,7 @@ export default async function PublicTicketsPage({
         </form>
       </div>
 
-      <TicketList tickets={tickets ?? []} />
+      <TicketList tickets={ticketsForList} />
 
       <Pagination
         currentPage={currentPage}

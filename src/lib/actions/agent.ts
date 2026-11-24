@@ -644,3 +644,84 @@ export async function convertPostKind(formData: FormData): Promise<void> {
   const ticket = Array.isArray(post.ticket) ? post.ticket[0] : post.ticket;
   if (ticket) revalidatePath(`/tickets/${ticket.id}/${ticket.slug}`);
 }
+
+export type OwnerCandidate = { id: string; display_name: string | null; email: string };
+
+/**
+ * People an agent can make a ticket's owner (#108): profiles whose name or
+ * email contains `query` (at least 2 characters), blocked users excluded.
+ */
+export async function searchTicketOwnerCandidates(query: string): Promise<OwnerCandidate[]> {
+  const { supabase } = await requireAgentRole();
+  // Escape LIKE wildcards; the value itself goes through .ilike(), not an
+  // .or() filter string, so dots/commas in emails need no stripping.
+  const term = query.trim().replace(/[\\%_]/g, (c) => `\\${c}`);
+  if (term.length < 2) return [];
+  const pattern = `%${term}%`;
+  const base = () =>
+    supabase.from('profiles').select('id, display_name, email').eq('is_blocked', false).limit(8);
+  const [byEmail, byName] = await Promise.all([
+    base().ilike('email', pattern),
+    base().ilike('display_name', pattern),
+  ]);
+  const seen = new Map<string, OwnerCandidate>();
+  for (const row of [...(byEmail.data ?? []), ...(byName.data ?? [])]) {
+    if (!seen.has(row.id)) seen.set(row.id, row as OwnerCandidate);
+  }
+  return [...seen.values()]
+    .sort((a, b) => (a.display_name ?? a.email).localeCompare(b.display_name ?? b.email))
+    .slice(0, 8);
+}
+
+/**
+ * Make another user the ticket's owner (#108). Agents only; not on merged
+ * tickets. The new owner gets the ticket's access (private tickets, My
+ * Tickets); post authors stay as they are. Logged as `owner_changed`.
+ */
+export async function changeTicketOwner(
+  ticketId: number,
+  newOwnerId: string,
+): Promise<{ error?: string }> {
+  const { supabase, user } = await requireAgentRole();
+  if (!Number.isInteger(ticketId) || !newOwnerId) return { error: 'Invalid request.' };
+
+  const { data: ticket } = await supabase
+    .from('tickets')
+    .select('id, slug, creator_id, merged_into_id')
+    .eq('id', ticketId)
+    .single();
+  if (!ticket) return { error: 'Ticket not found.' };
+  if (ticket.merged_into_id != null) return { error: 'A merged ticket cannot change owner.' };
+  if (ticket.creator_id === newOwnerId) return {};
+
+  const { data: people } = await supabase
+    .from('profiles')
+    .select('id, display_name, email, is_blocked')
+    .in('id', [ticket.creator_id, newOwnerId]);
+  const oldOwner = people?.find((p) => p.id === ticket.creator_id);
+  const newOwner = people?.find((p) => p.id === newOwnerId);
+  if (!newOwner) return { error: 'User not found.' };
+  if (newOwner.is_blocked) return { error: 'A blocked user cannot own a ticket.' };
+
+  const { error } = await supabase
+    .from('tickets')
+    .update({ creator_id: newOwnerId })
+    .eq('id', ticketId);
+  if (error) return { error: 'Failed to change the owner.' };
+
+  await supabase.from('activity_log').insert({
+    ticket_id: ticketId,
+    actor_id: user.id,
+    action: 'owner_changed',
+    details: {
+      from: ticket.creator_id,
+      to: newOwnerId,
+      from_name: oldOwner?.display_name ?? oldOwner?.email ?? null,
+      to_name: newOwner.display_name ?? newOwner.email,
+    },
+  });
+
+  revalidatePath(`/tickets/${ticketId}/${ticket.slug}`);
+  revalidatePath('/agent');
+  return {};
+}

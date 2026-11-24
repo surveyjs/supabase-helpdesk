@@ -51,6 +51,7 @@ import {
 import { inlineAttachmentIds } from '@/lib/tickets/inline-attachments';
 import { POST_ACTION_CLASS } from './post-action-class';
 import { convertPostKind } from '@/lib/actions/agent';
+import { ChangeOwnerControl } from './ChangeOwnerControl';
 import { TicketDetailsPanel } from './TicketDetailsPanel';
 import { TICKET_DETAILS_COLLAPSED_COOKIE } from './ticket-details-cookie';
 import { cookies } from 'next/headers';
@@ -1080,8 +1081,8 @@ export default async function TicketDetailPage({
               <section aria-labelledby="ticket-sidebar-people" className={GROUP_SECTION}>
                 <h3 id="ticket-sidebar-people" className={GROUP_HEADING}>People</h3>
                 <dl className={GROUP_LIST}>
-                  <dt className="text-gray-500">Created by</dt>
-                  <dd className="text-gray-900">
+                  <dt className="text-gray-500">Owner</dt>
+                  <dd className="text-gray-900" data-testid="ticket-owner">
                     <DisplayName
                       userId={ticket.creator_id}
                       displayName={creatorName}
@@ -1092,6 +1093,7 @@ export default async function TicketDetailPage({
                         {teamName}
                       </span>
                     )}
+                    {isAgent && !ticket.merged_into_id && <ChangeOwnerControl ticketId={ticket.id} />}
                   </dd>
                 </dl>
               </section>

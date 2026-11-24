@@ -6,6 +6,7 @@ import {
   calculateSlaPercentage,
 } from '@/lib/utils/business-hours';
 import {
+  createdRange,
   isAllStatusSelected,
   normalizeStoredDefinition,
   type TicketFilterData,
@@ -30,6 +31,10 @@ export type AgentTicketFilters = {
   tags?: string[];
   tier?: string;
   sort?: string;
+  created?: TicketFilterData['created'];
+  created_from?: string;
+  created_to?: string;
+  privacy?: TicketFilterData['privacy'];
   page?: string;
 };
 
@@ -51,6 +56,10 @@ export function filterDataToQueryFilters(
     tags: data.tags,
     tier: data.tier,
     sort: data.sort,
+    created: data.created,
+    created_from: data.created_from,
+    created_to: data.created_to,
+    privacy: data.privacy,
     page,
   };
 }
@@ -79,6 +88,11 @@ export type AgentTicketRow = {
   type_name: string;
   category_name: string | null;
   post_count: number;
+  /** Newest customer post, or the ticket's creation (#104). */
+  last_user_activity_at: string;
+  /** Newest non-note agent reply/comment; null if no agent has replied (#104). */
+  last_agent_activity_at: string | null;
+  custom_fields: Record<string, unknown> | null;
   sla_status?: 'on_track' | 'approaching' | 'breached' | 'met' | 'no_sla';
   sla_remaining_minutes?: number;
 };
@@ -148,7 +162,7 @@ export async function getAgentTickets(filters: AgentTicketFilters): Promise<{
   let query = supabase
     .from('agent_tickets')
     .select(
-      'id, title, slug, status, urgency, severity, is_private, created_at, updated_at, creator_id, creator_display_name, creator_email, creator_team_name, creator_tier_key, creator_tier_display_name, creator_tier_color, creator_tier_icon, creator_tier_active, agent_display_name, assigned_agent_id, type_name, category_name, post_count',
+      'id, title, slug, status, urgency, severity, is_private, created_at, updated_at, creator_id, creator_display_name, creator_email, creator_team_name, creator_tier_key, creator_tier_display_name, creator_tier_color, creator_tier_icon, creator_tier_active, agent_display_name, assigned_agent_id, type_name, category_name, post_count, last_user_activity_at, last_agent_activity_at, custom_fields',
       { count: 'exact' },
     );
 
@@ -175,6 +189,13 @@ export async function getAgentTickets(filters: AgentTicketFilters): Promise<{
   if (filters.severity && ['low', 'medium', 'high', 'critical'].includes(filters.severity)) {
     query = query.eq('severity', filters.severity);
   }
+
+  // Created date window and privacy (#113)
+  const created = createdRange(filters);
+  if (created.gte) query = query.gte('created_at', created.gte);
+  if (created.lt) query = query.lt('created_at', created.lt);
+  if (filters.privacy === 'private') query = query.eq('is_private', true);
+  else if (filters.privacy === 'public') query = query.eq('is_private', false);
 
   // Category filter
   if (filters.category) {

@@ -352,7 +352,7 @@ export default async function AgentDashboardPage({
                       <th scope="col" className={thClass}>Title</th>
                       <th scope="col" className={thClass}>
                         Submitter
-                        <span className="block font-normal normal-case text-gray-400">License · Activated</span>
+                        <span className="block font-normal normal-case text-gray-500">License · Activated</span>
                       </th>
                       <th scope="col" className={thClass}>Status</th>
                       <th scope="col" className={thClass}>Urgency</th>
@@ -360,7 +360,7 @@ export default async function AgentDashboardPage({
                       {showSla && <th scope="col" className={thClass}>SLA</th>}
                       <th scope="col" className={thClass}>
                         Agent
-                        <span className="block font-normal normal-case text-gray-400">Updated</span>
+                        <span className="block font-normal normal-case text-gray-500">Updated</span>
                       </th>
                     </tr>
                   </thead>
@@ -439,7 +439,7 @@ export default async function AgentDashboardPage({
                           )}
                           <td className="px-3 py-2 text-sm text-gray-700" data-testid={`agent-cell-${ticket.id}`}>
                             <span className="block whitespace-nowrap max-w-[10rem] truncate">
-                              {ticket.agent_display_name ?? <span className="text-gray-400">Unassigned</span>}
+                              {ticket.agent_display_name ?? <span className="text-gray-500">Unassigned</span>}
                             </span>
                             <span className="block mt-0.5 text-xs text-gray-500 whitespace-nowrap">
                               {ticket.last_agent_activity_at ? (

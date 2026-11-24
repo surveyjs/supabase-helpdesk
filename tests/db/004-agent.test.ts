@@ -492,12 +492,13 @@ describe('agent_tickets VIEW', () => {
       expect(empty!.last_agent_activity_at).toBeNull();
 
       const { error: pErr } = await admin.from('posts').insert([
-        { ticket_id: ticketId, author_id: USER_ALICE_ID, body: 'q', is_original: true, post_type: 'post', created_at: '2026-01-02T00:00:00Z' },
-        { ticket_id: ticketId, author_id: AGENT_ID, body: 'a', post_type: 'post', created_at: '2026-01-03T00:00:00Z' },
-        { ticket_id: ticketId, author_id: AGENT_ID, body: 'note', post_type: 'note', created_at: '2026-01-04T00:00:00Z' },
+        // defaultToNull: false — keys a row omits take the column default, not NULL.
+        { ticket_id: ticketId, author_id: USER_ALICE_ID, body: 'q', is_original: true, post_type: 'post', is_draft: false, created_at: '2026-01-02T00:00:00Z' },
+        { ticket_id: ticketId, author_id: AGENT_ID, body: 'a', post_type: 'post', is_draft: false, created_at: '2026-01-03T00:00:00Z' },
+        { ticket_id: ticketId, author_id: AGENT_ID, body: 'note', post_type: 'note', is_draft: false, created_at: '2026-01-04T00:00:00Z' },
         { ticket_id: ticketId, author_id: AGENT_ID, body: 'draft', post_type: 'post', is_draft: true, created_at: '2026-01-05T00:00:00Z' },
         { ticket_id: ticketId, author_id: USER_ALICE_ID, body: 'draft', post_type: 'post', is_draft: true, created_at: '2026-01-06T00:00:00Z' },
-      ]);
+      ], { defaultToNull: false });
       expect(pErr).toBeNull();
 
       const { data, error } = await agent.from('agent_tickets').select(cols).eq('id', ticketId).single();

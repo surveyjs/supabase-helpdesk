@@ -614,16 +614,24 @@ export type OwnerCandidate = { id: string; display_name: string | null; email: s
  */
 export async function searchTicketOwnerCandidates(query: string): Promise<OwnerCandidate[]> {
   const { supabase } = await requireAgentRole();
-  const term = query.trim().replace(/[,()."\%_*]/g, '');
+  // Escape LIKE wildcards; the value itself goes through .ilike(), not an
+  // .or() filter string, so dots/commas in emails need no stripping.
+  const term = query.trim().replace(/[\%_]/g, (c) => `\${c}`);
   if (term.length < 2) return [];
-  const { data } = await supabase
-    .from('profiles')
-    .select('id, display_name, email')
-    .or(`email.ilike.%${term}%,display_name.ilike.%${term}%`)
-    .eq('is_blocked', false)
-    .order('display_name')
-    .limit(8);
-  return (data ?? []) as OwnerCandidate[];
+  const pattern = `%${term}%`;
+  const base = () =>
+    supabase.from('profiles').select('id, display_name, email').eq('is_blocked', false).limit(8);
+  const [byEmail, byName] = await Promise.all([
+    base().ilike('email', pattern),
+    base().ilike('display_name', pattern),
+  ]);
+  const seen = new Map<string, OwnerCandidate>();
+  for (const row of [...(byEmail.data ?? []), ...(byName.data ?? [])]) {
+    if (!seen.has(row.id)) seen.set(row.id, row as OwnerCandidate);
+  }
+  return [...seen.values()]
+    .sort((a, b) => (a.display_name ?? a.email).localeCompare(b.display_name ?? b.email))
+    .slice(0, 8);
 }
 
 /**

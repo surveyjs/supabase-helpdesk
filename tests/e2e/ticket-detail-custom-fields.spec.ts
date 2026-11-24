@@ -455,12 +455,13 @@ test.describe('Custom field visibility flags', () => {
   test('New Ticket form: customers see neither field; agents see only the agent-only one', async ({ page }) => {
     await loginAs(page, 'alice@example.com');
     await page.goto('/tickets/new');
-    await expect(page.locator('form').first()).toBeVisible();
+    await expect(page.locator('[name="title"]')).toBeVisible();
     await expect(page.locator(`[name="cf_${CF_AGENT_ONLY}"]`)).toHaveCount(0);
     await expect(page.locator(`[name="cf_${CF_NOT_ON_CREATE}"]`)).toHaveCount(0);
 
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/tickets/new');
+    await expect(page.locator('[name="title"]')).toBeVisible();
     await expect(page.locator(`[name="cf_${CF_AGENT_ONLY}"]`)).toBeVisible();
     await expect(page.locator(`[name="cf_${CF_NOT_ON_CREATE}"]`)).toHaveCount(0);
   });

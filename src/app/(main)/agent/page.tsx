@@ -22,7 +22,9 @@ import { RealtimeDashboard } from '@/components/features/agent/RealtimeDashboard
 import { BulkSelectProvider } from '@/components/features/bulk-actions/BulkSelectProvider';
 import { TicketCheckbox, SelectAllCheckbox } from '@/components/features/bulk-actions/TicketCheckbox';
 import { BulkActionToolbar } from '@/components/features/bulk-actions/BulkActionToolbar';
-import { ViewsFiltersCollapsible } from './ViewsFiltersCollapsible';
+import { AgentFiltersLayout } from './AgentFiltersLayout';
+import { AGENT_FILTERS_HIDDEN_COOKIE } from './agent-filters-cookie';
+import { cookies } from 'next/headers';
 import { parseAgentDashboardTemplate } from '@/lib/constants/survey-ui-config';
 import { getTemplateDefaultSort } from '@/lib/filters/ticket-filter-survey';
 import {
@@ -189,7 +191,13 @@ export default async function AgentDashboardPage({
     if (effectiveData.status && effectiveData.status.length > 0 && effectiveData.status.length < 3) {
       linkParams.status = effectiveData.status.join(',');
     }
+    if (effectiveData.created) linkParams.created = effectiveData.created;
+    if (effectiveData.created_from) linkParams.created_from = effectiveData.created_from;
+    if (effectiveData.created_to) linkParams.created_to = effectiveData.created_to;
+    if (effectiveData.privacy) linkParams.privacy = effectiveData.privacy;
   }
+
+  const filtersHidden = (await cookies()).get(AGENT_FILTERS_HIDDEN_COOKIE)?.value === '1';
 
   const thClass = 'px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase whitespace-nowrap';
 
@@ -236,21 +244,21 @@ export default async function AgentDashboardPage({
         </dl>
       </details>
 
-      <div className="xl:flex xl:items-start xl:gap-6">
-        {/* Consolidated Views & Filters Panel: on top below xl, left column from xl */}
-        <ViewsFiltersCollapsible
-          className="xl:w-72 xl:shrink-0 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto"
-          filterOptions={filterOptions}
-          template={surveyFilterTemplate}
-          savedViews={savedViews.map((v) => ({ id: v.id, name: v.name }))}
-          activeViewId={activeView.id}
-          activeViewName={activeView.name}
-          initialData={effectiveData}
-          activeDefinition={activeView.definition}
-          aiFilterEnabled={aiFilterEnabled}
-        />
-
-        <div className="min-w-0 xl:flex-1">
+      {/* Views & Filters: on top below xl, a left column from xl that can be hidden (#105) */}
+      <AgentFiltersLayout
+        initialHidden={filtersHidden}
+        filterProps={{
+          filterOptions,
+          template: surveyFilterTemplate,
+          savedViews: savedViews.map((v) => ({ id: v.id, name: v.name })),
+          activeViewId: activeView.id,
+          activeViewName: activeView.name,
+          initialData: effectiveData,
+          activeDefinition: activeView.definition,
+          aiFilterEnabled,
+        }}
+      >
+        <>
           {/* Result count and Create Ticket (#109) */}
           <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
             <p className="text-sm text-gray-600" data-testid="result-count">
@@ -466,8 +474,8 @@ export default async function AgentDashboardPage({
             pageSize={pageSize}
             totalItems={total}
           />
-        </div>
-      </div>
+        </>
+      </AgentFiltersLayout>
 
       {/* Realtime subscription for live dashboard updates */}
       <RealtimeDashboard />

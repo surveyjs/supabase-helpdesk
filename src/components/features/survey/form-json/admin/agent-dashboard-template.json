@@ -119,6 +119,47 @@
           "title": "Tags",
           "choices": [],
           "showSelectAllItem": false
+        },
+        {
+          "type": "dropdown",
+          "name": "created",
+          "title": "Created",
+          "choices": [
+            { "value": "", "text": "Any time" },
+            { "value": "today", "text": "Today" },
+            { "value": "yesterday", "text": "Yesterday" },
+            { "value": "7d", "text": "Last 7 days" },
+            { "value": "30d", "text": "Last 30 days" },
+            { "value": "6m", "text": "Last 6 months" },
+            { "value": "1y", "text": "Last year" },
+            { "value": "custom", "text": "Custom range" }
+          ]
+        },
+        {
+          "type": "dropdown",
+          "name": "privacy",
+          "title": "Visibility",
+          "startWithNewLine": false,
+          "choices": [
+            { "value": "", "text": "All" },
+            { "value": "private", "text": "Private" },
+            { "value": "public", "text": "Public" }
+          ]
+        },
+        {
+          "type": "text",
+          "name": "created_from",
+          "title": "From",
+          "inputType": "date",
+          "visibleIf": "{created} = 'custom'"
+        },
+        {
+          "type": "text",
+          "name": "created_to",
+          "title": "To",
+          "inputType": "date",
+          "startWithNewLine": false,
+          "visibleIf": "{created} = 'custom'"
         }
       ]
     }

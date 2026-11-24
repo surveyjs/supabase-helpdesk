@@ -56,6 +56,36 @@ test.describe('Agent Dashboard', () => {
     await expect(page).toHaveURL(/\/tickets\/new$/, { timeout: 20000 });
   });
 
+  test('the filter column can be hidden at xl, with saved views on a bar, and stays hidden after a reload (#105)', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto('/agent');
+    const section = page.getByTestId('views-filters-section');
+    await expect(section).toBeVisible();
+    // The header (label, view switcher, collapse and hide buttons) stays on one line.
+    const header = section.locator(':scope > div').first();
+    expect((await header.boundingBox())!.height).toBeLessThan(56);
+    const tableWidth = async () => (await page.getByTestId('result-count').locator('..').boundingBox())!.width;
+    const before = await tableWidth();
+
+    await page.getByTestId('hide-filters-panel-btn').click();
+    await expect(section).toBeHidden();
+    const bar = page.getByTestId('quick-views-bar');
+    await expect(bar).toBeVisible();
+    await expect(bar.getByTestId('quick-view-btn').first()).toHaveText('Default');
+    await expect(bar.locator('[data-testid="quick-view-btn"][aria-pressed="true"]')).toHaveCount(1);
+    await expect.poll(tableWidth).toBeGreaterThan(before + 200);
+
+    await page.reload();
+    await expect(page.getByTestId('views-filters-section')).toBeHidden();
+    await expect(page.getByTestId('quick-views-bar')).toBeVisible();
+
+    await page.getByTestId('show-filters-btn').click();
+    await expect(page.getByTestId('views-filters-section')).toBeVisible();
+    await expect(page.getByTestId('views-and-filters-panel')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('quick-views-bar')).toHaveCount(0);
+  });
+
   test('table shows Activated / Updated times and no Posts column (#104)', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await loginAs(page, 'agent.smith@example.com');

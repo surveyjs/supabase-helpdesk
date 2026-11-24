@@ -98,6 +98,10 @@ export const AGENT_DASHBOARD_ALLOWED_QUESTION_NAMES = [
   'team',
   'tier',
   'tags',
+  'created',
+  'created_from',
+  'created_to',
+  'privacy',
 ] as const;
 
 export type AgentDashboardQuestionName =

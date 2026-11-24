@@ -1,0 +1,33 @@
+{
+  "showQuestionNumbers": "off",
+  "completeText": "Save",
+  "pages": [
+    {
+      "elements": [
+        {
+          "type": "html",
+          "name": "help",
+          "html": "<p class=\"text-sm text-gray-600\">Key combinations agents can use on a ticket page. Write them like <code>Ctrl+S</code>, <code>Alt+C</code> or <code>Ctrl+Shift+F2</code> (Ctrl also means Cmd on macOS). Leave a field empty to turn that shortcut off.</p>"
+        },
+        {
+          "type": "text",
+          "name": "save",
+          "title": "Save",
+          "description": "Submit the reply, comment, note or post edit being typed."
+        },
+        {
+          "type": "text",
+          "name": "reply_and_close",
+          "title": "Reply and close",
+          "description": "Send the reply being typed and close the ticket."
+        },
+        {
+          "type": "text",
+          "name": "copy_ticket_info",
+          "title": "Copy ticket info",
+          "description": "Copy the ticket number, title and link to the clipboard."
+        }
+      ]
+    }
+  ]
+}

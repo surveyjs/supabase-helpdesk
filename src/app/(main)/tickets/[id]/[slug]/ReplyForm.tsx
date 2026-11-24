@@ -26,7 +26,13 @@ export function ReplyForm({
   return (
     <MarkdownActionForm
       action={replyToTicket}
-      hiddenFields={<input type="hidden" name="ticket_id" value={ticketId} />}
+      hiddenFields={
+        <>
+          <input type="hidden" name="ticket_id" value={ticketId} />
+          {/* Set to "1" by the agent "Reply and close" shortcut (#1). */}
+          {isAgent && <input type="hidden" name="close_after" defaultValue="" data-close-after />}
+        </>
+      }
       placeholder="Write your reply… (Markdown supported)"
       editorViewMode={editorViewMode}
       editorMinHeightPx={editorMinHeightPx}

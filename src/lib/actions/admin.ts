@@ -1852,3 +1852,28 @@ export async function updateInboundEmailSettings(
   revalidatePath('/admin/inbound-email');
   return { message: 'Inbound email settings saved.' };
 }
+
+// ============================================================
+// Agent keyboard shortcuts (#1)
+// ============================================================
+
+export async function saveAgentShortcuts(
+  formData: FormData,
+): Promise<{ message?: string; error?: string }> {
+  const { supabase, profile: adminProfile } = await requireAdminRole();
+  const { validateShortcuts, SHORTCUTS_SETTING_KEY, SHORTCUT_ACTIONS } = await import('@/lib/shortcuts');
+
+  const input: Record<string, unknown> = {};
+  for (const { id } of SHORTCUT_ACTIONS) input[id] = formData.get(id) ?? '';
+  const result = validateShortcuts(input);
+  if ('error' in result) return { error: result.error };
+
+  const { error } = await supabase
+    .from('app_settings')
+    .upsert({ key: SHORTCUTS_SETTING_KEY, value: JSON.stringify(result.map), updated_at: new Date().toISOString() });
+  if (error) return { error: 'Failed to save the shortcuts.' };
+
+  await logAudit(supabase, adminProfile.id, 'update_agent_shortcuts', 'app_settings', null, result.map);
+  revalidatePath('/admin/shortcuts');
+  return { message: 'Shortcuts saved.' };
+}

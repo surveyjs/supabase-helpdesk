@@ -7,6 +7,8 @@ import { assignTier } from '@/lib/actions/tiers';
 import { UserNoteForm } from './UserNoteForm';
 import { UserNoteItem } from './UserNoteItem';
 import { AdminUserActions } from './AdminUserActions';
+import { UserFieldsForm } from './UserFieldsForm';
+import { loadUserFields } from '@/lib/users/user-fields';
 
 export default async function UserDetailPage({
   params,
@@ -88,6 +90,9 @@ export default async function UserDetailPage({
       author: Array.isArray(note.author) ? note.author[0] : note.author,
     })),
   );
+
+  // Admin-defined user fields (#103), all of them for staff.
+  const userFields = await loadUserFields(supabase, userId, { staff: true });
 
   const isDeleted = targetUser.display_name?.startsWith('Deleted User #') ?? false;
 
@@ -214,6 +219,13 @@ export default async function UserDetailPage({
       )}
 
       {/* User Notes */}
+      {userFields.length > 0 && (
+        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6" data-testid="user-fields-section">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Profile Fields</h2>
+          <UserFieldsForm userId={targetUser.id} fields={userFields} />
+        </div>
+      )}
+
       <div className="bg-white rounded-lg border border-gray-200 p-6" data-testid="user-notes-section">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">
           User Notes

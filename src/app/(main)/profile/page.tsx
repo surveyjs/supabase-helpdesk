@@ -5,6 +5,7 @@ import { DisplayNameForm } from './DisplayNameForm';
 import { ChangePasswordForm } from './ChangePasswordForm';
 import { DeleteAccountButton } from './DeleteAccountButton';
 import { EditorPreferenceForm } from './EditorPreferenceForm';
+import { formatUserFieldValue, loadUserFields } from '@/lib/users/user-fields';
 
 export default async function ProfilePage() {
   const user = await requireAuth();
@@ -77,12 +78,14 @@ export default async function ProfilePage() {
   const showPasswordForm = !isExternalAuth && !isSocialAuth;
 
   const isAgentOrAdmin = profile.role === 'agent' || profile.role === 'admin';
+  // Staff see their own staff-only fields too; customers only the shared ones.
+  const userFields = await loadUserFields(supabase, user.id, { staff: isAgentOrAdmin });
 
   return (
     <div className="max-w-2xl">
       <h1 className="text-2xl font-bold text-gray-900 mb-6">My Profile</h1>
 
-      {/* Account info */}
+      {/* Account info, with the user fields staff set (#103; not staff-only ones) */}
       <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Account Information</h2>
         <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
@@ -106,6 +109,12 @@ export default async function ProfilePage() {
               {new Date(profile.created_at).toLocaleDateString()}
             </dd>
           </div>
+          {userFields.map((f) => (
+            <div key={f.id} data-testid={`profile-field-${f.name}`}>
+              <dt className="text-gray-500">{f.name}</dt>
+              <dd className="text-gray-900">{formatUserFieldValue(f, f.value)}</dd>
+            </div>
+          ))}
         </dl>
       </div>
 

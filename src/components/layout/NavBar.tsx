@@ -3,6 +3,7 @@ import { getUser, getProfile } from '@/lib/supabase/auth';
 import { getUnreadCount } from '@/lib/actions/notifications';
 import { NotificationBell } from '@/components/features/notifications/NotificationBell';
 import { createServerClient } from '@/lib/supabase/server';
+import { getBranding } from '@/lib/branding-server';
 import { MobileMenu } from './MobileMenu';
 import { TopNavLinks } from './TopNavLinks';
 import { UserMenu } from './UserMenu';
@@ -20,6 +21,7 @@ export default async function NavBar() {
     .eq('key', 'kb_visible')
     .single();
   const kbVisible = kbSetting?.value === 'true';
+  const branding = await getBranding();
 
   const displayName = profile?.display_name || user?.email || '';
   const isAgent = profile && ['agent', 'admin'].includes(profile.role);
@@ -51,8 +53,16 @@ export default async function NavBar() {
       <div className="max-w-5xl mx-auto flex items-center justify-between">
         {/* Left side */}
         <div className="flex items-center gap-4">
-          <Link href="/" className="text-lg font-semibold text-gray-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none rounded">
-            HelpDesk
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 text-lg font-semibold text-gray-900 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:outline-none rounded"
+            data-testid="brand-link"
+          >
+            {branding.logoUrl && (
+              // eslint-disable-next-line @next/next/no-img-element -- admin-set URL, any host
+              <img src={branding.logoUrl} alt="" className="h-7 w-auto max-w-[8rem] object-contain" data-testid="brand-logo" />
+            )}
+            {branding.productName}
           </Link>
           {/* Desktop links */}
           <TopNavLinks links={navLinks} />

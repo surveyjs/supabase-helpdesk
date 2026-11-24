@@ -1,0 +1,32 @@
+{
+  "showQuestionNumbers": "off",
+  "completeText": "Save",
+  "pages": [
+    {
+      "elements": [
+        {
+          "type": "text",
+          "name": "product_name",
+          "title": "Product name",
+          "description": "Shown in the header and the browser tab.",
+          "isRequired": true,
+          "maxLength": 60
+        },
+        {
+          "type": "text",
+          "name": "logo_url",
+          "title": "Logo URL",
+          "description": "An https:// image URL or a path on this site (e.g. /logo.svg). Shown left of the name; leave empty for none.",
+          "maxLength": 500
+        },
+        {
+          "type": "text",
+          "name": "primary_color",
+          "title": "Primary colour",
+          "description": "Buttons, links, highlights and forms. Pick a colour dark enough for white text on it.",
+          "inputType": "color"
+        }
+      ]
+    }
+  ]
+}

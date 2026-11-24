@@ -251,10 +251,19 @@ export default async function AgentDashboardPage({
         />
 
         <div className="min-w-0 xl:flex-1">
-          {/* Result count */}
-          <p className="text-sm text-gray-600 mb-4" data-testid="result-count">
-            {total} ticket{total !== 1 ? 's' : ''} found
-          </p>
+          {/* Result count and Create Ticket (#109) */}
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+            <p className="text-sm text-gray-600" data-testid="result-count">
+              {total} ticket{total !== 1 ? 's' : ''} found
+            </p>
+            <IntentPrefetchLink
+              href="/tickets/new"
+              className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+              data-testid="agent-create-ticket-btn"
+            >
+              Create Ticket
+            </IntentPrefetchLink>
+          </div>
 
           {/* Ticket List */}
           {tickets.length === 0 ? (

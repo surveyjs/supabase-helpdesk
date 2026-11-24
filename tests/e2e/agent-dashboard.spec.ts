@@ -86,6 +86,21 @@ test.describe('Agent Dashboard', () => {
     await expect(page.getByTestId('quick-views-bar')).toHaveCount(0);
   });
 
+  test('table shows Activated / Updated times and no Posts column (#104)', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto('/agent');
+    const table = page.getByTestId('agent-ticket-table');
+    await expect(table).toBeVisible();
+    const headers = table.locator('thead th');
+    await expect(headers.filter({ hasText: /^Posts$/i })).toHaveCount(0);
+    await expect(headers.filter({ hasText: 'License · Activated' })).toHaveCount(1);
+    await expect(headers.filter({ hasText: /Agent\s*Updated/ })).toHaveCount(1);
+    const activated = table.getByTestId('activated-time').first();
+    await expect(activated).toHaveText(/just now|ago$/);
+    await expect(activated).toHaveAttribute('title', /^Activated /);
+  });
+
   test('status filter works', async ({ page }) => {
     await loginAs(page, 'agent.smith@example.com');
     await page.goto('/agent?status=closed');

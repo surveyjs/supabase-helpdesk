@@ -458,17 +458,69 @@ describe('agent_tickets VIEW', () => {
   it('filters work on the VIEW (status)', async () => {
     const agent = await clientForUser('agent@test.com');
 
-    // Filter by status=open
+    // Filter by status=open. Scoped to our ticket: the CI database holds over
+    // 1000 open tickets and PostgREST returns at most 1000 rows, in no fixed
+    // order, so an unscoped list need not include it.
     const { data, error } = await agent
       .from('agent_tickets')
       .select('id')
-      .eq('status', 'open');
+      .eq('status', 'open')
+      .in('id', [aliceTicketId, mergedTicketId]);
 
     expect(error).toBeNull();
     expect(data).toBeDefined();
     // Our test ticket is open, should be in results
     const ids = data!.map((r: { id: number }) => r.id);
     expect(ids).toContain(aliceTicketId);
+
+    const { data: closed } = await agent
+      .from('agent_tickets')
+      .select('id')
+      .eq('status', 'closed')
+      .eq('id', aliceTicketId);
+    expect(closed ?? []).toHaveLength(0);
+  });
+
+  it('last_user_activity_at / last_agent_activity_at skip drafts and notes (#104)', async () => {
+    const { data: t, error: tErr } = await admin
+      .from('tickets')
+      .insert({
+        title: 'Activity columns ticket', slug: 'activity-columns-ticket', creator_id: USER_ALICE_ID,
+        type_id: defaultTypeId, created_at: '2026-01-01T00:00:00Z',
+      })
+      .select('id')
+      .single();
+    expect(tErr).toBeNull();
+    const ticketId = t!.id as number;
+    try {
+      const agent = await clientForUser('agent@test.com');
+      const cols = 'last_user_activity_at, last_agent_activity_at';
+
+      // No posts yet: activated = ticket creation, no agent activity.
+      const { data: empty } = await agent.from('agent_tickets').select(cols).eq('id', ticketId).single();
+      expect(new Date(empty!.last_user_activity_at).toISOString()).toBe('2026-01-01T00:00:00.000Z');
+      expect(empty!.last_agent_activity_at).toBeNull();
+
+      const { error: pErr } = await admin.from('posts').insert([
+        // defaultToNull: false — keys a row omits take the column default, not NULL.
+        { ticket_id: ticketId, author_id: USER_ALICE_ID, body: 'q', is_original: true, post_type: 'post', is_draft: false, created_at: '2026-01-02T00:00:00Z' },
+        { ticket_id: ticketId, author_id: AGENT_ID, body: 'a', post_type: 'post', is_draft: false, created_at: '2026-01-03T00:00:00Z' },
+        { ticket_id: ticketId, author_id: AGENT_ID, body: 'note', post_type: 'note', is_draft: false, created_at: '2026-01-04T00:00:00Z' },
+        { ticket_id: ticketId, author_id: AGENT_ID, body: 'draft', post_type: 'post', is_draft: true, created_at: '2026-01-05T00:00:00Z' },
+        { ticket_id: ticketId, author_id: USER_ALICE_ID, body: 'draft', post_type: 'post', is_draft: true, created_at: '2026-01-06T00:00:00Z' },
+      ], { defaultToNull: false });
+      expect(pErr).toBeNull();
+
+      const { data, error } = await agent.from('agent_tickets').select(cols).eq('id', ticketId).single();
+      expect(error).toBeNull();
+      expect(new Date(data!.last_user_activity_at).toISOString()).toBe('2026-01-02T00:00:00.000Z');
+      expect(new Date(data!.last_agent_activity_at!).toISOString()).toBe('2026-01-03T00:00:00.000Z');
+    } finally {
+      await admin.from('activity_log').delete().eq('ticket_id', ticketId);
+      await admin.from('posts').delete().eq('ticket_id', ticketId);
+      await admin.from('sla_timers').delete().eq('ticket_id', ticketId);
+      await admin.from('tickets').delete().eq('id', ticketId);
+    }
   });
 });
 

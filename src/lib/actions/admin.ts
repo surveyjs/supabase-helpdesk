@@ -1885,3 +1885,30 @@ export async function saveAgentShortcuts(
   revalidatePath('/admin/shortcuts');
   return { message: 'Shortcuts saved.' };
 }
+
+// ============================================================
+// Appearance / branding (#2)
+// ============================================================
+
+export async function saveBranding(
+  formData: FormData,
+): Promise<{ message?: string; error?: string }> {
+  const { supabase, profile: adminProfile } = await requireAdminRole();
+  const { validateBranding, BRANDING_KEY } = await import('@/lib/branding');
+  const result = validateBranding({
+    productName: formData.get('product_name') ?? '',
+    logoUrl: formData.get('logo_url') ?? '',
+    primaryColor: formData.get('primary_color') ?? '',
+  });
+  if ('error' in result) return { error: result.error };
+
+  const { error } = await supabase
+    .from('app_settings')
+    .upsert({ key: BRANDING_KEY, value: JSON.stringify(result.branding), updated_at: new Date().toISOString() });
+  if (error) return { error: 'Failed to save the appearance settings.' };
+
+  await logAudit(supabase, adminProfile.id, 'update_branding', 'app_settings', null, result.branding);
+  // The name and colour are in the root layout: refresh every page.
+  revalidatePath('/', 'layout');
+  return { message: 'Appearance saved. Reload other open pages to see it.' };
+}

@@ -7,6 +7,7 @@ import { notifyTicketRecipients, notifyAgent } from '@/lib/email/notify';
 import { generateSlug } from '@/lib/utils/slug';
 import { sanitizeSvg } from '@/lib/utils/svg-sanitize';
 import { initializeSlaTimer, stopFirstResponseTimer, resumeSlaTimer } from '@/lib/utils/sla';
+import { screenNewTicket } from '@/lib/spam-screen';
 import { cancelCsatSurvey } from '@/lib/utils/csat';
 import { stripEmailSignature, extractTicketIdFromSubject } from '@/lib/utils/email-parser';
 import { runtimeConfig } from '@/lib/runtime-config';
@@ -706,6 +707,13 @@ async function processAsNewTicket(
   await supabase
     .from('ticket_followers')
     .insert({ ticket_id: ticket.id, user_id: sender.id });
+
+  // Spam screening (#28); a ticket closed as spam gets no SLA timer and no
+  // notifications.
+  const spam = isAgent
+    ? { closedAsSpam: false }
+    : await screenNewTicket(ticket.id, sender.id, { email: sender.email ?? '', title, body });
+  if (spam.closedAsSpam) return { success: true };
 
   // Initialize SLA timer
   initializeSlaTimer(ticket.id, 'medium').catch((err) => console.error('[sla]', err));

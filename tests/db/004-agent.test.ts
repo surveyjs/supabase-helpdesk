@@ -458,17 +458,27 @@ describe('agent_tickets VIEW', () => {
   it('filters work on the VIEW (status)', async () => {
     const agent = await clientForUser('agent@test.com');
 
-    // Filter by status=open
+    // Filter by status=open. Scoped to our ticket: the CI database holds over
+    // 1000 open tickets and PostgREST returns at most 1000 rows, in no fixed
+    // order, so an unscoped list need not include it.
     const { data, error } = await agent
       .from('agent_tickets')
       .select('id')
-      .eq('status', 'open');
+      .eq('status', 'open')
+      .in('id', [aliceTicketId, mergedTicketId]);
 
     expect(error).toBeNull();
     expect(data).toBeDefined();
     // Our test ticket is open, should be in results
     const ids = data!.map((r: { id: number }) => r.id);
     expect(ids).toContain(aliceTicketId);
+
+    const { data: closed } = await agent
+      .from('agent_tickets')
+      .select('id')
+      .eq('status', 'closed')
+      .eq('id', aliceTicketId);
+    expect(closed ?? []).toHaveLength(0);
   });
 
   it('last_user_activity_at / last_agent_activity_at skip drafts and notes (#104)', async () => {

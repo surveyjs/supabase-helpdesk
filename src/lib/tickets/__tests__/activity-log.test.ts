@@ -182,6 +182,14 @@ describe('buildActivityDescriptor — file entries', () => {
   });
 });
 
+describe('buildActivityDescriptor — post conversion (#106)', () => {
+  it('says which way the post was converted, for agents only', () => {
+    expect(build('post_converted', { to: 'post' }).message).toBe('converted a comment to an answer');
+    expect(build('post_converted', { to: 'comment' }).message).toBe('converted an answer to a comment');
+    expect(isActivityVisibleToNonAgent('post_converted', { to: 'post' })).toBe(false);
+  });
+});
+
 describe('buildActivityDescriptor — owner change (#108)', () => {
   it('shows old -> new owner names', () => {
     const desc = build('owner_changed', { from: 'u1', to: 'u2', from_name: 'Dana', to_name: 'Eve' });

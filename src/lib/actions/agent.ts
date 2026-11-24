@@ -605,3 +605,42 @@ export async function removeTagFromTicket(formData: FormData): Promise<void> {
   revalidatePath(`/tickets/${ticketId}/${ticket.slug}`);
   revalidatePath('/agent');
 }
+
+/**
+ * Turn a comment into a top-level answer or an answer into a comment (#106).
+ * Agents only; the `convert_post_kind` RPC moves the post and its comments
+ * atomically and never makes anything more visible. Logged as post_converted.
+ */
+export async function convertPostKind(formData: FormData): Promise<void> {
+  const { supabase, user } = await requireAgentRole();
+  const postId = formData.get('post_id') as string;
+  const to = formData.get('to') as string;
+  if (!postId || (to !== 'post' && to !== 'comment')) return;
+
+  const { data: post } = await supabase
+    .from('posts')
+    .select('id, ticket_id, ticket:tickets!posts_ticket_id_fkey(id, slug)')
+    .eq('id', postId)
+    .single();
+  if (!post) return;
+
+  const { data: result, error } = await supabase.rpc('convert_post_kind', {
+    p_post_id: postId,
+    p_to: to,
+  });
+  if (error) {
+    console.error(`convert_post_kind failed: ${error.message}`);
+    return;
+  }
+  if (!result) return;
+
+  await supabase.from('activity_log').insert({
+    ticket_id: post.ticket_id,
+    actor_id: user.id,
+    action: 'post_converted',
+    details: { post_id: postId, to },
+  });
+
+  const ticket = Array.isArray(post.ticket) ? post.ticket[0] : post.ticket;
+  if (ticket) revalidatePath(`/tickets/${ticket.id}/${ticket.slug}`);
+}

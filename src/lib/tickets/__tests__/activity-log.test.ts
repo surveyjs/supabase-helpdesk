@@ -182,6 +182,14 @@ describe('buildActivityDescriptor — file entries', () => {
   });
 });
 
+describe('buildActivityDescriptor — post conversion (#106)', () => {
+  it('says which way the post was converted, for agents only', () => {
+    expect(build('post_converted', { to: 'post' }).message).toBe('converted a comment to an answer');
+    expect(build('post_converted', { to: 'comment' }).message).toBe('converted an answer to a comment');
+    expect(isActivityVisibleToNonAgent('post_converted', { to: 'post' })).toBe(false);
+  });
+});
+
 describe('isActivityVisibleToNonAgent', () => {
   it('shows ordinary change entries to non-agents', () => {
     expect(isActivityVisibleToNonAgent('status_changed', { from: 'open', to: 'closed' })).toBe(true);

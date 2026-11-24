@@ -54,6 +54,8 @@ export function isActivityVisibleToNonAgent(
   agentOnlyCustomFields?: ReadonlySet<string>,
 ): boolean {
   if (action === 'draft_published' || action === 'post_privacy_changed') return false;
+  // Can point at private posts; agent workflow only (#106).
+  if (action === 'post_converted') return false;
   if (action === 'custom_field_changed' && agentOnlyCustomFields?.size) {
     const field = details?.field;
     if (typeof field === 'string' && agentOnlyCustomFields.has(field)) return false;
@@ -217,6 +219,11 @@ export function buildActivityDescriptor(
       return { actorName, message: `cloned this ticket from #${d.source_ticket_id ?? '?'}` };
     case 'comment_cloned':
       return { actorName, message: `cloned a comment to a new ticket #${d.new_ticket_id ?? '?'}` };
+    case 'post_converted':
+      return {
+        actorName,
+        message: d.to === 'comment' ? 'converted an answer to a comment' : 'converted a comment to an answer',
+      };
     case 'file_uploaded':
       return { actorName, message: `uploaded file "${d.filename ?? ''}"` };
     case 'file_deleted':

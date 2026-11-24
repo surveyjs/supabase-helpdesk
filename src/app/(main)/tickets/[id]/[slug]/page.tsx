@@ -50,6 +50,7 @@ import {
 } from '@/lib/tickets/apply-template-policy';
 import { inlineAttachmentIds } from '@/lib/tickets/inline-attachments';
 import { POST_ACTION_CLASS } from './post-action-class';
+import { convertPostKind } from '@/lib/actions/agent';
 import { TicketDetailsPanel } from './TicketDetailsPanel';
 import { TICKET_DETAILS_COLLAPSED_COOKIE } from './ticket-details-cookie';
 import { cookies } from 'next/headers';
@@ -439,7 +440,10 @@ export default async function TicketDetailPage({
     const canReplyToPost = canReply && !isDraft && !isNote && context === 'thread';
     const canClone = isAgent && !isOriginal && !isNote && !isDraft && !ticket!.merged_into_id;
     const canPublishDraft = isDraft && isCurrentUser;
-    const hasActions = canDeletePost || canTogglePrivacy || canClone || canPublishDraft;
+    // #106: agents restructure a thread by turning answers into comments and back.
+    const canConvert = isAgent && !isOriginal && !isNote && !isDraft && !ticket!.merged_into_id
+      && (context === 'thread' || context === 'comment');
+    const hasActions = canDeletePost || canTogglePrivacy || canClone || canPublishDraft || canConvert;
     // Files the body already shows (inline image or link) get no full row in
     // the attachment list. Read from the rendered HTML, so ids that only appear
     // inside code spans/blocks don't count.
@@ -526,6 +530,19 @@ export default async function TicketDetailPage({
                 <PrivacyCheckbox postId={post.id} isPrivate={post.is_private} />
               )}
               {canClone && <CloneCommentButton postId={post.id} />}
+              {canConvert && (
+                <form action={convertPostKind} className="inline">
+                  <input type="hidden" name="post_id" value={post.id} />
+                  <input type="hidden" name="to" value={context === 'thread' ? 'comment' : 'post'} />
+                  <button
+                    type="submit"
+                    className={`${POST_ACTION_CLASS} hover:text-gray-900`}
+                    data-testid="convert-post-btn"
+                  >
+                    {context === 'thread' ? 'Convert to comment' : 'Convert to answer'}
+                  </button>
+                </form>
+              )}
               {canPublishDraft && (
                 <form action={publishDraft} className="inline">
                   <input type="hidden" name="post_id" value={post.id} />

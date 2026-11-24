@@ -223,7 +223,7 @@ test.describe('Ticket thread layout', () => {
     expect(Math.abs(edit!.y - del!.y)).toBeLessThanOrEqual(4);
   });
 
-  test('inline-referenced attachment is listed once, under "Shown inline", with Delete for the owner', async ({ page }) => {
+  test('inline-referenced attachment is listed once, under "Shown inline", with Delete for the owner in edit mode', async ({ page }) => {
     await loginViaForm(page, 'alice@example.com');
     await page.goto(url);
     const list = page.getByTestId('attachment-list');
@@ -236,7 +236,14 @@ test.describe('Ticket thread layout', () => {
     await expect(inline).toContainText('Shown inline:');
     await expect(inline.getByText('inline-shot-only.png')).toHaveCount(1);
     await expect(list.getByText('inline-shot-only.png')).toHaveCount(1);
-    await expect(inline.getByTestId(`attachment-${inlineId}`).getByTestId('delete-attachment-btn')).toBeVisible();
+    // #118: Delete is disabled until the post is in edit mode.
+    const del = inline.getByTestId(`attachment-${inlineId}`).getByTestId('delete-attachment-btn');
+    await expect(del).toBeVisible();
+    await expect(del).toBeDisabled();
+    // Innermost card holding the list (a thread <li> also contains its comments).
+    const post = page.locator('[data-post-kind]').filter({ has: inline }).last();
+    await post.getByTestId('edit-post-btn').first().click();
+    await expect(del).toBeEnabled();
   });
 
   test('re-open hint shows for the creator on pending and closed tickets', async ({ page }) => {

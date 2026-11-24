@@ -26,6 +26,10 @@ type Props = {
   activeDefinition: TicketFilterDefinition;
   aiFilterEnabled: boolean;
   className?: string;
+  /** The column is hidden at xl (#105): don't mount the form there. */
+  hiddenAtXl?: boolean;
+  /** Hide the whole column at xl; shows a "Hide panel" button when set. */
+  onHide?: () => void;
 };
 
 export function ViewsFiltersCollapsible({
@@ -38,6 +42,8 @@ export function ViewsFiltersCollapsible({
   activeDefinition,
   aiFilterEnabled,
   className = '',
+  hiddenAtXl = false,
+  onHide,
 }: Props) {
   // null = not toggled yet: CSS decides (shell shown at xl, hidden below). The
   // SurveyJS form is mounted lazily, only while open, so at xl the server render
@@ -49,7 +55,7 @@ export function ViewsFiltersCollapsible({
     () => window.matchMedia(XL_QUERY).matches,
     () => false,
   );
-  const open = toggled ?? isXl;
+  const open = toggled ?? (isXl && !hiddenAtXl);
   const toggle = () => setToggled(!open);
 
   return (
@@ -94,6 +100,20 @@ export function ViewsFiltersCollapsible({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
           </button>
+          {onHide && (
+            <button
+              type="button"
+              className="hidden xl:inline-flex rounded p-1 hover:bg-gray-50 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              aria-label="Hide filters panel"
+              title="Hide filters panel"
+              onClick={onHide}
+              data-testid="hide-filters-panel-btn"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
       {toggled !== false && (

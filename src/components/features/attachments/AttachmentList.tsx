@@ -38,6 +38,8 @@ export async function AttachmentList({
     .from('attachments')
     .select('id, storage_path, legacy_blob_id, original_filename, file_size, mime_type, created_at')
     .eq('post_id', postId)
+    // Agents can read soft-deleted rows (for Restore in Logs); never list them.
+    .is('deleted_at', null)
     .order('created_at', { ascending: true });
 
   const all = attachments ?? [];

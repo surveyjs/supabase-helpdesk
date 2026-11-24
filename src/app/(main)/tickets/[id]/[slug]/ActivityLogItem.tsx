@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { formatRelativeTime } from '@/lib/utils/time';
 import { CopyButton } from './CopyButton';
 
@@ -34,6 +35,8 @@ export type ActivityLogItemProps = {
   newCopyText?: string;
   /** Full text behind a snippet embedded in `message`; enables a copy button. */
   messageCopyText?: string;
+  /** Controls after the message, e.g. Download / Restore for a deleted file. */
+  actions?: ReactNode;
 };
 
 function ValueChip({
@@ -70,6 +73,7 @@ export function ActivityLogItem({
   oldCopyText,
   newCopyText,
   messageCopyText,
+  actions,
 }: ActivityLogItemProps) {
   const exactTime = new Date(createdAt).toLocaleString();
   const isComparison = field !== undefined;
@@ -101,6 +105,8 @@ export function ActivityLogItem({
       )}
 
       {note ? <span className="italic text-gray-500">({note})</span> : null}
+
+      {actions}
 
       <time dateTime={createdAt} title={exactTime} className="ml-auto text-gray-400">
         {formatRelativeTime(createdAt)}

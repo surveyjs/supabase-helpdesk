@@ -215,6 +215,8 @@ export function buildActivityDescriptor(
       return { actorName, message: `uploaded file "${d.filename ?? ''}"` };
     case 'file_deleted':
       return { actorName, message: `deleted file "${d.filename ?? ''}"` };
+    case 'file_restored':
+      return { actorName, message: `restored file "${d.filename ?? ''}"` };
     case 'created':
       return { actorName, message: 'created the ticket' };
     default:

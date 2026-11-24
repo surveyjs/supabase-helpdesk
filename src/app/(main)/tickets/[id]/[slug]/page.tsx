@@ -14,6 +14,7 @@ import { ReplyToggle } from './ReplyToggle';
 import { NoteForm } from './NoteForm';
 import { CollapsibleTimeline, CollapsibleComments } from './CollapsibleTimeline';
 import { AttachmentList } from '@/components/features/attachments/AttachmentList';
+import { restoreAttachment } from '@/lib/actions/attachments';
 import { RealtimeTicketUpdates } from '@/components/features/tickets/RealtimeTicketUpdates';
 import {
   deletePost,
@@ -308,6 +309,29 @@ export default async function TicketDetailPage({
     (a) => isAgent || isActivityVisibleToNonAgent(a.action, a.details as Record<string, unknown> | null),
   );
 
+  // #119: deleted files are kept. For agents, the newest "deleted file" entry
+  // of each file that is still deleted gets Download and Restore.
+  const restorableLogEntryIds = new Map<string, string>(); // log entry id -> attachment id
+  if (isAgent) {
+    const latestDeleteEntry = new Map<string, string>(); // attachment id -> log entry id
+    for (const a of visibleActivityEntries) {
+      const attId = (a.details as Record<string, unknown> | null)?.attachment_id;
+      if (a.action === 'file_deleted' && typeof attId === 'string' && !latestDeleteEntry.has(attId)) {
+        latestDeleteEntry.set(attId, a.id);
+      }
+    }
+    if (latestDeleteEntry.size > 0) {
+      const { data: stillDeleted } = await supabase
+        .from('attachments')
+        .select('id')
+        .in('id', [...latestDeleteEntry.keys()])
+        .not('deleted_at', 'is', null);
+      for (const row of stillDeleted ?? []) {
+        restorableLogEntryIds.set(latestDeleteEntry.get(row.id)!, row.id);
+      }
+    }
+  }
+
   // Thread items: original post (if any) first, then root reply posts sorted by date.
   type ThreadItem = { kind: 'post'; data: (typeof renderedPosts)[number] };
   const replyItems: ThreadItem[] = rootPosts
@@ -587,6 +611,7 @@ export default async function TicketDetailPage({
       actor?.display_name ?? 'Unknown',
       activityLabelLookups,
     );
+    const restoreId = restorableLogEntryIds.get(entry.id);
     return (
       <ActivityLogItem
         key={entry.id}
@@ -601,6 +626,29 @@ export default async function TicketDetailPage({
         oldCopyText={desc.oldCopyText}
         newCopyText={desc.newCopyText}
         messageCopyText={desc.messageCopyText}
+        actions={restoreId ? (
+          <span className="inline-flex items-center gap-2" data-testid="deleted-file-actions">
+            <a
+              href={`/attachments/${restoreId}?deleted=1`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:text-blue-800 underline"
+              data-testid="deleted-file-download"
+            >
+              Download
+            </a>
+            <form action={restoreAttachment} className="inline">
+              <input type="hidden" name="attachment_id" value={restoreId} />
+              <button
+                type="submit"
+                className="text-blue-600 hover:text-blue-800 underline"
+                data-testid="restore-attachment-btn"
+              >
+                Restore
+              </button>
+            </form>
+          </span>
+        ) : undefined}
       />
     );
   }

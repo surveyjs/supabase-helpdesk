@@ -175,6 +175,13 @@ describe('buildActivityDescriptor — comparison entries', () => {
   });
 });
 
+describe('buildActivityDescriptor — file entries', () => {
+  it('deleted and restored files name the file (#119)', () => {
+    expect(build('file_deleted', { filename: 'a.png', attachment_id: 'x' }).message).toBe('deleted file "a.png"');
+    expect(build('file_restored', { filename: 'a.png', attachment_id: 'x' }).message).toBe('restored file "a.png"');
+  });
+});
+
 describe('isActivityVisibleToNonAgent', () => {
   it('shows ordinary change entries to non-agents', () => {
     expect(isActivityVisibleToNonAgent('status_changed', { from: 'open', to: 'closed' })).toBe(true);

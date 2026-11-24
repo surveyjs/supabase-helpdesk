@@ -88,6 +88,11 @@ export type AgentTicketRow = {
   type_name: string;
   category_name: string | null;
   post_count: number;
+  /** Newest customer post, or the ticket's creation (#104). */
+  last_user_activity_at: string;
+  /** Newest non-note agent reply/comment; null if no agent has replied (#104). */
+  last_agent_activity_at: string | null;
+  custom_fields: Record<string, unknown> | null;
   sla_status?: 'on_track' | 'approaching' | 'breached' | 'met' | 'no_sla';
   sla_remaining_minutes?: number;
 };
@@ -157,7 +162,7 @@ export async function getAgentTickets(filters: AgentTicketFilters): Promise<{
   let query = supabase
     .from('agent_tickets')
     .select(
-      'id, title, slug, status, urgency, severity, is_private, created_at, updated_at, creator_id, creator_display_name, creator_email, creator_team_name, creator_tier_key, creator_tier_display_name, creator_tier_color, creator_tier_icon, creator_tier_active, agent_display_name, assigned_agent_id, type_name, category_name, post_count',
+      'id, title, slug, status, urgency, severity, is_private, created_at, updated_at, creator_id, creator_display_name, creator_email, creator_team_name, creator_tier_key, creator_tier_display_name, creator_tier_color, creator_tier_icon, creator_tier_active, agent_display_name, assigned_agent_id, type_name, category_name, post_count, last_user_activity_at, last_agent_activity_at, custom_fields',
       { count: 'exact' },
     );
 

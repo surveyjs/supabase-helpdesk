@@ -9,6 +9,7 @@ type TicketEntry = {
   status: string;
   updated_at: string;
   creator_name?: string;
+  category_name?: string | null;
 };
 
 export function TicketList({ tickets, showCreator }: { tickets: TicketEntry[]; showCreator?: boolean }) {
@@ -40,6 +41,11 @@ export function TicketList({ tickets, showCreator }: { tickets: TicketEntry[]; s
                 <span className="text-sm font-medium text-gray-900 truncate">
                   {ticket.title}
                 </span>
+                {ticket.category_name && (
+                  <span className="hidden sm:inline text-xs text-gray-600 bg-gray-100 rounded-full px-2 py-0.5 shrink-0" data-testid="ticket-category">
+                    {ticket.category_name}
+                  </span>
+                )}
                 {showCreator && ticket.creator_name && (
                   <span className="text-xs text-gray-500 shrink-0">
                     by {ticket.creator_name}

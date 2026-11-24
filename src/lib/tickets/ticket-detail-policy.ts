@@ -35,6 +35,11 @@ export type TicketDetailPolicyInput = {
    * blocked).
    */
   customFieldNames?: string[];
+  /**
+   * Subset of `customFieldNames` that only agents may see or edit (#103).
+   * Hidden from, and read-only for, everyone else.
+   */
+  agentOnlyCustomFieldNames?: string[];
 };
 
 /**
@@ -134,14 +139,16 @@ export function computeTicketDetailFieldPolicy(
     if (!policy[name]) policy[name] = { visible: false, editable: false };
   }
 
-  // Custom fields are visible to every viewer; editing is restricted
-  // to the ticket owner and agents, and is disabled when the ticket is
-  // merged or the viewer is blocked.
+  // Custom fields are visible to every viewer except agent-only ones, which
+  // only agents see; editing is restricted to the ticket owner and agents,
+  // and is disabled when the ticket is merged or the viewer is blocked.
   const customEditable = !isMerged && !isBlocked && (isAgent || isOwner);
+  const agentOnly = new Set(input.agentOnlyCustomFieldNames ?? []);
   for (const cfName of input.customFieldNames ?? []) {
+    const visible = isAgent || !agentOnly.has(cfName);
     policy[`${CUSTOM_FIELD_QUESTION_PREFIX}${cfName}`] = {
-      visible: true,
-      editable: customEditable,
+      visible,
+      editable: visible && customEditable,
     };
   }
 

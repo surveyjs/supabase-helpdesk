@@ -52,6 +52,7 @@ import { inlineAttachmentIds } from '@/lib/tickets/inline-attachments';
 import { POST_ACTION_CLASS } from './post-action-class';
 import {
   injectCustomFieldsPanel,
+  canViewCustomField,
   type CustomFieldDef,
 } from '@/lib/tickets/custom-fields-template';
 
@@ -305,8 +306,21 @@ export default async function TicketDetailPage({
   // Separate activity log entries visible to this viewer. Agents see all;
   // non-agents are filtered by isActivityVisibleToNonAgent (fails closed for
   // body-snippet entries — see its docstring).
+  // Changes to agent-only custom fields are agent-only too (#103).
+  const agentOnlyFieldNames = new Set<string>();
+  if (!isAgent) {
+    const { data: agentOnlyRows } = await supabase
+      .from('custom_fields')
+      .select('name')
+      .eq('agent_only', true);
+    for (const r of agentOnlyRows ?? []) agentOnlyFieldNames.add(String(r.name));
+  }
   const visibleActivityEntries = (activityLog ?? []).filter(
-    (a) => isAgent || isActivityVisibleToNonAgent(a.action, a.details as Record<string, unknown> | null),
+    (a) => isAgent || isActivityVisibleToNonAgent(
+      a.action,
+      a.details as Record<string, unknown> | null,
+      agentOnlyFieldNames,
+    ),
   );
 
   // #119: deleted files are kept. For agents, the newest "deleted file" entry
@@ -732,6 +746,8 @@ export default async function TicketDetailPage({
     options: Array.isArray(row.options) ? (row.options as string[]) : null,
     default_value: row.default_value == null ? null : String(row.default_value),
     display_order: typeof row.display_order === 'number' ? row.display_order : 0,
+    agent_only: !!row.agent_only,
+    show_on_create: row.show_on_create !== false,
   }));
 
   const ticketCustomFields = (ticket.custom_fields ?? {}) as Record<string, unknown>;
@@ -823,6 +839,7 @@ export default async function TicketDetailPage({
     tierCaps,
     tierRules: detailUserTemplate.tierControlRules,
     customFieldNames: customFieldDefs.map((d) => d.name),
+    agentOnlyCustomFieldNames: customFieldDefs.filter((d) => d.agent_only).map((d) => d.name),
   });
 
   const templateWithCustomFields = detailTemplateWrapper.autoGenerateCustomFields
@@ -865,6 +882,8 @@ export default async function TicketDetailPage({
     tag_ids: ticketTags.map((t) => t.id),
   };
   for (const def of customFieldDefs) {
+    // Agent-only values never reach a customer's browser (#103).
+    if (!canViewCustomField(def, isAgent)) continue;
     const v = ticketCustomFields[def.name];
     if (v !== undefined) {
       sidebarTemplateInitial[`custom_fields.${def.name}`] = v;

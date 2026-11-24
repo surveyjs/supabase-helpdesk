@@ -412,3 +412,73 @@ test.describe('Boolean custom field rendering', () => {
     await expect(qb).toHaveClass(/sd-question--readonly/);
   });
 });
+
+// #103: per-field "On New Ticket form" and "Agents only" flags.
+// Unique per run and not prefixed `E2E` (admin-setup.spec bulk-deletes `E2E%`).
+const CF_AGENT_ONLY = `AgentOnlyCf${BOOL_SUFFIX}`;
+const CF_NOT_ON_CREATE = `NotOnCreateCf${BOOL_SUFFIX}`;
+
+test.describe('Custom field visibility flags', () => {
+  test.describe.configure({ mode: 'serial' });
+
+  test.beforeAll(async () => {
+    const svc = createServiceRoleClient();
+    await svc.from('custom_fields').delete().in('name', [CF_AGENT_ONLY, CF_NOT_ON_CREATE]);
+    const { error } = await svc.from('custom_fields').insert([
+      {
+        name: CF_AGENT_ONLY, field_type: 'text', is_required: false, options: null, default_value: null,
+        display_order: 9200, agent_only: true, show_on_create: true,
+      },
+      {
+        name: CF_NOT_ON_CREATE, field_type: 'text', is_required: false, options: null, default_value: null,
+        display_order: 9201, agent_only: false, show_on_create: false,
+      },
+    ]);
+    if (error) throw new Error(error.message);
+    await seedAliceTicket();
+    const { id } = await getAliceTicketUrl();
+    await svc
+      .from('tickets')
+      .update({ custom_fields: { [CF_AGENT_ONLY]: 'secret-license', [CF_NOT_ON_CREATE]: 'set-later' } })
+      .eq('id', id);
+  });
+
+  test.afterAll(async () => {
+    const svc = createServiceRoleClient();
+    try {
+      await deleteAliceTicket();
+    } finally {
+      await svc.from('custom_fields').delete().in('name', [CF_AGENT_ONLY, CF_NOT_ON_CREATE]);
+    }
+  });
+
+  test('New Ticket form: customers see neither field; agents see only the agent-only one', async ({ page }) => {
+    await loginAs(page, 'alice@example.com');
+    await page.goto('/tickets/new');
+    await expect(page.locator('[name="title"]')).toBeVisible();
+    await expect(page.locator(`[name="cf_${CF_AGENT_ONLY}"]`)).toHaveCount(0);
+    await expect(page.locator(`[name="cf_${CF_NOT_ON_CREATE}"]`)).toHaveCount(0);
+
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto('/tickets/new');
+    await expect(page.locator('[name="title"]')).toBeVisible();
+    await expect(page.locator(`[name="cf_${CF_AGENT_ONLY}"]`)).toBeVisible();
+    await expect(page.locator(`[name="cf_${CF_NOT_ON_CREATE}"]`)).toHaveCount(0);
+  });
+
+  test('sidebar: the owner never gets the agent-only field or its value; the agent does', async ({ page }) => {
+    const { url } = await getAliceTicketUrl();
+    await loginAs(page, 'alice@example.com');
+    await page.goto(url);
+    const survey = page.getByTestId('ticket-sidebar-survey');
+    await expect(survey).toBeVisible({ timeout: 15000 });
+    await expect(survey.locator(`.sd-question[data-name="custom_fields.${CF_NOT_ON_CREATE}"]`)).toBeVisible();
+    await expect(survey.locator(`.sd-question[data-name="custom_fields.${CF_AGENT_ONLY}"]`)).toHaveCount(0);
+    expect(await page.content()).not.toContain('secret-license');
+
+    await loginAs(page, 'agent.smith@example.com');
+    await page.goto(url);
+    const agentSurvey = page.getByTestId('ticket-sidebar-survey');
+    await expect(agentSurvey.locator(`.sd-question[data-name="custom_fields.${CF_AGENT_ONLY}"]`)).toBeVisible({ timeout: 15000 });
+  });
+});

@@ -4,6 +4,9 @@ import { requireAuth } from '@/lib/supabase/auth';
 import { TicketList } from '@/components/features/tickets/TicketList';
 import { StatusFilter } from '@/components/features/tickets/StatusFilter';
 import { Pagination, clampPage } from '@/components/ui/Pagination';
+import { CategorySelect } from '@/components/features/tickets/CategorySelect';
+import { parseCategoryParam } from '@/lib/filters/category-param';
+import { toQuery } from '@/lib/utils/query-string';
 
 const PAGE_SIZE = 20;
 
@@ -20,6 +23,7 @@ export default async function MyTicketsPage({
   const search = (params.q as string) ?? '';
   const requestedPage = Math.max(1, parseInt((params.page as string) ?? '1', 10) || 1);
   const view = (params.view as string) ?? 'my';
+  const category = parseCategoryParam(params.category);
 
   // Check if user belongs to a team
   const { data: profile } = await supabase
@@ -43,7 +47,12 @@ export default async function MyTicketsPage({
 
   // Shared filter values
   const searchTerms = search.trim() ? search.trim().split(/\s+/).join(' & ') : '';
-  type ListedTicket = { id: number; title: string; slug: string; status: string; updated_at: string; creator_name?: string };
+  type ListedTicket = {
+    id: number; title: string; slug: string; status: string; updated_at: string;
+    creator_name?: string; category_name?: string | null;
+  };
+  const categoryName = (c: { name: string } | { name: string }[] | null | undefined) =>
+    (Array.isArray(c) ? c[0]?.name : c?.name) ?? null;
 
   async function fetchPage(forPage: number): Promise<{ ticketsForList: ListedTicket[]; count: number | null }> {
     const from = (forPage - 1) * PAGE_SIZE;
@@ -53,9 +62,10 @@ export default async function MyTicketsPage({
     if (isTeamView) {
       let query = supabase
         .from('tickets')
-        .select('id, title, slug, status, updated_at, creator:profiles!tickets_creator_id_fkey(display_name)', { count: 'exact' })
+        .select('id, title, slug, status, updated_at, category:categories(name), creator:profiles!tickets_creator_id_fkey(display_name)', { count: 'exact' })
         .order('updated_at', { ascending: false })
         .in('creator_id', teamMemberIds);
+      if (category) query = query.eq('category_id', category);
       if (statusFilter === 'active') query = query.in('status', ['open', 'pending']);
       else if (statusFilter === 'closed') query = query.eq('status', 'closed');
       if (searchTerms) query = query.textSearch('search_vector', searchTerms, { type: 'plain', config: 'english' });
@@ -72,14 +82,16 @@ export default async function MyTicketsPage({
           status: t.status,
           updated_at: t.updated_at,
           creator_name: creator?.display_name ?? 'Unknown',
+          category_name: categoryName(t.category),
         };
       });
     } else {
       let query = supabase
         .from('tickets')
-        .select('id, title, slug, status, updated_at', { count: 'exact' })
+        .select('id, title, slug, status, updated_at, category:categories(name)', { count: 'exact' })
         .order('updated_at', { ascending: false })
         .eq('creator_id', user.id);
+      if (category) query = query.eq('category_id', category);
       if (statusFilter === 'active') query = query.in('status', ['open', 'pending']);
       else if (statusFilter === 'closed') query = query.eq('status', 'closed');
       if (searchTerms) query = query.textSearch('search_vector', searchTerms, { type: 'plain', config: 'english' });
@@ -93,6 +105,7 @@ export default async function MyTicketsPage({
         slug: t.slug,
         status: t.status,
         updated_at: t.updated_at,
+        category_name: categoryName(t.category),
       }));
     }
 
@@ -114,6 +127,10 @@ export default async function MyTicketsPage({
   if (statusFilter !== 'all') linkParams.status = statusFilter;
   if (search) linkParams.q = search;
   if (isTeamView) linkParams.view = 'team';
+  if (category) linkParams.category = category;
+
+  const { data: categories } = await supabase.from('categories').select('id, name').order('name');
+  const statusParam = statusFilter !== 'all' ? statusFilter : '';
 
   return (
     <div>
@@ -123,7 +140,7 @@ export default async function MyTicketsPage({
       {hasTeam && (
         <div className="flex gap-2 mb-4" data-testid="team-toggle">
           <Link
-            href={`/tickets${statusFilter !== 'all' ? `?status=${statusFilter}` : ''}${search ? `${statusFilter !== 'all' ? '&' : '?'}q=${encodeURIComponent(search)}` : ''}`}
+            href={`/tickets${toQuery({ status: statusParam, q: search, category })}`}
             className={`px-3 py-1.5 text-sm rounded font-medium ${
               !isTeamView
                 ? 'bg-blue-600 text-white'
@@ -133,7 +150,7 @@ export default async function MyTicketsPage({
             My Tickets
           </Link>
           <Link
-            href={`/tickets?view=team${statusFilter !== 'all' ? `&status=${statusFilter}` : ''}${search ? `&q=${encodeURIComponent(search)}` : ''}`}
+            href={`/tickets${toQuery({ view: 'team', status: statusParam, q: search, category })}`}
             className={`px-3 py-1.5 text-sm rounded font-medium ${
               isTeamView
                 ? 'bg-blue-600 text-white'
@@ -152,13 +169,14 @@ export default async function MyTicketsPage({
           searchParams={isTeamView ? { ...linkParams } : linkParams}
         />
 
-        <form method="get" action="/tickets" className="flex gap-2 flex-1 max-w-md">
+        <form method="get" action="/tickets" className="flex flex-wrap gap-2 flex-1 max-w-2xl">
           {statusFilter !== 'all' && (
             <input type="hidden" name="status" value={statusFilter} />
           )}
           {isTeamView && (
             <input type="hidden" name="view" value="team" />
           )}
+          <CategorySelect categories={categories ?? []} current={category} />
           <input
             type="search"
             name="q"
@@ -175,7 +193,7 @@ export default async function MyTicketsPage({
           </button>
           {search && (
             <Link
-              href={`/tickets${isTeamView ? '?view=team' : ''}${statusFilter !== 'all' ? `${isTeamView ? '&' : '?'}status=${statusFilter}` : ''}`}
+              href={`/tickets${toQuery({ view: isTeamView ? 'team' : '', status: statusParam, category })}`}
               className="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700"
             >
               Clear

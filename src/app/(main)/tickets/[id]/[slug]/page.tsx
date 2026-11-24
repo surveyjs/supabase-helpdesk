@@ -50,6 +50,8 @@ import {
 } from '@/lib/tickets/apply-template-policy';
 import { inlineAttachmentIds } from '@/lib/tickets/inline-attachments';
 import { POST_ACTION_CLASS } from './post-action-class';
+import { TicketDetailsPanel, TICKET_DETAILS_COLLAPSED_COOKIE } from './TicketDetailsPanel';
+import { cookies } from 'next/headers';
 import {
   injectCustomFieldsPanel,
   type CustomFieldDef,
@@ -207,6 +209,9 @@ export default async function TicketDetailPage({
     `)
     .eq('ticket_id', ticket.id)
     .order('created_at', { ascending: true });
+
+  const detailsCollapsed =
+    (await cookies()).get(TICKET_DETAILS_COLLAPSED_COOKIE)?.value === '1';
 
   // Fetch activity log
   const { data: activityLog } = await supabase
@@ -934,7 +939,7 @@ export default async function TicketDetailPage({
         </div>
       )}
 
-      {/* Two-column layout: fluid content + 400px information panel */}
+      {/* Two-column layout: fluid content + 400px information panel (collapsible, #114) */}
       <div className="flex flex-col lg:flex-row gap-6">
         {/* LEFT: Main content area */}
         <div className="w-full flex-1 min-w-0" data-testid="ticket-main-content">
@@ -1007,7 +1012,7 @@ export default async function TicketDetailPage({
         </div>
 
         {/* RIGHT: Sidebar */}
-        <aside className="w-full lg:w-[400px] lg:min-w-[400px] lg:max-w-[400px] flex-shrink-0 lg:sticky lg:top-4 lg:self-start" data-testid="ticket-sidebar">
+        <TicketDetailsPanel initialCollapsed={detailsCollapsed}>
           <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
             {/* Autosave status (issue #77); the ticket number lives in the header meta line */}
             {hasAnySidebarSurveyField && (
@@ -1283,7 +1288,7 @@ export default async function TicketDetailPage({
               </dl>
             </div>
           )}
-        </aside>
+        </TicketDetailsPanel>
       </div>
 
       {/* Realtime subscription for live updates */}

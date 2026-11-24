@@ -9,6 +9,8 @@ type CustomFieldRow = {
   name: string;
   field_type: string;
   is_required: boolean;
+  show_on_create: boolean;
+  agent_only: boolean;
   default_value: string;
   options: string;
 };

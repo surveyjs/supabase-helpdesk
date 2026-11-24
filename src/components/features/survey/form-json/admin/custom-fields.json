@@ -14,7 +14,7 @@
           "removeRowText": "Delete",
           "confirmDelete": false,
           "allowRowsDragAndDrop": true,
-          "defaultRowValue": { "field_type": "text" },
+          "defaultRowValue": { "field_type": "text", "show_on_create": true },
           "columns": [
             {
               "name": "name",
@@ -39,6 +39,19 @@
             {
               "name": "is_required",
               "title": "Required",
+              "cellType": "boolean",
+              "renderAs": "checkbox"
+            },
+            {
+              "name": "show_on_create",
+              "title": "On New Ticket form",
+              "cellType": "boolean",
+              "renderAs": "checkbox",
+              "defaultValue": true
+            },
+            {
+              "name": "agent_only",
+              "title": "Agents only",
               "cellType": "boolean",
               "renderAs": "checkbox"
             },

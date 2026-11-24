@@ -616,7 +616,7 @@ export async function searchTicketOwnerCandidates(query: string): Promise<OwnerC
   const { supabase } = await requireAgentRole();
   // Escape LIKE wildcards; the value itself goes through .ilike(), not an
   // .or() filter string, so dots/commas in emails need no stripping.
-  const term = query.trim().replace(/[\%_]/g, (c) => `\${c}`);
+  const term = query.trim().replace(/[\\%_]/g, (c) => `\\${c}`);
   if (term.length < 2) return [];
   const pattern = `%${term}%`;
   const base = () =>

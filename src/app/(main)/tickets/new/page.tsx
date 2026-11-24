@@ -2,6 +2,7 @@ import { createServerClient } from '@/lib/supabase/server';
 import { requireAuth } from '@/lib/supabase/auth';
 import { TicketForm } from '@/components/features/tickets/TicketForm';
 import { resolveCloneSource } from '@/lib/actions/clone';
+import { isCustomFieldOnCreateForm } from '@/lib/tickets/custom-fields-template';
 
 export default async function NewTicketPage({
   searchParams,
@@ -115,7 +116,9 @@ export default async function NewTicketPage({
         <TicketForm
           ticketTypes={ticketTypes ?? []}
           categories={categories ?? []}
-          customFields={customFields ?? []}
+          // Only fields the admin put on the New Ticket form, and agent-only
+          // ones for agents (#103).
+          customFields={(customFields ?? []).filter((f) => isCustomFieldOnCreateForm(f, isAgent))}
           defaultPrivate={defaultPrivate}
           showPrivacyControl={showPrivacyControl}
           editorViewMode={(profile?.editor_view_mode as 'both' | 'preview' | 'editor' | null) ?? 'both'}

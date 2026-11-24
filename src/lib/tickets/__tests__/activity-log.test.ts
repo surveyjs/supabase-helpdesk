@@ -199,6 +199,13 @@ describe('isActivityVisibleToNonAgent', () => {
     expect(isActivityVisibleToNonAgent('tag_added', { tag_id: 'g1' })).toBe(true);
   });
 
+  it('hides changes to agent-only custom fields (#103)', () => {
+    const agentOnly = new Set(['License Status']);
+    expect(isActivityVisibleToNonAgent('custom_field_changed', { field: 'License Status' }, agentOnly)).toBe(false);
+    expect(isActivityVisibleToNonAgent('custom_field_changed', { field: 'Browser' }, agentOnly)).toBe(true);
+    expect(isActivityVisibleToNonAgent('custom_field_changed', { field: 'License Status' })).toBe(true);
+  });
+
   it('hides agent-only workflow events', () => {
     expect(isActivityVisibleToNonAgent('draft_published', {})).toBe(false);
     expect(isActivityVisibleToNonAgent('post_privacy_changed', {})).toBe(false);

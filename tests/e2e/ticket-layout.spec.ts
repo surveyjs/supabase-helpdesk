@@ -257,6 +257,35 @@ test.describe('Ticket thread layout', () => {
     await expect(page.getByTestId('reopen-hint')).toHaveCount(0);
   });
 
+  test('ticket details panel collapses, stays collapsed after a reload, and expands again (#114)', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await loginViaForm(page, 'agent.smith@example.com');
+    await page.goto(url);
+    const sidebar = page.getByTestId('ticket-sidebar');
+    const toggle = page.getByTestId('ticket-details-toggle');
+    const survey = page.getByTestId('ticket-sidebar-survey');
+    await expect(survey).toBeVisible();
+    const mainBefore = (await page.getByTestId('ticket-main-content').boundingBox())!.width;
+
+    await toggle.click();
+    await expect(sidebar).toHaveAttribute('data-collapsed', 'true');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(survey).toBeHidden();
+    // The thread takes the freed width.
+    await expect.poll(async () => (await page.getByTestId('ticket-main-content').boundingBox())!.width)
+      .toBeGreaterThan(mainBefore + 200);
+
+    await page.reload();
+    await expect(page.getByTestId('ticket-sidebar')).toHaveAttribute('data-collapsed', 'true');
+    await expect(page.getByTestId('ticket-sidebar-survey')).toBeHidden();
+
+    await page.getByTestId('ticket-details-toggle').click();
+    await expect(page.getByTestId('ticket-sidebar')).toHaveAttribute('data-collapsed', 'false');
+    await expect(page.getByTestId('ticket-sidebar-survey')).toBeVisible();
+    await page.reload();
+    await expect(page.getByTestId('ticket-sidebar')).toHaveAttribute('data-collapsed', 'false');
+  });
+
   test('sidebar details are labelled sections with h3 headings and paired dt/dd', async ({ page }) => {
     await loginViaForm(page, 'admin@example.com');
     await page.goto(url);
